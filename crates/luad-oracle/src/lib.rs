@@ -9,8 +9,8 @@ pub mod listing_parser;
 
 pub use listing_parser::{
     assert_chunk_matches_luac, compare_chunk_with_luac, decode_instruction_mnemonic,
-    parse_luac_dump, LuacConstDump, LuacDump, LuacInstDump, LuacLocVarDump, LuacProtoDump,
-    LuacUpvalDump, OracleMismatch,
+    decode_instruction_operands, parse_luac_dump, LuacConstDump, LuacDump, LuacInstDump,
+    LuacLocVarDump, LuacProtoDump, LuacUpvalDump, OracleMismatch,
 };
 
 use luad_core::limits::{ParseMode, ResourceLimits};

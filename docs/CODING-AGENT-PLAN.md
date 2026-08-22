@@ -60,6 +60,8 @@ Disposition:
 7. Record official-source references and exact fixture/tool hashes in test evidence.
 8. Never assume the developer host's integer, `size_t`, instruction, number, or endian layout matches the chunk header.
 9. Distinguish stock dialect behavior from LNUM or other vendor-profile behavior in parsing, output, evidence, and capabilities.
+10. A gate's acceptance criteria must exist as named, committed tests before its implementation commit; CI fails if a gate's named test is absent.
+
 
 ## Gate 0: Downgrade unsupported claims immediately
 

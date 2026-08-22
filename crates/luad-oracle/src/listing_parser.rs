@@ -37,6 +37,8 @@ pub struct LuacInstDump {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LuacConstDump {
     pub index: usize,
+    pub tag: Option<char>,
+    pub value_str: String,
     pub raw_text: String,
 }
 
@@ -207,13 +209,33 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                 let tokens: Vec<&str> = trimmed.split_whitespace().collect();
                 if !tokens.is_empty() {
                     let idx: usize = tokens[0].parse().unwrap_or(0);
-                    let text = trimmed;
+                    let (tag, value_str) = if tokens.len() >= 3
+                        && tokens[1].len() == 1
+                        && "IFSNB".contains(tokens[1].chars().next().unwrap_or(' '))
+                    {
+                        let tag_char = tokens[1].chars().next().unwrap();
+                        let remainder = trimmed
+                            .split_once(tokens[1])
+                            .map(|(_, r)| r.trim())
+                            .unwrap_or("");
+                        (Some(tag_char), remainder.to_string())
+                    } else {
+                        let remainder = trimmed
+                            .split_once(tokens[0])
+                            .map(|(_, r)| r.trim())
+                            .unwrap_or("");
+                        (None, remainder.to_string())
+                    };
+
                     proto.constants.push(LuacConstDump {
                         index: idx,
-                        raw_text: text.to_string(),
+                        tag,
+                        value_str,
+                        raw_text: trimmed.to_string(),
                     });
                 }
             }
+
             Section::Locals => {
                 // E.g. "\t0\t(for state)\t5\t7" (startpc and endpc are 1-based in luac.c: startpc + 1, endpc + 1)
                 let parts: Vec<&str> = line.split('\t').filter(|s| !s.is_empty()).collect();
@@ -744,32 +766,68 @@ fn format_luac_string(bytes: &[u8]) -> String {
     out
 }
 
-fn check_constant_matches(val: &luad_core::model::ConstantValue, exp_raw: &str) -> bool {
+fn check_constant_matches(val: &luad_core::model::ConstantValue, exp_c: &LuacConstDump) -> bool {
+    let exp_str = exp_c.value_str.trim();
     match val {
-        luad_core::model::ConstantValue::Nil => exp_raw.to_ascii_lowercase().contains("nil"),
-        luad_core::model::ConstantValue::Boolean(b) => {
-            let s = if *b { "true" } else { "false" };
-            exp_raw.to_ascii_lowercase().contains(s)
+        luad_core::model::ConstantValue::Nil => {
+            if let Some(tag) = exp_c.tag {
+                tag == 'N' || exp_str == "nil"
+            } else {
+                exp_str == "nil"
+            }
         }
-        luad_core::model::ConstantValue::Integer { val, .. } => exp_raw.contains(&val.to_string()),
-        luad_core::model::ConstantValue::Float { val, .. } => {
-            let mut matched = false;
-            for token in exp_raw.split_whitespace() {
-                if let Ok(parsed_f) = token.parse::<f64>() {
-                    let diff = (parsed_f - *val).abs();
-                    let scale = val.abs().max(parsed_f.abs()).max(1.0);
-                    if diff / scale < 1e-5 {
-                        matched = true;
-                        break;
-                    }
+        luad_core::model::ConstantValue::Boolean(b) => {
+            if let Some(tag) = exp_c.tag {
+                if tag != 'B' {
+                    return false;
                 }
             }
-            matched
+            let s = if *b { "true" } else { "false" };
+            exp_str == s
+        }
+        luad_core::model::ConstantValue::Integer { val, .. } => {
+            if let Some(tag) = exp_c.tag {
+                if tag != 'I' {
+                    return false;
+                }
+            }
+            if let Ok(parsed_int) = exp_str.parse::<i64>() {
+                *val == parsed_int
+            } else {
+                exp_str == val.to_string()
+            }
+        }
+        luad_core::model::ConstantValue::Float { val, .. } => {
+            if let Some(tag) = exp_c.tag {
+                if tag != 'F' {
+                    return false;
+                }
+            }
+            if let Ok(parsed_f) = exp_str.parse::<f64>() {
+                if (val.is_nan() && parsed_f.is_nan()) || val.to_bits() == parsed_f.to_bits() {
+                    true
+                } else {
+                    let val_str = format!("{}", val);
+                    val_str == exp_str
+                        || (*val - parsed_f).abs() <= f64::EPSILON
+                        || (val.is_finite()
+                            && parsed_f.is_finite()
+                            && (*val - parsed_f).abs() / (val.abs().max(parsed_f.abs()).max(1.0))
+                                < 1e-12)
+                }
+            } else {
+                false
+            }
         }
         luad_core::model::ConstantValue::ShortString(s)
         | luad_core::model::ConstantValue::LongString(s) => {
+            if let Some(tag) = exp_c.tag {
+                if tag != 'S' {
+                    return false;
+                }
+            }
             let formatted_luac = format_luac_string(&s.raw_bytes);
-            exp_raw.contains(&formatted_luac) || exp_raw.contains(s.as_str())
+            exp_str == formatted_luac || exp_str == s.as_str()
         }
     }
 }
@@ -860,41 +918,37 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                     });
                 }
 
-                if let Some(act_mnem) =
-                    decode_instruction_mnemonic(&chunk.dialect, act_inst.raw_word)
-                {
-                    if !act_mnem.eq_ignore_ascii_case(&exp_inst.mnemonic) {
-                        mismatches.push(OracleMismatch::Mnemonic {
-                            proto: i,
-                            pc,
-                            raw_word: act_inst.raw_word,
-                            actual: act_mnem.to_string(),
-                            expected: exp_inst.mnemonic.clone(),
-                        });
-                    }
+                let act_mnem = decode_instruction_mnemonic(&chunk.dialect, act_inst.raw_word)
+                    .unwrap_or("<unknown>");
+                if !act_mnem.eq_ignore_ascii_case(&exp_inst.mnemonic) {
+                    mismatches.push(OracleMismatch::Mnemonic {
+                        proto: i,
+                        pc,
+                        raw_word: act_inst.raw_word,
+                        actual: act_mnem.to_string(),
+                        expected: exp_inst.mnemonic.clone(),
+                    });
                 }
 
-                if let Some(act_ops) =
-                    decode_instruction_operands(&chunk.dialect, act_inst.raw_word)
-                {
-                    let exp_ops = &exp_inst.operands_raw;
-                    if act_ops.trim() != exp_ops.trim() {
-                        let act_tokens: Vec<&str> = act_ops.split_whitespace().collect();
-                        let exp_tokens: Vec<&str> = exp_ops.split_whitespace().collect();
-                        let max_len = act_tokens.len().max(exp_tokens.len());
-                        for op_idx in 0..max_len {
-                            let act_tok = act_tokens.get(op_idx).unwrap_or(&"");
-                            let exp_tok = exp_tokens.get(op_idx).unwrap_or(&"");
-                            if act_tok != exp_tok {
-                                mismatches.push(OracleMismatch::Operand {
-                                    proto: i,
-                                    pc,
-                                    raw_word: act_inst.raw_word,
-                                    index: op_idx,
-                                    actual: (*act_tok).to_string(),
-                                    expected: (*exp_tok).to_string(),
-                                });
-                            }
+                let act_ops = decode_instruction_operands(&chunk.dialect, act_inst.raw_word)
+                    .unwrap_or_else(|| "<invalid>".to_string());
+                let exp_ops = &exp_inst.operands_raw;
+                if act_ops.trim() != exp_ops.trim() {
+                    let act_tokens: Vec<&str> = act_ops.split_whitespace().collect();
+                    let exp_tokens: Vec<&str> = exp_ops.split_whitespace().collect();
+                    let max_len = act_tokens.len().max(exp_tokens.len());
+                    for op_idx in 0..max_len {
+                        let act_tok = act_tokens.get(op_idx).unwrap_or(&"");
+                        let exp_tok = exp_tokens.get(op_idx).unwrap_or(&"");
+                        if act_tok != exp_tok {
+                            mismatches.push(OracleMismatch::Operand {
+                                proto: i,
+                                pc,
+                                raw_word: act_inst.raw_word,
+                                index: op_idx,
+                                actual: (*act_tok).to_string(),
+                                expected: (*exp_tok).to_string(),
+                            });
                         }
                     }
                 }
@@ -911,7 +965,7 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
         } else {
             for (c_idx, act_c) in actual.constants.iter().enumerate() {
                 if let Some(exp_c) = expected.constants.get(c_idx) {
-                    if !check_constant_matches(&act_c.value, &exp_c.raw_text) {
+                    if !check_constant_matches(&act_c.value, exp_c) {
                         mismatches.push(OracleMismatch::Constant {
                             proto: i,
                             index: c_idx,
@@ -981,16 +1035,15 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 .zip(expected.upvalues.iter())
                 .enumerate()
             {
-                if let Some(act_name) = &act_up.name {
-                    if act_name.as_str() != exp_up.name.as_str() {
-                        mismatches.push(OracleMismatch::Upvalue {
-                            proto: i,
-                            index: up_idx,
-                            field: "name".to_string(),
-                            actual: act_name.as_str().to_string(),
-                            expected: exp_up.name.clone(),
-                        });
-                    }
+                let act_name = act_up.name.as_ref().map(|s| s.as_str()).unwrap_or("");
+                if act_name != exp_up.name.as_str() {
+                    mismatches.push(OracleMismatch::Upvalue {
+                        proto: i,
+                        index: up_idx,
+                        field: "name".to_string(),
+                        actual: act_name.to_string(),
+                        expected: exp_up.name.clone(),
+                    });
                 }
                 if let Some(exp_instack) = exp_up.instack {
                     if act_up.instack != exp_instack {

@@ -31,6 +31,8 @@ The project is under a correctness stop line. Work the gates in `docs/CODING-AGE
 - Do not update `supported` capability status without a passing named evidence gate.
 - Machine stdout must remain deterministic and free of commentary.
 - Treat fixture binaries and evidence manifests as generated evidence with recorded provenance.
+- A gate's acceptance criteria must exist as named, committed tests before its implementation commit; CI fails if a gate's named test is absent.
+
 
 ## Verification
 

@@ -32,10 +32,10 @@ fn test_negative_control_clean_passes() {
 fn test_negative_control_mnemonic_mutation() {
     let (mut chunk, dump) = get_base_test_pair();
 
-    // Perturb instruction 0 opcode (change to something different, e.g. OP_SUB)
-    // Lua 5.4 OP_SUB = 1
+    // Perturb instruction 0 opcode (change to LOADI, opcode 1)
+    // Lua 5.4 LOADI = 1
     let original_word = chunk.main_proto.instructions[0].raw_word;
-    let corrupted_word = (original_word & !0x7F) | 1; // force OP_SUB (opcode 1)
+    let corrupted_word = (original_word & !0x7F) | 1; // force LOADI (opcode 1)
     chunk.main_proto.instructions[0].raw_word = corrupted_word;
 
     let mismatches = compare_chunk_with_luac(&chunk, &dump);
@@ -162,6 +162,49 @@ fn test_unpatched_pre_gate2_decoder_fails_oracle_on_all_fixtures() {
         assert!(
             !pre_gate2_mismatches.is_empty(),
             "Pre-Gate 2 buggy decoder MUST fail the oracle on fixture '{fixture}'"
+        );
+    }
+}
+
+#[test]
+fn test_golden_word_pins_and_unpatched_decoder_failure() {
+    // Review's three golden words (Lua 5.4):
+    // 1. 0x050100a2 -> ADD 1 1 5
+    // 2. 0x00010180 -> MOVE 3 1
+    // 3. 0x01030146 -> RETURN 2 3 1
+    let golden_cases = [
+        (0x050100a2_u32, "ADD", "1 1 5"),
+        (0x00010180_u32, "MOVE", "3 1"),
+        (0x01030146_u32, "RETURN", "2 3 1"),
+    ];
+
+    for (word, exp_mnem, exp_ops) in golden_cases {
+        // 1. Current corrected decoder matches golden expectation
+        let mnem =
+            luad_oracle::decode_instruction_mnemonic("lua5.4", word).expect("Mnemonic must decode");
+        assert_eq!(mnem, exp_mnem, "Mnemonic mismatch on word 0x{word:08x}");
+        let ops =
+            luad_oracle::decode_instruction_operands("lua5.4", word).expect("Operands must decode");
+        assert_eq!(
+            ops.trim(),
+            exp_ops,
+            "Operands mismatch on word 0x{word:08x}"
+        );
+
+        // 2. Pre-Gate 2 unpatched bitfield decoder produces wrong operands and FAILS
+        let a = ((word >> 7) & 0xff) as u8;
+        let buggy_b = ((word >> 15) & 0xff) as u8; // BUG: bit 15
+        let buggy_c = ((word >> 23) & 0xff) as u8; // BUG: bit 23
+        let buggy_ops = match exp_mnem {
+            "MOVE" => format!("{a} {buggy_b}"),
+            "ADD" => format!("{a} {buggy_b} {buggy_c}"),
+            "RETURN" => format!("{a} {buggy_b} {buggy_c}"),
+            _ => panic!("Unexpected golden mnemonic"),
+        };
+        assert_ne!(
+            buggy_ops.trim(),
+            exp_ops,
+            "Pre-Gate 2 unpatched decoder must FAIL on golden word 0x{word:08x}"
         );
     }
 }
