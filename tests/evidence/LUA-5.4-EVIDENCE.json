@@ -1,19 +1,13 @@
 {
   "schema_version": 1,
   "dialect": "lua5.4",
-  "display_name": "Lua 5.4.0 - 5.4.8",
-  "status": "supported",
-  "generated_at": "2026-08-22T16:50:42.525993+00:00",
+  "display_name": "Lua 5.4.8",
+  "status": "experimental",
+  "generated_at": "2026-08-22T17:06:56.946378+00:00",
   "host_system": "Darwin",
   "host_machine": "arm64",
   "compiler_version": "Lua 5.4.8",
-  "completed_gates": [
-    "gate-facts",
-    "gate-oracle-negative-controls",
-    "gate-lossless",
-    "gate-analysis-cfg",
-    "gate-runtime-semantics"
-  ],
+  "completed_gates": [],
   "verification_results": {
     "opcodes_verified": 83,
     "golden_vectors_passed": true,

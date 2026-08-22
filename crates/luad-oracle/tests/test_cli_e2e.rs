@@ -39,7 +39,7 @@ fn test_cli_capabilities() {
     assert!(stdout.contains("lua5.3"));
     assert!(stdout.contains("lua5.2"));
     assert!(stdout.contains("lua5.1"));
-    assert!(stdout.contains("[supported]"));
+    assert!(stdout.contains("[experimental]"));
     assert!(stdout.contains("luajit"));
     assert!(stdout.contains("[planned]"));
 
@@ -55,22 +55,58 @@ fn test_cli_capabilities() {
         .as_array()
         .expect("supported_dialects array");
     let supp_strings: Vec<&str> = supported.iter().filter_map(|v| v.as_str()).collect();
-    assert_eq!(
-        supp_strings,
-        vec!["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"]
+    assert!(
+        supp_strings.is_empty(),
+        "Under C0, supported_dialects must be empty at baseline"
     );
 
     let experimental = json_val["experimental_dialects"]
         .as_array()
         .expect("experimental_dialects array");
     let exp_strings: Vec<&str> = experimental.iter().filter_map(|v| v.as_str()).collect();
-    assert!(exp_strings.is_empty());
+    assert_eq!(
+        exp_strings,
+        vec!["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"]
+    );
 
     let planned = json_val["planned_dialects"]
         .as_array()
         .expect("planned_dialects array");
     let planned_strings: Vec<&str> = planned.iter().filter_map(|v| v.as_str()).collect();
     assert_eq!(planned_strings, vec!["luajit"]);
+}
+
+#[test]
+fn test_capabilities_readme_status_consistency() {
+    let manifest = luad_core::capabilities::get_canonical_capabilities("0.1.0");
+    let root = luad_oracle::find_workspace_root();
+    let readme_content =
+        std::fs::read_to_string(root.join("README.md")).expect("README.md must be readable");
+
+    // Verify each dialect in manifest matches README claims
+    for dialect in &manifest.dialects {
+        match dialect.status {
+            luad_core::capabilities::SupportTier::Experimental => {
+                assert!(
+                    readme_content.contains(&format!("{} |", dialect.id))
+                        || readme_content.contains(&format!("{} ", dialect.id))
+                        || readme_content.contains("Experimental"),
+                    "README must reflect Experimental status for {}",
+                    dialect.id
+                );
+            }
+            luad_core::capabilities::SupportTier::Planned => {
+                assert!(
+                    readme_content.contains("Planned"),
+                    "README must reflect Planned status for {}",
+                    dialect.id
+                );
+            }
+            luad_core::capabilities::SupportTier::Supported => {
+                panic!("No dialect may be Supported at C0 baseline!");
+            }
+        }
+    }
 }
 
 #[test]

@@ -19,7 +19,7 @@ fn test_lua54_evidence_file_integrity() {
     let json: serde_json::Value = serde_json::from_str(&content).expect("Valid JSON evidence");
 
     assert_eq!(json["dialect"].as_str(), Some("lua5.4"));
-    assert_eq!(json["status"].as_str(), Some("supported"));
+    assert_eq!(json["status"].as_str(), Some("experimental"));
     assert_eq!(
         json["verification_results"]["opcodes_verified"].as_u64(),
         Some(83)
@@ -50,7 +50,7 @@ fn test_lua55_evidence_file_integrity() {
     let json: serde_json::Value = serde_json::from_str(&content).expect("Valid JSON evidence");
 
     assert_eq!(json["dialect"].as_str(), Some("lua5.5"));
-    assert_eq!(json["status"].as_str(), Some("supported"));
+    assert_eq!(json["status"].as_str(), Some("experimental"));
     assert_eq!(
         json["verification_results"]["opcodes_verified"].as_u64(),
         Some(85)
@@ -81,7 +81,7 @@ fn test_lua51_evidence_file_integrity() {
     let json: serde_json::Value = serde_json::from_str(&content).expect("Valid JSON evidence");
 
     assert_eq!(json["dialect"].as_str(), Some("lua5.1"));
-    assert_eq!(json["status"].as_str(), Some("supported"));
+    assert_eq!(json["status"].as_str(), Some("experimental"));
     assert_eq!(
         json["verification_results"]["opcodes_verified"].as_u64(),
         Some(38)
@@ -112,7 +112,7 @@ fn test_lua53_evidence_file_integrity() {
     let json: serde_json::Value = serde_json::from_str(&content).expect("Valid JSON evidence");
 
     assert_eq!(json["dialect"].as_str(), Some("lua5.3"));
-    assert_eq!(json["status"].as_str(), Some("supported"));
+    assert_eq!(json["status"].as_str(), Some("experimental"));
     assert_eq!(
         json["verification_results"]["opcodes_verified"].as_u64(),
         Some(47)
@@ -143,7 +143,7 @@ fn test_lua52_evidence_file_integrity() {
     let json: serde_json::Value = serde_json::from_str(&content).expect("Valid JSON evidence");
 
     assert_eq!(json["dialect"].as_str(), Some("lua5.2"));
-    assert_eq!(json["status"].as_str(), Some("supported"));
+    assert_eq!(json["status"].as_str(), Some("experimental"));
     assert_eq!(
         json["verification_results"]["opcodes_verified"].as_u64(),
         Some(40)

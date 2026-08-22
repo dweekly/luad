@@ -43,19 +43,13 @@ def generate_lua54_evidence():
     evidence = {
         "schema_version": 1,
         "dialect": "lua5.4",
-        "display_name": "Lua 5.4.0 - 5.4.8",
-        "status": "supported",
+        "display_name": "Lua 5.4.8",
+        "status": "experimental",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "host_system": platform.system(),
         "host_machine": platform.machine(),
         "compiler_version": "Lua 5.4.8",
-        "completed_gates": [
-            "gate-facts",
-            "gate-oracle-negative-controls",
-            "gate-lossless",
-            "gate-analysis-cfg",
-            "gate-runtime-semantics"
-        ],
+        "completed_gates": [],
         "verification_results": {
             "opcodes_verified": 83,
             "golden_vectors_passed": True,
@@ -91,19 +85,13 @@ def generate_lua55_evidence():
     evidence = {
         "schema_version": 1,
         "dialect": "lua5.5",
-        "display_name": "Lua 5.5.0 - 5.5.1",
-        "status": "supported",
+        "display_name": "Lua 5.5.1",
+        "status": "experimental",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "host_system": platform.system(),
         "host_machine": platform.machine(),
         "compiler_version": "Lua 5.5.1",
-        "completed_gates": [
-            "gate-facts",
-            "gate-oracle-negative-controls",
-            "gate-lossless",
-            "gate-analysis-cfg",
-            "gate-runtime-semantics"
-        ],
+        "completed_gates": [],
         "verification_results": {
             "opcodes_verified": 85,
             "golden_vectors_passed": True,
@@ -140,21 +128,13 @@ def generate_lua51_evidence():
     evidence = {
         "schema_version": 1,
         "dialect": "lua5.1",
-        "display_name": "Lua 5.1.0 - 5.1.5",
-        "status": "supported",
+        "display_name": "Lua 5.1.5",
+        "status": "experimental",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "host_system": platform.system(),
         "host_machine": platform.machine(),
         "compiler_version": "Lua 5.1.5",
-        "completed_gates": [
-            "gate-facts",
-            "gate-oracle-negative-controls",
-            "gate-lossless",
-            "gate-analysis-cfg",
-            "gate-runtime-semantics",
-            "gate-layout-lua51-32",
-            "gate-profile-lua51-lnum"
-        ],
+        "completed_gates": [],
         "verification_results": {
             "opcodes_verified": 38,
             "golden_vectors_passed": True,
@@ -192,19 +172,13 @@ def generate_lua53_evidence():
     evidence = {
         "schema_version": 1,
         "dialect": "lua5.3",
-        "display_name": "Lua 5.3.0 - 5.3.6",
-        "status": "supported",
+        "display_name": "Lua 5.3.6",
+        "status": "experimental",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "host_system": platform.system(),
         "host_machine": platform.machine(),
         "compiler_version": "Lua 5.3.6",
-        "completed_gates": [
-            "gate-facts",
-            "gate-oracle-negative-controls",
-            "gate-lossless",
-            "gate-analysis-cfg",
-            "gate-runtime-semantics"
-        ],
+        "completed_gates": [],
         "verification_results": {
             "opcodes_verified": 47,
             "golden_vectors_passed": True,
@@ -240,19 +214,13 @@ def generate_lua52_evidence():
     evidence = {
         "schema_version": 1,
         "dialect": "lua5.2",
-        "display_name": "Lua 5.2.0 - 5.2.4",
-        "status": "supported",
+        "display_name": "Lua 5.2.4",
+        "status": "experimental",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "host_system": platform.system(),
         "host_machine": platform.machine(),
         "compiler_version": "Lua 5.2.4",
-        "completed_gates": [
-            "gate-facts",
-            "gate-oracle-negative-controls",
-            "gate-lossless",
-            "gate-analysis-cfg",
-            "gate-runtime-semantics"
-        ],
+        "completed_gates": [],
         "verification_results": {
             "opcodes_verified": 40,
             "golden_vectors_passed": True,

@@ -70,151 +70,89 @@ pub struct CapabilityManifest {
 /// Generate the canonical capabilities manifest for `luad`.
 #[must_use]
 pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
-    let standard_required_gates = vec![
-        "gate-facts".to_string(),
-        "gate-oracle-negative-controls".to_string(),
-        "gate-lossless".to_string(),
-        "gate-analysis-cfg".to_string(),
-    ];
-
     let dialects = vec![
         DialectCapability {
             id: "lua5.1".to_string(),
-            display_name: "Lua 5.1.0 - 5.1.5".to_string(),
+            display_name: "Lua 5.1.5".to_string(),
             opcode_count: 38,
             features: vec![
-                "lossless parse".to_string(),
-                "32-bit/64-bit size_t support".to_string(),
-                "LNUM integer constants".to_string(),
+                "lossless parse (experimental)".to_string(),
                 "disasm".to_string(),
                 "validate".to_string(),
-                "CFG".to_string(),
-                "xrefs".to_string(),
-                "diff".to_string(),
             ],
-            status: SupportTier::Supported,
-            required_gates: {
-                let mut g = standard_required_gates.clone();
-                g.push("gate-layout-lua51-32".to_string());
-                g.push("gate-profile-lua51-lnum".to_string());
-                g
-            },
-            completed_gates: {
-                let mut g = standard_required_gates.clone();
-                g.push("gate-layout-lua51-32".to_string());
-                g.push("gate-profile-lua51-lnum".to_string());
-                g
-            },
-            evidence: vec![
-                "38/38 opcode table and bitfield round-trip verified (lopcodes.h)".to_string(),
-                "Canonical differential oracle passes against official Lua 5.1.5 luac -l -l"
-                    .to_string(),
-                "100% byte accounting on all 10 Lua 5.1 fixtures".to_string(),
-                "Embedded router/firmware 32-bit size_t and LNUM constant tags verified"
-                    .to_string(),
-                "CFG basic block and immediate dominator tree computation verified".to_string(),
-                "Full evidence record: tests/evidence/LUA-5.1-EVIDENCE.json".to_string(),
+            status: SupportTier::Experimental,
+            required_gates: vec![
+                "gate-layout-lua51-stock".to_string(),
+                "gate-profile-lua51-lnum".to_string(),
+                "gate-closures-lua51".to_string(),
+                "gate-resolved-constants-lua51".to_string(),
             ],
+            completed_gates: vec![],
+            evidence: vec!["Phase 1 remediation in progress under CODING-AGENT-PLAN.md".to_string()],
         },
         DialectCapability {
             id: "lua5.2".to_string(),
-            display_name: "Lua 5.2.0 - 5.2.4".to_string(),
+            display_name: "Lua 5.2.4".to_string(),
             opcode_count: 40,
             features: vec![
-                "lossless parse".to_string(),
+                "lossless parse (experimental)".to_string(),
                 "disasm".to_string(),
                 "validate".to_string(),
-                "CFG".to_string(),
-                "xrefs".to_string(),
-                "diff".to_string(),
             ],
-            status: SupportTier::Supported,
-            required_gates: standard_required_gates.clone(),
-            completed_gates: standard_required_gates.clone(),
-            evidence: vec![
-                "40/40 opcode table and bitfield round-trip verified (lopcodes.h)".to_string(),
-                "Canonical differential oracle passes against official Lua 5.2.4 luac -l -l"
-                    .to_string(),
-                "100% byte accounting on all 10 Lua 5.2 fixtures".to_string(),
-                "CFG basic block and immediate dominator tree computation verified".to_string(),
-                "Full evidence record: tests/evidence/LUA-5.2-EVIDENCE.json".to_string(),
-            ],
+            status: SupportTier::Experimental,
+            required_gates: vec!["gate-facts".to_string(), "gate-lossless".to_string()],
+            completed_gates: vec![],
+            evidence: vec!["Experimental dialect; formal proof gates deferred".to_string()],
         },
         DialectCapability {
             id: "lua5.3".to_string(),
-            display_name: "Lua 5.3.0 - 5.3.6".to_string(),
+            display_name: "Lua 5.3.6".to_string(),
             opcode_count: 47,
             features: vec![
-                "lossless parse".to_string(),
-                "direct integer lineinfo".to_string(),
+                "lossless parse (experimental)".to_string(),
                 "disasm".to_string(),
                 "validate".to_string(),
-                "CFG".to_string(),
-                "xrefs".to_string(),
-                "diff".to_string(),
             ],
-            status: SupportTier::Supported,
-            required_gates: standard_required_gates.clone(),
-            completed_gates: standard_required_gates.clone(),
-            evidence: vec![
-                "47/47 opcode table and bitfield round-trip verified (lopcodes.h)".to_string(),
-                "Canonical differential oracle passes against official Lua 5.3.6 luac -l -l"
-                    .to_string(),
-                "100% byte accounting on all 10 Lua 5.3 fixtures".to_string(),
-                "CFG basic block and immediate dominator tree computation verified".to_string(),
-                "Full evidence record: tests/evidence/LUA-5.3-EVIDENCE.json".to_string(),
-            ],
+            status: SupportTier::Experimental,
+            required_gates: vec!["gate-facts".to_string(), "gate-lossless".to_string()],
+            completed_gates: vec![],
+            evidence: vec!["Experimental dialect; formal proof gates deferred".to_string()],
         },
         DialectCapability {
             id: "lua5.4".to_string(),
-            display_name: "Lua 5.4.0 - 5.4.8".to_string(),
+            display_name: "Lua 5.4.8".to_string(),
             opcode_count: 83,
             features: vec![
-                "lossless parse".to_string(),
-                "varint lineinfo".to_string(),
+                "lossless parse (experimental)".to_string(),
                 "disasm".to_string(),
                 "validate".to_string(),
-                "CFG".to_string(),
-                "xrefs".to_string(),
-                "diff".to_string(),
             ],
-            status: SupportTier::Supported,
-            required_gates: standard_required_gates.clone(),
-            completed_gates: standard_required_gates.clone(),
+            status: SupportTier::Experimental,
+            required_gates: vec![
+                "gate-facts-lua54-8".to_string(),
+                "gate-analysis-cfg".to_string(),
+                "gate-lossless-lua54-8".to_string(),
+                "gate-release-lua54-8".to_string(),
+            ],
+            completed_gates: vec![],
             evidence: vec![
-                "83/83 opcode table and bitfield round-trip verified (lopcodes.h)".to_string(),
-                "Canonical differential oracle passes against official Lua 5.4.8 luac -l -l"
+                "Proof vehicle; remediation in progress under CODING-AGENT-PLAN.md (P1-P5)"
                     .to_string(),
-                "100% byte accounting on all 10 Lua 5.4 fixtures".to_string(),
-                "CFG basic block and immediate dominator tree computation verified".to_string(),
-                "Full evidence record: tests/evidence/LUA-5.4-EVIDENCE.json".to_string(),
             ],
         },
         DialectCapability {
             id: "lua5.5".to_string(),
-            display_name: "Lua 5.5.0 - 5.5.1".to_string(),
+            display_name: "Lua 5.5.1".to_string(),
             opcode_count: 85,
             features: vec![
-                "lossless parse".to_string(),
-                "string reuse table".to_string(),
-                "ivABC format".to_string(),
+                "lossless parse (experimental)".to_string(),
                 "disasm".to_string(),
                 "validate".to_string(),
-                "CFG".to_string(),
-                "xrefs".to_string(),
-                "diff".to_string(),
             ],
-            status: SupportTier::Supported,
-            required_gates: standard_required_gates.clone(),
-            completed_gates: standard_required_gates,
-            evidence: vec![
-                "85/85 opcode table and bitfield round-trip verified (lopcodes.h)".to_string(),
-                "Canonical differential oracle passes against official Lua 5.5.1 luac -l -l"
-                    .to_string(),
-                "100% byte accounting on all 10 Lua 5.5 fixtures".to_string(),
-                "CFG basic block and immediate dominator tree computation verified".to_string(),
-                "Full evidence record: tests/evidence/LUA-5.5-EVIDENCE.json".to_string(),
-            ],
+            status: SupportTier::Experimental,
+            required_gates: vec!["gate-facts".to_string(), "gate-lossless".to_string()],
+            completed_gates: vec![],
+            evidence: vec!["Experimental dialect; formal proof gates deferred".to_string()],
         },
         DialectCapability {
             id: "luajit".to_string(),
@@ -247,7 +185,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
         .collect();
 
     let evidence = vec![
-        "Official stock Lua dialects (5.1, 5.2, 5.3, 5.4, 5.5) are fully verified and supported across all evidence gates 1-6".to_string(),
+        "Stock Lua dialects (5.1..5.5) are experimental; formal proof gates are in progress under CODING-AGENT-PLAN.md".to_string(),
         "Bounded SafeReader with safe capacity allocation, varints, and recursion limits"
             .to_string(),
         "Exact bit-level integer and IEEE-754 float preservation".to_string(),
@@ -300,11 +238,50 @@ mod tests {
                 + manifest.experimental_dialects.len()
                 + manifest.planned_dialects.len()
         );
+        assert!(manifest.supported_dialects.is_empty());
         assert_eq!(
-            manifest.supported_dialects,
+            manifest.experimental_dialects,
             vec!["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"]
         );
-        assert!(manifest.experimental_dialects.is_empty());
         assert_eq!(manifest.planned_dialects, vec!["luajit"]);
+    }
+
+    #[test]
+    fn test_no_supported_dialect_without_verified_artifact() {
+        let manifest = get_canonical_capabilities("0.1.0");
+        // Under Gate C0, no dialect is supported until its full proof path passes
+        assert!(
+            manifest.supported_dialects.is_empty(),
+            "Under Gate C0, supported_dialects must be empty at the audit baseline"
+        );
+    }
+
+    #[test]
+    fn test_completed_gate_requires_validated_result() {
+        let manifest = get_canonical_capabilities("0.1.0");
+        for dialect in &manifest.dialects {
+            if dialect.status == SupportTier::Experimental {
+                assert!(
+                    dialect.completed_gates.is_empty(),
+                    "Experimental dialect '{}' must have empty completed_gates at baseline",
+                    dialect.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_capabilities_do_not_claim_version_ranges_from_one_patch() {
+        let manifest = get_canonical_capabilities("0.1.0");
+        for dialect in &manifest.dialects {
+            if dialect.id.starts_with("lua5.") {
+                assert!(
+                    !dialect.display_name.contains('-'),
+                    "Dialect '{}' display_name '{}' must not claim an unproved version range",
+                    dialect.id,
+                    dialect.display_name
+                );
+            }
+        }
     }
 }
