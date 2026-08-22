@@ -139,7 +139,7 @@ pub struct UpvalueDesc {
     /// Upvalue kind/tag (e.g. in Lua 5.4: 0 = regular, 1 = read-only/const, 2 = to-be-closed).
     pub kind: u8,
     /// Debug variable name if present.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<LuaString>,
     /// Source byte location.
     pub source: SourceLocation,
@@ -181,7 +181,7 @@ pub struct Prototype {
     /// Structural path.
     pub path: ProtoPath,
     /// Source file name if debug information is present.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_name: Option<LuaString>,
     /// First line of source where function was defined.
     pub line_defined: usize,
@@ -202,16 +202,16 @@ pub struct Prototype {
     /// Nested child prototypes.
     pub protos: Vec<Prototype>,
     /// Debug line offset vector.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub line_info: Vec<u8>,
     /// Absolute line info records.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub abs_line_info: Vec<AbsLineInfo>,
     /// Local variable debug records.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub loc_vars: Vec<LocalVar>,
     /// Upvalue debug names.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub upvalue_names: Vec<Option<LuaString>>,
     /// Source byte location of the prototype.
     pub source: SourceLocation,
