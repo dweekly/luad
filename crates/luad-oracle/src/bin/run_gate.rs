@@ -198,6 +198,55 @@ fn main() {
         exit(1);
     }
 
+    // Collect prerequisite gate results to satisfy prerequisite closure
+    let mut all_results_and_specs: Vec<(GateResult, GateSpec)> = Vec::new();
+    for prereq_id in &spec.prerequisite_gates {
+        let prereq_spec_path = workspace_root
+            .join("tests")
+            .join("gates")
+            .join(format!("{prereq_id}.json"));
+        if !prereq_spec_path.exists() {
+            eprintln!("Error: Prerequisite gate spec {prereq_spec_path:?} does not exist");
+            exit(1);
+        }
+        let prereq_bytes = match std::fs::read(&prereq_spec_path) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("Error reading prerequisite spec: {e}");
+                exit(1);
+            }
+        };
+        let prereq_spec: GateSpec = match serde_json::from_slice(&prereq_bytes) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Error parsing prerequisite spec: {e}");
+                exit(1);
+            }
+        };
+
+        let prereq_temp_dir = tempfile::tempdir().unwrap();
+        let prereq_result_path = prereq_temp_dir.path().join("gate-result.json");
+        let prereq_result =
+            match execute_gate_spec(&prereq_spec, &prereq_result_path, &workspace_root, None) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("Error executing prerequisite gate '{prereq_id}': {e}");
+                    exit(1);
+                }
+            };
+        if let Err(e) = verify_gate_result(
+            &prereq_result,
+            &prereq_spec,
+            Some(&current_commit),
+            require_clean,
+        ) {
+            eprintln!("Error verifying prerequisite gate '{prereq_id}': {e}");
+            exit(1);
+        }
+        all_results_and_specs.push((prereq_result, prereq_spec));
+    }
+    all_results_and_specs.push((result.clone(), spec.clone()));
+
     // Assemble and verify checkpoint manifest artifact
     let manifest_path = out_dir.join("release-manifest.json");
     let target_dialect = if spec.gate_id.contains("lua54") {
@@ -213,14 +262,12 @@ fn main() {
         profile,
         &current_commit,
         !result.dirty,
-        &[(result.clone(), spec.clone())],
+        &all_results_and_specs,
     ) {
         Ok(manifest) => {
-            if let Err(e) = verify_release_manifest(
-                &manifest,
-                &current_commit,
-                &[(result.clone(), spec.clone())],
-            ) {
+            if let Err(e) =
+                verify_release_manifest(&manifest, &current_commit, &all_results_and_specs)
+            {
                 eprintln!("==> Failed to verify checkpoint manifest artifact: {e}");
                 exit(1);
             }
@@ -228,6 +275,7 @@ fn main() {
                 let _ = std::fs::write(&manifest_path, json_bytes);
             }
         }
+
         Err(e) => {
             if require_clean {
                 eprintln!("==> Failed to assemble checkpoint manifest: {e}");
