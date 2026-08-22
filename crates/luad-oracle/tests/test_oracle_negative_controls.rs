@@ -1209,4 +1209,3 @@ fn test_negative_control_jmp_comment_changed_to_wrong_target_rejected() {
         .iter()
         .any(|m| matches!(m, OracleMismatch::JumpTargetMismatch { .. })));
 }
-

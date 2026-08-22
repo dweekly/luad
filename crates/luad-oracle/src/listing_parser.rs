@@ -516,7 +516,6 @@ pub fn parse_luac_dump(output: &str) -> Result<LuacDump, OracleParseError> {
                         None
                     };
 
-
                     let expected_operands = Some(parse_expected_operands_54(
                         &mnemonic,
                         &operands_raw,
