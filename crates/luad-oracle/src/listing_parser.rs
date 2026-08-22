@@ -167,34 +167,39 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                     let line_str = parts[1].trim().trim_matches('[').trim_matches(']');
                     let line_num: usize = line_str.parse().unwrap_or(0);
 
-                    let mnem_and_ops = parts[2].trim();
+                    let mnem_field = parts[2].trim();
+                    let (mnemonic, maybe_ops) =
+                        if let Some((m, o)) = mnem_field.split_once(char::is_whitespace) {
+                            (m.trim().to_string(), o.trim().to_string())
+                        } else {
+                            (mnem_field.to_string(), String::new())
+                        };
+
+                    let mut operands_raw = maybe_ops;
                     let mut comment = None;
-                    let (op_part, comment_part) = if let Some((o, c)) = mnem_and_ops.split_once(';')
-                    {
-                        (o.trim(), Some(c.trim().to_string()))
-                    } else if parts.len() >= 4 && parts[3].trim().starts_with(';') {
-                        (
-                            mnem_and_ops,
-                            Some(parts[3].trim().trim_start_matches(';').trim().to_string()),
-                        )
-                    } else {
-                        (mnem_and_ops, None)
-                    };
-                    if comment.is_none() {
-                        comment = comment_part;
+
+                    for part in &parts[3..] {
+                        let trimmed_part = part.trim();
+                        if trimmed_part.starts_with(';') {
+                            comment = Some(trimmed_part.trim_start_matches(';').trim().to_string());
+                        } else if let Some((before_semi, after_semi)) = trimmed_part.split_once(';')
+                        {
+                            if operands_raw.is_empty() {
+                                operands_raw = before_semi.trim().to_string();
+                            }
+                            comment = Some(after_semi.trim().to_string());
+                        } else if operands_raw.is_empty() {
+                            operands_raw = trimmed_part.to_string();
+                        }
                     }
 
-                    let mut tokens = op_part.split_whitespace();
-                    if let Some(mnemonic) = tokens.next() {
-                        let ops_raw: Vec<&str> = tokens.collect();
-                        proto.instructions.push(LuacInstDump {
-                            pc,
-                            line: line_num,
-                            mnemonic: mnemonic.to_string(),
-                            operands_raw: ops_raw.join(" "),
-                            comment,
-                        });
-                    }
+                    proto.instructions.push(LuacInstDump {
+                        pc,
+                        line: line_num,
+                        mnemonic,
+                        operands_raw,
+                        comment,
+                    });
                 }
             }
             Section::Constants => {
@@ -374,6 +379,350 @@ pub fn decode_instruction_mnemonic(dialect: &str, raw_word: u32) -> Option<&'sta
     }
 }
 
+/// Decode instruction operands string for a given dialect and instruction word formatted as `luac -l -l`.
+#[must_use]
+pub fn decode_instruction_operands(dialect: &str, raw_word: u32) -> Option<String> {
+    match dialect {
+        "lua5.1" => decode_instruction_operands_51(raw_word),
+        "lua5.2" => decode_instruction_operands_52(raw_word),
+        "lua5.3" => decode_instruction_operands_53(raw_word),
+        "lua5.4" => decode_instruction_operands_54(raw_word),
+        "lua5.5" => decode_instruction_operands_55(raw_word),
+        _ => None,
+    }
+}
+
+fn decode_instruction_operands_51(raw_word: u32) -> Option<String> {
+    let raw = luad_dialect_lua51::RawInstruction51::decode(raw_word);
+    let op = raw.opcode?;
+    use luad_dialect_lua51::Opcode51;
+
+    let b_str = if raw.is_b_k() {
+        format!("-{}", raw.b_index_k() + 1)
+    } else {
+        format!("{}", raw.b)
+    };
+    let c_str = if raw.is_c_k() {
+        format!("-{}", raw.c_index_k() + 1)
+    } else {
+        format!("{}", raw.c)
+    };
+
+    let s = match op {
+        Opcode51::Move => format!("{} {}", raw.a, raw.b),
+        Opcode51::LoadK => format!("{} -{}", raw.a, raw.bx + 1),
+        Opcode51::LoadBool => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode51::LoadNil => format!("{} {}", raw.a, raw.b),
+        Opcode51::GetUpval | Opcode51::SetUpval => format!("{} {}", raw.a, raw.b),
+        Opcode51::GetGlobal | Opcode51::SetGlobal => format!("{} -{}", raw.a, raw.bx + 1),
+        Opcode51::GetTable | Opcode51::SetTable => format!("{} {} {}", raw.a, b_str, c_str),
+        Opcode51::NewTable => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode51::SelfOp => format!("{} {} {}", raw.a, b_str, c_str),
+        Opcode51::Add
+        | Opcode51::Sub
+        | Opcode51::Mul
+        | Opcode51::Div
+        | Opcode51::Mod
+        | Opcode51::Pow => format!("{} {} {}", raw.a, b_str, c_str),
+        Opcode51::Unm | Opcode51::Not | Opcode51::Len => format!("{} {}", raw.a, raw.b),
+        Opcode51::Concat => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode51::Jmp => format!("{}", raw.sbx),
+        Opcode51::Eq | Opcode51::Lt | Opcode51::Le => format!("{} {} {}", raw.a, b_str, c_str),
+        Opcode51::Test => format!("{} {}", raw.a, raw.c),
+        Opcode51::TestSet => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode51::Call | Opcode51::TailCall => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode51::Return => format!("{} {}", raw.a, raw.b),
+        Opcode51::ForLoop | Opcode51::ForPrep => format!("{} {}", raw.a, raw.sbx),
+        Opcode51::TForLoop => format!("{} {}", raw.a, raw.c),
+        Opcode51::SetList => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode51::Close => format!("{}", raw.a),
+        Opcode51::Closure => format!("{} {}", raw.a, raw.bx),
+        Opcode51::VarArg => format!("{} {}", raw.a, raw.b),
+    };
+    Some(s)
+}
+
+fn decode_instruction_operands_52(raw_word: u32) -> Option<String> {
+    let raw = luad_dialect_lua52::RawInstruction52::decode(raw_word);
+    let op = raw.opcode?;
+    use luad_dialect_lua52::Opcode52;
+
+    let b_str = if raw.is_b_k() {
+        format!("-{}", raw.b_index_k() + 1)
+    } else {
+        format!("{}", raw.b)
+    };
+    let c_str = if raw.is_c_k() {
+        format!("-{}", raw.c_index_k() + 1)
+    } else {
+        format!("{}", raw.c)
+    };
+
+    let s = match op {
+        Opcode52::Move => format!("{} {}", raw.a, raw.b),
+        Opcode52::LoadK => format!("{} -{}", raw.a, raw.bx + 1),
+        Opcode52::LoadKx => format!("{}", raw.a),
+        Opcode52::LoadBool => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode52::LoadNil => format!("{} {}", raw.a, raw.b),
+        Opcode52::GetUpval | Opcode52::SetUpval => format!("{} {}", raw.a, raw.b),
+        Opcode52::GetTabUp | Opcode52::SetTabUp | Opcode52::GetTable | Opcode52::SetTable => {
+            format!("{} {} {}", raw.a, b_str, c_str)
+        }
+        Opcode52::NewTable => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode52::SelfOp => format!("{} {} {}", raw.a, b_str, c_str),
+        Opcode52::Add
+        | Opcode52::Sub
+        | Opcode52::Mul
+        | Opcode52::Div
+        | Opcode52::Mod
+        | Opcode52::Pow => format!("{} {} {}", raw.a, b_str, c_str),
+        Opcode52::Unm | Opcode52::Not | Opcode52::Len => format!("{} {}", raw.a, raw.b),
+        Opcode52::Concat => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode52::Jmp => format!("{} {}", raw.a, raw.sbx),
+        Opcode52::Eq | Opcode52::Lt | Opcode52::Le => format!("{} {} {}", raw.a, b_str, c_str),
+        Opcode52::Test => format!("{} {}", raw.a, raw.c),
+        Opcode52::TestSet => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode52::Call | Opcode52::TailCall => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode52::Return => format!("{} {}", raw.a, raw.b),
+        Opcode52::ForLoop | Opcode52::ForPrep => format!("{} {}", raw.a, raw.sbx),
+        Opcode52::TForCall => format!("{} {}", raw.a, raw.c),
+        Opcode52::TForLoop => format!("{} {}", raw.a, raw.sbx),
+        Opcode52::SetList => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode52::Closure => format!("{} {}", raw.a, raw.bx),
+        Opcode52::VarArg => format!("{} {}", raw.a, raw.b),
+        Opcode52::ExtraArg => format!("{}", raw.ax),
+    };
+    Some(s)
+}
+
+fn decode_instruction_operands_53(raw_word: u32) -> Option<String> {
+    let raw = luad_dialect_lua53::RawInstruction53::decode(raw_word);
+    let op = raw.opcode?;
+    use luad_dialect_lua53::Opcode53;
+
+    let b_str = if raw.is_b_k() {
+        format!("-{}", raw.b_index_k() + 1)
+    } else {
+        format!("{}", raw.b)
+    };
+    let c_str = if raw.is_c_k() {
+        format!("-{}", raw.c_index_k() + 1)
+    } else {
+        format!("{}", raw.c)
+    };
+
+    let s = match op {
+        Opcode53::Move => format!("{} {}", raw.a, raw.b),
+        Opcode53::LoadK => format!("{} -{}", raw.a, raw.bx + 1),
+        Opcode53::LoadKx => format!("{}", raw.a),
+        Opcode53::LoadBool => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode53::LoadNil => format!("{} {}", raw.a, raw.b),
+        Opcode53::GetUpval | Opcode53::SetUpval => format!("{} {}", raw.a, raw.b),
+        Opcode53::GetTabUp | Opcode53::SetTabUp | Opcode53::GetTable | Opcode53::SetTable => {
+            format!("{} {} {}", raw.a, b_str, c_str)
+        }
+        Opcode53::NewTable => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode53::SelfOp => format!("{} {} {}", raw.a, b_str, c_str),
+        Opcode53::Add
+        | Opcode53::Sub
+        | Opcode53::Mul
+        | Opcode53::Mod
+        | Opcode53::Pow
+        | Opcode53::Div
+        | Opcode53::IDiv
+        | Opcode53::BAnd
+        | Opcode53::BOr
+        | Opcode53::BXor
+        | Opcode53::Shl
+        | Opcode53::Shr => format!("{} {} {}", raw.a, b_str, c_str),
+        Opcode53::Unm | Opcode53::BNot | Opcode53::Not | Opcode53::Len => {
+            format!("{} {}", raw.a, raw.b)
+        }
+        Opcode53::Concat => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode53::Jmp => format!("{} {}", raw.a, raw.sbx),
+        Opcode53::Eq | Opcode53::Lt | Opcode53::Le => format!("{} {} {}", raw.a, b_str, c_str),
+        Opcode53::Test => format!("{} {}", raw.a, raw.c),
+        Opcode53::TestSet => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode53::Call | Opcode53::TailCall => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode53::Return => format!("{} {}", raw.a, raw.b),
+        Opcode53::ForLoop | Opcode53::ForPrep => format!("{} {}", raw.a, raw.sbx),
+        Opcode53::TForCall => format!("{} {}", raw.a, raw.c),
+        Opcode53::TForLoop => format!("{} {}", raw.a, raw.sbx),
+        Opcode53::SetList => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode53::Closure => format!("{} {}", raw.a, raw.bx),
+        Opcode53::VarArg => format!("{} {}", raw.a, raw.b),
+        Opcode53::ExtraArg => format!("{}", raw.ax),
+    };
+    Some(s)
+}
+
+fn decode_instruction_operands_54(raw_word: u32) -> Option<String> {
+    let raw = luad_dialect_lua54::RawInstruction54::decode(raw_word);
+    let op = raw.opcode?;
+    use luad_dialect_lua54::Opcode54;
+
+    let k_suffix = if raw.k != 0 { "k" } else { "" };
+
+    let s = match op {
+        Opcode54::Move => format!("{} {}", raw.a, raw.b),
+        Opcode54::Loadi | Opcode54::Loadf => format!("{} {}", raw.a, raw.sbx),
+        Opcode54::Loadk => format!("{} {}", raw.a, raw.bx),
+        Opcode54::Loadkx => format!("{}", raw.a),
+        Opcode54::Loadfalse | Opcode54::Lfalseskip | Opcode54::Loadtrue => format!("{}", raw.a),
+        Opcode54::Loadnil => format!("{} {}", raw.a, raw.b),
+        Opcode54::Getupval | Opcode54::Setupval => format!("{} {}", raw.a, raw.b),
+        Opcode54::Gettabup | Opcode54::Gettable | Opcode54::Geti | Opcode54::Getfield => {
+            format!("{} {} {}", raw.a, raw.b, raw.c)
+        }
+        Opcode54::Settabup | Opcode54::Settable | Opcode54::Seti | Opcode54::Setfield => {
+            format!("{} {} {}{}", raw.a, raw.b, raw.c, k_suffix)
+        }
+        Opcode54::Newtable => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode54::SelfOp => format!("{} {} {}{}", raw.a, raw.b, raw.c, k_suffix),
+        Opcode54::Addi | Opcode54::Shri | Opcode54::Shli => {
+            format!("{} {} {}", raw.a, raw.b, raw.sc)
+        }
+        Opcode54::Addk
+        | Opcode54::Subk
+        | Opcode54::Mulk
+        | Opcode54::Modk
+        | Opcode54::Powk
+        | Opcode54::Divk
+        | Opcode54::Idivk
+        | Opcode54::Bandk
+        | Opcode54::Bork
+        | Opcode54::Bxork => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode54::Add
+        | Opcode54::Sub
+        | Opcode54::Mul
+        | Opcode54::Mod
+        | Opcode54::Pow
+        | Opcode54::Div
+        | Opcode54::Idiv
+        | Opcode54::Band
+        | Opcode54::Bor
+        | Opcode54::Bxor
+        | Opcode54::Shl
+        | Opcode54::Shr => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode54::Mmbin => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode54::Mmbini => format!("{} {} {} {}", raw.a, raw.sb, raw.c, raw.k),
+        Opcode54::Mmbink => format!("{} {} {} {}", raw.a, raw.b, raw.c, raw.k),
+        Opcode54::Unm | Opcode54::Bnot | Opcode54::Not | Opcode54::Len | Opcode54::Concat => {
+            format!("{} {}", raw.a, raw.b)
+        }
+        Opcode54::Close | Opcode54::Tbc => format!("{}", raw.a),
+        Opcode54::Jmp => format!("{}", raw.sj),
+        Opcode54::Eq | Opcode54::Lt | Opcode54::Le | Opcode54::Eqk => {
+            format!("{} {} {}", raw.a, raw.b, raw.k)
+        }
+        Opcode54::Eqi | Opcode54::Lti | Opcode54::Lei | Opcode54::Gti | Opcode54::Gei => {
+            format!("{} {} {}", raw.a, raw.sb, raw.k)
+        }
+        Opcode54::Test => format!("{} {}", raw.a, raw.k),
+        Opcode54::Testset => format!("{} {} {}", raw.a, raw.b, raw.k),
+        Opcode54::Call => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode54::Tailcall => format!("{} {} {}{}", raw.a, raw.b, raw.c, k_suffix),
+        Opcode54::Return => format!("{} {} {}{}", raw.a, raw.b, raw.c, k_suffix),
+        Opcode54::Return0 => String::new(),
+        Opcode54::Return1 => format!("{}", raw.a),
+        Opcode54::Forloop | Opcode54::Forprep | Opcode54::Tforprep => {
+            format!("{} {}", raw.a, raw.bx)
+        }
+        Opcode54::Tforcall => format!("{} {}", raw.a, raw.c),
+        Opcode54::Tforloop => format!("{} {}", raw.a, raw.bx),
+        Opcode54::Setlist => format!("{} {} {}{}", raw.a, raw.b, raw.c, k_suffix),
+        Opcode54::Closure => format!("{} {}", raw.a, raw.bx),
+        Opcode54::Vararg => format!("{} {} {}{}", raw.a, raw.b, raw.c, k_suffix),
+        Opcode54::Varargprep => format!("{}", raw.a),
+        Opcode54::Extraarg => format!("{}", raw.ax),
+    };
+    Some(s)
+}
+
+fn decode_instruction_operands_55(raw_word: u32) -> Option<String> {
+    let raw = luad_dialect_lua55::RawInstruction55::decode(raw_word);
+    let op = raw.opcode?;
+    use luad_dialect_lua55::Opcode55;
+
+    let k_suffix = if raw.k != 0 { "k" } else { "" };
+
+    let s = match op {
+        Opcode55::Move => format!("{} {}", raw.a, raw.b),
+        Opcode55::Loadi | Opcode55::Loadf => format!("{} {}", raw.a, raw.sbx),
+        Opcode55::Loadk => format!("{} {}", raw.a, raw.bx),
+        Opcode55::Loadkx => format!("{}", raw.a),
+        Opcode55::Loadfalse | Opcode55::Lfalseskip | Opcode55::Loadtrue => format!("{}", raw.a),
+        Opcode55::Loadnil => format!("{} {}", raw.a, raw.b),
+        Opcode55::Getupval | Opcode55::Setupval => format!("{} {}", raw.a, raw.b),
+        Opcode55::Gettabup | Opcode55::Gettable | Opcode55::Geti | Opcode55::Getfield => {
+            format!("{} {} {}", raw.a, raw.b, raw.c)
+        }
+        Opcode55::Settabup | Opcode55::Settable | Opcode55::Seti | Opcode55::Setfield => {
+            format!("{} {} {}{}", raw.a, raw.b, raw.c, k_suffix)
+        }
+        Opcode55::Newtable => format!("{} {} {}{}", raw.a, raw.vb, raw.vc, k_suffix),
+        Opcode55::SelfOp => format!("{} {} {}{}", raw.a, raw.b, raw.c, k_suffix),
+        Opcode55::Addi | Opcode55::Shri | Opcode55::Shli => {
+            format!("{} {} {}", raw.a, raw.b, raw.sc)
+        }
+        Opcode55::Addk
+        | Opcode55::Subk
+        | Opcode55::Mulk
+        | Opcode55::Modk
+        | Opcode55::Powk
+        | Opcode55::Divk
+        | Opcode55::Idivk
+        | Opcode55::Bandk
+        | Opcode55::Bork
+        | Opcode55::Bxork => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode55::Add
+        | Opcode55::Sub
+        | Opcode55::Mul
+        | Opcode55::Mod
+        | Opcode55::Pow
+        | Opcode55::Div
+        | Opcode55::Idiv
+        | Opcode55::Band
+        | Opcode55::Bor
+        | Opcode55::Bxor
+        | Opcode55::Shl
+        | Opcode55::Shr => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode55::Mmbin => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode55::Mmbini => format!("{} {} {} {}", raw.a, raw.sb, raw.c, raw.k),
+        Opcode55::Mmbink => format!("{} {} {} {}", raw.a, raw.b, raw.c, raw.k),
+        Opcode55::Unm | Opcode55::Bnot | Opcode55::Not | Opcode55::Len | Opcode55::Concat => {
+            format!("{} {}", raw.a, raw.b)
+        }
+        Opcode55::Close | Opcode55::Tbc => format!("{}", raw.a),
+        Opcode55::Jmp => format!("{}", raw.sj),
+        Opcode55::Eq | Opcode55::Lt | Opcode55::Le | Opcode55::Eqk => {
+            format!("{} {} {}", raw.a, raw.b, raw.k)
+        }
+        Opcode55::Eqi | Opcode55::Lti | Opcode55::Lei | Opcode55::Gti | Opcode55::Gei => {
+            format!("{} {} {}", raw.a, raw.sb, raw.k)
+        }
+        Opcode55::Test => format!("{} {}", raw.a, raw.k),
+        Opcode55::Testset => format!("{} {} {}", raw.a, raw.b, raw.k),
+        Opcode55::Call => format!("{} {} {}", raw.a, raw.b, raw.c),
+        Opcode55::Tailcall => format!("{} {} {}{}", raw.a, raw.b, raw.c, k_suffix),
+        Opcode55::Return => format!("{} {} {}{}", raw.a, raw.b, raw.c, k_suffix),
+        Opcode55::Return0 => String::new(),
+        Opcode55::Return1 => format!("{}", raw.a),
+        Opcode55::Forloop | Opcode55::Forprep | Opcode55::Tforprep => {
+            format!("{} {}", raw.a, raw.bx)
+        }
+        Opcode55::Tforcall => format!("{} {}", raw.a, raw.c),
+        Opcode55::Tforloop => format!("{} {}", raw.a, raw.bx),
+        Opcode55::Setlist => format!("{} {} {}{}", raw.a, raw.vb, raw.vc, k_suffix),
+        Opcode55::Closure => format!("{} {}", raw.a, raw.bx),
+        Opcode55::Vararg => format!("{} {} {}{}", raw.a, raw.b, raw.c, k_suffix),
+        Opcode55::Varargprep => format!("{}", raw.a),
+        Opcode55::Extraarg => format!("{}", raw.ax),
+        _ => format!("{} {} {}", raw.a, raw.b, raw.c),
+    };
+    Some(s)
+}
+
 fn format_luac_string(bytes: &[u8]) -> String {
     let mut out = String::from("\"");
     for &b in bytes {
@@ -522,6 +871,31 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                             actual: act_mnem.to_string(),
                             expected: exp_inst.mnemonic.clone(),
                         });
+                    }
+                }
+
+                if let Some(act_ops) =
+                    decode_instruction_operands(&chunk.dialect, act_inst.raw_word)
+                {
+                    let exp_ops = &exp_inst.operands_raw;
+                    if act_ops.trim() != exp_ops.trim() {
+                        let act_tokens: Vec<&str> = act_ops.split_whitespace().collect();
+                        let exp_tokens: Vec<&str> = exp_ops.split_whitespace().collect();
+                        let max_len = act_tokens.len().max(exp_tokens.len());
+                        for op_idx in 0..max_len {
+                            let act_tok = act_tokens.get(op_idx).unwrap_or(&"");
+                            let exp_tok = exp_tokens.get(op_idx).unwrap_or(&"");
+                            if act_tok != exp_tok {
+                                mismatches.push(OracleMismatch::Operand {
+                                    proto: i,
+                                    pc,
+                                    raw_word: act_inst.raw_word,
+                                    index: op_idx,
+                                    actual: (*act_tok).to_string(),
+                                    expected: (*exp_tok).to_string(),
+                                });
+                            }
+                        }
                     }
                 }
             }
