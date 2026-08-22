@@ -351,11 +351,8 @@ fn main() {
             exit(1);
         }
     };
-    if let Err(e) = verify_release_manifest(
-        &disk_manifest,
-        &current_commit,
-        &[(disk_result.clone(), spec.clone())],
-    ) {
+    if let Err(e) = verify_release_manifest(&disk_manifest, &current_commit, &all_results_and_specs)
+    {
         eprintln!("Error verifying on-disk ReleaseManifest: {e}");
         exit(1);
     }
