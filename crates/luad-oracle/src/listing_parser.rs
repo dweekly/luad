@@ -1,4 +1,7 @@
 //! Parser and differential comparator for canonical `luac -l -l` compiler dumps.
+//!
+//! Implements strict typed operand field verification, field-consumption accounting,
+//! and exact canonical constant token matching (Gate R2).
 
 use luad_core::model::{Chunk, Prototype};
 
@@ -314,6 +317,35 @@ pub enum OracleMismatch {
         actual: String,
         expected: String,
     },
+    UnknownActualOpcode {
+        proto: usize,
+        pc: usize,
+        raw_word: u32,
+        opcode: u8,
+    },
+    UnknownExpectedMnemonic {
+        proto: usize,
+        pc: usize,
+        mnemonic: String,
+    },
+    MissingOperand {
+        proto: usize,
+        pc: usize,
+        raw_word: u32,
+        field_name: String,
+        expected: String,
+    },
+    ExtraOperand {
+        proto: usize,
+        pc: usize,
+        raw_word: u32,
+        extra_token: String,
+    },
+    UnconsumedField {
+        proto: usize,
+        pc: usize,
+        field: String,
+    },
     Operand {
         proto: usize,
         pc: usize,
@@ -321,6 +353,32 @@ pub enum OracleMismatch {
         index: usize,
         actual: String,
         expected: String,
+    },
+    OperandField {
+        proto: usize,
+        pc: usize,
+        raw_word: u32,
+        field: String,
+        actual: String,
+        expected: String,
+    },
+    ConstantTagMismatch {
+        proto: usize,
+        index: usize,
+        actual_tag: String,
+        expected_tag: String,
+    },
+    ConstantFloatTokenMismatch {
+        proto: usize,
+        index: usize,
+        actual_token: String,
+        expected_token: String,
+    },
+    JumpTargetMismatch {
+        proto: usize,
+        pc: usize,
+        actual_target: usize,
+        expected_target: usize,
     },
     Line {
         proto: usize,
@@ -766,82 +824,181 @@ fn format_luac_string(bytes: &[u8]) -> String {
     out
 }
 
-fn check_constant_matches(val: &luad_core::model::ConstantValue, exp_c: &LuacConstDump) -> bool {
+/// Compute exact canonical `luac` float string representation (%.14g or %.15g formatting).
+fn canonical_luac_float_str(val: f64, dialect: &str) -> String {
+    if val.is_nan() {
+        return "nan".to_string();
+    }
+    if val.is_infinite() {
+        return if val > 0.0 {
+            "inf".to_string()
+        } else {
+            "-inf".to_string()
+        };
+    }
+    if val == 0.0 {
+        return if val.is_sign_negative() {
+            "-0".to_string()
+        } else {
+            "0".to_string()
+        };
+    }
+
+    let sign = if val.is_sign_negative() { "-" } else { "" };
+    let abs_v = val.abs();
+    let exp = abs_v.log10().floor() as i32;
+    let total_prec = if dialect == "lua5.5" { 15 } else { 14 };
+
+    if exp < -4 || exp >= total_prec {
+        // Scientific notation
+        let mantissa_prec = (total_prec - 1) as usize;
+        let s = format!("{abs_v:.mantissa_prec$e}");
+        if let Some((mantissa, e_part)) = s.split_once('e') {
+            let clean_mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
+            let (e_sign, e_num_str) = if let Some(rest) = e_part.strip_prefix('-') {
+                ("-", rest)
+            } else if let Some(rest) = e_part.strip_prefix('+') {
+                ("+", rest)
+            } else {
+                ("+", e_part)
+            };
+            let e_num: i32 = e_num_str.parse().unwrap_or(0);
+            format!("{sign}{clean_mantissa}e{e_sign}{e_num:02}")
+        } else {
+            format!("{sign}{abs_v}")
+        }
+    } else {
+        let prec = (total_prec - 1 - exp).max(0) as usize;
+        let s = format!("{abs_v:.prec$}");
+        let clean_s = if s.contains('.') {
+            s.trim_end_matches('0').trim_end_matches('.')
+        } else {
+            &s
+        };
+        format!("{sign}{clean_s}")
+    }
+}
+
+fn check_constant_matches_exact(
+    proto_idx: usize,
+    c_idx: usize,
+    dialect: &str,
+    val: &luad_core::model::ConstantValue,
+    exp_c: &LuacConstDump,
+    mismatches: &mut Vec<OracleMismatch>,
+) {
     let exp_str = exp_c.value_str.trim();
     match val {
         luad_core::model::ConstantValue::Nil => {
             if let Some(tag) = exp_c.tag {
-                tag == 'N' || exp_str == "nil"
-            } else {
-                exp_str == "nil"
+                if tag != 'N' && exp_str != "nil" {
+                    mismatches.push(OracleMismatch::ConstantTagMismatch {
+                        proto: proto_idx,
+                        index: c_idx,
+                        actual_tag: "Nil".to_string(),
+                        expected_tag: tag.to_string(),
+                    });
+                    return;
+                }
+            }
+            if exp_str != "nil" && exp_str != "N" {
+                mismatches.push(OracleMismatch::Constant {
+                    proto: proto_idx,
+                    index: c_idx,
+                    actual: "nil".to_string(),
+                    expected: exp_c.raw_text.clone(),
+                });
             }
         }
         luad_core::model::ConstantValue::Boolean(b) => {
             if let Some(tag) = exp_c.tag {
                 if tag != 'B' {
-                    return false;
+                    mismatches.push(OracleMismatch::ConstantTagMismatch {
+                        proto: proto_idx,
+                        index: c_idx,
+                        actual_tag: "Boolean".to_string(),
+                        expected_tag: tag.to_string(),
+                    });
+                    return;
                 }
             }
-            let s = if *b { "true" } else { "false" };
-            exp_str == s
+            let exp_expected = if *b { "true" } else { "false" };
+            if exp_str != exp_expected {
+                mismatches.push(OracleMismatch::Constant {
+                    proto: proto_idx,
+                    index: c_idx,
+                    actual: exp_expected.to_string(),
+                    expected: exp_c.raw_text.clone(),
+                });
+            }
         }
         luad_core::model::ConstantValue::Integer { val, .. } => {
             if let Some(tag) = exp_c.tag {
                 if tag != 'I' {
-                    return false;
+                    mismatches.push(OracleMismatch::ConstantTagMismatch {
+                        proto: proto_idx,
+                        index: c_idx,
+                        actual_tag: "Integer".to_string(),
+                        expected_tag: tag.to_string(),
+                    });
+                    return;
                 }
             }
-            if let Ok(parsed_int) = exp_str.parse::<i64>() {
-                *val == parsed_int
-            } else {
-                exp_str == val.to_string()
+            let act_str = val.to_string();
+            if exp_str != act_str {
+                mismatches.push(OracleMismatch::Constant {
+                    proto: proto_idx,
+                    index: c_idx,
+                    actual: act_str,
+                    expected: exp_c.raw_text.clone(),
+                });
             }
         }
         luad_core::model::ConstantValue::Float { val, .. } => {
             if let Some(tag) = exp_c.tag {
                 if tag != 'F' {
-                    return false;
+                    mismatches.push(OracleMismatch::ConstantTagMismatch {
+                        proto: proto_idx,
+                        index: c_idx,
+                        actual_tag: "Float".to_string(),
+                        expected_tag: tag.to_string(),
+                    });
+                    return;
                 }
             }
-            if val.is_nan() {
-                exp_str == "nan" || exp_str == "-nan"
-            } else if *val == 0.0 && val.is_sign_negative() {
-                exp_str == "-0.0" || exp_str == "-0"
-            } else if *val == 0.0 && val.is_sign_positive() {
-                exp_str == "0.0" || exp_str == "0"
-            } else if let Ok(parsed_f) = exp_str.parse::<f64>() {
-                if val.to_bits() == parsed_f.to_bits() {
-                    true
-                } else {
-                    let val_str = format!("{}", val);
-                    let val_str_float = if !val_str.contains('.')
-                        && !val_str.contains('e')
-                        && !val_str.contains('E')
-                    {
-                        format!("{}.0", val_str)
-                    } else {
-                        val_str.clone()
-                    };
-                    val_str == exp_str
-                        || val_str_float == exp_str
-                        || (val.is_finite()
-                            && parsed_f.is_finite()
-                            && (*val - parsed_f).abs() / val.abs().max(1.0) < 1e-13)
-                }
-            } else {
-                false
+            let act_float_token = canonical_luac_float_str(*val, dialect);
+            if act_float_token != exp_str {
+                // Strict token match - no relative tolerance
+                mismatches.push(OracleMismatch::ConstantFloatTokenMismatch {
+                    proto: proto_idx,
+                    index: c_idx,
+                    actual_token: act_float_token,
+                    expected_token: exp_str.to_string(),
+                });
             }
         }
-
         luad_core::model::ConstantValue::ShortString(s)
         | luad_core::model::ConstantValue::LongString(s) => {
             if let Some(tag) = exp_c.tag {
                 if tag != 'S' {
-                    return false;
+                    mismatches.push(OracleMismatch::ConstantTagMismatch {
+                        proto: proto_idx,
+                        index: c_idx,
+                        actual_tag: "String".to_string(),
+                        expected_tag: tag.to_string(),
+                    });
+                    return;
                 }
             }
             let formatted_luac = format_luac_string(&s.raw_bytes);
-            exp_str == formatted_luac || exp_str == s.as_str()
+            if exp_str != formatted_luac && exp_str != s.as_str() {
+                mismatches.push(OracleMismatch::Constant {
+                    proto: proto_idx,
+                    index: c_idx,
+                    actual: formatted_luac,
+                    expected: exp_c.raw_text.clone(),
+                });
+            }
         }
     }
 }
@@ -932,37 +1089,43 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                     });
                 }
 
-                let act_mnem = decode_instruction_mnemonic(&chunk.dialect, act_inst.raw_word)
-                    .unwrap_or("<unknown>");
-                if !act_mnem.eq_ignore_ascii_case(&exp_inst.mnemonic) {
-                    mismatches.push(OracleMismatch::Mnemonic {
-                        proto: i,
-                        pc,
-                        raw_word: act_inst.raw_word,
-                        actual: act_mnem.to_string(),
-                        expected: exp_inst.mnemonic.clone(),
-                    });
-                }
+                // Check dialect-specific instruction comparison
+                if chunk.dialect == "lua5.4" {
+                    compare_instruction_54(i, pc, act_inst.raw_word, exp_inst, &mut mismatches);
+                } else {
+                    // Fallback comparison for other dialects
+                    let act_mnem = decode_instruction_mnemonic(&chunk.dialect, act_inst.raw_word)
+                        .unwrap_or("<unknown>");
+                    if !act_mnem.eq_ignore_ascii_case(&exp_inst.mnemonic) {
+                        mismatches.push(OracleMismatch::Mnemonic {
+                            proto: i,
+                            pc,
+                            raw_word: act_inst.raw_word,
+                            actual: act_mnem.to_string(),
+                            expected: exp_inst.mnemonic.clone(),
+                        });
+                    }
 
-                let act_ops = decode_instruction_operands(&chunk.dialect, act_inst.raw_word)
-                    .unwrap_or_else(|| "<invalid>".to_string());
-                let exp_ops = &exp_inst.operands_raw;
-                if act_ops.trim() != exp_ops.trim() {
-                    let act_tokens: Vec<&str> = act_ops.split_whitespace().collect();
-                    let exp_tokens: Vec<&str> = exp_ops.split_whitespace().collect();
-                    let max_len = act_tokens.len().max(exp_tokens.len());
-                    for op_idx in 0..max_len {
-                        let act_tok = act_tokens.get(op_idx).unwrap_or(&"");
-                        let exp_tok = exp_tokens.get(op_idx).unwrap_or(&"");
-                        if act_tok != exp_tok {
-                            mismatches.push(OracleMismatch::Operand {
-                                proto: i,
-                                pc,
-                                raw_word: act_inst.raw_word,
-                                index: op_idx,
-                                actual: (*act_tok).to_string(),
-                                expected: (*exp_tok).to_string(),
-                            });
+                    let act_ops = decode_instruction_operands(&chunk.dialect, act_inst.raw_word)
+                        .unwrap_or_else(|| "<invalid>".to_string());
+                    let exp_ops = &exp_inst.operands_raw;
+                    if act_ops.trim() != exp_ops.trim() {
+                        let act_tokens: Vec<&str> = act_ops.split_whitespace().collect();
+                        let exp_tokens: Vec<&str> = exp_ops.split_whitespace().collect();
+                        let max_len = act_tokens.len().max(exp_tokens.len());
+                        for op_idx in 0..max_len {
+                            let act_tok = act_tokens.get(op_idx).unwrap_or(&"");
+                            let exp_tok = exp_tokens.get(op_idx).unwrap_or(&"");
+                            if act_tok != exp_tok {
+                                mismatches.push(OracleMismatch::Operand {
+                                    proto: i,
+                                    pc,
+                                    raw_word: act_inst.raw_word,
+                                    index: op_idx,
+                                    actual: (*act_tok).to_string(),
+                                    expected: (*exp_tok).to_string(),
+                                });
+                            }
                         }
                     }
                 }
@@ -979,14 +1142,14 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
         } else {
             for (c_idx, act_c) in actual.constants.iter().enumerate() {
                 if let Some(exp_c) = expected.constants.get(c_idx) {
-                    if !check_constant_matches(&act_c.value, exp_c) {
-                        mismatches.push(OracleMismatch::Constant {
-                            proto: i,
-                            index: c_idx,
-                            actual: format!("{:?}", act_c.value),
-                            expected: exp_c.raw_text.clone(),
-                        });
-                    }
+                    check_constant_matches_exact(
+                        i,
+                        c_idx,
+                        &chunk.dialect,
+                        &act_c.value,
+                        exp_c,
+                        &mut mismatches,
+                    );
                 }
             }
         }
@@ -1086,6 +1249,289 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
     }
 
     mismatches
+}
+
+/// Strict typed operand field verification and field-consumption accounting for Lua 5.4.8.
+struct InstructionFieldChecker<'a> {
+    proto: usize,
+    pc: usize,
+    raw_word: u32,
+    exp_tokens: &'a [&'a str],
+    consumed_count: usize,
+}
+
+impl<'a> InstructionFieldChecker<'a> {
+    fn new(proto: usize, pc: usize, raw_word: u32, exp_tokens: &'a [&'a str]) -> Self {
+        Self {
+            proto,
+            pc,
+            raw_word,
+            exp_tokens,
+            consumed_count: 0,
+        }
+    }
+
+    fn check(&mut self, field_name: &str, actual_val: &str, mismatches: &mut Vec<OracleMismatch>) {
+        if self.consumed_count < self.exp_tokens.len() {
+            let exp_token = self.exp_tokens[self.consumed_count];
+            self.consumed_count += 1;
+            if actual_val != exp_token {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto: self.proto,
+                    pc: self.pc,
+                    raw_word: self.raw_word,
+                    field: field_name.to_string(),
+                    actual: actual_val.to_string(),
+                    expected: exp_token.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto: self.proto,
+                    pc: self.pc,
+                    raw_word: self.raw_word,
+                    index: self.consumed_count - 1,
+                    actual: actual_val.to_string(),
+                    expected: exp_token.to_string(),
+                });
+            }
+        } else {
+            mismatches.push(OracleMismatch::MissingOperand {
+                proto: self.proto,
+                pc: self.pc,
+                raw_word: self.raw_word,
+                field_name: field_name.to_string(),
+                expected: actual_val.to_string(),
+            });
+        }
+    }
+
+    fn check_remaining(&self, mismatches: &mut Vec<OracleMismatch>) {
+        if self.consumed_count < self.exp_tokens.len() {
+            for extra in &self.exp_tokens[self.consumed_count..] {
+                mismatches.push(OracleMismatch::ExtraOperand {
+                    proto: self.proto,
+                    pc: self.pc,
+                    raw_word: self.raw_word,
+                    extra_token: (*extra).to_string(),
+                });
+            }
+        }
+    }
+}
+
+/// Strict typed operand field verification and field-consumption accounting for Lua 5.4.8.
+fn compare_instruction_54(
+    proto: usize,
+    pc: usize,
+    raw_word: u32,
+    exp_inst: &LuacInstDump,
+    mismatches: &mut Vec<OracleMismatch>,
+) {
+    let raw = luad_dialect_lua54::RawInstruction54::decode(raw_word);
+    let Some(act_opcode) = raw.opcode else {
+        mismatches.push(OracleMismatch::UnknownActualOpcode {
+            proto,
+            pc,
+            raw_word,
+            opcode: (raw_word & 0x7F) as u8,
+        });
+        return;
+    };
+
+    let act_mnem = act_opcode.name();
+    if !act_mnem.eq_ignore_ascii_case(&exp_inst.mnemonic) {
+        mismatches.push(OracleMismatch::Mnemonic {
+            proto,
+            pc,
+            raw_word,
+            actual: act_mnem.to_string(),
+            expected: exp_inst.mnemonic.clone(),
+        });
+        return;
+    }
+
+    let exp_tokens: Vec<&str> = exp_inst.operands_raw.split_whitespace().collect();
+    let mut checker = InstructionFieldChecker::new(proto, pc, raw_word, &exp_tokens);
+
+    let k_suffix = if raw.k != 0 { "k" } else { "" };
+
+    match act_opcode {
+        luad_dialect_lua54::Opcode54::Return0 => {
+            // 0 operands
+        }
+        luad_dialect_lua54::Opcode54::Loadkx
+        | luad_dialect_lua54::Opcode54::Loadfalse
+        | luad_dialect_lua54::Opcode54::Lfalseskip
+        | luad_dialect_lua54::Opcode54::Loadtrue
+        | luad_dialect_lua54::Opcode54::Close
+        | luad_dialect_lua54::Opcode54::Tbc
+        | luad_dialect_lua54::Opcode54::Return1
+        | luad_dialect_lua54::Opcode54::Varargprep => {
+            // 1 operand: A
+            checker.check("A", &raw.a.to_string(), mismatches);
+        }
+        luad_dialect_lua54::Opcode54::Extraarg => {
+            // 1 operand: Ax
+            checker.check("Ax", &raw.ax.to_string(), mismatches);
+        }
+        luad_dialect_lua54::Opcode54::Jmp => {
+            // 1 operand: sJ
+            checker.check("sJ", &raw.sj.to_string(), mismatches);
+
+            // Verify resolved jump target against comment if present (e.g. "; to 5")
+            if let Some(comment) = &exp_inst.comment {
+                if let Some(target_str) = comment.strip_prefix("to ") {
+                    if let Ok(exp_1based_target) = target_str.trim().parse::<usize>() {
+                        let exp_target = if exp_1based_target > 0 {
+                            exp_1based_target - 1
+                        } else {
+                            0
+                        };
+                        let act_target = (pc as isize + 1 + raw.sj as isize).max(0) as usize;
+                        if act_target != exp_target {
+                            mismatches.push(OracleMismatch::JumpTargetMismatch {
+                                proto,
+                                pc,
+                                actual_target: act_target,
+                                expected_target: exp_target,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        luad_dialect_lua54::Opcode54::Move
+        | luad_dialect_lua54::Opcode54::Loadnil
+        | luad_dialect_lua54::Opcode54::Getupval
+        | luad_dialect_lua54::Opcode54::Setupval
+        | luad_dialect_lua54::Opcode54::Unm
+        | luad_dialect_lua54::Opcode54::Bnot
+        | luad_dialect_lua54::Opcode54::Not
+        | luad_dialect_lua54::Opcode54::Len
+        | luad_dialect_lua54::Opcode54::Concat => {
+            // 2 operands: A, B
+            checker.check("A", &raw.a.to_string(), mismatches);
+            checker.check("B", &raw.b.to_string(), mismatches);
+        }
+        luad_dialect_lua54::Opcode54::Loadi | luad_dialect_lua54::Opcode54::Loadf => {
+            // 2 operands: A, sBx
+            checker.check("A", &raw.a.to_string(), mismatches);
+            checker.check("sBx", &raw.sbx.to_string(), mismatches);
+        }
+        luad_dialect_lua54::Opcode54::Loadk
+        | luad_dialect_lua54::Opcode54::Forloop
+        | luad_dialect_lua54::Opcode54::Forprep
+        | luad_dialect_lua54::Opcode54::Tforprep
+        | luad_dialect_lua54::Opcode54::Tforloop
+        | luad_dialect_lua54::Opcode54::Closure => {
+            // 2 operands: A, Bx
+            checker.check("A", &raw.a.to_string(), mismatches);
+            checker.check("Bx", &raw.bx.to_string(), mismatches);
+        }
+        luad_dialect_lua54::Opcode54::Tforcall => {
+            // 2 operands: A, C
+            checker.check("A", &raw.a.to_string(), mismatches);
+            checker.check("C", &raw.c.to_string(), mismatches);
+        }
+        luad_dialect_lua54::Opcode54::Test => {
+            // 2 operands: A, k
+            checker.check("A", &raw.a.to_string(), mismatches);
+            checker.check("k", &raw.k.to_string(), mismatches);
+        }
+        luad_dialect_lua54::Opcode54::Testset
+        | luad_dialect_lua54::Opcode54::Eq
+        | luad_dialect_lua54::Opcode54::Lt
+        | luad_dialect_lua54::Opcode54::Le
+        | luad_dialect_lua54::Opcode54::Eqk => {
+            // 3 operands: A, B, k
+            checker.check("A", &raw.a.to_string(), mismatches);
+            checker.check("B", &raw.b.to_string(), mismatches);
+            checker.check("k", &raw.k.to_string(), mismatches);
+        }
+        luad_dialect_lua54::Opcode54::Eqi
+        | luad_dialect_lua54::Opcode54::Lti
+        | luad_dialect_lua54::Opcode54::Lei
+        | luad_dialect_lua54::Opcode54::Gti
+        | luad_dialect_lua54::Opcode54::Gei => {
+            // 3 operands: A, sB, k
+            checker.check("A", &raw.a.to_string(), mismatches);
+            checker.check("sB", &raw.sb.to_string(), mismatches);
+            checker.check("k", &raw.k.to_string(), mismatches);
+        }
+        luad_dialect_lua54::Opcode54::Addi
+        | luad_dialect_lua54::Opcode54::Shri
+        | luad_dialect_lua54::Opcode54::Shli => {
+            // 3 operands: A, B, sC
+            checker.check("A", &raw.a.to_string(), mismatches);
+            checker.check("B", &raw.b.to_string(), mismatches);
+            checker.check("sC", &raw.sc.to_string(), mismatches);
+        }
+        luad_dialect_lua54::Opcode54::Gettabup
+        | luad_dialect_lua54::Opcode54::Gettable
+        | luad_dialect_lua54::Opcode54::Geti
+        | luad_dialect_lua54::Opcode54::Getfield
+        | luad_dialect_lua54::Opcode54::Newtable
+        | luad_dialect_lua54::Opcode54::Addk
+        | luad_dialect_lua54::Opcode54::Subk
+        | luad_dialect_lua54::Opcode54::Mulk
+        | luad_dialect_lua54::Opcode54::Modk
+        | luad_dialect_lua54::Opcode54::Powk
+        | luad_dialect_lua54::Opcode54::Divk
+        | luad_dialect_lua54::Opcode54::Idivk
+        | luad_dialect_lua54::Opcode54::Bandk
+        | luad_dialect_lua54::Opcode54::Bork
+        | luad_dialect_lua54::Opcode54::Bxork
+        | luad_dialect_lua54::Opcode54::Add
+        | luad_dialect_lua54::Opcode54::Sub
+        | luad_dialect_lua54::Opcode54::Mul
+        | luad_dialect_lua54::Opcode54::Mod
+        | luad_dialect_lua54::Opcode54::Pow
+        | luad_dialect_lua54::Opcode54::Div
+        | luad_dialect_lua54::Opcode54::Idiv
+        | luad_dialect_lua54::Opcode54::Band
+        | luad_dialect_lua54::Opcode54::Bor
+        | luad_dialect_lua54::Opcode54::Bxor
+        | luad_dialect_lua54::Opcode54::Shl
+        | luad_dialect_lua54::Opcode54::Shr
+        | luad_dialect_lua54::Opcode54::Mmbin
+        | luad_dialect_lua54::Opcode54::Call => {
+            // 3 operands: A, B, C
+            checker.check("A", &raw.a.to_string(), mismatches);
+            checker.check("B", &raw.b.to_string(), mismatches);
+            checker.check("C", &raw.c.to_string(), mismatches);
+        }
+        luad_dialect_lua54::Opcode54::Settabup
+        | luad_dialect_lua54::Opcode54::Settable
+        | luad_dialect_lua54::Opcode54::Seti
+        | luad_dialect_lua54::Opcode54::Setfield
+        | luad_dialect_lua54::Opcode54::SelfOp
+        | luad_dialect_lua54::Opcode54::Tailcall
+        | luad_dialect_lua54::Opcode54::Return
+        | luad_dialect_lua54::Opcode54::Setlist
+        | luad_dialect_lua54::Opcode54::Vararg => {
+            // 3 operands: A, B, C (with k suffix if raw.k != 0)
+            checker.check("A", &raw.a.to_string(), mismatches);
+            checker.check("B", &raw.b.to_string(), mismatches);
+            let expected_c_str = format!("{}{}", raw.c, k_suffix);
+            checker.check("C", &expected_c_str, mismatches);
+        }
+        luad_dialect_lua54::Opcode54::Mmbini => {
+            // 4 operands: A, sB, C, k
+            checker.check("A", &raw.a.to_string(), mismatches);
+            checker.check("sB", &raw.sb.to_string(), mismatches);
+            checker.check("C", &raw.c.to_string(), mismatches);
+            checker.check("k", &raw.k.to_string(), mismatches);
+        }
+        luad_dialect_lua54::Opcode54::Mmbink => {
+            // 4 operands: A, B, C, k
+            checker.check("A", &raw.a.to_string(), mismatches);
+            checker.check("B", &raw.b.to_string(), mismatches);
+            checker.check("C", &raw.c.to_string(), mismatches);
+            checker.check("k", &raw.k.to_string(), mismatches);
+        }
+    }
+
+    // Field-consumption accounting: verify no trailing unconsumed operands exist
+    checker.check_remaining(mismatches);
 }
 
 /// Perform field-by-field differential comparison between `luad`'s parsed `Chunk` and `luac -l -l`.

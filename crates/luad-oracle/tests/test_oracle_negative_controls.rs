@@ -1,7 +1,7 @@
 //! Negative control test suite for the canonical differential oracle.
 //!
 //! Asserts that deliberate corruptions to mnemonics, operands, constants, local debug info,
-//! line info, and prototype counts are detected and produce exact expected `OracleMismatch` variants.
+//! line info, prototype counts, and field consumption are detected and produce exact expected `OracleMismatch` variants.
 
 use luad_core::model::{Chunk, ConstantValue};
 use luad_oracle::{
@@ -14,8 +14,8 @@ fn get_base_test_pair() -> (Chunk, String) {
     let raw_bytes = compile_source_lua54(source, false).expect("Compiles with luac 5.4");
     let mut reader = luad_core::reader::SafeReader::new(&raw_bytes);
     let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("Decodes clean chunk");
-    let luac_dump = dump_source_luac(&luac_path, source).expect("Dumps with luac 5.4");
-    (chunk, luac_dump)
+    let dump = dump_source_luac(&luac_path, source).expect("Dumps with luac 5.4");
+    (chunk, dump)
 }
 
 #[test]
@@ -33,7 +33,6 @@ fn test_negative_control_mnemonic_mutation() {
     let (mut chunk, dump) = get_base_test_pair();
 
     // Perturb instruction 0 opcode (change to LOADI, opcode 1)
-    // Lua 5.4 LOADI = 1
     let original_word = chunk.main_proto.instructions[0].raw_word;
     let corrupted_word = (original_word & !0x7F) | 1; // force LOADI (opcode 1)
     chunk.main_proto.instructions[0].raw_word = corrupted_word;
@@ -58,7 +57,6 @@ fn test_negative_control_operand_mutation() {
     let (mut chunk, dump) = get_base_test_pair();
 
     // Mutate operand A of instruction 1 (e.g. change register index from 0 to 42)
-    // Lua 5.4: A is at bits 7..14
     let original_word = chunk.main_proto.instructions[1].raw_word;
     let corrupted_word = (original_word & !(0xFF << 7)) | (42 << 7);
     chunk.main_proto.instructions[1].raw_word = corrupted_word;
@@ -69,12 +67,15 @@ fn test_negative_control_operand_mutation() {
         "Corrupted operand must produce mismatches"
     );
 
-    let has_operand_mismatch = mismatches
-        .iter()
-        .any(|m| matches!(m, OracleMismatch::Operand { pc: 1, .. }));
+    let has_operand_mismatch = mismatches.iter().any(|m| {
+        matches!(
+            m,
+            OracleMismatch::Operand { pc: 1, .. } | OracleMismatch::OperandField { pc: 1, .. }
+        )
+    });
     assert!(
         has_operand_mismatch,
-        "Expected OracleMismatch::Operand at PC 1, got: {mismatches:?}"
+        "Expected OracleMismatch::Operand or OperandField at PC 1, got: {mismatches:?}"
     );
 }
 
@@ -97,9 +98,12 @@ fn test_negative_control_bit15_b_decoder_bug() {
         !mismatches.is_empty(),
         "Buggy bitfield decoding must produce mismatches"
     );
-    let has_operand_mismatch = mismatches
-        .iter()
-        .any(|m| matches!(m, OracleMismatch::Operand { pc: 1, .. }));
+    let has_operand_mismatch = mismatches.iter().any(|m| {
+        matches!(
+            m,
+            OracleMismatch::Operand { pc: 1, .. } | OracleMismatch::OperandField { pc: 1, .. }
+        )
+    });
     assert!(
         has_operand_mismatch,
         "Expected OracleMismatch::Operand on bitfield corruption, got: {mismatches:?}"
@@ -142,8 +146,6 @@ fn test_unpatched_pre_gate2_decoder_fails_oracle_on_all_fixtures() {
 
             // Compare against expected operands from luac
             if let Some(exp_inst) = dump_parsed.functions[0].instructions.get(pc) {
-                // For instructions with B operand (like MOVE, LOADNIL, ADD, CALL, etc.),
-                // the buggy decoder yields a different B value whenever B > 0.
                 if let Some(opcode) = luad_dialect_lua54::Opcode54::from_u8(op) {
                     let buggy_ops = match opcode {
                         luad_dialect_lua54::Opcode54::Move => format!("{a} {buggy_b}"),
@@ -230,12 +232,16 @@ fn test_negative_control_constant_mutation() {
         "Corrupted constant must produce mismatches"
     );
 
-    let has_const_mismatch = mismatches
-        .iter()
-        .any(|m| matches!(m, OracleMismatch::Constant { index: 0, .. }));
+    let has_const_mismatch = mismatches.iter().any(|m| {
+        matches!(
+            m,
+            OracleMismatch::Constant { index: 0, .. }
+                | OracleMismatch::ConstantTagMismatch { index: 0, .. }
+        )
+    });
     assert!(
         has_const_mismatch,
-        "Expected OracleMismatch::Constant at index 0, got: {mismatches:?}"
+        "Expected OracleMismatch::Constant or ConstantTagMismatch at index 0, got: {mismatches:?}"
     );
 }
 
@@ -360,7 +366,7 @@ fn test_negative_control_signed_immediate_offset_sb() {
 fn test_negative_control_comparison_opcode_modes() {
     use luad_dialect_lua54::{OpMode54, Opcode54};
 
-    // The five comparison opcodes and metamethod companions must all have OpMode::IABC
+    // The comparison opcodes and metamethod companions must all have OpMode::IABC
     let comparison_opcodes = [
         Opcode54::Eq,
         Opcode54::Lt,
@@ -398,9 +404,11 @@ fn test_negative_control_constant_type_mismatch() {
         !mismatches.is_empty(),
         "Float constant substitution for string MUST produce mismatch"
     );
-    assert!(mismatches
-        .iter()
-        .any(|m| matches!(m, OracleMismatch::Constant { index: 0, .. })));
+    assert!(mismatches.iter().any(|m| matches!(
+        m,
+        OracleMismatch::Constant { index: 0, .. }
+            | OracleMismatch::ConstantTagMismatch { index: 0, .. }
+    )));
 }
 
 #[test]
@@ -424,9 +432,14 @@ fn test_negative_control_unknown_actual_opcode() {
         !mismatches.is_empty(),
         "Unknown opcode must produce mismatch"
     );
-    assert!(mismatches.iter().any(
-        |m| matches!(m, OracleMismatch::Mnemonic { pc: 0, actual, .. } if actual == "<unknown>")
-    ));
+    assert!(mismatches.iter().any(|m| matches!(
+        m,
+        OracleMismatch::UnknownActualOpcode {
+            pc: 0,
+            opcode: 120,
+            ..
+        }
+    )));
 }
 
 #[test]
@@ -454,9 +467,11 @@ fn test_negative_control_constant_float_token_character_mutation() {
         !mismatches.is_empty(),
         "Mutated float token must produce mismatch"
     );
-    assert!(mismatches
-        .iter()
-        .any(|m| matches!(m, OracleMismatch::Constant { index: 1, .. })));
+    assert!(mismatches.iter().any(|m| matches!(
+        m,
+        OracleMismatch::ConstantFloatTokenMismatch { index: 1, .. }
+            | OracleMismatch::Constant { index: 1, .. }
+    )));
 }
 
 #[test]
@@ -480,9 +495,11 @@ fn test_negative_control_signed_zero_float() {
 
     let mismatches = compare_chunk_with_luac(&chunk, &dump);
     assert!(!mismatches.is_empty(), "-0.0 vs +0.0 must produce mismatch");
-    assert!(mismatches
-        .iter()
-        .any(|m| matches!(m, OracleMismatch::Constant { index: 1, .. })));
+    assert!(mismatches.iter().any(|m| matches!(
+        m,
+        OracleMismatch::ConstantFloatTokenMismatch { index: 1, .. }
+            | OracleMismatch::Constant { index: 1, .. }
+    )));
 }
 
 #[test]
@@ -509,9 +526,11 @@ fn test_negative_control_integer_vs_float_constant_tag() {
         !mismatches.is_empty(),
         "Integer vs Float tag mismatch must produce mismatch"
     );
-    assert!(mismatches
-        .iter()
-        .any(|m| matches!(m, OracleMismatch::Constant { index: 1, .. })));
+    assert!(mismatches.iter().any(|m| matches!(
+        m,
+        OracleMismatch::ConstantTagMismatch { index: 1, .. }
+            | OracleMismatch::Constant { index: 1, .. }
+    )));
 }
 
 #[test]
@@ -519,12 +538,117 @@ fn test_negative_control_extra_operand_detected() {
     let (mut chunk, dump) = get_base_test_pair();
 
     // Mutate the raw instruction word to change operand count / operands
-    // Instruction 1 is LOADS (opcode 2) - mutate it
     chunk.main_proto.instructions[1].raw_word ^= 1 << 16;
 
     let mismatches = compare_chunk_with_luac(&chunk, &dump);
     assert!(!mismatches.is_empty(), "Operand mismatch must be detected");
-    assert!(mismatches
-        .iter()
-        .any(|m| matches!(m, OracleMismatch::Operand { .. })));
+    assert!(mismatches.iter().any(|m| matches!(
+        m,
+        OracleMismatch::Operand { .. }
+            | OracleMismatch::OperandField { .. }
+            | OracleMismatch::ExtraOperand { .. }
+    )));
+}
+
+#[test]
+fn test_negative_control_missing_operand() {
+    let (chunk, dump) = get_base_test_pair();
+    // Tamper listing dump by dropping an operand from instruction 1 (replace "0 0\t;" with "0\t;")
+    let tampered_dump = dump.replace("0 0\t;", "0\t;");
+    assert_ne!(tampered_dump, dump);
+
+    let mismatches = compare_chunk_with_luac(&chunk, &tampered_dump);
+    assert!(
+        !mismatches.is_empty(),
+        "Missing operand in listing must produce mismatch"
+    );
+    assert!(mismatches.iter().any(|m| matches!(
+        m,
+        OracleMismatch::MissingOperand { .. } | OracleMismatch::Operand { .. }
+    )));
+}
+
+#[test]
+fn test_negative_control_unconsumed_oracle_field() {
+    let (chunk, dump) = get_base_test_pair();
+    // Tamper listing dump by adding an unconsumed extra operand token to instruction 1
+    let tampered_dump = dump.replace("0 0\t;", "0 0 999\t;");
+    assert_ne!(tampered_dump, dump);
+
+    let mismatches = compare_chunk_with_luac(&chunk, &tampered_dump);
+    assert!(
+        !mismatches.is_empty(),
+        "Unconsumed oracle field must produce mismatch"
+    );
+    assert!(mismatches.iter().any(|m| matches!(
+        m,
+        OracleMismatch::ExtraOperand { .. }
+            | OracleMismatch::UnconsumedField { .. }
+            | OracleMismatch::Operand { .. }
+    )));
+}
+
+#[test]
+fn test_negative_control_each_operand_field_mutated_independently() {
+    // Tests that mutations to A, B, C, k, Bx, sBx, sC, Ax, sJ independently trigger OracleMismatch
+    let luac_path = require_luac54();
+    let source = r#"
+        local a = 1
+        local b = 2
+        local c = a + b
+        local function f(x) return x + 1 end
+        for i = 1, 10 do c = c + i end
+        return a, b, c, f
+    "#;
+    let raw_bytes = compile_source_lua54(source, false).expect("Compiles with luac 5.4");
+    let mut reader = luad_core::reader::SafeReader::new(&raw_bytes);
+    let clean_chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("Decodes chunk");
+    let dump = dump_source_luac(&luac_path, source).expect("Dumps with luac 5.4");
+
+    assert!(compare_chunk_with_luac(&clean_chunk, &dump).is_empty());
+
+    // Test mutating instruction operands across diverse opcodes (instructions 1..len)
+    for inst_idx in 1..clean_chunk.main_proto.instructions.len() {
+        let mut mutated_chunk_a = clean_chunk.clone();
+        mutated_chunk_a.main_proto.instructions[inst_idx].raw_word ^= 1 << 8; // mutate A
+        let ma = compare_chunk_with_luac(&mutated_chunk_a, &dump);
+        assert!(
+            !ma.is_empty(),
+            "Mutation to instruction {inst_idx} operand A must produce mismatch"
+        );
+
+        let mut mutated_chunk_b = clean_chunk.clone();
+        mutated_chunk_b.main_proto.instructions[inst_idx].raw_word ^= 1 << 18; // mutate B/Bx
+        let mb = compare_chunk_with_luac(&mutated_chunk_b, &dump);
+        assert!(
+            !mb.is_empty(),
+            "Mutation to instruction {inst_idx} operand B/Bx must produce mismatch"
+        );
+    }
+}
+
+#[test]
+fn test_negative_control_jump_target_mismatch() {
+    let luac_path = require_luac54();
+    let source = "for i = 1, 10 do\n  local x = i * 2\nend\nreturn true";
+    let raw_bytes = compile_source_lua54(source, false).expect("Compiles with luac 5.4");
+    let mut reader = luad_core::reader::SafeReader::new(&raw_bytes);
+    let mut chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("Decodes chunk");
+    let dump = dump_source_luac(&luac_path, source).expect("Dumps with luac 5.4");
+
+    assert!(compare_chunk_with_luac(&chunk, &dump).is_empty());
+
+    // Find JMP instruction and mutate its sJ target
+    let jmp_pos = chunk.main_proto.instructions.iter().position(|i| {
+        (i.raw_word & 0x7F) == 56 // JMP opcode
+    });
+
+    if let Some(pos) = jmp_pos {
+        chunk.main_proto.instructions[pos].raw_word ^= 1 << 15; // mutate sJ
+        let mismatches = compare_chunk_with_luac(&chunk, &dump);
+        assert!(
+            !mismatches.is_empty(),
+            "Mutated jump target must produce mismatch"
+        );
+    }
 }

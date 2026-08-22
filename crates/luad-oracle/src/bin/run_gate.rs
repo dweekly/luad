@@ -138,7 +138,48 @@ fn main() {
     }
 
     let result_path = out_dir.join("gate-result.json");
-    let comp_ref: Option<&Path> = compiler_path.as_deref();
+    let mut resolved_compiler_path = compiler_path;
+    if resolved_compiler_path.is_none() {
+        if let Some(req_ver) = &spec.required_compiler_version {
+            let candidates = if req_ver.contains("5.4") {
+                vec![
+                    PathBuf::from("/tmp/lua-tools/bin/luac5.4"),
+                    PathBuf::from("/usr/local/bin/luac5.4"),
+                    PathBuf::from("/opt/homebrew/bin/luac5.4"),
+                ]
+            } else if req_ver.contains("5.1") {
+                vec![
+                    PathBuf::from("/tmp/lua-tools/bin/luac5.1"),
+                    PathBuf::from("/usr/local/bin/luac5.1"),
+                ]
+            } else if req_ver.contains("5.2") {
+                vec![
+                    PathBuf::from("/tmp/lua-tools/bin/luac5.2"),
+                    PathBuf::from("/usr/local/bin/luac5.2"),
+                ]
+            } else if req_ver.contains("5.3") {
+                vec![
+                    PathBuf::from("/tmp/lua-tools/bin/luac5.3"),
+                    PathBuf::from("/usr/local/bin/luac5.3"),
+                ]
+            } else if req_ver.contains("5.5") {
+                vec![
+                    PathBuf::from("/tmp/lua-tools/bin/luac5.5"),
+                    PathBuf::from("/usr/local/bin/luac5.5"),
+                ]
+            } else {
+                vec![]
+            };
+            for cand in candidates {
+                if cand.exists() {
+                    resolved_compiler_path = Some(cand);
+                    break;
+                }
+            }
+        }
+    }
+
+    let comp_ref: Option<&Path> = resolved_compiler_path.as_deref();
 
     println!("==> Executing GateSpec '{}'...", spec.gate_id);
     let result = match execute_gate_spec(&spec, &result_path, &workspace_root, comp_ref) {
@@ -159,10 +200,17 @@ fn main() {
 
     // Assemble and verify checkpoint manifest artifact
     let manifest_path = out_dir.join("release-manifest.json");
+    let target_dialect = if spec.gate_id.contains("lua54") {
+        "lua5.4"
+    } else {
+        "proof-harness-checkpoint-r1"
+    };
+    let profile = spec.required_profile.as_deref().unwrap_or("R1-Harness-v1");
+
     match assemble_release_manifest(
         &format!("checkpoint-{}", spec.gate_id),
-        "proof-harness-checkpoint-r1",
-        "R1-Harness-v1",
+        target_dialect,
+        profile,
         &current_commit,
         !result.dirty,
         &[(result.clone(), spec.clone())],

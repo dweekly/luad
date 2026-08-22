@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-facts-lua54-8",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_oracle_negative_controls",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_assert_chunk_matches_luac_panics_on_mismatch",
+    "test_golden_word_pins_and_unpatched_decoder_failure",
+    "test_negative_control_bit15_b_decoder_bug",
+    "test_negative_control_clean_passes",
+    "test_negative_control_comparison_opcode_modes",
+    "test_negative_control_constant_float_token_character_mutation",
+    "test_negative_control_constant_mutation",
+    "test_negative_control_constant_type_mismatch",
+    "test_negative_control_each_operand_field_mutated_independently",
+    "test_negative_control_extra_operand_detected",
+    "test_negative_control_instruction_count_mutation",
+    "test_negative_control_integer_vs_float_constant_tag",
+    "test_negative_control_jump_target_mismatch",
+    "test_negative_control_local_var_mutation",
+    "test_negative_control_metadata_mutation",
+    "test_negative_control_missing_operand",
+    "test_negative_control_mnemonic_mutation",
+    "test_negative_control_operand_mutation",
+    "test_negative_control_signed_immediate_offset_sb",
+    "test_negative_control_signed_zero_float",
+    "test_negative_control_unconsumed_oracle_field",
+    "test_negative_control_unknown_actual_opcode",
+    "test_unpatched_pre_gate2_decoder_fails_oracle_on_all_fixtures"
+  ],
+  "required_compiler_version": "Lua 5.4.8",
+  "required_compiler_sha256": "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",
+  "required_fixtures": [
+    {
+      "path": "tests/fixtures/precompiled/lua54/hello.luac",
+      "sha256": "a171c4c88ec40b1c871a57a888f66d7a93144e1d742f4071af286c9dc7b93575"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua54/hello_stripped.luac",
+      "sha256": "9806c9692fd2e55f737c0af5b9cfb96fd543383a2f4decc715c8c30a861ede0f"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua54/control_flow.luac",
+      "sha256": "afca11be116a96cd956ecaa3326b2f896ab828a2e6a6c995ab4e8d22e72f8fbf"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua54/control_flow_stripped.luac",
+      "sha256": "1fa7703d3f009b57d1382518e78bb676c1cafbbe26448fcdd3d225ec261da24b"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua54/closures.luac",
+      "sha256": "ceb00168e673be9fdbcdc24190d071ec8efa6afe6d1fe6f3a833b9ea3474f981"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua54/closures_stripped.luac",
+      "sha256": "9c997b1f76f828b11326333c349294cee2ee536a21f7c2244a6b5ed7a82f9ac7"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua54/tables.luac",
+      "sha256": "701b52fcfa9a9e798e68dda6933e021bd35e4768d817cbe5270a4242912d476b"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua54/tables_stripped.luac",
+      "sha256": "2700a1f815fad482ae1b82c16bc40c8ce6562b8b8bd09b7e9d8f3d8e97693279"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua54/numerics.luac",
+      "sha256": "f57931e46d30e42a1cf6f26a04e25c149c20f9386dfd1dbca619a7a25dcdcb23"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua54/numerics_stripped.luac",
+      "sha256": "aa30816dc42e2b1a9fead667ca1cf44412d488ced8ad30d5934308721d3e5795"
+    }
+  ],
+  "required_profile": "stock-lua54",
+  "prerequisite_gates": [
+    "gate-proof-harness"
+  ],
+  "allowed_capability_mutations": []
+}
