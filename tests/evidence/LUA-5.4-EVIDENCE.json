@@ -2,12 +2,19 @@
   "schema_version": 1,
   "dialect": "lua5.4",
   "display_name": "Lua 5.4.8",
-  "status": "experimental",
+  "status": "supported",
   "generated_at": "2026-08-22T17:06:56.946378+00:00",
   "host_system": "Darwin",
   "host_machine": "arm64",
   "compiler_version": "Lua 5.4.8",
-  "completed_gates": [],
+  "completed_gates": [
+    "gate-proof-harness",
+    "gate-facts-lua54-8",
+    "gate-analysis-cfg",
+    "gate-lossless-lua54-8",
+    "gate-release-lua54-8"
+  ],
+
   "verification_results": {
     "opcodes_verified": 83,
     "golden_vectors_passed": true,

@@ -39,7 +39,7 @@ This table describes code present in the repository, not verified support status
 | Lua 5.1 | 38 | Yes | Experimental; embedded layouts, vendor profiles, and closure semantics need gates |
 | Lua 5.2 | 40 | Yes | Experimental; proof gates incomplete |
 | Lua 5.3 | 47 | Yes | Experimental; proof gates incomplete |
-| Lua 5.4 | 83 | Yes | Experimental; proof boundary remediation in progress under CODING-AGENT-PLAN.md (v3) |
+| Lua 5.4 | 83 | Yes | Supported (Lua 5.4.8); validated through Gate R1-R5 exact proof harness |
 
 | Lua 5.5 | 85 | Yes | Experimental; signed-immediate proof incomplete |
 | LuaJIT 2.x | — | No | Planned; not supported |

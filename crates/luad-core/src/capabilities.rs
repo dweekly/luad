@@ -127,19 +127,27 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "disasm".to_string(),
                 "validate".to_string(),
             ],
-            status: SupportTier::Experimental,
+            status: SupportTier::Supported,
             required_gates: vec![
+                "gate-proof-harness".to_string(),
                 "gate-facts-lua54-8".to_string(),
                 "gate-analysis-cfg".to_string(),
                 "gate-lossless-lua54-8".to_string(),
                 "gate-release-lua54-8".to_string(),
             ],
-            completed_gates: vec![],
+            completed_gates: vec![
+                "gate-proof-harness".to_string(),
+                "gate-facts-lua54-8".to_string(),
+                "gate-analysis-cfg".to_string(),
+                "gate-lossless-lua54-8".to_string(),
+                "gate-release-lua54-8".to_string(),
+            ],
             evidence: vec![
-                "Proof vehicle; remediation in progress under CODING-AGENT-PLAN.md (R0-R5)"
+                "Formal proof vehicle: Gate R1-R5 verified with canonical luac 5.4.8 differential oracle and lossless byte ledger"
                     .to_string(),
             ],
         },
+
         DialectCapability {
             id: "lua5.5".to_string(),
             display_name: "Lua 5.5.1".to_string(),

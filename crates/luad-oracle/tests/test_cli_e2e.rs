@@ -55,19 +55,17 @@ fn test_cli_capabilities() {
         .as_array()
         .expect("supported_dialects array");
     let supp_strings: Vec<&str> = supported.iter().filter_map(|v| v.as_str()).collect();
-    assert!(
-        supp_strings.is_empty(),
-        "Under Gate R0, no stock dialect is supported until formal proof passes"
+    assert_eq!(
+        supp_strings,
+        vec!["lua5.4"],
+        "Under Gate R5, strictly lua5.4 is promoted to supported"
     );
 
     let experimental = json_val["experimental_dialects"]
         .as_array()
         .expect("experimental_dialects array");
     let exp_strings: Vec<&str> = experimental.iter().filter_map(|v| v.as_str()).collect();
-    assert_eq!(
-        exp_strings,
-        vec!["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"]
-    );
+    assert_eq!(exp_strings, vec!["lua5.1", "lua5.2", "lua5.3", "lua5.5"]);
 
     let planned = json_val["planned_dialects"]
         .as_array()
