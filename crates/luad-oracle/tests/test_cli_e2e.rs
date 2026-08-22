@@ -39,6 +39,7 @@ fn test_cli_capabilities() {
     assert!(stdout.contains("lua5.3"));
     assert!(stdout.contains("lua5.2"));
     assert!(stdout.contains("lua5.1"));
+    assert!(stdout.contains("[experimental]"));
 
     // JSON capabilities
     let json_output = Command::new(&luad)
@@ -48,12 +49,20 @@ fn test_cli_capabilities() {
     assert_eq!(json_output.status.code(), Some(0));
     let json_val: serde_json::Value =
         serde_json::from_slice(&json_output.stdout).expect("Valid JSON");
-    let dialects = json_val["supported_dialects"]
+    let supported = json_val["supported_dialects"]
         .as_array()
         .expect("supported_dialects array");
-    let dialect_strings: Vec<&str> = dialects.iter().filter_map(|v| v.as_str()).collect();
+    assert!(
+        supported.is_empty(),
+        "Supported dialects must remain empty until Gate 7 release evidence passes"
+    );
+
+    let experimental = json_val["experimental_dialects"]
+        .as_array()
+        .expect("experimental_dialects array");
+    let exp_strings: Vec<&str> = experimental.iter().filter_map(|v| v.as_str()).collect();
     assert_eq!(
-        dialect_strings,
+        exp_strings,
         vec!["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"]
     );
 }

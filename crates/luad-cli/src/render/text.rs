@@ -431,24 +431,21 @@ pub fn render_capabilities(manifest: &luad_core::CapabilityManifest, evidence: b
         manifest.schema_version
     );
     println!();
-    println!("{}", "Supported Dialects:".bold());
+    println!("{}", "Dialect Matrix:".bold());
     for d in &manifest.dialects {
         let features_str = d.features.join(", ");
-        if d.status == "supported" {
-            println!(
-                "  - {:<12} {} ({})",
-                d.id.green().bold(),
-                d.display_name,
-                features_str
-            );
-        } else {
-            println!(
-                "  - {:<12} {} ({})",
-                d.id.dimmed(),
-                d.display_name,
-                features_str
-            );
-        }
+        let status_str = match d.status {
+            luad_core::SupportTier::Supported => "[supported]".green().bold(),
+            luad_core::SupportTier::Experimental => "[experimental]".yellow().bold(),
+            luad_core::SupportTier::Planned => "[planned]".dimmed(),
+        };
+        println!(
+            "  - {:<10} {:<15} {:<24} ({})",
+            d.id.bold(),
+            status_str,
+            d.display_name,
+            features_str
+        );
     }
 
     if evidence {

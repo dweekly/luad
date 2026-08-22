@@ -12,7 +12,10 @@ pub mod model;
 pub mod provenance;
 pub mod reader;
 
-pub use capabilities::{get_canonical_capabilities, CapabilityManifest, DialectCapability};
+pub use capabilities::{
+    get_canonical_capabilities, CapabilityManifest, DialectCapability, SupportTier,
+};
+
 pub use diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
 pub use dialect::{DetectionResult, Dialect};
 pub use id::{ProtoPath, StableId};
