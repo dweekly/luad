@@ -297,10 +297,18 @@ pub fn execute_gate_spec(
     }
 
     // 3. Query compiled tests from libtest runner binary using `-- --list`
+    let mut list_args: Vec<String> = Vec::new();
+    for a in args {
+        if a == "--" {
+            break;
+        }
+        list_args.push(a.clone());
+    }
+    list_args.push("--".to_string());
+    list_args.push("--list".to_string());
+
     let mut list_cmd = Command::new(prog);
-    list_cmd.args(args);
-    list_cmd.arg("--");
-    list_cmd.arg("--list");
+    list_cmd.args(&list_args);
     list_cmd.current_dir(workspace_root);
 
     let list_output = list_cmd.output().map_err(|e| {
