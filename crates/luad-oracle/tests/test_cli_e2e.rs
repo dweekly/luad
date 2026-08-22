@@ -66,10 +66,7 @@ fn test_cli_capabilities() {
         .as_array()
         .expect("experimental_dialects array");
     let exp_strings: Vec<&str> = experimental.iter().filter_map(|v| v.as_str()).collect();
-    assert_eq!(
-        exp_strings,
-        vec!["lua5.1", "lua5.2", "lua5.3", "lua5.5"]
-    );
+    assert_eq!(exp_strings, vec!["lua5.1", "lua5.2", "lua5.3", "lua5.5"]);
 
     let planned = json_val["planned_dialects"]
         .as_array()
@@ -114,7 +111,6 @@ fn test_capabilities_readme_status_consistency() {
         }
     }
 }
-
 
 #[test]
 fn test_cli_schema_export() {

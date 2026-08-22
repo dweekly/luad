@@ -115,7 +115,6 @@ fn load_proto_51(
     parent_source: Option<&LuaString>,
     layout: &ChunkLayout,
 ) -> Result<Prototype, Diagnostic> {
-
     let start_pos = reader.position();
     let start_cursor = reader.cursor_offset();
 
@@ -270,12 +269,8 @@ fn load_proto_51(
     for child_idx in 0..sizep {
         let child_path = path.child(child_idx);
         let mut child_guard = reader.enter_proto(child_idx)?;
-        let child_proto = load_proto_51(
-            &mut child_guard,
-            &child_path,
-            source_name.as_ref(),
-            layout,
-        )?;
+        let child_proto =
+            load_proto_51(&mut child_guard, &child_path, source_name.as_ref(), layout)?;
         protos.push(child_proto);
     }
 
@@ -302,8 +297,8 @@ fn load_proto_51(
     for idx in 0..sizelocvars {
         let loc_pos = reader.position();
         let loc_cursor = reader.cursor_offset();
-        let varname =
-            load_string_51(reader, layout.sizeof_sizet)?.unwrap_or_else(|| LuaString::from_bytes(b"?"));
+        let varname = load_string_51(reader, layout.sizeof_sizet)?
+            .unwrap_or_else(|| LuaString::from_bytes(b"?"));
         let startpc = reader.read_i32_le()? as usize;
         let endpc = reader.read_i32_le()? as usize;
         let raw_bytes = reader.slice_from_cursor(loc_cursor)?;
@@ -343,7 +338,6 @@ fn load_proto_51(
         }
         upvalue_names.push(name);
     }
-
 
     let proto_bytes = reader.slice_from_cursor(start_cursor)?;
 

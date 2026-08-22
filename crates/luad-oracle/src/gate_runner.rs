@@ -7,7 +7,6 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-
 /// Versioned schema for gate execution results.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GateResult {
@@ -80,13 +79,16 @@ pub fn execute_and_record_gate(
         cmd.args(&parts[1..]);
     }
 
-    let output = cmd
-        .output()
-        .map_err(|e| GateRunnerError::Io(format!("Failed to execute command '{command_str}': {e}")))?;
+    let output = cmd.output().map_err(|e| {
+        GateRunnerError::Io(format!("Failed to execute command '{command_str}': {e}"))
+    })?;
 
     let exit_code = output.status.code().unwrap_or(-1);
     if exit_code != 0 {
-        return Err(GateRunnerError::NonzeroExitCode(exit_code, command_str.to_string()));
+        return Err(GateRunnerError::NonzeroExitCode(
+            exit_code,
+            command_str.to_string(),
+        ));
     }
 
     let stdout_str = String::from_utf8_lossy(&output.stdout);
@@ -119,7 +121,10 @@ pub fn execute_and_record_gate(
     }
 
     if skipped_count > 0 {
-        return Err(GateRunnerError::SkippedTests(skipped_count, gate_id.to_string()));
+        return Err(GateRunnerError::SkippedTests(
+            skipped_count,
+            gate_id.to_string(),
+        ));
     }
 
     let git_commit = get_current_git_commit();
@@ -176,8 +181,11 @@ pub fn execute_and_record_gate(
     }
     let json_bytes = serde_json::to_vec_pretty(&result)
         .map_err(|e| GateRunnerError::Io(format!("Failed to serialize GateResult: {e}")))?;
-    fs::write(output_path, json_bytes)
-        .map_err(|e| GateRunnerError::Io(format!("Failed to write GateResult to {output_path:?}: {e}")))?;
+    fs::write(output_path, json_bytes).map_err(|e| {
+        GateRunnerError::Io(format!(
+            "Failed to write GateResult to {output_path:?}: {e}"
+        ))
+    })?;
 
     Ok(result)
 }
@@ -188,10 +196,12 @@ pub fn verify_gate_artifact_integrity(
     expected_gate_id: &str,
     expected_compiler_version_substr: Option<&str>,
 ) -> Result<GateResult, GateRunnerError> {
-    let content = fs::read_to_string(artifact_path)
-        .map_err(|e| GateRunnerError::Io(format!("Failed to read artifact {artifact_path:?}: {e}")))?;
-    let result: GateResult = serde_json::from_str(&content)
-        .map_err(|e| GateRunnerError::TamperDetected(format!("Invalid JSON in {artifact_path:?}: {e}")))?;
+    let content = fs::read_to_string(artifact_path).map_err(|e| {
+        GateRunnerError::Io(format!("Failed to read artifact {artifact_path:?}: {e}"))
+    })?;
+    let result: GateResult = serde_json::from_str(&content).map_err(|e| {
+        GateRunnerError::TamperDetected(format!("Invalid JSON in {artifact_path:?}: {e}"))
+    })?;
 
     if result.gate_id != expected_gate_id {
         return Err(GateRunnerError::TamperDetected(format!(
@@ -201,11 +211,17 @@ pub fn verify_gate_artifact_integrity(
     }
 
     if !result.success || result.exit_code != 0 {
-        return Err(GateRunnerError::NonzeroExitCode(result.exit_code, result.command));
+        return Err(GateRunnerError::NonzeroExitCode(
+            result.exit_code,
+            result.command,
+        ));
     }
 
     if result.skipped_count > 0 {
-        return Err(GateRunnerError::SkippedTests(result.skipped_count, result.gate_id));
+        return Err(GateRunnerError::SkippedTests(
+            result.skipped_count,
+            result.gate_id,
+        ));
     }
 
     if let Some(expected_ver) = expected_compiler_version_substr {

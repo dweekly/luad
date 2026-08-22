@@ -245,4 +245,3 @@ fn test_cfg_dominance_frontiers() {
         }
     }
 }
-

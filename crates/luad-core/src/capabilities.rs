@@ -148,7 +148,8 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "83/83 opcode table, bitfields, and operands verified against official Lua 5.4.8"
                     .to_string(),
                 "Canonical differential oracle passes across all Lua 5.4 fixtures".to_string(),
-                "100% byte-for-byte binary round-trip and zero-gap byte ledger verified".to_string(),
+                "100% byte-for-byte binary round-trip and zero-gap byte ledger verified"
+                    .to_string(),
                 "CFG basic blocks, dominators, and dominance frontiers verified".to_string(),
                 "Full evidence record: tests/evidence/LUA-5.4.8-PROOF.json".to_string(),
             ],
@@ -165,9 +166,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
             status: SupportTier::Experimental,
             required_gates: vec!["gate-facts".to_string(), "gate-lossless".to_string()],
             completed_gates: vec![],
-            evidence: vec![
-                "Experimental dialect; formal proof gates deferred".to_string(),
-            ],
+            evidence: vec!["Experimental dialect; formal proof gates deferred".to_string()],
         },
         DialectCapability {
             id: "luajit".to_string(),

@@ -2,7 +2,6 @@ use luad_core::reader::SafeReader;
 use luad_dialect_lua54::{decode_chunk_lua54, encode_chunk_lua54};
 use luad_oracle::get_fixture_bytes;
 
-
 #[test]
 fn test_binary_roundtrip_byte_for_byte_lua54() {
     let fixtures = ["hello", "control_flow", "closures", "tables", "numerics"];
@@ -91,4 +90,3 @@ fn test_negative_control_byte_ledger_overlap_detected() {
         "Corrupted ledger must produce sum mismatch against total chunk size"
     );
 }
-

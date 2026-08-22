@@ -11,7 +11,8 @@ use luad_oracle::get_fixture_bytes;
 fn test_chunk_layout_validation_stock51() {
     let raw_bytes = get_fixture_bytes("lua5.1", "hello", false).expect("fixture failed");
     let mut reader = SafeReader::new(&raw_bytes);
-    let (header, layout) = parse_header_lua51(&mut reader, Lua51Profile::Stock).expect("valid header");
+    let (header, layout) =
+        parse_header_lua51(&mut reader, Lua51Profile::Stock).expect("valid header");
 
     assert_eq!(layout.sizeof_int, 4);
     assert_eq!(layout.sizeof_sizet, 8);
@@ -51,7 +52,6 @@ fn test_stock_lua51_rejects_lnum_tag_9() {
     // Create a Lua 5.1 chunk with tag 9 injected as a constant
     let raw_bytes = get_fixture_bytes("lua5.1", "hello", false).expect("fixture failed");
 
-
     // In hello fixture, find constant table position and change constant tag to 9
     // Hello fixture has string constant "Hello world"
     // Find tag 4 (string) after line numbers and change to 9
@@ -82,13 +82,17 @@ fn test_profile_lua51_lnum_accepts_tag_9() {
     let mut mutated = raw_bytes[..const_offset].to_vec();
     mutated.push(9); // tag 9
     mutated.extend_from_slice(&42i32.to_le_bytes()); // 4-byte int
-    // Rest of prototype following the original string constant
+                                                     // Rest of prototype following the original string constant
     let orig_const_len = chunk.main_proto.constants[0].source.byte_length;
     mutated.extend_from_slice(&raw_bytes[const_offset + orig_const_len..]);
 
     let mut reader_lnum = SafeReader::new(&mutated);
     let res = decode_chunk_lua51_with_profile(&mut reader_lnum, Lua51Profile::Lnum);
-    assert!(res.is_ok(), "Lnum profile must accept tag 9: {:?}", res.err());
+    assert!(
+        res.is_ok(),
+        "Lnum profile must accept tag 9: {:?}",
+        res.err()
+    );
 }
 
 #[test]

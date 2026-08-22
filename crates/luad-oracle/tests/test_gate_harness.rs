@@ -1,9 +1,9 @@
 //! Gate P1: Proof harness and gate execution verification tests.
 
+use luad_oracle::find_workspace_root;
 use luad_oracle::gate_runner::{
     execute_and_record_gate, verify_gate_artifact_integrity, GateResult, GateRunnerError,
 };
-use luad_oracle::find_workspace_root;
 use std::fs;
 use tempfile::NamedTempFile;
 
@@ -49,9 +49,14 @@ fn test_gate_runner_rejects_skipped_test() {
 #[test]
 fn test_gate_runner_rejects_stale_source_revision() {
     let tmp = NamedTempFile::new().unwrap();
-    let res = execute_and_record_gate("test-gate", "echo test result: ok. 1 passed; 0 ignored; 0 failed", tmp.path(), None)
-        .expect("Clean echo should record gate result");
-    
+    let res = execute_and_record_gate(
+        "test-gate",
+        "echo test result: ok. 1 passed; 0 ignored; 0 failed",
+        tmp.path(),
+        None,
+    )
+    .expect("Clean echo should record gate result");
+
     // Verify that checking against a different git SHA fails
     let expected_sha = "0000000000000000000000000000000000000000";
     if res.git_commit != expected_sha {
@@ -83,12 +88,20 @@ fn test_gate_runner_rejects_dirty_promotion_evidence() {
     };
 
     let tmp = NamedTempFile::new().unwrap();
-    fs::write(tmp.path(), serde_json::to_vec_pretty(&dirty_result).unwrap()).unwrap();
+    fs::write(
+        tmp.path(),
+        serde_json::to_vec_pretty(&dirty_result).unwrap(),
+    )
+    .unwrap();
 
-    let verified = verify_gate_artifact_integrity(tmp.path(), "gate-release-lua54-8", Some("5.4.8"));
+    let verified =
+        verify_gate_artifact_integrity(tmp.path(), "gate-release-lua54-8", Some("5.4.8"));
     assert!(verified.is_ok());
     // Promotion gate validator checks dirty flag explicitly
-    assert!(dirty_result.dirty, "Dirty artifact correctly records dirty flag");
+    assert!(
+        dirty_result.dirty,
+        "Dirty artifact correctly records dirty flag"
+    );
 }
 
 #[test]
@@ -110,7 +123,11 @@ fn test_gate_runner_rejects_wrong_compiler_binary() {
     };
 
     let tmp = NamedTempFile::new().unwrap();
-    fs::write(tmp.path(), serde_json::to_vec_pretty(&wrong_compiler_result).unwrap()).unwrap();
+    fs::write(
+        tmp.path(),
+        serde_json::to_vec_pretty(&wrong_compiler_result).unwrap(),
+    )
+    .unwrap();
 
     let verified = verify_gate_artifact_integrity(tmp.path(), "gate-facts-lua54-8", Some("5.4.8"));
     match verified {
@@ -141,7 +158,11 @@ fn test_evidence_tamper_is_detected() {
     };
 
     let tmp = NamedTempFile::new().unwrap();
-    fs::write(tmp.path(), serde_json::to_vec_pretty(&valid_result).unwrap()).unwrap();
+    fs::write(
+        tmp.path(),
+        serde_json::to_vec_pretty(&valid_result).unwrap(),
+    )
+    .unwrap();
 
     // 1. Gate ID mismatch tamper
     let res = verify_gate_artifact_integrity(tmp.path(), "gate-facts-lua51", Some("5.4.8"));
@@ -182,4 +203,3 @@ fn test_fixture_manifest_records_complete_provenance() {
         assert!(f["compiler_flags"].as_str().is_some());
     }
 }
-

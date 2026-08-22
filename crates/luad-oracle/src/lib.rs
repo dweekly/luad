@@ -17,7 +17,6 @@ pub use listing_parser::{
     LuacLocVarDump, LuacProtoDump, LuacUpvalDump, OracleMismatch,
 };
 
-
 use luad_core::limits::{ParseMode, ResourceLimits};
 use luad_core::model::Chunk;
 use luad_core::reader::SafeReader;
@@ -112,7 +111,11 @@ pub fn get_fixture_bytes(
 }
 
 /// Locate compiler binary checking LUAD_ORACLE_BIN_DIR first, then candidate paths, verifying version output.
-pub fn find_compiler_binary(bin_name: &str, candidates: &[&str], expected_version_substr: &str) -> Option<PathBuf> {
+pub fn find_compiler_binary(
+    bin_name: &str,
+    candidates: &[&str],
+    expected_version_substr: &str,
+) -> Option<PathBuf> {
     if let Ok(dir) = std::env::var("LUAD_ORACLE_BIN_DIR") {
         let p = Path::new(&dir).join(bin_name);
         if p.exists() {
@@ -223,7 +226,6 @@ pub fn find_luac55() -> Option<PathBuf> {
         "5.5",
     )
 }
-
 
 /// Compile Lua 5.5 source code to binary chunk using host `luac`.
 pub fn compile_source_lua55(source: &str, strip: bool) -> Result<Vec<u8>, String> {
@@ -375,7 +377,6 @@ pub fn find_luac51() -> Option<PathBuf> {
         "5.1",
     )
 }
-
 
 /// Compile Lua 5.1 source code to binary chunk using host `luac`.
 pub fn compile_source_lua51(source: &str, strip: bool) -> Result<Vec<u8>, String> {

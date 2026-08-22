@@ -359,7 +359,6 @@ impl ControlFlowGraph {
     }
 }
 
-
 /// Compute immediate dominators (idom) using standard iterative dataflow algorithm.
 fn compute_immediate_dominators(blocks: &mut [BasicBlock]) {
     let reachable_blocks: Vec<usize> = blocks

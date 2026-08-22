@@ -20,7 +20,11 @@ pub fn lift_proto_lua51(proto: &Prototype) -> Vec<SemanticInstruction> {
         let raw = RawInstruction51::decode(inst.raw_word);
         if raw.opcode == Some(Opcode51::Closure) {
             let child_bx = raw.bx as usize;
-            let nups = proto.protos.get(child_bx).map(|p| p.upvalues.len()).unwrap_or(0);
+            let nups = proto
+                .protos
+                .get(child_bx)
+                .map(|p| p.upvalues.len())
+                .unwrap_or(0);
             for (j, b_pc) in (0..nups).zip(pc + 1..) {
                 if b_pc < proto.instructions.len() {
                     binding_descriptors.insert(b_pc, (pc, j));
@@ -45,7 +49,8 @@ pub fn lift_proto_lua51(proto: &Prototype) -> Vec<SemanticInstruction> {
         };
 
         let binding_info = binding_descriptors.get(&pc).copied();
-        let semantic = lift_instruction_51(proto, pc, inst, raw, next_word, prev_word, binding_info);
+        let semantic =
+            lift_instruction_51(proto, pc, inst, raw, next_word, prev_word, binding_info);
         lifted.push(semantic);
     }
 
@@ -518,7 +523,11 @@ fn lift_instruction_51(
         }
         Opcode51::Closure => {
             let child_bx = raw.bx as usize;
-            let nups = proto.protos.get(child_bx).map(|p| p.upvalues.len()).unwrap_or(0);
+            let nups = proto
+                .protos
+                .get(child_bx)
+                .map(|p| p.upvalues.len())
+                .unwrap_or(0);
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Prototype {
                 index: child_bx,
@@ -532,15 +541,25 @@ fn lift_instruction_51(
                 if let Some(desc_inst) = proto.instructions.get(desc_pc) {
                     let desc_raw = RawInstruction51::decode(desc_inst.raw_word);
                     if desc_raw.opcode == Some(Opcode51::Move) {
-                        reads.push(EffectTarget::Register { index: desc_raw.b as u8 });
-                        implicit_effects.push(ImplicitEffect::CaptureUpvalue { register: desc_raw.b as u8 });
+                        reads.push(EffectTarget::Register {
+                            index: desc_raw.b as u8,
+                        });
+                        implicit_effects.push(ImplicitEffect::CaptureUpvalue {
+                            register: desc_raw.b as u8,
+                        });
                     } else if desc_raw.opcode == Some(Opcode51::GetUpval) {
-                        reads.push(EffectTarget::Upvalue { index: desc_raw.b as u8, name: None });
+                        reads.push(EffectTarget::Upvalue {
+                            index: desc_raw.b as u8,
+                            name: None,
+                        });
                     }
                 }
             }
 
-            explanation = format!("Instantiate closure proto:{child_bx} into R({}) with {nups} upvalue capture(s)", raw.a);
+            explanation = format!(
+                "Instantiate closure proto:{child_bx} into R({}) with {nups} upvalue capture(s)",
+                raw.a
+            );
             citations.push("lvm.c:1400".to_string());
         }
         Opcode51::VarArg => {
@@ -567,7 +586,10 @@ fn lift_instruction_51(
         if is_move {
             desc_reads.push(EffectTarget::Register { index: raw.b as u8 });
         } else {
-            desc_reads.push(EffectTarget::Upvalue { index: raw.b as u8, name: None });
+            desc_reads.push(EffectTarget::Upvalue {
+                index: raw.b as u8,
+                name: None,
+            });
         }
 
         return SemanticInstruction {
@@ -622,4 +644,3 @@ fn lift_instruction_51(
         source,
     }
 }
-

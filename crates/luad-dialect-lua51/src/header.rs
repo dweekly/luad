@@ -58,22 +58,32 @@ impl ChunkLayout {
         profile: Lua51Profile,
     ) -> Result<Self, String> {
         if sizeof_int != 4 && sizeof_int != 8 {
-            return Err(format!("Unsupported sizeof(int): {sizeof_int} (expected 4 or 8)"));
+            return Err(format!(
+                "Unsupported sizeof(int): {sizeof_int} (expected 4 or 8)"
+            ));
         }
         if sizeof_sizet != 4 && sizeof_sizet != 8 {
-            return Err(format!("Unsupported sizeof(size_t): {sizeof_sizet} (expected 4 or 8)"));
+            return Err(format!(
+                "Unsupported sizeof(size_t): {sizeof_sizet} (expected 4 or 8)"
+            ));
         }
         if instruction_size != 4 {
-            return Err(format!("Unsupported sizeof(Instruction): {instruction_size} (expected 4)"));
+            return Err(format!(
+                "Unsupported sizeof(Instruction): {instruction_size} (expected 4)"
+            ));
         }
         if lua_number_size != 4 && lua_number_size != 8 {
-            return Err(format!("Unsupported sizeof(lua_Number): {lua_number_size} (expected 4 or 8)"));
+            return Err(format!(
+                "Unsupported sizeof(lua_Number): {lua_number_size} (expected 4 or 8)"
+            ));
         }
         if endianness != 1 {
             return Err(format!("Unsupported endianness {endianness}: only Little-Endian (1) is currently supported"));
         }
         if integral_flag > 1 {
-            return Err(format!("Invalid integral flag {integral_flag}: expected 0 or 1"));
+            return Err(format!(
+                "Invalid integral flag {integral_flag}: expected 0 or 1"
+            ));
         }
 
         Ok(Self {
@@ -115,7 +125,10 @@ pub fn detect_lua51(bytes: &[u8]) -> Option<DetectionResult> {
 }
 
 /// Parse and validate Lua 5.1 chunk header (12 bytes).
-pub fn parse_header_lua51(reader: &mut SafeReader, profile: Lua51Profile) -> Result<(Header, ChunkLayout), Diagnostic> {
+pub fn parse_header_lua51(
+    reader: &mut SafeReader,
+    profile: Lua51Profile,
+) -> Result<(Header, ChunkLayout), Diagnostic> {
     let start_pos = reader.position();
     let start_cursor = reader.cursor_offset();
 
@@ -185,7 +198,17 @@ pub fn parse_header_lua51(reader: &mut SafeReader, profile: Lua51Profile) -> Res
             StableId::Chunk,
             format!("Chunk layout validation failed: {msg}"),
         )
-        .with_source(SourceLocation::new(start_pos, &[endianness, sizeof_int, sizeof_sizet, instruction_size, lua_number_size, integral_flag]))
+        .with_source(SourceLocation::new(
+            start_pos,
+            &[
+                endianness,
+                sizeof_int,
+                sizeof_sizet,
+                instruction_size,
+                lua_number_size,
+                integral_flag,
+            ],
+        ))
     })?;
 
     let header_bytes = reader.slice_from_cursor(start_cursor)?;
@@ -207,4 +230,3 @@ pub fn parse_header_lua51(reader: &mut SafeReader, profile: Lua51Profile) -> Res
 
     Ok((header, layout))
 }
-

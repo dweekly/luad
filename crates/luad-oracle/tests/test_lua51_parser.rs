@@ -94,8 +94,11 @@ fn test_lua51_32bit_sizet_and_lnum_constants() {
     bytes.extend_from_slice(&0i32.to_le_bytes());
 
     let mut reader = luad_core::reader::SafeReader::new(&bytes);
-    let chunk = luad_dialect_lua51::decode_chunk_lua51(&mut reader)
-        .expect("32-bit Lua 5.1 chunk with LNUM constants must parse successfully");
+    let chunk = luad_dialect_lua51::decode_chunk_lua51_with_profile(
+        &mut reader,
+        luad_dialect_lua51::Lua51Profile::Lnum,
+    )
+    .expect("32-bit Lua 5.1 chunk with LNUM constants must parse successfully");
 
     assert_eq!(chunk.dialect, "lua5.1");
     assert_eq!(chunk.header.sizeof_sizet, 4);

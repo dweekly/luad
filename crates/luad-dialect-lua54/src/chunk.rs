@@ -481,7 +481,6 @@ pub fn encode_proto_lua54(buf: &mut Vec<u8>, proto: &Prototype) {
     }
 }
 
-
 /// Encode a complete Lua 5.4 binary chunk into byte-for-byte serialized bytecode.
 #[must_use]
 pub fn encode_chunk_lua54(chunk: &Chunk) -> Vec<u8> {
@@ -502,5 +501,3 @@ pub fn encode_chunk_lua54(chunk: &Chunk) -> Vec<u8> {
     }
     buf
 }
-
-

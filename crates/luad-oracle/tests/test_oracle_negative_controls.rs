@@ -329,8 +329,7 @@ fn test_negative_control_signed_immediate_offset_sb() {
         .instructions
         .iter()
         .position(|i| {
-            luad_oracle::decode_instruction_mnemonic("lua5.4", i.raw_word).as_deref()
-                == Some("ADDI")
+            luad_oracle::decode_instruction_mnemonic("lua5.4", i.raw_word) == Some("ADDI")
         })
         .expect("ADDI instruction present in chunk");
 
@@ -394,7 +393,6 @@ fn test_negative_control_constant_type_mismatch() {
         is_nan: false,
     };
 
-
     let mismatches = compare_chunk_with_luac(&chunk, &dump);
     assert!(
         !mismatches.is_empty(),
@@ -414,4 +412,3 @@ fn test_assert_chunk_matches_luac_panics_on_mismatch() {
     chunk.main_proto.instructions[0].raw_word ^= 0x7F;
     luad_oracle::assert_chunk_matches_luac(&chunk, &dump);
 }
-

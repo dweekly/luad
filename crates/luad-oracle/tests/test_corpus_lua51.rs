@@ -61,8 +61,9 @@ fn test_negative_control_stock_lnum_identity_on_standard_chunks() {
                 .unwrap_or_else(|e| panic!("Failed to load fixture {fixture_name}: {e}"));
 
             let mut reader_stock = SafeReader::new(&raw_bytes);
-            let chunk_stock = decode_chunk_lua51_with_profile(&mut reader_stock, Lua51Profile::Stock)
-                .expect("Stock decode");
+            let chunk_stock =
+                decode_chunk_lua51_with_profile(&mut reader_stock, Lua51Profile::Stock)
+                    .expect("Stock decode");
 
             let mut reader_lnum = SafeReader::new(&raw_bytes);
             let chunk_lnum = decode_chunk_lua51_with_profile(&mut reader_lnum, Lua51Profile::Lnum)
@@ -83,7 +84,10 @@ fn test_negative_control_corrupted_sizet_chunk_fails() {
 
     let mut reader = SafeReader::new(&raw_bytes);
     let res = decode_chunk_lua51_with_profile(&mut reader, Lua51Profile::Stock);
-    assert!(res.is_err(), "Corrupted sizeof(size_t) must fail validation");
+    assert!(
+        res.is_err(),
+        "Corrupted sizeof(size_t) must fail validation"
+    );
     let diag = res.unwrap_err();
     assert_eq!(diag.code, "L51-HEADER-003");
 }

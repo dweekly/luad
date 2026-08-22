@@ -18,10 +18,9 @@ use luad_core::reader::SafeReader;
 pub use chunk::{decode_chunk_lua51, decode_chunk_lua51_with_profile};
 pub use header::{detect_lua51, parse_header_lua51, ChunkLayout, Lua51Profile};
 pub use lifter::lift_proto_lua51;
-pub use opcodes::{BITRK_51, OpMode51, Opcode51, RawInstruction51};
+pub use opcodes::{OpMode51, Opcode51, RawInstruction51, BITRK_51};
 
 pub use validator::validate_chunk_lua51;
-
 
 /// Concrete dialect handler for official Lua 5.1.0 - 5.1.5 bytecode.
 #[derive(Debug, Default, Clone, Copy)]

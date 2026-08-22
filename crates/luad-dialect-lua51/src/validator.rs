@@ -77,7 +77,10 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
                     "L51-CONST-003",
                     DiagnosticCategory::Instruction,
                     inst.id.clone(),
-                    format!("Constant index {k_idx} out of bounds (total constants: {})", proto.constants.len()),
+                    format!(
+                        "Constant index {k_idx} out of bounds (total constants: {})",
+                        proto.constants.len()
+                    ),
                 )
                 .with_source(inst.source.clone());
                 diags.push(diag);
@@ -113,7 +116,6 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
                 }
             }
         }
-
 
         // Closure binding descriptor validation
         if op == crate::opcodes::Opcode51::Closure {
@@ -154,7 +156,6 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
             }
         }
     }
-
 
     for child in &proto.protos {
         validate_proto(child, diags);

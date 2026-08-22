@@ -1,7 +1,9 @@
 //! Gate L2: Lua 5.1 closure-binding and capture facts tests.
 
 use luad_core::reader::SafeReader;
-use luad_dialect_lua51::{decode_chunk_lua51, lift_proto_lua51, validate_chunk_lua51, RawInstruction51, Opcode51};
+use luad_dialect_lua51::{
+    decode_chunk_lua51, lift_proto_lua51, validate_chunk_lua51, Opcode51, RawInstruction51,
+};
 use luad_oracle::get_fixture_bytes;
 
 #[test]
@@ -65,7 +67,6 @@ fn test_lua51_closure_bindings_not_executed_as_standalone_instructions() {
         );
     }
 }
-
 
 #[test]
 fn test_lua51_closure_binding_preserves_physical_pc_words() {
@@ -144,4 +145,3 @@ fn test_negative_control_invalid_binding_opcode_rejected() {
         diags
     );
 }
-

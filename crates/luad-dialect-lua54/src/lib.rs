@@ -20,7 +20,6 @@ pub use lifter::lift_proto_lua54;
 pub use opcodes::{OpMode54, Opcode54, RawInstruction54};
 pub use validator::validate_chunk_lua54;
 
-
 /// Lua 5.4 dialect handler.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Lua54Dialect;
