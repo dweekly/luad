@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-release-lua54-8",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_release_lua54",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_killer_probe_dirty_result_rejects_promotion",
+    "test_killer_probe_missing_prerequisite_result_rejects_verification",
+    "test_killer_probe_tampered_success_flag_rejects_verification",
+    "test_killer_probe_unqualified_dialect_string_rejected",
+    "test_r0_baseline_supported_dialects_empty",
+    "test_unproven_dialects_remain_experimental"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-facts-lua54-8",
+    "gate-analysis-r3",
+    "gate-lossless-lua54-8"
+  ],
+  "allowed_capability_mutations": []
+}
