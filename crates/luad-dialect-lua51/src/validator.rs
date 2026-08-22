@@ -66,6 +66,55 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
             }
         }
 
+        // Constant bounds validation
+        if op == crate::opcodes::Opcode51::LoadK
+            || op == crate::opcodes::Opcode51::GetGlobal
+            || op == crate::opcodes::Opcode51::SetGlobal
+        {
+            let k_idx = raw.bx as usize;
+            if k_idx >= proto.constants.len() {
+                let diag = Diagnostic::error(
+                    "L51-CONST-003",
+                    DiagnosticCategory::Instruction,
+                    inst.id.clone(),
+                    format!("Constant index {k_idx} out of bounds (total constants: {})", proto.constants.len()),
+                )
+                .with_source(inst.source.clone());
+                diags.push(diag);
+            }
+        }
+
+        // RK operand bounds validation
+        if op.mode() == OpMode51::IABC {
+            if raw.is_b_k() {
+                let k_idx = raw.b_index_k();
+                if k_idx >= proto.constants.len() {
+                    let diag = Diagnostic::error(
+                        "L51-CONST-004",
+                        DiagnosticCategory::Instruction,
+                        inst.id.clone(),
+                        format!("RK operand B constant index {k_idx} out of bounds (total constants: {})", proto.constants.len()),
+                    )
+                    .with_source(inst.source.clone());
+                    diags.push(diag);
+                }
+            }
+            if raw.is_c_k() {
+                let k_idx = raw.c_index_k();
+                if k_idx >= proto.constants.len() {
+                    let diag = Diagnostic::error(
+                        "L51-CONST-005",
+                        DiagnosticCategory::Instruction,
+                        inst.id.clone(),
+                        format!("RK operand C constant index {k_idx} out of bounds (total constants: {})", proto.constants.len()),
+                    )
+                    .with_source(inst.source.clone());
+                    diags.push(diag);
+                }
+            }
+        }
+
+
         // Closure binding descriptor validation
         if op == crate::opcodes::Opcode51::Closure {
             let child_idx = raw.bx as usize;
