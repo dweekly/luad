@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-evidence-field",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_evidence_gate",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_lua51_evidence_file_integrity",
+    "test_lua52_evidence_file_integrity",
+    "test_lua53_evidence_file_integrity",
+    "test_lua54_evidence_file_integrity",
+    "test_lua55_evidence_file_integrity"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-layout-lua51-stock",
+    "gate-profile-lua51-lnum"
+  ],
+  "allowed_capability_mutations": []
+}

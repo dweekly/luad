@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-closures-lua51",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_closures_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_lua51_closure_binding_descriptors_attached_to_closure",
+    "test_lua51_closure_binding_preserves_physical_pc_words",
+    "test_lua51_closure_bindings_not_executed_as_standalone_instructions",
+    "test_negative_control_binding_move_produces_no_standalone_write",
+    "test_negative_control_invalid_binding_opcode_rejected"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-layout-lua51-stock"
+  ],
+  "allowed_capability_mutations": []
+}

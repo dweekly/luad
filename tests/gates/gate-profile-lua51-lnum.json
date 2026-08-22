@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-profile-lua51-lnum",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_corpus_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_lua51_lnum_corpus_regression",
+    "test_lua51_stock_corpus_regression",
+    "test_negative_control_corrupted_sizet_chunk_fails",
+    "test_negative_control_stock_lnum_identity_on_standard_chunks"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": "lua51-lnum",
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-layout-lua51-stock"
+  ],
+  "allowed_capability_mutations": []
+}

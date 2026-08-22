@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-layout-lua51-stock",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_layout_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_chunk_layout_rejects_mismatched_reader",
+    "test_chunk_layout_validation_32bit_sizet",
+    "test_chunk_layout_validation_stock51",
+    "test_negative_control_endianness_mismatch",
+    "test_negative_control_number_format_mismatch",
+    "test_profile_lua51_lnum_accepts_tag_9",
+    "test_stock_lua51_rejects_lnum_tag_9"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": "stock-lua51",
+  "prerequisite_gates": [
+    "gate-proof-harness"
+  ],
+  "allowed_capability_mutations": []
+}

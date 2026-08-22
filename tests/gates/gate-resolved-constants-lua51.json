@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-resolved-constants-lua51",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_operands_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_lua51_operand_resolution_getglobal",
+    "test_lua51_operand_resolution_rk_operands",
+    "test_negative_control_getglobal_oob_rejected",
+    "test_negative_control_rk_constant_oob_rejected"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-layout-lua51-stock"
+  ],
+  "allowed_capability_mutations": []
+}
