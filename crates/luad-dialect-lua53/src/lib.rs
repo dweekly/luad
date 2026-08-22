@@ -1,5 +1,6 @@
 //! Lua 5.3 Dialect Implementation for luad.
 
+#![forbid(unsafe_code)]
 #![allow(clippy::result_large_err)]
 
 pub mod chunk;

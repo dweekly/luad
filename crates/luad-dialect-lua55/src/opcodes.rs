@@ -1,30 +1,33 @@
-//! Lua 5.5 Opcode table, instruction formats, and bitfield decoder.
+//! Lua 5.5 Opcode table, Lua 5.5 instruction format, opcodes, and bitfield decoding.
+
+#![forbid(unsafe_code)]
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// Instruction layout mode for Lua 5.5.
+/// Instruction encoding format in Lua 5.5.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum OpMode55 {
-    /// Standard 3-register/constant format: A(8), k(1), B(8), C(8)
+    /// 3-register/operand format: A (8 bits), k (1 bit), B (8 bits), C (8 bits).
     IABC,
-    /// Variant 3-operand format: A(8), k(1), vB(6), vC(10)
+    /// Variable 2-register format with extended C: A (8 bits), vB (6 bits), vC (10 bits).
     IvABC,
-    /// 1-register, 17-bit unsigned constant/proto: A(8), Bx(17)
+    /// 17-bit unsigned Bx format: A (8 bits), Bx (17 bits).
     IABx,
-    /// 1-register, 17-bit signed immediate integer: A(8), sBx(17)
+    /// 17-bit signed sBx format: A (8 bits), sBx (17 bits).
     IAsBx,
-    /// 25-bit unsigned extra argument: Ax(25)
+    /// 25-bit unsigned Ax format: Ax (25 bits).
     IAx,
-    /// 25-bit signed jump offset: sJ(25)
+    /// 25-bit signed jump offset format: sJ (25 bits).
     IsJ,
 }
 
-/// Enumeration of all 85 opcodes supported in Lua 5.5.0 - 5.5.1.
+/// Enumeration of all 85 Lua 5.5 opcodes (Lua 5.5.0 through 5.5.1).
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[repr(u8)]
 pub enum Opcode55 {
     Move = 0,
@@ -59,8 +62,8 @@ pub enum Opcode55 {
     Bandk = 29,
     Bork = 30,
     Bxork = 31,
-    Shli = 32,
-    Shri = 33,
+    Shri = 32,
+    Shli = 33,
     Add = 34,
     Sub = 35,
     Mul = 36,
@@ -115,13 +118,96 @@ pub enum Opcode55 {
 }
 
 impl Opcode55 {
+    /// Safe construction of Lua 5.5 opcode without unsafe code.
     #[must_use]
     pub fn from_u8(val: u8) -> Option<Self> {
-        if val <= 84 {
-            // SAFETY: Validated <= 84 matching contiguous repr(u8) enum range 0..=84
-            Some(unsafe { std::mem::transmute::<u8, Self>(val) })
-        } else {
-            None
+        match val {
+            0 => Some(Self::Move),
+            1 => Some(Self::Loadi),
+            2 => Some(Self::Loadf),
+            3 => Some(Self::Loadk),
+            4 => Some(Self::Loadkx),
+            5 => Some(Self::Loadfalse),
+            6 => Some(Self::Lfalseskip),
+            7 => Some(Self::Loadtrue),
+            8 => Some(Self::Loadnil),
+            9 => Some(Self::Getupval),
+            10 => Some(Self::Setupval),
+            11 => Some(Self::Gettabup),
+            12 => Some(Self::Gettable),
+            13 => Some(Self::Geti),
+            14 => Some(Self::Getfield),
+            15 => Some(Self::Settabup),
+            16 => Some(Self::Settable),
+            17 => Some(Self::Seti),
+            18 => Some(Self::Setfield),
+            19 => Some(Self::Newtable),
+            20 => Some(Self::SelfOp),
+            21 => Some(Self::Addi),
+            22 => Some(Self::Addk),
+            23 => Some(Self::Subk),
+            24 => Some(Self::Mulk),
+            25 => Some(Self::Modk),
+            26 => Some(Self::Powk),
+            27 => Some(Self::Divk),
+            28 => Some(Self::Idivk),
+            29 => Some(Self::Bandk),
+            30 => Some(Self::Bork),
+            31 => Some(Self::Bxork),
+            32 => Some(Self::Shri),
+            33 => Some(Self::Shli),
+            34 => Some(Self::Add),
+            35 => Some(Self::Sub),
+            36 => Some(Self::Mul),
+            37 => Some(Self::Mod),
+            38 => Some(Self::Pow),
+            39 => Some(Self::Div),
+            40 => Some(Self::Idiv),
+            41 => Some(Self::Band),
+            42 => Some(Self::Bor),
+            43 => Some(Self::Bxor),
+            44 => Some(Self::Shl),
+            45 => Some(Self::Shr),
+            46 => Some(Self::Mmbin),
+            47 => Some(Self::Mmbini),
+            48 => Some(Self::Mmbink),
+            49 => Some(Self::Unm),
+            50 => Some(Self::Bnot),
+            51 => Some(Self::Not),
+            52 => Some(Self::Len),
+            53 => Some(Self::Concat),
+            54 => Some(Self::Close),
+            55 => Some(Self::Tbc),
+            56 => Some(Self::Jmp),
+            57 => Some(Self::Eq),
+            58 => Some(Self::Lt),
+            59 => Some(Self::Le),
+            60 => Some(Self::Eqk),
+            61 => Some(Self::Eqi),
+            62 => Some(Self::Lti),
+            63 => Some(Self::Lei),
+            64 => Some(Self::Gti),
+            65 => Some(Self::Gei),
+            66 => Some(Self::Test),
+            67 => Some(Self::Testset),
+            68 => Some(Self::Call),
+            69 => Some(Self::Tailcall),
+            70 => Some(Self::Return),
+            71 => Some(Self::Return0),
+            72 => Some(Self::Return1),
+            73 => Some(Self::Forloop),
+            74 => Some(Self::Forprep),
+            75 => Some(Self::Tforprep),
+            76 => Some(Self::Tforcall),
+            77 => Some(Self::Tforloop),
+            78 => Some(Self::Setlist),
+            79 => Some(Self::Closure),
+            80 => Some(Self::Vararg),
+            81 => Some(Self::Getvarg),
+            82 => Some(Self::Errnnil),
+            83 => Some(Self::Varargprep),
+            84 => Some(Self::Extraarg),
+            _ => None,
         }
     }
 
@@ -160,8 +246,8 @@ impl Opcode55 {
             Self::Bandk => "BANDK",
             Self::Bork => "BORK",
             Self::Bxork => "BXORK",
-            Self::Shli => "SHLI",
             Self::Shri => "SHRI",
+            Self::Shli => "SHLI",
             Self::Add => "ADD",
             Self::Sub => "SUB",
             Self::Mul => "MUL",
@@ -220,38 +306,40 @@ impl Opcode55 {
     pub const fn mode(self) -> OpMode55 {
         match self {
             Self::Move => OpMode55::IABC,
-            Self::Loadi | Self::Loadf => OpMode55::IAsBx,
-            Self::Loadk | Self::Loadkx => OpMode55::IABx,
-            Self::Loadfalse
-            | Self::Lfalseskip
-            | Self::Loadtrue
-            | Self::Loadnil
-            | Self::Getupval
-            | Self::Setupval
-            | Self::Gettabup
-            | Self::Gettable
-            | Self::Geti
-            | Self::Getfield
-            | Self::Settabup
-            | Self::Settable
-            | Self::Seti
-            | Self::Setfield => OpMode55::IABC,
-            Self::Newtable => OpMode55::IvABC,
-            Self::SelfOp
-            | Self::Addi
-            | Self::Addk
-            | Self::Subk
-            | Self::Mulk
-            | Self::Modk
-            | Self::Powk
-            | Self::Divk
-            | Self::Idivk
-            | Self::Bandk
-            | Self::Bork
-            | Self::Bxork
-            | Self::Shli
-            | Self::Shri
-            | Self::Add
+            Self::Loadi => OpMode55::IAsBx,
+            Self::Loadf => OpMode55::IAsBx,
+            Self::Loadk => OpMode55::IABx,
+            Self::Loadkx => OpMode55::IABx,
+            Self::Loadfalse => OpMode55::IABC,
+            Self::Lfalseskip => OpMode55::IABC,
+            Self::Loadtrue => OpMode55::IABC,
+            Self::Loadnil => OpMode55::IABC,
+            Self::Getupval => OpMode55::IABC,
+            Self::Setupval => OpMode55::IABC,
+            Self::Gettabup => OpMode55::IABC,
+            Self::Gettable => OpMode55::IABC,
+            Self::Geti => OpMode55::IABC,
+            Self::Getfield => OpMode55::IABC,
+            Self::Settabup => OpMode55::IABC,
+            Self::Settable => OpMode55::IABC,
+            Self::Seti => OpMode55::IABC,
+            Self::Setfield => OpMode55::IABC,
+            Self::Newtable => OpMode55::IABC,
+            Self::SelfOp => OpMode55::IABC,
+            Self::Addi => OpMode55::IABC,
+            Self::Addk => OpMode55::IABC,
+            Self::Subk => OpMode55::IABC,
+            Self::Mulk => OpMode55::IABC,
+            Self::Modk => OpMode55::IABC,
+            Self::Powk => OpMode55::IABC,
+            Self::Divk => OpMode55::IABC,
+            Self::Idivk => OpMode55::IABC,
+            Self::Bandk => OpMode55::IABC,
+            Self::Bork => OpMode55::IABC,
+            Self::Bxork => OpMode55::IABC,
+            Self::Shri => OpMode55::IABC,
+            Self::Shli => OpMode55::IABC,
+            Self::Add
             | Self::Sub
             | Self::Mul
             | Self::Mod
@@ -304,15 +392,17 @@ impl Opcode55 {
 }
 
 /// Decoded bitfields of a 32-bit physical Lua 5.5 instruction word.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RawInstruction55 {
     pub raw: u32,
     pub opcode_num: u8,
     pub opcode: Option<Opcode55>,
     pub a: u8,
     pub b: u8,
+    pub sb: i32,
     pub vb: u8,
     pub c: u8,
+    pub sc: i32,
     pub vc: u16,
     pub k: u8,
     pub bx: u32,
@@ -322,6 +412,11 @@ pub struct RawInstruction55 {
 }
 
 impl RawInstruction55 {
+    pub const OFFSET_SB: i32 = 127;
+    pub const OFFSET_SC: i32 = 127;
+    pub const OFFSET_SBX: i32 = 65535;
+    pub const OFFSET_SJ: i32 = 16777215;
+
     #[must_use]
     pub fn decode(raw: u32) -> Self {
         let opcode_num = (raw & 0x7F) as u8;
@@ -329,7 +424,9 @@ impl RawInstruction55 {
         let a = ((raw >> 7) & 0xFF) as u8;
         let k = ((raw >> 15) & 1) as u8;
         let b = ((raw >> 16) & 0xFF) as u8;
+        let sb = (b as i32) - Self::OFFSET_SB;
         let c = ((raw >> 24) & 0xFF) as u8;
+        let sc = (c as i32) - Self::OFFSET_SC;
 
         // ivABC layout
         let vb = ((raw >> 16) & 0x3F) as u8; // 6 bits (16..21)
@@ -337,13 +434,13 @@ impl RawInstruction55 {
 
         // iABx layout (17 bits from bit 15)
         let bx = raw >> 15;
-        let sbx = (bx as i32) - 65535;
+        let sbx = (bx as i32) - Self::OFFSET_SBX;
 
         // iAx layout (25 bits from bit 7)
         let ax = raw >> 7;
 
         // isJ layout (25 bits signed from bit 7 with bias 16777215)
-        let sj = (ax as i32) - 16777215;
+        let sj = (ax as i32) - Self::OFFSET_SJ;
 
         Self {
             raw,
@@ -351,8 +448,10 @@ impl RawInstruction55 {
             opcode,
             a,
             b,
+            sb,
             vb,
             c,
+            sc,
             vc,
             k,
             bx,
@@ -360,5 +459,91 @@ impl RawInstruction55 {
             ax,
             sj,
         }
+    }
+
+    #[must_use]
+    pub fn encode_iabc(opcode: Opcode55, a: u8, b: u8, c: u8, k: u8) -> u32 {
+        ((opcode as u32) & 0x7F)
+            | (((a as u32) & 0xFF) << 7)
+            | (((k as u32) & 0x1) << 15)
+            | (((b as u32) & 0xFF) << 16)
+            | (((c as u32) & 0xFF) << 24)
+    }
+
+    #[must_use]
+    pub fn encode_ivabc(opcode: Opcode55, a: u8, vb: u8, vc: u16, k: u8) -> u32 {
+        ((opcode as u32) & 0x7F)
+            | (((a as u32) & 0xFF) << 7)
+            | (((k as u32) & 0x1) << 15)
+            | (((vb as u32) & 0x3F) << 16)
+            | (((vc as u32) & 0x3FF) << 22)
+    }
+
+    #[must_use]
+    pub fn encode_iabx(opcode: Opcode55, a: u8, bx: u32) -> u32 {
+        ((opcode as u32) & 0x7F) | (((a as u32) & 0xFF) << 7) | ((bx & 0x1FFFF) << 15)
+    }
+
+    #[must_use]
+    pub fn encode_iasbx(opcode: Opcode55, a: u8, sbx: i32) -> u32 {
+        let bx = (sbx + Self::OFFSET_SBX) as u32;
+        Self::encode_iabx(opcode, a, bx)
+    }
+
+    #[must_use]
+    pub fn encode_iax(opcode: Opcode55, ax: u32) -> u32 {
+        ((opcode as u32) & 0x7F) | ((ax & 0x1FFFFFF) << 7)
+    }
+
+    #[must_use]
+    pub fn encode_isj(opcode: Opcode55, sj: i32) -> u32 {
+        let uj = (sj + Self::OFFSET_SJ) as u32;
+        ((opcode as u32) & 0x7F) | ((uj & 0x1FFFFFF) << 7)
+    }
+
+    #[must_use]
+    pub fn encode(self) -> Option<u32> {
+        let op = self.opcode?;
+        let word = match op.mode() {
+            OpMode55::IABC => Self::encode_iabc(op, self.a, self.b, self.c, self.k),
+            OpMode55::IvABC => Self::encode_ivabc(op, self.a, self.vb, self.vc, self.k),
+            OpMode55::IABx => Self::encode_iabx(op, self.a, self.bx),
+            OpMode55::IAsBx => Self::encode_iasbx(op, self.a, self.sbx),
+            OpMode55::IAx => Self::encode_iax(op, self.ax),
+            OpMode55::IsJ => Self::encode_isj(op, self.sj),
+        };
+        Some(word)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_all_85_opcodes_from_u8() {
+        for op in 0..=84 {
+            let opcode = Opcode55::from_u8(op);
+            assert!(opcode.is_some(), "Opcode {op} must be recognized");
+            assert_eq!(opcode.unwrap() as u8, op);
+        }
+        assert!(Opcode55::from_u8(85).is_none());
+    }
+
+    #[test]
+    fn test_round_trip_property_all_opmodes() {
+        for op in [Opcode55::Move, Opcode55::Add, Opcode55::Eqi] {
+            let word = RawInstruction55::encode_iabc(op, 42, 100, 200, 1);
+            let decoded = RawInstruction55::decode(word);
+            assert_eq!(decoded.opcode, Some(op));
+            assert_eq!(decoded.encode(), Some(word));
+        }
+
+        let word_iv = RawInstruction55::encode_ivabc(Opcode55::Setlist, 5, 20, 500, 0);
+        let dec_iv = RawInstruction55::decode(word_iv);
+        assert_eq!(dec_iv.opcode, Some(Opcode55::Setlist));
+        assert_eq!(dec_iv.vb, 20);
+        assert_eq!(dec_iv.vc, 500);
+        assert_eq!(dec_iv.encode(), Some(word_iv));
     }
 }

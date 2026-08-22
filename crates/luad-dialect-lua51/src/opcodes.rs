@@ -1,12 +1,17 @@
 //! Lua 5.1 opcode definitions and bitfield decoder.
 
+#![forbid(unsafe_code)]
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 pub const BITRK_51: u32 = 1 << 8; // 256
 
 /// All 38 official Lua 5.1 opcodes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[repr(u8)]
 pub enum Opcode51 {
     Move = 0,
@@ -50,12 +55,49 @@ pub enum Opcode51 {
 }
 
 impl Opcode51 {
+    /// Safe construction of Lua 5.1 opcode without unsafe code.
     #[must_use]
     pub fn from_u8(val: u8) -> Option<Self> {
-        if val <= 37 {
-            Some(unsafe { std::mem::transmute::<u8, Opcode51>(val) })
-        } else {
-            None
+        match val {
+            0 => Some(Self::Move),
+            1 => Some(Self::LoadK),
+            2 => Some(Self::LoadBool),
+            3 => Some(Self::LoadNil),
+            4 => Some(Self::GetUpval),
+            5 => Some(Self::GetGlobal),
+            6 => Some(Self::GetTable),
+            7 => Some(Self::SetGlobal),
+            8 => Some(Self::SetUpval),
+            9 => Some(Self::SetTable),
+            10 => Some(Self::NewTable),
+            11 => Some(Self::SelfOp),
+            12 => Some(Self::Add),
+            13 => Some(Self::Sub),
+            14 => Some(Self::Mul),
+            15 => Some(Self::Div),
+            16 => Some(Self::Mod),
+            17 => Some(Self::Pow),
+            18 => Some(Self::Unm),
+            19 => Some(Self::Not),
+            20 => Some(Self::Len),
+            21 => Some(Self::Concat),
+            22 => Some(Self::Jmp),
+            23 => Some(Self::Eq),
+            24 => Some(Self::Lt),
+            25 => Some(Self::Le),
+            26 => Some(Self::Test),
+            27 => Some(Self::TestSet),
+            28 => Some(Self::Call),
+            29 => Some(Self::TailCall),
+            30 => Some(Self::Return),
+            31 => Some(Self::ForLoop),
+            32 => Some(Self::ForPrep),
+            33 => Some(Self::TForLoop),
+            34 => Some(Self::SetList),
+            35 => Some(Self::Close),
+            36 => Some(Self::Closure),
+            37 => Some(Self::VarArg),
+            _ => None,
         }
     }
 
@@ -144,7 +186,8 @@ impl Opcode51 {
 }
 
 /// Lua 5.1 instruction format modes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
 pub enum OpMode51 {
     IABC,
     IABx,
@@ -152,8 +195,9 @@ pub enum OpMode51 {
 }
 
 /// Decoded raw bitfields from a 32-bit Lua 5.1 instruction word.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RawInstruction51 {
+    pub raw: u32,
     pub opcode_num: u8,
     pub opcode: Option<Opcode51>,
     pub a: u8,
@@ -164,6 +208,8 @@ pub struct RawInstruction51 {
 }
 
 impl RawInstruction51 {
+    pub const OFFSET_SBX: i32 = 131071;
+
     #[must_use]
     pub fn decode(raw: u32) -> Self {
         let opcode_num = (raw & 0x3f) as u8;
@@ -172,9 +218,10 @@ impl RawInstruction51 {
         let c = ((raw >> 14) & 0x1ff) as u16;
         let b = ((raw >> 23) & 0x1ff) as u16;
         let bx = (raw >> 14) & 0x3ffff;
-        let sbx = (bx as i32) - 131071;
+        let sbx = (bx as i32) - Self::OFFSET_SBX;
 
         Self {
+            raw,
             opcode_num,
             opcode,
             a,
@@ -183,6 +230,36 @@ impl RawInstruction51 {
             bx,
             sbx,
         }
+    }
+
+    #[must_use]
+    pub fn encode_iabc(opcode: Opcode51, a: u8, b: u16, c: u16) -> u32 {
+        ((opcode as u32) & 0x3F)
+            | (((a as u32) & 0xFF) << 6)
+            | (((c as u32) & 0x1FF) << 14)
+            | (((b as u32) & 0x1FF) << 23)
+    }
+
+    #[must_use]
+    pub fn encode_iabx(opcode: Opcode51, a: u8, bx: u32) -> u32 {
+        ((opcode as u32) & 0x3F) | (((a as u32) & 0xFF) << 6) | ((bx & 0x3FFFF) << 14)
+    }
+
+    #[must_use]
+    pub fn encode_iasbx(opcode: Opcode51, a: u8, sbx: i32) -> u32 {
+        let bx = (sbx + Self::OFFSET_SBX) as u32;
+        Self::encode_iabx(opcode, a, bx)
+    }
+
+    #[must_use]
+    pub fn encode(self) -> Option<u32> {
+        let op = self.opcode?;
+        let word = match op.mode() {
+            OpMode51::IABC => Self::encode_iabc(op, self.a, self.b, self.c),
+            OpMode51::IABx => Self::encode_iabx(op, self.a, self.bx),
+            OpMode51::IAsBx => Self::encode_iasbx(op, self.a, self.sbx),
+        };
+        Some(word)
     }
 
     #[must_use]
@@ -203,5 +280,42 @@ impl RawInstruction51 {
     #[must_use]
     pub fn c_index_k(&self) -> usize {
         (self.c as u32 & !BITRK_51) as usize
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_all_38_opcodes_from_u8() {
+        for op in 0..=37 {
+            let opcode = Opcode51::from_u8(op);
+            assert!(opcode.is_some(), "Opcode {op} must be recognized");
+            assert_eq!(opcode.unwrap() as u8, op);
+        }
+        assert!(Opcode51::from_u8(38).is_none());
+    }
+
+    #[test]
+    fn test_round_trip_property_all_opmodes() {
+        for op in [Opcode51::Move, Opcode51::Add, Opcode51::Eq] {
+            let word = RawInstruction51::encode_iabc(op, 42, 100, 200);
+            let decoded = RawInstruction51::decode(word);
+            assert_eq!(decoded.opcode, Some(op));
+            assert_eq!(decoded.encode(), Some(word));
+        }
+
+        let word_bx = RawInstruction51::encode_iabx(Opcode51::LoadK, 5, 12345);
+        let dec_bx = RawInstruction51::decode(word_bx);
+        assert_eq!(dec_bx.opcode, Some(Opcode51::LoadK));
+        assert_eq!(dec_bx.bx, 12345);
+        assert_eq!(dec_bx.encode(), Some(word_bx));
+
+        let word_sbx = RawInstruction51::encode_iasbx(Opcode51::Jmp, 0, -500);
+        let dec_sbx = RawInstruction51::decode(word_sbx);
+        assert_eq!(dec_sbx.opcode, Some(Opcode51::Jmp));
+        assert_eq!(dec_sbx.sbx, -500);
+        assert_eq!(dec_sbx.encode(), Some(word_sbx));
     }
 }

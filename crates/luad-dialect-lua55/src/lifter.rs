@@ -384,9 +384,19 @@ fn lift_instruction_55(
         Opcode55::Addi | Opcode55::Shli | Opcode55::Shri => {
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Register { index: raw.b });
+            operands.push(TypedOperand::ImmediateInt {
+                value: raw.sc as i64,
+            });
             reads.push(EffectTarget::Register { index: raw.b });
             writes.push(EffectTarget::Register { index: raw.a });
-            explanation = format!("R({}) := R({}) {} {}", raw.a, raw.b, op.name(), raw.c);
+            let op_sym = if op == Opcode55::Addi {
+                "+"
+            } else if op == Opcode55::Shri {
+                ">>"
+            } else {
+                "<<"
+            };
+            explanation = format!("R({}) := R({}) {op_sym} {}", raw.a, raw.b, raw.sc);
         }
         Opcode55::Addk
         | Opcode55::Subk
@@ -435,6 +445,16 @@ fn lift_instruction_55(
             companion_pc = prev.map(|_| pc - 1);
             let tm = tm_name(raw.c);
             metamethod_fallbacks.push(tm.to_string());
+            if op == Opcode55::Mmbini {
+                operands.push(TypedOperand::Register { index: raw.a });
+                operands.push(TypedOperand::ImmediateInt {
+                    value: raw.sb as i64,
+                });
+                operands.push(TypedOperand::ExtraArg {
+                    value: raw.c as u32,
+                });
+                operands.push(TypedOperand::Flag { value: raw.k != 0 });
+            }
             implicit_effects.push(ImplicitEffect::CompanionPair {
                 companion_pc: pc.saturating_sub(1),
                 companion_role: format!("Metamethod fallback {tm}"),
@@ -450,42 +470,82 @@ fn lift_instruction_55(
             explanation = format!("R({}) := {} R({})", raw.a, op.name(), raw.b);
         }
         Opcode55::Concat => {
+            let end_reg = raw.a.saturating_add(raw.b).saturating_sub(1);
             operands.push(TypedOperand::Register { index: raw.a });
+            operands.push(TypedOperand::Count {
+                value: raw.b as usize,
+                is_variable: false,
+            });
             reads.push(EffectTarget::RegisterRange {
                 start: raw.a,
-                end: raw.a.saturating_add(raw.b).saturating_sub(1),
+                end: end_reg,
             });
             writes.push(EffectTarget::Register { index: raw.a });
-            explanation = format!("R({}) := concatenation of {} registers", raw.a, raw.b);
+            metamethod_fallbacks.push("__concat".to_string());
+            explanation = format!(
+                "R({}) := R({})....R({end_reg}) (string concatenation)",
+                raw.a, raw.a
+            );
         }
 
         Opcode55::Close => {
             operands.push(TypedOperand::Register { index: raw.a });
-            explanation = format!("Close active upvalues >= R({})", raw.a);
+            implicit_effects.push(ImplicitEffect::CloseUpvalues {
+                min_register: raw.a,
+            });
+            explanation = format!("Close active upvalues at or above R({})", raw.a);
         }
         Opcode55::Tbc => {
             operands.push(TypedOperand::Register { index: raw.a });
-            explanation = format!("Mark R({}) as to-be-closed", raw.a);
+            metamethod_fallbacks.push("__close".to_string());
+            explanation = format!(
+                "Mark R({}) as to-be-closed (invoke __close on scope exit)",
+                raw.a
+            );
         }
         Opcode55::Jmp => {
             let dest_pc = (pc as i32 + 1 + raw.sj) as usize;
+            let dest_id = StableId::instruction(proto.path.clone(), dest_pc);
             operands.push(TypedOperand::Jump {
                 offset: raw.sj,
                 target_pc: dest_pc,
-                target_id: StableId::instruction(proto.path.clone(), dest_pc),
+                target_id: dest_id,
             });
             jump_target = Some(dest_pc);
+            reads.push(EffectTarget::JumpTarget { pc: dest_pc });
             explanation = format!("Unconditional jump by offset {} to PC {dest_pc}", raw.sj);
+        }
+        Opcode55::Eqi | Opcode55::Lti | Opcode55::Lei | Opcode55::Gti | Opcode55::Gei => {
+            let skip_pc = pc + 2;
+            operands.push(TypedOperand::Register { index: raw.a });
+            operands.push(TypedOperand::ImmediateInt {
+                value: raw.sb as i64,
+            });
+            operands.push(TypedOperand::Flag { value: raw.k != 0 });
+            reads.push(EffectTarget::Register { index: raw.a });
+            implicit_effects.push(ImplicitEffect::ConditionalSkip {
+                skip_target_pc: skip_pc,
+            });
+            let op_sym = match op {
+                Opcode55::Eqi => "==",
+                Opcode55::Lti => "<",
+                Opcode55::Lei => "<=",
+                Opcode55::Gti => ">",
+                Opcode55::Gei => ">=",
+                _ => "??",
+            };
+            explanation = format!(
+                "if ((R({}) {} {}) != {}) then skip next instruction (jump to PC {skip_pc})",
+                raw.a,
+                op_sym,
+                raw.sb,
+                raw.k != 0
+            );
         }
         Opcode55::Eq
         | Opcode55::Lt
         | Opcode55::Le
         | Opcode55::Eqk
-        | Opcode55::Eqi
-        | Opcode55::Lti
-        | Opcode55::Lei
-        | Opcode55::Gti
-        | Opcode55::Gei
         | Opcode55::Test
         | Opcode55::Testset => {
             let skip_pc = pc + 2;

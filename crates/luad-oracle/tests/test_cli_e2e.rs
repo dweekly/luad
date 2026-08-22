@@ -40,7 +40,8 @@ fn test_cli_capabilities() {
     assert!(stdout.contains("lua5.2"));
     assert!(stdout.contains("lua5.1"));
     assert!(stdout.contains("[supported]"));
-    assert!(stdout.contains("[experimental]"));
+    assert!(stdout.contains("luajit"));
+    assert!(stdout.contains("[planned]"));
 
     // JSON capabilities
     let json_output = Command::new(&luad)
@@ -54,13 +55,22 @@ fn test_cli_capabilities() {
         .as_array()
         .expect("supported_dialects array");
     let supp_strings: Vec<&str> = supported.iter().filter_map(|v| v.as_str()).collect();
-    assert_eq!(supp_strings, vec!["lua5.4"]);
+    assert_eq!(
+        supp_strings,
+        vec!["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"]
+    );
 
     let experimental = json_val["experimental_dialects"]
         .as_array()
         .expect("experimental_dialects array");
     let exp_strings: Vec<&str> = experimental.iter().filter_map(|v| v.as_str()).collect();
-    assert_eq!(exp_strings, vec!["lua5.1", "lua5.2", "lua5.3", "lua5.5"]);
+    assert!(exp_strings.is_empty());
+
+    let planned = json_val["planned_dialects"]
+        .as_array()
+        .expect("planned_dialects array");
+    let planned_strings: Vec<&str> = planned.iter().filter_map(|v| v.as_str()).collect();
+    assert_eq!(planned_strings, vec!["luajit"]);
 }
 
 #[test]

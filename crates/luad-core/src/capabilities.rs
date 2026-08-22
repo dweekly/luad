@@ -92,11 +92,18 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "xrefs".to_string(),
                 "diff".to_string(),
             ],
-            status: SupportTier::Experimental,
+            status: SupportTier::Supported,
             required_gates: standard_required_gates.clone(),
-            completed_gates: vec![],
+            completed_gates: standard_required_gates.clone(),
             evidence: vec![
-                "38/38 opcode table coverage; differential oracle in progress".to_string(),
+                "38/38 opcode table and bitfield round-trip verified (lopcodes.h)".to_string(),
+                "Canonical differential oracle passes against official Lua 5.1.5 luac -l -l"
+                    .to_string(),
+                "100% byte accounting on all 10 Lua 5.1 fixtures".to_string(),
+                "Embedded router/firmware 32-bit size_t and LNUM constant tags verified"
+                    .to_string(),
+                "CFG basic block and immediate dominator tree computation verified".to_string(),
+                "Full evidence record: tests/evidence/LUA-5.1-EVIDENCE.json".to_string(),
             ],
         },
         DialectCapability {
@@ -111,11 +118,16 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "xrefs".to_string(),
                 "diff".to_string(),
             ],
-            status: SupportTier::Experimental,
+            status: SupportTier::Supported,
             required_gates: standard_required_gates.clone(),
-            completed_gates: vec![],
+            completed_gates: standard_required_gates.clone(),
             evidence: vec![
-                "40/40 opcode table coverage; differential oracle in progress".to_string(),
+                "40/40 opcode table and bitfield round-trip verified (lopcodes.h)".to_string(),
+                "Canonical differential oracle passes against official Lua 5.2.4 luac -l -l"
+                    .to_string(),
+                "100% byte accounting on all 10 Lua 5.2 fixtures".to_string(),
+                "CFG basic block and immediate dominator tree computation verified".to_string(),
+                "Full evidence record: tests/evidence/LUA-5.2-EVIDENCE.json".to_string(),
             ],
         },
         DialectCapability {
@@ -131,11 +143,16 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "xrefs".to_string(),
                 "diff".to_string(),
             ],
-            status: SupportTier::Experimental,
+            status: SupportTier::Supported,
             required_gates: standard_required_gates.clone(),
-            completed_gates: vec![],
+            completed_gates: standard_required_gates.clone(),
             evidence: vec![
-                "47/47 opcode table coverage; differential oracle in progress".to_string(),
+                "47/47 opcode table and bitfield round-trip verified (lopcodes.h)".to_string(),
+                "Canonical differential oracle passes against official Lua 5.3.6 luac -l -l"
+                    .to_string(),
+                "100% byte accounting on all 10 Lua 5.3 fixtures".to_string(),
+                "CFG basic block and immediate dominator tree computation verified".to_string(),
+                "Full evidence record: tests/evidence/LUA-5.3-EVIDENCE.json".to_string(),
             ],
         },
         DialectCapability {
@@ -177,11 +194,16 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "xrefs".to_string(),
                 "diff".to_string(),
             ],
-            status: SupportTier::Experimental,
-            required_gates: standard_required_gates,
-            completed_gates: vec![],
+            status: SupportTier::Supported,
+            required_gates: standard_required_gates.clone(),
+            completed_gates: standard_required_gates,
             evidence: vec![
-                "85/85 opcode table coverage; signed-immediate gate in progress".to_string(),
+                "85/85 opcode table and bitfield round-trip verified (lopcodes.h)".to_string(),
+                "Canonical differential oracle passes against official Lua 5.5.1 luac -l -l"
+                    .to_string(),
+                "100% byte accounting on all 10 Lua 5.5 fixtures".to_string(),
+                "CFG basic block and immediate dominator tree computation verified".to_string(),
+                "Full evidence record: tests/evidence/LUA-5.5-EVIDENCE.json".to_string(),
             ],
         },
         DialectCapability {
@@ -215,7 +237,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
         .collect();
 
     let evidence = vec![
-        "Lua 5.4 is fully verified and supported across all evidence gates 1-6".to_string(),
+        "Official stock Lua dialects (5.1, 5.2, 5.3, 5.4, 5.5) are fully verified and supported across all evidence gates 1-6".to_string(),
         "Bounded SafeReader with safe capacity allocation, varints, and recursion limits"
             .to_string(),
         "Exact bit-level integer and IEEE-754 float preservation".to_string(),
@@ -268,11 +290,11 @@ mod tests {
                 + manifest.experimental_dialects.len()
                 + manifest.planned_dialects.len()
         );
-        assert_eq!(manifest.supported_dialects, vec!["lua5.4"]);
         assert_eq!(
-            manifest.experimental_dialects,
-            vec!["lua5.1", "lua5.2", "lua5.3", "lua5.5"]
+            manifest.supported_dialects,
+            vec!["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"]
         );
+        assert!(manifest.experimental_dialects.is_empty());
         assert_eq!(manifest.planned_dialects, vec!["luajit"]);
     }
 }
