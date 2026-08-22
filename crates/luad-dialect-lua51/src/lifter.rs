@@ -7,10 +7,27 @@ use luad_core::provenance::Confidence;
 
 use crate::opcodes::{Opcode51, RawInstruction51};
 
+use std::collections::BTreeMap;
+
 /// Lift an entire prototype's instructions into normalized semantic IR.
 #[must_use]
 pub fn lift_proto_lua51(proto: &Prototype) -> Vec<SemanticInstruction> {
     let mut lifted = Vec::with_capacity(proto.instructions.len());
+
+    // 1. Identify all closure binding descriptor PCs
+    let mut binding_descriptors: BTreeMap<usize, (usize, usize)> = BTreeMap::new();
+    for (pc, inst) in proto.instructions.iter().enumerate() {
+        let raw = RawInstruction51::decode(inst.raw_word);
+        if raw.opcode == Some(Opcode51::Closure) {
+            let child_bx = raw.bx as usize;
+            let nups = proto.protos.get(child_bx).map(|p| p.upvalues.len()).unwrap_or(0);
+            for (j, b_pc) in (0..nups).zip(pc + 1..) {
+                if b_pc < proto.instructions.len() {
+                    binding_descriptors.insert(b_pc, (pc, j));
+                }
+            }
+        }
+    }
 
     for (pc, inst) in proto.instructions.iter().enumerate() {
         let raw = RawInstruction51::decode(inst.raw_word);
@@ -27,7 +44,8 @@ pub fn lift_proto_lua51(proto: &Prototype) -> Vec<SemanticInstruction> {
             None
         };
 
-        let semantic = lift_instruction_51(proto, pc, inst, raw, next_word, prev_word);
+        let binding_info = binding_descriptors.get(&pc).copied();
+        let semantic = lift_instruction_51(proto, pc, inst, raw, next_word, prev_word, binding_info);
         lifted.push(semantic);
     }
 
@@ -41,8 +59,10 @@ fn lift_instruction_51(
     raw: RawInstruction51,
     _next: Option<RawInstruction51>,
     _prev: Option<RawInstruction51>,
+    binding_info: Option<(usize, usize)>,
 ) -> SemanticInstruction {
     let id = StableId::instruction(proto.path.clone(), pc);
+
     let raw_word = inst.raw_word;
     let raw_hex = inst.raw_hex.clone();
     let source = inst.source.clone();
@@ -497,13 +517,30 @@ fn lift_instruction_51(
             citations.push("lvm.c:1395".to_string());
         }
         Opcode51::Closure => {
+            let child_bx = raw.bx as usize;
+            let nups = proto.protos.get(child_bx).map(|p| p.upvalues.len()).unwrap_or(0);
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Prototype {
-                index: raw.bx as usize,
-                path: proto.path.child(raw.bx as usize),
+                index: child_bx,
+                path: proto.path.child(child_bx),
             });
             writes.push(EffectTarget::Register { index: raw.a });
-            explanation = format!("Instantiate closure proto:{} into R({})", raw.bx, raw.a);
+
+            // Capture facts from following binding descriptor instructions
+            for j in 0..nups {
+                let desc_pc = pc + 1 + j;
+                if let Some(desc_inst) = proto.instructions.get(desc_pc) {
+                    let desc_raw = RawInstruction51::decode(desc_inst.raw_word);
+                    if desc_raw.opcode == Some(Opcode51::Move) {
+                        reads.push(EffectTarget::Register { index: desc_raw.b as u8 });
+                        implicit_effects.push(ImplicitEffect::CaptureUpvalue { register: desc_raw.b as u8 });
+                    } else if desc_raw.opcode == Some(Opcode51::GetUpval) {
+                        reads.push(EffectTarget::Upvalue { index: desc_raw.b as u8, name: None });
+                    }
+                }
+            }
+
+            explanation = format!("Instantiate closure proto:{child_bx} into R({}) with {nups} upvalue capture(s)", raw.a);
             citations.push("lvm.c:1400".to_string());
         }
         Opcode51::VarArg => {
@@ -521,6 +558,49 @@ fn lift_instruction_51(
             explanation = format!("Load vararg into R({})", raw.a);
             citations.push("lvm.c:1410".to_string());
         }
+    }
+
+    if let Some((closure_pc, upval_idx)) = binding_info {
+        let is_move = op == Opcode51::Move;
+        let capture_kind = if is_move { "local register" } else { "upvalue" };
+        let mut desc_reads = Vec::new();
+        if is_move {
+            desc_reads.push(EffectTarget::Register { index: raw.b as u8 });
+        } else {
+            desc_reads.push(EffectTarget::Upvalue { index: raw.b as u8, name: None });
+        }
+
+        return SemanticInstruction {
+            id,
+            pc,
+            raw_word,
+            raw_hex,
+            mnemonic: format!("{} (binding descriptor)", op.name()),
+            explanation: format!(
+                "Closure-binding descriptor for closure at PC {closure_pc}: captures {capture_kind} {} into child upvalue {upval_idx}",
+                raw.b
+            ),
+            operands: vec![
+                TypedOperand::Register { index: raw.b as u8 },
+                TypedOperand::Count {
+                    value: upval_idx,
+                    is_variable: false,
+                },
+            ],
+
+            reads: desc_reads,
+            writes: vec![], // CRITICAL: Binding descriptors do not execute or write registers!
+            metamethod_fallbacks: vec![],
+            implicit_effects: vec![ImplicitEffect::CompanionPair {
+                companion_pc: closure_pc,
+                companion_role: "closure_binding".to_string(),
+            }],
+            jump_target: None,
+            companion_pc: Some(closure_pc),
+            confidence: Confidence::Fact,
+            source_citations: vec!["lvm.c:1402".to_string()],
+            source,
+        };
     }
 
     SemanticInstruction {
@@ -542,3 +622,4 @@ fn lift_instruction_51(
         source,
     }
 }
+

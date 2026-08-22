@@ -65,7 +65,47 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
                 diags.push(diag);
             }
         }
+
+        // Closure binding descriptor validation
+        if op == crate::opcodes::Opcode51::Closure {
+            let child_idx = raw.bx as usize;
+            if let Some(child) = proto.protos.get(child_idx) {
+                let nups = child.upvalues.len();
+                for j in 1..=nups {
+                    let desc_pc = pc + j;
+                    if desc_pc >= num_insts {
+                        let diag = Diagnostic::error(
+                            "L51-CLOSURE-001",
+                            DiagnosticCategory::Instruction,
+                            inst.id.clone(),
+                            format!("Missing closure binding descriptor at PC {desc_pc} for closure at PC {pc}"),
+                        )
+                        .with_source(inst.source.clone());
+                        diags.push(diag);
+                    } else {
+                        let desc_word = proto.instructions[desc_pc].raw_word;
+                        let desc_raw = RawInstruction51::decode(desc_word);
+                        if desc_raw.opcode != Some(crate::opcodes::Opcode51::Move)
+                            && desc_raw.opcode != Some(crate::opcodes::Opcode51::GetUpval)
+                        {
+                            let diag = Diagnostic::error(
+                                "L51-CLOSURE-002",
+                                DiagnosticCategory::Instruction,
+                                proto.instructions[desc_pc].id.clone(),
+                                format!(
+                                    "Invalid closure binding opcode at PC {desc_pc}: expected MOVE or GETUPVAL, found {:?}",
+                                    desc_raw.opcode
+                                ),
+                            )
+                            .with_source(proto.instructions[desc_pc].source.clone());
+                            diags.push(diag);
+                        }
+                    }
+                }
+            }
+        }
     }
+
 
     for child in &proto.protos {
         validate_proto(child, diags);
