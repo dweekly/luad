@@ -9,8 +9,10 @@ pub mod gate_runner;
 pub mod listing_parser;
 
 pub use gate_runner::{
-    execute_and_record_gate, verify_gate_artifact_integrity, GateResult, GateRunnerError,
+    assemble_release_manifest, execute_gate_spec, verify_gate_result, verify_release_manifest,
+    GateResult, GateRunnerError, GateSpec, ReleaseManifest,
 };
+
 pub use listing_parser::{
     assert_chunk_matches_luac, compare_chunk_with_luac, decode_instruction_mnemonic,
     decode_instruction_operands, parse_luac_dump, LuacConstDump, LuacDump, LuacInstDump,
@@ -110,11 +112,11 @@ pub fn get_fixture_bytes(
     }
 }
 
-/// Locate compiler binary checking LUAD_ORACLE_BIN_DIR first, then candidate paths, verifying version output.
+/// Locate compiler binary checking LUAD_ORACLE_BIN_DIR first, then explicit absolute paths, verifying version output.
 pub fn find_compiler_binary(
     bin_name: &str,
     candidates: &[&str],
-    expected_version_substr: &str,
+    expected_version: &str,
 ) -> Option<PathBuf> {
     if let Ok(dir) = std::env::var("LUAD_ORACLE_BIN_DIR") {
         let p = Path::new(&dir).join(bin_name);
@@ -125,7 +127,8 @@ pub fn find_compiler_binary(
                     String::from_utf8_lossy(&output.stdout),
                     String::from_utf8_lossy(&output.stderr)
                 );
-                if v.contains(expected_version_substr) {
+                let actual = v.trim();
+                if actual.starts_with(expected_version) || actual.contains(expected_version) {
                     return Some(p);
                 }
             }
@@ -134,25 +137,17 @@ pub fn find_compiler_binary(
 
     for candidate in candidates {
         let path = Path::new(candidate);
-        if path.exists() {
+        if path.is_absolute() && path.exists() {
             if let Ok(output) = Command::new(path).arg("-v").output() {
                 let v = format!(
                     "{}{}",
                     String::from_utf8_lossy(&output.stdout),
                     String::from_utf8_lossy(&output.stderr)
                 );
-                if v.contains(expected_version_substr) {
+                let actual = v.trim();
+                if actual.starts_with(expected_version) || actual.contains(expected_version) {
                     return Some(path.to_path_buf());
                 }
-            }
-        } else if let Ok(output) = Command::new(candidate).arg("-v").output() {
-            let v = format!(
-                "{}{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-            if v.contains(expected_version_substr) {
-                return Some(PathBuf::from(candidate));
             }
         }
     }

@@ -1,50 +1,30 @@
-//! Executable gate harness and versioned gate-result schema.
+//! Executable gate harness and verification runner.
 //!
-//! Provides deterministic gate execution, artifact recording, release manifest assembly,
-//! and tamper detection conforming to Coding-Agent Plan v3 Section 4 & 7.
+//! Enforces Coding-Agent Plan v3 Section 4 & Section 7 (Gate R1).
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
-/// Exact requirement for a fixture file used in a gate.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct FixtureRequirement {
-    /// Relative path from workspace root.
-    pub path: String,
-    /// Expected SHA-256 hex string of fixture content.
-    pub sha256: String,
-}
-
-/// Versioned schema for gate specifications.
+/// Exact specification of an executable gate.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GateSpec {
-    /// Schema version for gate specifications (always 1).
     pub schema_version: u32,
-    /// Unique gate identifier (e.g. `gate-facts-lua54-8`).
     pub gate_id: String,
-    /// Exact command argv array (never a whitespace-split shell string).
     pub command_argv: Vec<String>,
-    /// Exact test names expected to execute in this gate.
     pub expected_tests: Vec<String>,
-    /// Required compiler version string (e.g. `Lua 5.4.8`).
     pub required_compiler_version: Option<String>,
-    /// Required compiler binary SHA-256 hex string.
     pub required_compiler_sha256: Option<String>,
-    /// Required fixtures and their exact SHA-256 values.
     pub required_fixtures: Vec<FixtureRequirement>,
-    /// Required profile/layout identifier if applicable.
     pub required_profile: Option<String>,
-    /// Prerequisite gate IDs.
     pub prerequisite_gates: Vec<String>,
-    /// Exact capability fields this gate is allowed to mutate.
     pub allowed_capability_mutations: Vec<String>,
 }
 
 impl GateSpec {
-    /// Compute the canonical SHA-256 hash of this specification.
+    /// Compute canonical SHA-256 hash of this gate specification.
     #[must_use]
     pub fn compute_hash(&self) -> String {
         let json_bytes = serde_json::to_vec(self).unwrap_or_default();
@@ -54,59 +34,43 @@ impl GateSpec {
     }
 }
 
-/// Versioned schema for gate execution results.
+/// Recorded requirement on a fixture file.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FixtureRequirement {
+    pub path: String,
+    pub sha256: String,
+}
+
+/// Recorded outcome of executing a gate.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GateResult {
-    /// Schema version for gate results (always 1).
     pub schema_version: u32,
-    /// Unique gate identifier.
     pub gate_id: String,
-    /// Canonical SHA-256 hash of the GateSpec that generated this result.
     pub spec_hash: String,
-    /// Exact command argv executed.
     pub command_argv: Vec<String>,
-    /// Process exit code.
     pub exit_code: i32,
-    /// Success flag derived strictly by the runner.
     pub success: bool,
-    /// Exact enumerated test names executed.
     pub enumerated_tests: Vec<String>,
-    /// Number of tests that passed.
     pub passed_count: usize,
-    /// Number of tests that failed.
     pub failed_count: usize,
-    /// Number of tests that were ignored/skipped.
     pub ignored_count: usize,
-    /// Expected tests that did not execute.
     pub missing_expected_tests: Vec<String>,
-    /// Git commit SHA at time of execution.
     pub git_commit: String,
-    /// Whether the git worktree had uncommitted changes.
     pub dirty: bool,
-    /// Target compiler path.
     pub compiler_path: Option<String>,
-    /// Target compiler version string.
     pub compiler_version: Option<String>,
-    /// Target compiler binary SHA-256.
     pub compiler_sha256: Option<String>,
-    /// Recorded fixture paths and hashes.
     pub fixture_hashes: Vec<FixtureRequirement>,
-    /// Platform OS.
     pub platform: String,
-    /// Host architecture.
     pub arch: String,
-    /// UTC start timestamp.
     pub start_timestamp: String,
-    /// UTC end timestamp.
     pub end_timestamp: String,
-    /// SHA-256 hash of stdout.
     pub stdout_sha256: String,
-    /// SHA-256 hash of stderr.
     pub stderr_sha256: String,
 }
 
 impl GateResult {
-    /// Compute the canonical SHA-256 hash of this result artifact.
+    /// Compute canonical SHA-256 hash of this recorded gate result.
     #[must_use]
     pub fn compute_hash(&self) -> String {
         let json_bytes = serde_json::to_vec(self).unwrap_or_default();
@@ -116,36 +80,25 @@ impl GateResult {
     }
 }
 
-/// Reference to a prerequisite gate result in a release manifest.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PrerequisiteResultRef {
-    /// Gate ID.
-    pub gate_id: String,
-    /// SHA-256 hash of the GateResult JSON artifact.
-    pub result_sha256: String,
-    /// SHA-256 hash of the GateSpec that generated it.
-    pub spec_hash: String,
-}
-
-/// Versioned schema for an assembled release manifest.
+/// Immutable release manifest recording closure over verified prerequisite gates.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReleaseManifest {
-    /// Schema version (always 1).
     pub schema_version: u32,
-    /// Unique release identifier (e.g. `release-lua54-8`).
     pub release_id: String,
-    /// Target dialect ID (e.g. `lua5.4`).
     pub target_dialect: String,
-    /// Exact target patch release (e.g. `Lua 5.4.8`).
     pub target_patch_version: String,
-    /// Git commit SHA of the release.
     pub git_commit: String,
-    /// Whether the worktree was clean (must be true for promotion).
     pub clean: bool,
-    /// List of validated prerequisite result references.
     pub prerequisite_results: Vec<PrerequisiteResultRef>,
-    /// ISO-8601 UTC timestamp of assembly.
     pub assembled_at: String,
+}
+
+/// Reference to a prerequisite gate result and its matching spec.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PrerequisiteResultRef {
+    pub gate_id: String,
+    pub result_sha256: String,
+    pub spec_hash: String,
 }
 
 impl ReleaseManifest {
@@ -157,6 +110,17 @@ impl ReleaseManifest {
         hasher.update(&json_bytes);
         format!("{:x}", hasher.finalize())
     }
+}
+
+/// Structured report of an adversarial probe rejection.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProbeReport {
+    pub probe_id: usize,
+    pub probe_name: String,
+    pub target_failure_mode: String,
+    pub rejected: bool,
+    pub error_variant: String,
+    pub rejection_message: String,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -195,7 +159,6 @@ pub enum GateRunnerError {
         expected: String,
         actual: String,
     },
-
     #[error("Evidence tampering detected in '{0}': {1}")]
     TamperDetected(String, String),
     #[error("IO or parsing error: {0}")]
@@ -211,6 +174,13 @@ pub fn execute_gate_spec(
 ) -> Result<GateResult, GateRunnerError> {
     if spec.command_argv.is_empty() {
         return Err(GateRunnerError::MissingCommand(spec.gate_id.clone()));
+    }
+
+    if spec.schema_version != 1 {
+        return Err(GateRunnerError::TamperDetected(
+            spec.gate_id.clone(),
+            format!("Unsupported spec schema version: {}", spec.schema_version),
+        ));
     }
 
     // 1. Verify required fixtures before running tests
@@ -271,7 +241,8 @@ pub fn execute_gate_spec(
         comp_ver = Some(actual_ver.clone());
 
         if let Some(expected_ver) = &spec.required_compiler_version {
-            if !actual_ver.contains(expected_ver) {
+            let first_line = actual_ver.lines().next().unwrap_or("").trim();
+            if first_line != expected_ver && !actual_ver.starts_with(expected_ver) {
                 return Err(GateRunnerError::WrongCompilerVersion {
                     expected: expected_ver.clone(),
                     actual: actual_ver,
@@ -348,7 +319,6 @@ pub fn execute_gate_spec(
                 || trimmed.ends_with("... FAILED")
                 || trimmed.ends_with("... ignored"))
         {
-            // E.g.: "test test_lua54_golden_word_vectors ... ok"
             if let Some(rest) = trimmed.strip_prefix("test ") {
                 if let Some(test_name) = rest.split_whitespace().next() {
                     enumerated_tests.push(test_name.to_string());
@@ -357,7 +327,6 @@ pub fn execute_gate_spec(
         }
 
         if trimmed.contains("test result:") {
-            // E.g.: "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out"
             if let Some(passed_part) = trimmed.split("passed").next() {
                 if let Some(num_str) = passed_part.split_whitespace().last() {
                     if let Ok(n) = num_str.parse::<usize>() {
@@ -412,7 +381,6 @@ pub fn execute_gate_spec(
         success,
         enumerated_tests: enumerated_tests.clone(),
         passed_count,
-
         failed_count,
         ignored_count,
         missing_expected_tests: missing_expected_tests.clone(),
@@ -430,7 +398,7 @@ pub fn execute_gate_spec(
         stderr_sha256,
     };
 
-    // Serialize result
+    // Serialize result and logs
     if let Some(parent) = output_path.parent() {
         let _ = fs::create_dir_all(parent);
         let _ = fs::write(parent.join("stdout.log"), &stdout_bytes);
@@ -487,6 +455,16 @@ pub fn verify_gate_result(
     expected_git_commit: Option<&str>,
     require_clean: bool,
 ) -> Result<(), GateRunnerError> {
+    if result.schema_version != 1 || spec.schema_version != 1 {
+        return Err(GateRunnerError::TamperDetected(
+            result.gate_id.clone(),
+            format!(
+                "Unsupported schema version: result={}, spec={}",
+                result.schema_version, spec.schema_version
+            ),
+        ));
+    }
+
     if result.gate_id != spec.gate_id {
         return Err(GateRunnerError::TamperDetected(
             result.gate_id.clone(),
@@ -504,6 +482,13 @@ pub fn verify_gate_result(
             expected: expected_spec_hash,
             actual: result.spec_hash.clone(),
         });
+    }
+
+    if result.command_argv != spec.command_argv {
+        return Err(GateRunnerError::TamperDetected(
+            result.gate_id.clone(),
+            "Command argv mismatch against spec".to_string(),
+        ));
     }
 
     // Runner derived success check: success MUST match actual fields
@@ -548,13 +533,33 @@ pub fn verify_gate_result(
         ));
     }
 
-    // Verify all expected tests are in enumerated tests
     for expected in &spec.expected_tests {
         if !result.enumerated_tests.contains(expected) {
             return Err(GateRunnerError::MissingExpectedTests(
                 result.gate_id.clone(),
                 vec![expected.clone()],
             ));
+        }
+    }
+
+    // Verify fixture requirements
+    for req in &spec.required_fixtures {
+        match result.fixture_hashes.iter().find(|f| f.path == req.path) {
+            Some(f) if f.sha256 == req.sha256 => {}
+            Some(f) => {
+                return Err(GateRunnerError::FixtureCorrupted {
+                    path: req.path.clone(),
+                    expected: req.sha256.clone(),
+                    actual: f.sha256.clone(),
+                });
+            }
+            None => {
+                return Err(GateRunnerError::FixtureCorrupted {
+                    path: req.path.clone(),
+                    expected: req.sha256.clone(),
+                    actual: "missing".to_string(),
+                });
+            }
         }
     }
 
@@ -573,7 +578,8 @@ pub fn verify_gate_result(
 
     if let Some(exp_comp_ver) = &spec.required_compiler_version {
         let actual_ver = result.compiler_version.as_deref().unwrap_or("");
-        if !actual_ver.contains(exp_comp_ver) {
+        let first_line = actual_ver.lines().next().unwrap_or("").trim();
+        if first_line != exp_comp_ver && !actual_ver.starts_with(exp_comp_ver) {
             return Err(GateRunnerError::WrongCompilerVersion {
                 expected: exp_comp_ver.clone(),
                 actual: actual_ver.to_string(),
@@ -609,7 +615,6 @@ pub fn assemble_release_manifest(
 
     let mut refs = Vec::new();
     for (result, spec) in prerequisite_results {
-        // Validate each prerequisite result strictly
         verify_gate_result(result, spec, Some(git_commit), true)?;
         refs.push(PrerequisiteResultRef {
             gate_id: result.gate_id.clone(),
@@ -630,12 +635,22 @@ pub fn assemble_release_manifest(
     })
 }
 
-/// Verify an assembled ReleaseManifest against its prerequisite results.
+/// Verify an assembled ReleaseManifest against its prerequisite results and specs.
 pub fn verify_release_manifest(
     manifest: &ReleaseManifest,
     expected_commit: &str,
-    results: &[GateResult],
+    results_and_specs: &[(GateResult, GateSpec)],
 ) -> Result<(), GateRunnerError> {
+    if manifest.schema_version != 1 {
+        return Err(GateRunnerError::TamperDetected(
+            manifest.release_id.clone(),
+            format!(
+                "Unsupported manifest schema version: {}",
+                manifest.schema_version
+            ),
+        ));
+    }
+
     if manifest.git_commit != expected_commit {
         return Err(GateRunnerError::StaleRevision {
             expected: expected_commit.to_string(),
@@ -647,18 +662,32 @@ pub fn verify_release_manifest(
         return Err(GateRunnerError::DirtyPromotionArtifact);
     }
 
-    for prereq_ref in &manifest.prerequisite_results {
-        let matching_result = results
+    if manifest.prerequisite_results.len() != results_and_specs.len() {
+        return Err(GateRunnerError::TamperDetected(
+            manifest.release_id.clone(),
+            format!(
+                "Prerequisite count mismatch: manifest has {}, provided {}",
+                manifest.prerequisite_results.len(),
+                results_and_specs.len()
+            ),
+        ));
+    }
+
+    for (result, spec) in results_and_specs {
+        verify_gate_result(result, spec, Some(expected_commit), true)?;
+
+        let prereq_ref = manifest
+            .prerequisite_results
             .iter()
-            .find(|r| r.gate_id == prereq_ref.gate_id)
+            .find(|r| r.gate_id == result.gate_id)
             .ok_or_else(|| {
                 GateRunnerError::TamperDetected(
                     manifest.release_id.clone(),
-                    format!("Missing prerequisite result '{}'", prereq_ref.gate_id),
+                    format!("Missing prerequisite result '{}'", result.gate_id),
                 )
             })?;
 
-        let actual_res_hash = matching_result.compute_hash();
+        let actual_res_hash = result.compute_hash();
         if actual_res_hash != prereq_ref.result_sha256 {
             return Err(GateRunnerError::TamperDetected(
                 manifest.release_id.clone(),
@@ -668,27 +697,51 @@ pub fn verify_release_manifest(
                 ),
             ));
         }
+
+        let actual_spec_hash = spec.compute_hash();
+        if actual_spec_hash != prereq_ref.spec_hash {
+            return Err(GateRunnerError::TamperDetected(
+                manifest.release_id.clone(),
+                format!(
+                    "Spec hash mismatch for '{}': expected {}, got {}",
+                    prereq_ref.gate_id, prereq_ref.spec_hash, actual_spec_hash
+                ),
+            ));
+        }
+
+        // Prerequisite closure: check that every gate required by this spec is present in manifest
+        for required_prereq_id in &spec.prerequisite_gates {
+            if !manifest
+                .prerequisite_results
+                .iter()
+                .any(|r| &r.gate_id == required_prereq_id)
+            {
+                return Err(GateRunnerError::TamperDetected(
+                    manifest.release_id.clone(),
+                    format!(
+                        "Prerequisite closure broken: gate '{}' requires '{}' which is missing from manifest",
+                        spec.gate_id, required_prereq_id
+                    ),
+                ));
+            }
+        }
     }
 
     Ok(())
 }
 
-/// Helper for backwards compatibility with earlier execute_and_record_gate calls.
-pub fn execute_and_record_gate(
-    gate_id: &str,
-    command_str: &str,
-    output_path: &Path,
-    compiler_path: Option<&Path>,
-) -> Result<GateResult, GateRunnerError> {
-    let workspace_root = find_workspace_root_dir();
-    let parts: Vec<String> = command_str
-        .split_whitespace()
-        .map(|s| s.to_string())
-        .collect();
-    let spec = GateSpec {
+/// Execute all 11 adversarial probes against production verification logic and record structured reports.
+pub fn record_all_adversarial_probes(
+    workspace_root: &Path,
+    out_path: &Path,
+) -> Result<Vec<ProbeReport>, GateRunnerError> {
+    let mut reports = Vec::new();
+
+    // Probe 1: Zero tests executed (echo success)
+    let spec1 = GateSpec {
         schema_version: 1,
-        gate_id: gate_id.to_string(),
-        command_argv: parts,
+        gate_id: "probe-1-zero-tests".to_string(),
+        command_argv: vec!["echo".to_string(), "success".to_string()],
         expected_tests: vec![],
         required_compiler_version: None,
         required_compiler_sha256: None,
@@ -697,57 +750,303 @@ pub fn execute_and_record_gate(
         prerequisite_gates: vec![],
         allowed_capability_mutations: vec![],
     };
-    execute_gate_spec(&spec, output_path, &workspace_root, compiler_path)
+    let tmp_out1 = tempfile::NamedTempFile::new().unwrap();
+    let res1 = execute_gate_spec(&spec1, tmp_out1.path(), workspace_root, None);
+    reports.push(ProbeReport {
+        probe_id: 1,
+        probe_name: "probe_1_zero_tests_executed_rejected".to_string(),
+        target_failure_mode: "Command exits zero but executes zero tests".to_string(),
+        rejected: res1.is_err(),
+        error_variant: format!("{:?}", res1.as_ref().err().unwrap()),
+        rejection_message: res1.err().unwrap().to_string(),
+    });
+
+    // Probe 2: Nonexistent test filter
+    let spec2 = GateSpec {
+        schema_version: 1,
+        gate_id: "probe-2-nonexistent-filter".to_string(),
+        command_argv: vec![
+            "cargo".to_string(),
+            "test".to_string(),
+            "-p".to_string(),
+            "luad-oracle".to_string(),
+            "--test".to_string(),
+            "test_gate_harness".to_string(),
+            "--".to_string(),
+            "nonexistent_filter_xyz_123".to_string(),
+        ],
+        expected_tests: vec!["test_probe_1_zero_tests_executed_rejected".to_string()],
+        required_compiler_version: None,
+        required_compiler_sha256: None,
+        required_fixtures: vec![],
+        required_profile: None,
+        prerequisite_gates: vec![],
+        allowed_capability_mutations: vec![],
+    };
+    let tmp_out2 = tempfile::NamedTempFile::new().unwrap();
+    let res2 = execute_gate_spec(&spec2, tmp_out2.path(), workspace_root, None);
+    reports.push(ProbeReport {
+        probe_id: 2,
+        probe_name: "probe_2_nonexistent_test_filter_rejected".to_string(),
+        target_failure_mode: "Nonexistent test filter executes zero matching tests".to_string(),
+        rejected: res2.is_err(),
+        error_variant: format!("{:?}", res2.as_ref().err().unwrap()),
+        rejection_message: res2.err().unwrap().to_string(),
+    });
+
+    // Probe 3: Ignored/skipped required test
+    let mut fake_res3 = mock_valid_result("probe-3-ignored");
+    fake_res3.ignored_count = 1;
+    let spec3 = mock_valid_spec("probe-3-ignored");
+    fake_res3.spec_hash = spec3.compute_hash();
+    let res3 = verify_gate_result(&fake_res3, &spec3, None, false);
+    reports.push(ProbeReport {
+        probe_id: 3,
+        probe_name: "probe_3_ignored_test_rejected".to_string(),
+        target_failure_mode: "Gate result records ignored/skipped test count > 0".to_string(),
+        rejected: res3.is_err(),
+        error_variant: format!("{:?}", res3.as_ref().err().unwrap()),
+        rejection_message: res3.err().unwrap().to_string(),
+    });
+
+    // Probe 4: Stale git commit
+    let fake_res4 = mock_valid_result("probe-4-stale-commit");
+    let spec4 = mock_valid_spec("probe-4-stale-commit");
+    let res4 = verify_gate_result(
+        &fake_res4,
+        &spec4,
+        Some("deadbeef00000000000000000000000000000000"),
+        false,
+    );
+    reports.push(ProbeReport {
+        probe_id: 4,
+        probe_name: "probe_4_stale_git_commit_rejected".to_string(),
+        target_failure_mode: "Result git commit does not match expected source revision"
+            .to_string(),
+        rejected: res4.is_err(),
+        error_variant: format!("{:?}", res4.as_ref().err().unwrap()),
+        rejection_message: res4.err().unwrap().to_string(),
+    });
+
+    // Probe 5: Dirty result rejected for promotion
+    let mut fake_res5 = mock_valid_result("probe-5-dirty");
+    fake_res5.dirty = true;
+    let spec5 = mock_valid_spec("probe-5-dirty");
+    fake_res5.spec_hash = spec5.compute_hash();
+    let res5 = verify_gate_result(&fake_res5, &spec5, None, true);
+    reports.push(ProbeReport {
+        probe_id: 5,
+        probe_name: "probe_5_dirty_result_rejected_for_promotion".to_string(),
+        target_failure_mode: "Result records dirty working tree when require_clean is true"
+            .to_string(),
+        rejected: res5.is_err(),
+        error_variant: format!("{:?}", res5.as_ref().err().unwrap()),
+        rejection_message: res5.err().unwrap().to_string(),
+    });
+
+    // Probe 6: Wrong compiler binary SHA-256
+    let fake_res6 = mock_valid_result("probe-6-wrong-comp-sha");
+    let mut spec6 = mock_valid_spec("probe-6-wrong-comp-sha");
+    spec6.required_compiler_sha256 =
+        Some("1111111111111111111111111111111111111111111111111111111111111111".to_string());
+    let mut fake_res6_mut = fake_res6.clone();
+    fake_res6_mut.spec_hash = spec6.compute_hash();
+    fake_res6_mut.compiler_sha256 =
+        Some("2222222222222222222222222222222222222222222222222222222222222222".to_string());
+    let res6 = verify_gate_result(&fake_res6_mut, &spec6, None, false);
+    reports.push(ProbeReport {
+        probe_id: 6,
+        probe_name: "probe_6_wrong_compiler_binary_sha256_rejected".to_string(),
+        target_failure_mode: "Compiler binary SHA-256 does not match spec required hash"
+            .to_string(),
+        rejected: res6.is_err(),
+        error_variant: format!("{:?}", res6.as_ref().err().unwrap()),
+        rejection_message: res6.err().unwrap().to_string(),
+    });
+
+    // Probe 7: Wrong compiler patch version
+    let fake_res7 = mock_valid_result("probe-7-wrong-comp-ver");
+    let mut spec7 = mock_valid_spec("probe-7-wrong-comp-ver");
+    spec7.required_compiler_version = Some("Lua 5.4.8".to_string());
+    let mut fake_res7_mut = fake_res7.clone();
+    fake_res7_mut.spec_hash = spec7.compute_hash();
+    fake_res7_mut.compiler_version = Some("Lua 5.4.7".to_string());
+    let res7 = verify_gate_result(&fake_res7_mut, &spec7, None, false);
+    reports.push(ProbeReport {
+        probe_id: 7,
+        probe_name: "probe_7_wrong_compiler_version_rejected".to_string(),
+        target_failure_mode:
+            "Compiler version string does not exactly match required patch version".to_string(),
+        rejected: res7.is_err(),
+        error_variant: format!("{:?}", res7.as_ref().err().unwrap()),
+        rejection_message: res7.err().unwrap().to_string(),
+    });
+
+    // Probe 8: Missing compiler before tests run
+    let spec8 = GateSpec {
+        schema_version: 1,
+        gate_id: "probe-8-missing-comp".to_string(),
+        command_argv: vec!["cargo".to_string(), "test".to_string()],
+        expected_tests: vec![],
+        required_compiler_version: Some("Lua 5.4.8".to_string()),
+        required_compiler_sha256: None,
+        required_fixtures: vec![],
+        required_profile: None,
+        prerequisite_gates: vec![],
+        allowed_capability_mutations: vec![],
+    };
+    let tmp_out8 = tempfile::NamedTempFile::new().unwrap();
+    let res8 = execute_gate_spec(
+        &spec8,
+        tmp_out8.path(),
+        workspace_root,
+        Some(Path::new("/tmp/nonexistent_luac_binary_probe8")),
+    );
+    reports.push(ProbeReport {
+        probe_id: 8,
+        probe_name: "probe_8_missing_compiler_rejected_before_tests".to_string(),
+        target_failure_mode: "Required compiler binary is missing from filesystem before execution"
+            .to_string(),
+        rejected: res8.is_err(),
+        error_variant: format!("{:?}", res8.as_ref().err().unwrap()),
+        rejection_message: res8.err().unwrap().to_string(),
+    });
+
+    // Probe 9: Mutated fixture byte
+    let spec9 = GateSpec {
+        schema_version: 1,
+        gate_id: "probe-9-fixture-corrupt".to_string(),
+        command_argv: vec!["cargo".to_string(), "test".to_string()],
+        expected_tests: vec![],
+        required_compiler_version: None,
+        required_compiler_sha256: None,
+        required_fixtures: vec![FixtureRequirement {
+            path: "tests/fixtures/hello.lua".to_string(),
+            sha256: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+        }],
+        required_profile: None,
+        prerequisite_gates: vec![],
+        allowed_capability_mutations: vec![],
+    };
+    let tmp_out9 = tempfile::NamedTempFile::new().unwrap();
+    let res9 = execute_gate_spec(&spec9, tmp_out9.path(), workspace_root, None);
+    reports.push(ProbeReport {
+        probe_id: 9,
+        probe_name: "probe_9_mutated_fixture_rejected_before_evaluation".to_string(),
+        target_failure_mode: "Fixture SHA-256 does not match spec requirement before evaluation"
+            .to_string(),
+        rejected: res9.is_err(),
+        error_variant: format!("{:?}", res9.as_ref().err().unwrap()),
+        rejection_message: res9.err().unwrap().to_string(),
+    });
+
+    // Probe 10: Mutated result after manifest assembly
+    let fake_res10 = mock_valid_result("probe-10-manifest-tamper");
+    let spec10 = mock_valid_spec("probe-10-manifest-tamper");
+    let mut fake_res10_clean = fake_res10.clone();
+    fake_res10_clean.spec_hash = spec10.compute_hash();
+    let manifest10 = assemble_release_manifest(
+        "rel-probe10",
+        "lua5.4.8",
+        "Lua 5.4.8",
+        "feedface00000000000000000000000000000000",
+        true,
+        &[(fake_res10_clean.clone(), spec10.clone())],
+    )
+    .unwrap();
+    let mut tampered_res10 = fake_res10_clean.clone();
+    tampered_res10.passed_count = 999;
+    let res10 = verify_release_manifest(
+        &manifest10,
+        "feedface00000000000000000000000000000000",
+        &[(tampered_res10, spec10)],
+    );
+    reports.push(ProbeReport {
+        probe_id: 10,
+        probe_name: "probe_10_mutated_result_after_manifest_assembly_rejected".to_string(),
+        target_failure_mode: "Gate result hash tampered after ReleaseManifest assembly".to_string(),
+        rejected: res10.is_err(),
+        error_variant: format!("{:?}", res10.as_ref().err().unwrap()),
+        rejection_message: res10.err().unwrap().to_string(),
+    });
+
+    // Probe 11: Flipped success boolean
+    let mut fake_res11 = mock_valid_result("probe-11-boolean-flip");
+    fake_res11.exit_code = 1;
+    fake_res11.failed_count = 1;
+    fake_res11.success = true; // In-memory tamper
+    let spec11 = mock_valid_spec("probe-11-boolean-flip");
+    fake_res11.spec_hash = spec11.compute_hash();
+    let res11 = verify_gate_result(&fake_res11, &spec11, None, false);
+    reports.push(ProbeReport {
+        probe_id: 11,
+        probe_name: "probe_11_success_boolean_flip_rejected".to_string(),
+        target_failure_mode:
+            "Flipped in-memory success boolean contradicts nonzero exit/failure count".to_string(),
+        rejected: res11.is_err(),
+        error_variant: format!("{:?}", res11.as_ref().err().unwrap()),
+        rejection_message: res11.err().unwrap().to_string(),
+    });
+
+    if let Some(parent) = out_path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let json_bytes = serde_json::to_vec_pretty(&reports)
+        .map_err(|e| GateRunnerError::Io(format!("Failed to serialize probe reports: {e}")))?;
+    fs::write(out_path, json_bytes).map_err(|e| {
+        GateRunnerError::Io(format!(
+            "Failed to write probe reports to {out_path:?}: {e}"
+        ))
+    })?;
+
+    Ok(reports)
 }
 
-/// Helper for backwards compatibility with earlier verify_gate_artifact_integrity calls.
-pub fn verify_gate_artifact_integrity(
-    artifact_path: &Path,
-    expected_gate_id: &str,
-    expected_compiler_version_substr: Option<&str>,
-) -> Result<GateResult, GateRunnerError> {
-    let content = fs::read_to_string(artifact_path).map_err(|e| {
-        GateRunnerError::Io(format!("Failed to read artifact {artifact_path:?}: {e}"))
-    })?;
-    let result: GateResult = serde_json::from_str(&content).map_err(|e| {
-        GateRunnerError::TamperDetected(expected_gate_id.to_string(), format!("Invalid JSON: {e}"))
-    })?;
-
-    if result.gate_id != expected_gate_id {
-        return Err(GateRunnerError::TamperDetected(
-            result.gate_id,
-            format!("Gate ID mismatch: expected {expected_gate_id}"),
-        ));
+fn mock_valid_spec(gate_id: &str) -> GateSpec {
+    GateSpec {
+        schema_version: 1,
+        gate_id: gate_id.to_string(),
+        command_argv: vec!["cargo".to_string(), "test".to_string()],
+        expected_tests: vec!["test_sample".to_string()],
+        required_compiler_version: None,
+        required_compiler_sha256: None,
+        required_fixtures: vec![],
+        required_profile: None,
+        prerequisite_gates: vec![],
+        allowed_capability_mutations: vec![],
     }
-
-    if !result.success || result.exit_code != 0 {
-        return Err(GateRunnerError::NonzeroExitCode(
-            result.exit_code,
-            result.command_argv,
-        ));
-    }
-
-    if result.ignored_count > 0 {
-        return Err(GateRunnerError::SkippedTests(
-            result.ignored_count,
-            result.gate_id,
-        ));
-    }
-
-    if let Some(expected_ver) = expected_compiler_version_substr {
-        let actual_ver = result.compiler_version.as_deref().unwrap_or("");
-        if !actual_ver.contains(expected_ver) {
-            return Err(GateRunnerError::WrongCompilerVersion {
-                expected: expected_ver.to_string(),
-                actual: actual_ver.to_string(),
-            });
-        }
-    }
-
-    Ok(result)
 }
 
-fn get_current_git_commit(workspace_root: &Path) -> String {
+fn mock_valid_result(gate_id: &str) -> GateResult {
+    let spec = mock_valid_spec(gate_id);
+    GateResult {
+        schema_version: 1,
+        gate_id: gate_id.to_string(),
+        spec_hash: spec.compute_hash(),
+        command_argv: spec.command_argv,
+        exit_code: 0,
+        success: true,
+        enumerated_tests: vec!["test_sample".to_string()],
+        passed_count: 1,
+        failed_count: 0,
+        ignored_count: 0,
+        missing_expected_tests: vec![],
+        git_commit: "feedface00000000000000000000000000000000".to_string(),
+        dirty: false,
+        compiler_path: None,
+        compiler_version: None,
+        compiler_sha256: None,
+        fixture_hashes: vec![],
+        platform: "macos".to_string(),
+        arch: "aarch64".to_string(),
+        start_timestamp: "2026-08-22T12:00:00Z".to_string(),
+        end_timestamp: "2026-08-22T12:00:01Z".to_string(),
+        stdout_sha256: "abc".to_string(),
+        stderr_sha256: "def".to_string(),
+    }
+}
+
+pub fn get_current_git_commit(workspace_root: &Path) -> String {
     Command::new("git")
         .args(["rev-parse", "HEAD"])
         .current_dir(workspace_root)
@@ -763,7 +1062,7 @@ fn get_current_git_commit(workspace_root: &Path) -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
-fn is_git_dirty(workspace_root: &Path) -> bool {
+pub fn is_git_dirty(workspace_root: &Path) -> bool {
     Command::new("git")
         .args(["status", "--porcelain"])
         .current_dir(workspace_root)
@@ -773,32 +1072,48 @@ fn is_git_dirty(workspace_root: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn current_iso_timestamp() -> String {
-    format!(
-        "{:?}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs()
-    )
-}
+pub fn current_iso_timestamp() -> String {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let secs = now % 60;
+    let mins = (now / 60) % 60;
+    let hours = (now / 3600) % 24;
+    let mut days = (now / 86400) as i64;
 
-fn find_workspace_root_dir() -> PathBuf {
-    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
-        let p = PathBuf::from(manifest_dir);
-        if p.join("Cargo.toml").exists() && p.join("crates").exists() {
-            return p;
-        }
-        if let Some(parent) = p.parent() {
-            if parent.join("Cargo.toml").exists() && parent.join("crates").exists() {
-                return parent.to_path_buf();
-            }
-            if let Some(gparent) = parent.parent() {
-                if gparent.join("Cargo.toml").exists() && gparent.join("crates").exists() {
-                    return gparent.to_path_buf();
-                }
-            }
+    let mut year = 1970;
+    loop {
+        let leap = if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
+            1
+        } else {
+            0
+        };
+        let days_in_year = 365 + leap;
+        if days >= days_in_year {
+            days -= days_in_year;
+            year += 1;
+        } else {
+            break;
         }
     }
-    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+
+    let leap = if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
+        1
+    } else {
+        0
+    };
+    let month_days = [31, 28 + leap, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let mut month = 1;
+    for &md in &month_days {
+        if days >= md as i64 {
+            days -= md as i64;
+            month += 1;
+        } else {
+            break;
+        }
+    }
+    let day = days + 1;
+
+    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{secs:02}Z")
 }

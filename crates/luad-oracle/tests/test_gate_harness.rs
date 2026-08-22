@@ -424,14 +424,14 @@ fn test_probe_10_mutated_result_after_manifest_assembly_rejected() {
         "Lua 5.4.8",
         "1111",
         true,
-        &[(result.clone(), spec)],
+        &[(result.clone(), spec.clone())],
     )
     .expect("Clean assembly");
 
     // Mutate result after assembly (e.g. change exit code or platform)
     result.platform = "linux".to_string();
 
-    let verified = verify_release_manifest(&manifest, "1111", &[result]);
+    let verified = verify_release_manifest(&manifest, "1111", &[(result, spec)]);
     assert!(
         matches!(verified, Err(GateRunnerError::TamperDetected(..))),
         "Mutated result must fail manifest verification"
@@ -508,10 +508,58 @@ fn test_fixture_manifest_records_complete_provenance() {
     assert_eq!(fixtures.len(), 50, "Must record all 50 fixtures");
 
     for f in fixtures {
-        assert!(f["dialect"].as_str().is_some());
-        assert!(f["binary_sha256"].as_str().is_some());
-        assert!(f["source_sha256"].as_str().is_some());
-        assert!(f["source_path"].as_str().is_some());
-        assert!(f["binary_path"].as_str().is_some());
+        assert!(f["dialect"].as_str().is_some(), "dialect must be present");
+        assert!(
+            f["fixture_name"].as_str().is_some(),
+            "fixture_name must be present"
+        );
+        assert!(
+            f["source_path"].as_str().is_some(),
+            "source_path must be present"
+        );
+        assert!(
+            f["source_sha256"].as_str().is_some(),
+            "source_sha256 must be present"
+        );
+        assert!(
+            f["binary_path"].as_str().is_some(),
+            "binary_path must be present"
+        );
+        assert!(
+            f["binary_sha256"].as_str().is_some(),
+            "binary_sha256 must be present"
+        );
+        assert!(
+            f["byte_length"].as_u64().is_some(),
+            "byte_length must be present"
+        );
+        assert!(
+            f["is_stripped"].as_bool().is_some(),
+            "is_stripped must be present"
+        );
+        assert!(
+            f["source_archive_url"].as_str().is_some(),
+            "source_archive_url must be present"
+        );
+        assert!(
+            f["source_archive_sha256"].as_str().is_some(),
+            "source_archive_sha256 must be present"
+        );
+        assert!(
+            f["compiler_binary_sha256"].as_str().is_some(),
+            "compiler_binary_sha256 must be present"
+        );
+        assert!(
+            f["target_layout"].as_str().is_some(),
+            "target_layout must be present"
+        );
+        assert!(
+            f["generator_revision"].as_str().is_some(),
+            "generator_revision must be present"
+        );
+        assert!(
+            f["generation_command"].as_str().is_some(),
+            "generation_command must be present"
+        );
     }
 }

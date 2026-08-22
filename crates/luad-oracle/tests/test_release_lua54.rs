@@ -199,7 +199,7 @@ fn test_killer_probe_tampered_success_flag_rejects_verification() {
         "Lua 5.4.8",
         "1111",
         true,
-        &[(result.clone(), spec)],
+        &[(result.clone(), spec.clone())],
     )
     .expect("Clean assembly");
 
@@ -207,7 +207,7 @@ fn test_killer_probe_tampered_success_flag_rejects_verification() {
     let mut tampered_result = result;
     tampered_result.exit_code = 1;
 
-    let verify_res = verify_release_manifest(&manifest, "1111", &[tampered_result]);
+    let verify_res = verify_release_manifest(&manifest, "1111", &[(tampered_result, spec)]);
     assert!(
         matches!(verify_res, Err(GateRunnerError::TamperDetected(..))),
         "Tampered result must be rejected"
