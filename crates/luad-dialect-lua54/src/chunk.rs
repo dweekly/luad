@@ -11,7 +11,7 @@ use luad_core::model::{
 use luad_core::provenance::SourceLocation;
 use luad_core::reader::SafeReader;
 
-use crate::header::parse_header_lua54;
+use crate::header::{parse_header_lua54, LUAC_DATA_54, LUA_SIGNATURE};
 
 /// Constant type tags in Lua 5.4 bytecode.
 pub const LUA_VNIL: u8 = 0;
@@ -390,35 +390,31 @@ pub fn write_string_lua54(buf: &mut Vec<u8>, s: Option<&[u8]>) {
     }
 }
 
-/// Encode a Lua 5.4 prototype to binary bytecode according to official specification.
+/// Encode a Lua 5.4 prototype to binary bytecode purely from its AST model fields.
 pub fn encode_proto_lua54(buf: &mut Vec<u8>, proto: &Prototype) {
-    if let Ok(proto_bytes) = hex::decode(&proto.source.raw_hex) {
-        if !proto_bytes.is_empty() {
-            buf.extend_from_slice(&proto_bytes);
-            return;
-        }
-    }
-
-    // Fallback AST field-by-field encoder if raw bytes are empty
-    // 1. source_name (only root proto writes source name, sub-protos inherit)
+    // 1. source_name (only root proto writes source name, sub-protos inherit unless distinct)
     let s_name = if proto.path.depth() == 0 {
         proto.source_name.as_ref().map(|s| s.raw_bytes.as_slice())
     } else {
         None
     };
     write_string_lua54(buf, s_name);
+
     // 2. lines defined
     write_varint_lua54(buf, proto.line_defined as u64);
     write_varint_lua54(buf, proto.last_line_defined as u64);
+
     // 3. params & flags
     buf.push(proto.numparams);
     buf.push(proto.is_vararg);
     buf.push(proto.maxstacksize);
-    // 4. code
+
+    // 4. code instructions
     write_varint_lua54(buf, proto.instructions.len() as u64);
     for inst in &proto.instructions {
         buf.extend_from_slice(&inst.raw_word.to_le_bytes());
     }
+
     // 5. constants
     write_varint_lua54(buf, proto.constants.len() as u64);
     for k in &proto.constants {
@@ -444,6 +440,7 @@ pub fn encode_proto_lua54(buf: &mut Vec<u8>, proto: &Prototype) {
             }
         }
     }
+
     // 6. upvalues
     write_varint_lua54(buf, proto.upvalues.len() as u64);
     for u in &proto.upvalues {
@@ -451,22 +448,26 @@ pub fn encode_proto_lua54(buf: &mut Vec<u8>, proto: &Prototype) {
         buf.push(u.idx);
         buf.push(u.kind);
     }
+
     // 7. sub-prototypes
     write_varint_lua54(buf, proto.protos.len() as u64);
     for p in &proto.protos {
         encode_proto_lua54(buf, p);
     }
+
     // 8. line_info
     write_varint_lua54(buf, proto.line_info.len() as u64);
     for &li in &proto.line_info {
         buf.push(li);
     }
+
     // 9. abs_line_info
     write_varint_lua54(buf, proto.abs_line_info.len() as u64);
     for ali in &proto.abs_line_info {
         write_varint_lua54(buf, ali.pc as u64);
         write_varint_lua54(buf, ali.line as u64);
     }
+
     // 10. loc_vars
     write_varint_lua54(buf, proto.loc_vars.len() as u64);
     for lv in &proto.loc_vars {
@@ -474,6 +475,7 @@ pub fn encode_proto_lua54(buf: &mut Vec<u8>, proto: &Prototype) {
         write_varint_lua54(buf, lv.startpc as u64);
         write_varint_lua54(buf, lv.endpc as u64);
     }
+
     // 11. upvalue_names
     write_varint_lua54(buf, proto.upvalue_names.len() as u64);
     for un in &proto.upvalue_names {
@@ -481,23 +483,35 @@ pub fn encode_proto_lua54(buf: &mut Vec<u8>, proto: &Prototype) {
     }
 }
 
-/// Encode a complete Lua 5.4 binary chunk into byte-for-byte serialized bytecode.
+/// Encode a complete Lua 5.4 binary chunk purely from its AST model fields.
 #[must_use]
 pub fn encode_chunk_lua54(chunk: &Chunk) -> Vec<u8> {
     let mut buf = Vec::with_capacity(chunk.byte_length);
-    // 1. Header
-    if let Ok(hdr_bytes) = hex::decode(&chunk.header.source.raw_hex) {
-        buf.extend_from_slice(&hdr_bytes);
-    }
+
+    // 1. Header (official Lua 5.4.8 layout: 30 bytes)
+    buf.extend_from_slice(LUA_SIGNATURE); // 4 bytes: "\x1bLua"
+    buf.push(0x54); // Version 5.4
+    buf.push(0x00); // Format 0
+    buf.extend_from_slice(LUAC_DATA_54); // 6 bytes: "\x19\x93\r\n\x1a\n"
+
+    buf.push(chunk.header.instruction_size as u8); // 4
+    buf.push(chunk.header.lua_integer_size as u8); // 8
+    buf.push(chunk.header.lua_number_size as u8); // 8
+    buf.extend_from_slice(&0x5678i64.to_le_bytes()); // LUAC_INT test integer
+    buf.extend_from_slice(&370.5f64.to_le_bytes()); // LUAC_NUM test float
+
     // 2. Main closure sizeupvalues
     buf.push(chunk.main_proto.upvalues.len() as u8);
-    // 3. Main Prototype
+
+    // 3. Main Prototype (recursive)
     encode_proto_lua54(&mut buf, &chunk.main_proto);
+
     // 4. Trailing bytes if any
     if let Some(tb) = &chunk.trailing_bytes {
         if let Ok(bytes) = hex::decode(tb) {
             buf.extend_from_slice(&bytes);
         }
     }
+
     buf
 }

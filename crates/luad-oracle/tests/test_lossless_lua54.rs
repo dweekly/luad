@@ -1,6 +1,14 @@
+use luad_core::model::{ConstantValue, Prototype};
 use luad_core::reader::SafeReader;
 use luad_dialect_lua54::{decode_chunk_lua54, encode_chunk_lua54};
 use luad_oracle::get_fixture_bytes;
+
+fn clear_raw_spans(proto: &mut Prototype) {
+    proto.source.raw_hex = String::new();
+    for p in &mut proto.protos {
+        clear_raw_spans(p);
+    }
+}
 
 #[test]
 fn test_binary_roundtrip_byte_for_byte_lua54() {
@@ -27,6 +35,62 @@ fn test_binary_roundtrip_byte_for_byte_lua54() {
             );
         }
     }
+}
+
+#[test]
+fn test_killer_probe_clearing_raw_spans_remains_byte_identical() {
+    // Proves that the encoder relies purely on AST model fields and NOT raw_hex shortcuts
+    let fixtures = ["hello", "control_flow", "closures", "tables", "numerics"];
+
+    for fixture_name in fixtures {
+        for is_stripped in [false, true] {
+            let raw_bytes = get_fixture_bytes("lua5.4", fixture_name, is_stripped)
+                .unwrap_or_else(|e| panic!("Failed to load fixture {fixture_name}: {e}"));
+
+            let mut reader = SafeReader::new(&raw_bytes);
+            let mut chunk = decode_chunk_lua54(&mut reader)
+                .unwrap_or_else(|e| panic!("Failed to decode {fixture_name}: {e:?}"));
+
+            // Clear all raw spans
+            chunk.header.source.raw_hex = String::new();
+            clear_raw_spans(&mut chunk.main_proto);
+
+            let re_encoded = encode_chunk_lua54(&chunk);
+            assert_eq!(
+                re_encoded, raw_bytes,
+                "Serialization must remain byte-identical after clearing all raw spans for {fixture_name} (stripped={is_stripped})"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_killer_probe_mutated_field_changes_serialized_bytes_and_reparses() {
+    let raw_bytes = get_fixture_bytes("lua5.4", "hello", false).expect("fixture failed");
+    let mut reader = SafeReader::new(&raw_bytes);
+    let mut chunk = decode_chunk_lua54(&mut reader).expect("clean decode");
+
+    // Clear raw spans to ensure model fields drive serialization
+    chunk.header.source.raw_hex = String::new();
+    clear_raw_spans(&mut chunk.main_proto);
+
+    // Mutate constant 0 string content
+    chunk.main_proto.constants[0].value =
+        ConstantValue::ShortString(luad_core::model::LuaString::from_bytes(b"MUTATED_PAYLOAD"));
+
+    let mutated_bytes = encode_chunk_lua54(&chunk);
+    assert_ne!(
+        mutated_bytes, raw_bytes,
+        "Mutated constant must produce distinct serialized bytes"
+    );
+
+    // Reparse mutated bytes
+    let mut reader2 = SafeReader::new(&mutated_bytes);
+    let reparsed = decode_chunk_lua54(&mut reader2).expect("Reparses mutated chunk");
+    assert_eq!(
+        reparsed.main_proto.constants[0].value,
+        ConstantValue::ShortString(luad_core::model::LuaString::from_bytes(b"MUTATED_PAYLOAD"))
+    );
 }
 
 #[test]
