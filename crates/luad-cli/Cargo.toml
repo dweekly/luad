@@ -1,0 +1,23 @@
+[package]
+name = "luad-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "luad"
+path = "src/main.rs"
+
+[dependencies]
+luad-core = { workspace = true }
+luad-dialect-lua54 = { workspace = true }
+luad-dialect-lua55 = { workspace = true }
+luad-analysis = { workspace = true }
+clap = { workspace = true }
+clap_complete = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+schemars = { workspace = true }
+colored = { workspace = true }
+hex = { workspace = true }

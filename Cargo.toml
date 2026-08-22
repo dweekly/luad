@@ -1,0 +1,33 @@
+[workspace]
+members = [
+    "crates/luad-core",
+    "crates/luad-dialect-lua54",
+    "crates/luad-dialect-lua55",
+    "crates/luad-analysis",
+    "crates/luad-cli",
+    "crates/luad-oracle",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["luad contributors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/dew/luad"
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+schemars = { version = "0.8", features = ["derive"] }
+clap = { version = "4.5", features = ["derive", "env"] }
+clap_complete = "4.5"
+sha2 = "0.10"
+hex = "0.4"
+thiserror = "1.0"
+colored = "2.1"
+tempfile = "3.10"
+luad-core = { path = "crates/luad-core" }
+luad-dialect-lua54 = { path = "crates/luad-dialect-lua54" }
+luad-dialect-lua55 = { path = "crates/luad-dialect-lua55" }
+luad-analysis = { path = "crates/luad-analysis" }
