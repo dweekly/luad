@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-analysis-r3",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_analysis",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_analysis_refuses_invalid_chunks",
+    "test_cfg_block_partitioning_and_reachability",
+    "test_cfg_comparison_fallthrough_edges",
+    "test_cfg_dominance_frontiers",
+    "test_cfg_dominator_tree_golden_topologies",
+    "test_cfg_irreducible_graph_dominators",
+    "test_cfg_metamethod_companion_edges",
+    "test_cfg_rejects_invalid_chunk_preconditions",
+    "test_chunk_diffing",
+    "test_killer_probe_diamond_and_nested_diamond_idoms",
+    "test_killer_probe_linear_chain_idoms",
+    "test_killer_probe_loop_and_unreachable_idoms",
+    "test_structured_query_engine",
+    "test_xrefs_indexing_and_query"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-facts-lua54-8"
+  ],
+  "allowed_capability_mutations": []
+}
