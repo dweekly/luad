@@ -404,7 +404,8 @@ fn test_unpatched_pre_gate2_decoder_fails_oracle_on_all_fixtures() {
             String::from_utf8_lossy(&output.stderr)
         );
         let luac_dump = String::from_utf8(output.stdout).expect("Valid utf8 stdout");
-        let dump_parsed = luad_oracle::parse_luac_dump(&luac_dump);
+        let dump_parsed = luad_oracle::parse_luac_dump(&luac_dump).expect("Parses dump");
+
         assert!(!dump_parsed.functions.is_empty());
 
         let mut reader = luad_core::reader::SafeReader::new(&raw_bytes);
@@ -607,7 +608,7 @@ fn test_negative_control_signed_immediate_offset_sb() {
         .expect("ADDI instruction present in chunk");
 
     let addi_inst = &chunk.main_proto.instructions[addi_pc];
-    let dump_parsed = luad_oracle::parse_luac_dump(&dump);
+    let dump_parsed = luad_oracle::parse_luac_dump(&dump).expect("Parses dump");
     let exp_addi_inst = &dump_parsed.functions[0].instructions[addi_pc];
 
     let raw = addi_inst.raw_word;
@@ -1082,7 +1083,7 @@ fn test_negative_control_missing_upvalue_columns_rejected() {
 #[test]
 fn test_negative_control_recognized_unconsumed_field_sweep() {
     let (_chunk, dump) = get_base_test_pair();
-    let parsed_dump = luad_oracle::listing_parser::parse_luac_dump(&dump);
+    let parsed_dump = luad_oracle::listing_parser::parse_luac_dump(&dump).expect("Parses dump");
     let mut ledger = luad_oracle::listing_parser::RecordConsumptionLedger::from_dump(&parsed_dump);
 
     // Mark all clean fields as consumed
@@ -1130,3 +1131,82 @@ fn test_negative_control_recognized_unconsumed_field_sweep() {
         OracleMismatch::UnconsumedField { field, .. } if field.contains("extra_unconsumed_inst_field")
     )));
 }
+
+#[test]
+fn test_negative_control_malformed_zero_valued_field_rejected() {
+    let (chunk, dump) = get_base_test_pair();
+
+    // 1. Malformed instruction line token
+    let malformed_inst_dump = dump.replace("\t1\t[1]\t", "\tbad_pc\t[1]\t");
+    let parse_res1 = luad_oracle::listing_parser::parse_luac_dump(&malformed_inst_dump);
+    assert!(
+        parse_res1.is_err(),
+        "Non-numeric instruction index MUST be rejected"
+    );
+    let mismatches1 = compare_chunk_with_luac(&chunk, &malformed_inst_dump);
+    assert!(!mismatches1.is_empty());
+
+    // 2. Malformed line token (e.g. [-0] or [bad])
+    let malformed_line_dump = dump.replace("\t1\t[1]\t", "\t1\t[bad]\t");
+    let parse_res2 = luad_oracle::listing_parser::parse_luac_dump(&malformed_line_dump);
+    assert!(parse_res2.is_err(), "Malformed line token MUST be rejected");
+    let mismatches2 = compare_chunk_with_luac(&chunk, &malformed_line_dump);
+    assert!(!mismatches2.is_empty());
+
+    // 3. Malformed header line number
+    assert!(dump.contains(":0,0>"));
+    let malformed_header_dump = dump.replace(":0,0>", ":0,invalid>");
+    let parse_res3 = luad_oracle::listing_parser::parse_luac_dump(&malformed_header_dump);
+    assert!(
+        parse_res3.is_err(),
+        "Malformed header line number MUST be rejected"
+    );
+}
+
+#[test]
+fn test_negative_control_jmp_comment_changed_to_arbitrary_text_rejected() {
+    let luac_path = require_luac54();
+    let source = "local x = 1\nwhile x < 10 do\n  x = x + 1\nend\nreturn x";
+    let raw_bytes = compile_source_lua54(source, false).expect("Compiles with luac 5.4");
+    let mut reader = luad_core::reader::SafeReader::new(&raw_bytes);
+    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("Decodes chunk");
+    let dump = dump_source_luac(&luac_path, source).expect("Dumps with luac 5.4");
+
+    assert!(dump.contains("; to "));
+    // Change "; to 4" (or whatever destination) to arbitrary non-semantic comment text
+    let tampered_dump = dump.replace("; to ", "; arbitrary_comment_text ");
+    assert_ne!(tampered_dump, dump);
+
+    let mismatches = compare_chunk_with_luac(&chunk, &tampered_dump);
+    assert!(
+        !mismatches.is_empty(),
+        "Changing JMP destination comment to arbitrary text MUST fail with JumpTargetMismatch"
+    );
+    assert!(mismatches
+        .iter()
+        .any(|m| matches!(m, OracleMismatch::JumpTargetMismatch { .. })));
+}
+
+#[test]
+fn test_negative_control_jmp_comment_changed_to_wrong_target_rejected() {
+    let luac_path = require_luac54();
+    let source = "local x = 1\nwhile x < 10 do\n  x = x + 1\nend\nreturn x";
+    let raw_bytes = compile_source_lua54(source, false).expect("Compiles with luac 5.4");
+    let mut reader = luad_core::reader::SafeReader::new(&raw_bytes);
+    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("Decodes chunk");
+    let dump = dump_source_luac(&luac_path, source).expect("Dumps with luac 5.4");
+
+    assert!(dump.contains("; to "));
+    let tampered_dump = dump.replace("; to ", "; to 99");
+    assert_ne!(tampered_dump, dump);
+
+    let mismatches = compare_chunk_with_luac(&chunk, &tampered_dump);
+    assert!(
+        !mismatches.is_empty(),
+        "Changing JMP destination comment to wrong target MUST fail with JumpTargetMismatch"
+    );
+    assert!(mismatches
+        .iter()
+        .any(|m| matches!(m, OracleMismatch::JumpTargetMismatch { .. })));
+}
+

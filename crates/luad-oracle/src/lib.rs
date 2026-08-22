@@ -17,7 +17,7 @@ pub use gate_runner::{
 pub use listing_parser::{
     assert_chunk_matches_luac, compare_chunk_with_luac, decode_instruction_mnemonic,
     decode_instruction_operands, parse_luac_dump, LuacConstDump, LuacDump, LuacInstDump,
-    LuacLocVarDump, LuacProtoDump, LuacUpvalDump, OracleMismatch,
+    LuacLocVarDump, LuacProtoDump, LuacUpvalDump, OracleMismatch, OracleParseError,
 };
 
 use luad_core::limits::{ParseMode, ResourceLimits};

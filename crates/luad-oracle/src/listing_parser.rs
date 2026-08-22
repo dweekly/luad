@@ -48,6 +48,46 @@ pub enum TypedExpectedOperands54 {
     Invalid { raw_tokens: Vec<String> },
 }
 
+/// Strict errors produced when parsing compiler listings (`luac -l -l`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OracleParseError {
+    EmptyDump,
+    MalformedHeader { line: String, reason: String },
+    MalformedParams { line: String, reason: String },
+    MalformedInstruction { line: String, reason: String },
+    MalformedConstant { line: String, reason: String },
+    MalformedLocal { line: String, reason: String },
+    MalformedUpvalue { line: String, reason: String },
+}
+
+impl std::fmt::Display for OracleParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EmptyDump => write!(f, "empty luac dump"),
+            Self::MalformedHeader { line, reason } => {
+                write!(f, "malformed function header '{line}': {reason}")
+            }
+            Self::MalformedParams { line, reason } => {
+                write!(f, "malformed parameters metadata '{line}': {reason}")
+            }
+            Self::MalformedInstruction { line, reason } => {
+                write!(f, "malformed instruction line '{line}': {reason}")
+            }
+            Self::MalformedConstant { line, reason } => {
+                write!(f, "malformed constant line '{line}': {reason}")
+            }
+            Self::MalformedLocal { line, reason } => {
+                write!(f, "malformed local var line '{line}': {reason}")
+            }
+            Self::MalformedUpvalue { line, reason } => {
+                write!(f, "malformed upvalue line '{line}': {reason}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for OracleParseError {}
+
 /// Typed line number info in `luac -l -l`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DumpLineInfo {
@@ -63,8 +103,7 @@ pub struct LuacInstDump {
     pub mnemonic: String,
     pub expected_operands: Option<TypedExpectedOperands54>,
     pub operands_raw: String,
-    pub jump_target: Option<usize>,
-    pub comment: Option<String>,
+    pub jump_target: Option<usize>, // 0-based PC destination strictly parsed from "; to N"
 }
 
 /// Structured constant representation parsed from `luac -l -l`.
@@ -125,10 +164,8 @@ impl RecordConsumptionLedger {
                 ledger.inst_fields.insert((i, pc, "line_info"), false);
                 ledger.inst_fields.insert((i, pc, "mnemonic"), false);
                 ledger.inst_fields.insert((i, pc, "operands"), false);
-                if inst.jump_target.is_some() || inst.comment.is_some() {
-                    ledger
-                        .inst_fields
-                        .insert((i, pc, "comment_or_jump_target"), false);
+                if inst.jump_target.is_some() {
+                    ledger.inst_fields.insert((i, pc, "jump_target"), false);
                 }
             }
 
@@ -242,8 +279,7 @@ enum Section {
 }
 
 /// Parse the text output of `luac -l -l` into a `LuacDump`.
-#[must_use]
-pub fn parse_luac_dump(output: &str) -> LuacDump {
+pub fn parse_luac_dump(output: &str) -> Result<LuacDump, OracleParseError> {
     let mut functions = Vec::new();
     let mut current_proto: Option<LuacProtoDump> = None;
     let mut current_section = Section::Instructions;
@@ -270,11 +306,36 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                     if let Some(colon) = loc_str.rfind(':') {
                         let lines_part = &loc_str[colon + 1..];
                         if let Some((l1, l2)) = lines_part.split_once(',') {
-                            linedefined = l1.parse().unwrap_or(0);
-                            lastlinedefined = l2.parse().unwrap_or(0);
+                            linedefined = l1.parse::<usize>().map_err(|_| {
+                                OracleParseError::MalformedHeader {
+                                    line: line.to_string(),
+                                    reason: format!("invalid line_defined integer '{l1}'"),
+                                }
+                            })?;
+                            lastlinedefined = l2.parse::<usize>().map_err(|_| {
+                                OracleParseError::MalformedHeader {
+                                    line: line.to_string(),
+                                    reason: format!("invalid last_line_defined integer '{l2}'"),
+                                }
+                            })?;
+                        } else {
+                            return Err(OracleParseError::MalformedHeader {
+                                line: line.to_string(),
+                                reason: "missing comma in defined line range".to_string(),
+                            });
                         }
                     }
+                } else {
+                    return Err(OracleParseError::MalformedHeader {
+                        line: line.to_string(),
+                        reason: "missing closing '>' bracket in header".to_string(),
+                    });
                 }
+            } else {
+                return Err(OracleParseError::MalformedHeader {
+                    line: line.to_string(),
+                    reason: "missing opening '<' bracket in header".to_string(),
+                });
             }
 
             current_proto = Some(LuacProtoDump {
@@ -299,16 +360,41 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                 let parts: Vec<&str> = trimmed.split(',').map(str::trim).collect();
                 for part in parts {
                     if part.contains("param") {
-                        let num_part = part.split_whitespace().next().unwrap_or("0");
-                        if num_part.ends_with('+') {
+                        let num_part = part.split_whitespace().next().ok_or_else(|| {
+                            OracleParseError::MalformedParams {
+                                line: line.to_string(),
+                                reason: "missing param count token".to_string(),
+                            }
+                        })?;
+                        if let Some(stripped) = num_part.strip_suffix('+') {
                             proto.is_vararg = true;
-                            proto.numparams = num_part.trim_end_matches('+').parse().unwrap_or(0);
+                            proto.numparams = stripped.parse::<usize>().map_err(|_| {
+                                OracleParseError::MalformedParams {
+                                    line: line.to_string(),
+                                    reason: format!("invalid vararg param count '{stripped}'"),
+                                }
+                            })?;
                         } else {
-                            proto.numparams = num_part.parse().unwrap_or(0);
+                            proto.numparams = num_part.parse::<usize>().map_err(|_| {
+                                OracleParseError::MalformedParams {
+                                    line: line.to_string(),
+                                    reason: format!("invalid param count '{num_part}'"),
+                                }
+                            })?;
                         }
                     } else if part.contains("slot") {
-                        let num_part = part.split_whitespace().next().unwrap_or("0");
-                        proto.maxstacksize = num_part.parse().unwrap_or(0);
+                        let num_part = part.split_whitespace().next().ok_or_else(|| {
+                            OracleParseError::MalformedParams {
+                                line: line.to_string(),
+                                reason: "missing slot count token".to_string(),
+                            }
+                        })?;
+                        proto.maxstacksize = num_part.parse::<usize>().map_err(|_| {
+                            OracleParseError::MalformedParams {
+                                line: line.to_string(),
+                                reason: format!("invalid slot count '{num_part}'"),
+                            }
+                        })?;
                     }
                 }
             }
@@ -337,20 +423,45 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                 // or   "	2	[1]	LOADK    	0 0	; \"hello\""
                 let parts: Vec<&str> = line.split('\t').filter(|s| !s.is_empty()).collect();
                 if parts.len() >= 3 {
-                    let pc_1based: usize = parts[0].trim().parse().unwrap_or(0);
-                    let pc = if pc_1based > 0 { pc_1based - 1 } else { 0 };
+                    let pc_1based = parts[0].trim().parse::<usize>().map_err(|_| {
+                        OracleParseError::MalformedInstruction {
+                            line: line.to_string(),
+                            reason: format!("invalid instruction PC token '{}'", parts[0]),
+                        }
+                    })?;
+                    if pc_1based == 0 {
+                        return Err(OracleParseError::MalformedInstruction {
+                            line: line.to_string(),
+                            reason: "1-based instruction index must be >= 1".to_string(),
+                        });
+                    }
+                    let pc = pc_1based - 1;
 
                     let raw_line_tok = parts[1].trim();
                     let line_info = if raw_line_tok == "[-]" {
                         DumpLineInfo::Stripped
-                    } else if let Ok(l) = raw_line_tok
-                        .trim_matches('[')
-                        .trim_matches(']')
-                        .parse::<usize>()
-                    {
+                    } else if raw_line_tok.starts_with('[') && raw_line_tok.ends_with(']') {
+                        let inner = &raw_line_tok[1..raw_line_tok.len() - 1];
+                        let l = inner.parse::<usize>().map_err(|_| {
+                            OracleParseError::MalformedInstruction {
+                                line: line.to_string(),
+                                reason: format!("invalid line number in bracket: '{raw_line_tok}'"),
+                            }
+                        })?;
+                        if l == 0 {
+                            return Err(OracleParseError::MalformedInstruction {
+                                line: line.to_string(),
+                                reason: "line number must be >= 1".to_string(),
+                            });
+                        }
                         DumpLineInfo::Known(l)
                     } else {
-                        DumpLineInfo::Stripped
+                        return Err(OracleParseError::MalformedInstruction {
+                            line: line.to_string(),
+                            reason: format!(
+                                "malformed line token '{raw_line_tok}', expected [N] or [-]"
+                            ),
+                        });
                     };
 
                     let mnem_field = parts[2].trim();
@@ -362,41 +473,54 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                         };
 
                     let mut operands_raw = maybe_ops;
-                    let mut comment = None;
+                    let mut comment_str = None;
 
                     for part in &parts[3..] {
                         let trimmed_part = part.trim();
-                        if trimmed_part.starts_with(';') {
-                            comment = Some(trimmed_part.trim_start_matches(';').trim().to_string());
+                        if let Some(after_semi) = trimmed_part.strip_prefix(';') {
+                            comment_str = Some(after_semi.trim().to_string());
                         } else if let Some((before_semi, after_semi)) = trimmed_part.split_once(';')
                         {
                             if operands_raw.is_empty() {
                                 operands_raw = before_semi.trim().to_string();
                             }
-                            comment = Some(after_semi.trim().to_string());
+                            comment_str = Some(after_semi.trim().to_string());
                         } else if operands_raw.is_empty() {
                             operands_raw = trimmed_part.to_string();
                         }
                     }
 
-                    let jump_target = if let Some(ref c) = comment {
-                        if let Some(to_str) = c.strip_prefix("to ") {
-                            to_str
-                                .trim()
-                                .parse::<usize>()
-                                .ok()
-                                .map(|d| if d > 0 { d - 1 } else { 0 })
+                    // Strictly parse jump target from "; to N" or "; exit to N"
+                    let jump_target = if let Some(ref c) = comment_str {
+                        let to_str = c.strip_prefix("to ").or_else(|| c.strip_prefix("exit to "));
+                        if let Some(dest_str) = to_str {
+                            let dest_1based = dest_str.trim().parse::<usize>().map_err(|_| {
+                                OracleParseError::MalformedInstruction {
+                                    line: line.to_string(),
+                                    reason: format!(
+                                        "invalid jump destination integer in comment: '{dest_str}'"
+                                    ),
+                                }
+                            })?;
+                            if dest_1based == 0 {
+                                return Err(OracleParseError::MalformedInstruction {
+                                    line: line.to_string(),
+                                    reason: "jump target destination must be >= 1".to_string(),
+                                });
+                            }
+                            Some(dest_1based - 1)
                         } else {
-                            None
+                            None // Non-semantic comments explicitly discarded
                         }
                     } else {
                         None
                     };
 
+
                     let expected_operands = Some(parse_expected_operands_54(
                         &mnemonic,
                         &operands_raw,
-                        comment.as_deref(),
+                        comment_str.as_deref(),
                     ));
 
                     proto.instructions.push(LuacInstDump {
@@ -406,7 +530,6 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                         expected_operands,
                         operands_raw,
                         jump_target,
-                        comment,
                     });
                 }
             }
@@ -415,7 +538,12 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                 // E.g. "	0	S	\"hello\"" (Lua 5.4/5.5) or "	1	\"hello\"" (Lua 5.1-5.3)
                 let tokens: Vec<&str> = trimmed.split_whitespace().collect();
                 if !tokens.is_empty() {
-                    let idx: usize = tokens[0].parse().unwrap_or(0);
+                    let idx = tokens[0].parse::<usize>().map_err(|_| {
+                        OracleParseError::MalformedConstant {
+                            line: line.to_string(),
+                            reason: format!("invalid constant index '{}'", tokens[0]),
+                        }
+                    })?;
                     let (tag, value_str) = if tokens.len() >= 3
                         && tokens[1].len() == 1
                         && "IFSNB".contains(tokens[1].chars().next().unwrap_or(' '))
@@ -447,10 +575,25 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                 // E.g. "\t0\t(for state)\t5\t7" (startpc and endpc are 1-based in luac.c: startpc + 1, endpc + 1)
                 let parts: Vec<&str> = line.split('\t').filter(|s| !s.is_empty()).collect();
                 if parts.len() >= 4 {
-                    let idx: usize = parts[0].trim().parse().unwrap_or(0);
+                    let idx = parts[0].trim().parse::<usize>().map_err(|_| {
+                        OracleParseError::MalformedLocal {
+                            line: line.to_string(),
+                            reason: format!("invalid local index '{}'", parts[0]),
+                        }
+                    })?;
                     let name = parts[1].trim().to_string();
-                    let startpc_1based: usize = parts[2].trim().parse().unwrap_or(0);
-                    let endpc_1based: usize = parts[3].trim().parse().unwrap_or(0);
+                    let startpc_1based = parts[2].trim().parse::<usize>().map_err(|_| {
+                        OracleParseError::MalformedLocal {
+                            line: line.to_string(),
+                            reason: format!("invalid local startpc '{}'", parts[2]),
+                        }
+                    })?;
+                    let endpc_1based = parts[3].trim().parse::<usize>().map_err(|_| {
+                        OracleParseError::MalformedLocal {
+                            line: line.to_string(),
+                            reason: format!("invalid local endpc '{}'", parts[3]),
+                        }
+                    })?;
                     let startpc = if startpc_1based > 0 {
                         startpc_1based - 1
                     } else {
@@ -474,10 +617,33 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                 // E.g. "\t0\t_ENV\t1\t0"
                 let parts: Vec<&str> = line.split('\t').filter(|s| !s.is_empty()).collect();
                 if parts.len() >= 2 {
-                    let idx: usize = parts[0].trim().parse().unwrap_or(0);
+                    let idx = parts[0].trim().parse::<usize>().map_err(|_| {
+                        OracleParseError::MalformedUpvalue {
+                            line: line.to_string(),
+                            reason: format!("invalid upvalue index '{}'", parts[0]),
+                        }
+                    })?;
                     let name = parts[1].trim().to_string();
-                    let instack = parts.get(2).and_then(|s| s.trim().parse().ok());
-                    let upval_idx = parts.get(3).and_then(|s| s.trim().parse().ok());
+                    let instack = if let Some(s) = parts.get(2) {
+                        Some(s.trim().parse::<u8>().map_err(|_| {
+                            OracleParseError::MalformedUpvalue {
+                                line: line.to_string(),
+                                reason: format!("invalid upvalue instack '{}'", s),
+                            }
+                        })?)
+                    } else {
+                        None
+                    };
+                    let upval_idx = if let Some(s) = parts.get(3) {
+                        Some(s.trim().parse::<u8>().map_err(|_| {
+                            OracleParseError::MalformedUpvalue {
+                                line: line.to_string(),
+                                reason: format!("invalid upvalue idx '{}'", s),
+                            }
+                        })?)
+                    } else {
+                        None
+                    };
                     proto.upvalues.push(LuacUpvalDump {
                         index: idx,
                         name,
@@ -493,7 +659,11 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
         functions.push(proto);
     }
 
-    LuacDump { functions }
+    if functions.is_empty() {
+        return Err(OracleParseError::EmptyDump);
+    }
+
+    Ok(LuacDump { functions })
 }
 
 /// Parse typed expected operands for Lua 5.4 instructions from string tokens.
@@ -1467,7 +1637,17 @@ fn check_constant_matches_exact(
 #[must_use]
 pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMismatch> {
     let mut mismatches = Vec::new();
-    let dump = parse_luac_dump(luac_output);
+    let dump = match parse_luac_dump(luac_output) {
+        Ok(d) => d,
+        Err(err) => {
+            mismatches.push(OracleMismatch::UnconsumedField {
+                proto: 0,
+                pc: 0,
+                field: format!("oracle parse error: {err}"),
+            });
+            return mismatches;
+        }
+    };
     let mut ledger = RecordConsumptionLedger::from_dump(&dump);
 
     let mut actual_protos = Vec::new();
@@ -1645,27 +1825,31 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 ledger.mark_inst_field(i, pc, "mnemonic");
                 ledger.mark_inst_field(i, pc, "operands");
 
-                // Verify jump target if annotated in comment
-                if let Some(exp_target) = exp_inst.jump_target {
-                    if chunk.dialect == "lua5.4" {
-                        let indep =
-                            crate::independent_lua54_oracle::IndependentInstruction54::decode(
-                                act_inst.raw_word,
-                            );
-                        let calculated_target = match indep.opcode {
-                            Some(crate::independent_lua54_oracle::IndependentOpcode54::Jmp) => {
-                                Some(((pc as i32) + 1 + indep.sj) as usize)
-                            }
-                            Some(crate::independent_lua54_oracle::IndependentOpcode54::Forloop)
-                            | Some(
-                                crate::independent_lua54_oracle::IndependentOpcode54::Tforloop,
-                            ) => Some(((pc as i32) + 1 - (indep.bx as i32)) as usize),
-                            Some(crate::independent_lua54_oracle::IndependentOpcode54::Forprep) => {
-                                Some(((pc as i32) + 1 + (indep.bx as i32)) as usize)
-                            }
-                            _ => None,
-                        };
-                        if let Some(act_target) = calculated_target {
+                // Verify jump target for branch instructions (JMP, FORLOOP, FORPREP, TFORLOOP)
+                let is_jump_inst = matches!(
+                    exp_inst.mnemonic.as_str(),
+                    "JMP" | "FORLOOP" | "FORPREP" | "TFORLOOP"
+                );
+                if is_jump_inst && chunk.dialect == "lua5.4" {
+                    let indep = crate::independent_lua54_oracle::IndependentInstruction54::decode(
+                        act_inst.raw_word,
+                    );
+                    let calculated_target = match indep.opcode {
+                        Some(crate::independent_lua54_oracle::IndependentOpcode54::Jmp) => {
+                            Some(((pc as i32) + 1 + indep.sj) as usize)
+                        }
+                        Some(crate::independent_lua54_oracle::IndependentOpcode54::Forloop)
+                        | Some(crate::independent_lua54_oracle::IndependentOpcode54::Tforloop) => {
+                            Some(((pc as i32) + 1 - (indep.bx as i32)) as usize)
+                        }
+                        Some(crate::independent_lua54_oracle::IndependentOpcode54::Forprep) => {
+                            Some(((pc as i32) + 1 + (indep.bx as i32) + 1) as usize)
+                        }
+
+                        _ => None,
+                    };
+                    if let Some(act_target) = calculated_target {
+                        if let Some(exp_target) = exp_inst.jump_target {
                             if act_target != exp_target {
                                 mismatches.push(OracleMismatch::JumpTargetMismatch {
                                     proto: i,
@@ -1674,11 +1858,18 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                                     expected_target: exp_target,
                                 });
                             }
+                            ledger.mark_inst_field(i, pc, "jump_target");
+                        } else {
+                            mismatches.push(OracleMismatch::JumpTargetMismatch {
+                                proto: i,
+                                pc,
+                                actual_target: act_target,
+                                expected_target: 0,
+                            });
                         }
                     }
-                }
-                if exp_inst.jump_target.is_some() || exp_inst.comment.is_some() {
-                    ledger.mark_inst_field(i, pc, "comment_or_jump_target");
+                } else if let Some(_) = exp_inst.jump_target {
+                    ledger.mark_inst_field(i, pc, "jump_target");
                 }
             }
         }
