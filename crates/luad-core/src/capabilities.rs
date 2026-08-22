@@ -93,8 +93,18 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "diff".to_string(),
             ],
             status: SupportTier::Supported,
-            required_gates: standard_required_gates.clone(),
-            completed_gates: standard_required_gates.clone(),
+            required_gates: {
+                let mut g = standard_required_gates.clone();
+                g.push("gate-layout-lua51-32".to_string());
+                g.push("gate-profile-lua51-lnum".to_string());
+                g
+            },
+            completed_gates: {
+                let mut g = standard_required_gates.clone();
+                g.push("gate-layout-lua51-32".to_string());
+                g.push("gate-profile-lua51-lnum".to_string());
+                g
+            },
             evidence: vec![
                 "38/38 opcode table and bitfield round-trip verified (lopcodes.h)".to_string(),
                 "Canonical differential oracle passes against official Lua 5.1.5 luac -l -l"

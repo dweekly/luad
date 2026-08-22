@@ -3,7 +3,7 @@
   "dialect": "lua5.1",
   "display_name": "Lua 5.1.0 - 5.1.5",
   "status": "supported",
-  "generated_at": "2026-08-22T16:45:15.516383+00:00",
+  "generated_at": "2026-08-22T16:50:46.231269+00:00",
   "host_system": "Darwin",
   "host_machine": "arm64",
   "compiler_version": "Lua 5.1.5",
@@ -12,7 +12,9 @@
     "gate-oracle-negative-controls",
     "gate-lossless",
     "gate-analysis-cfg",
-    "gate-runtime-semantics"
+    "gate-runtime-semantics",
+    "gate-layout-lua51-32",
+    "gate-profile-lua51-lnum"
   ],
   "verification_results": {
     "opcodes_verified": 38,

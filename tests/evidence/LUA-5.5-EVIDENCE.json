@@ -3,7 +3,7 @@
   "dialect": "lua5.5",
   "display_name": "Lua 5.5.0 - 5.5.1",
   "status": "supported",
-  "generated_at": "2026-08-22T16:45:13.687417+00:00",
+  "generated_at": "2026-08-22T16:50:44.385985+00:00",
   "host_system": "Darwin",
   "host_machine": "arm64",
   "compiler_version": "Lua 5.5.1",

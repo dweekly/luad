@@ -151,7 +151,9 @@ def generate_lua51_evidence():
             "gate-oracle-negative-controls",
             "gate-lossless",
             "gate-analysis-cfg",
-            "gate-runtime-semantics"
+            "gate-runtime-semantics",
+            "gate-layout-lua51-32",
+            "gate-profile-lua51-lnum"
         ],
         "verification_results": {
             "opcodes_verified": 38,
