@@ -628,17 +628,34 @@ fn test_fixture_manifest_records_complete_provenance() {
         let arc_sha = f["source_archive_sha256"]
             .as_str()
             .expect("source_archive_sha256 string");
-        assert_ne!(
-            arc_sha, empty_hash,
-            "source_archive_sha256 must not be empty hash"
+        let dialect = f["dialect"].as_str().expect("dialect string");
+        let expected_archive_sha = match dialect {
+            "lua51" => "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333",
+            "lua52" => "b9e2e4aad6789b3b63a056d442f7b39f0ecfca3ae0f1fc0ae4e9614401b69f4b",
+            "lua53" => "fc5fd69bb8736323f026672b1b7235da613d7177e72558893a0bdcd320466d60",
+            "lua54" => "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae",
+            "lua55" => "1c4b4068d67061f2a2231ad2b5422e77acea1487ea9890f6320af614f4373dce",
+            other => panic!("Unknown dialect in fixture manifest: {other}"),
+        };
+        assert_eq!(
+            arc_sha, expected_archive_sha,
+            "source_archive_sha256 for {dialect} must match authoritative official lua.org release hash"
         );
 
         let comp_sha = f["compiler_binary_sha256"]
             .as_str()
             .expect("compiler_binary_sha256 string");
-        assert_ne!(
-            comp_sha, empty_hash,
-            "compiler_binary_sha256 must not be placeholder empty hash"
+        let expected_compiler_sha = match dialect {
+            "lua51" => "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
+            "lua52" => "f9c391541b15f620a50bf07f729e3c72dd63aa5af0bad3722a939673588d6c0b",
+            "lua53" => "f78a04d412ca144c8aefe0275f74c5cde4dc83225996a71575be66ce581cfaa1",
+            "lua54" => "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",
+            "lua55" => "2e916949110e641c3aee9922e79d4d4f8e48e0fcfcc42cc5316721bed2cb34e0",
+            other => panic!("Unknown dialect in fixture manifest: {other}"),
+        };
+        assert_eq!(
+            comp_sha, expected_compiler_sha,
+            "compiler_binary_sha256 for {dialect} must match genuine compiler binary hash"
         );
 
         let comp_ver = f["compiler_version"]
