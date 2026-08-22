@@ -329,11 +329,35 @@ fn handle_schema(args: SchemaArgs) {
             let schema = schema_for!(Diagnostic);
             println!("{}", serde_json::to_string_pretty(&schema).unwrap_or_default());
         }
+        "instruction" => {
+            let schema = schema_for!(luad_core::SemanticInstruction);
+            println!("{}", serde_json::to_string_pretty(&schema).unwrap_or_default());
+        }
+        "cfg" => {
+            let schema = schema_for!(luad_analysis::ControlFlowGraph);
+            println!("{}", serde_json::to_string_pretty(&schema).unwrap_or_default());
+        }
+        "xrefs" => {
+            let schema = schema_for!(luad_analysis::XrefEntry);
+            println!("{}", serde_json::to_string_pretty(&schema).unwrap_or_default());
+        }
+        "query" => {
+            let schema = schema_for!(luad_analysis::QueryResponse);
+            println!("{}", serde_json::to_string_pretty(&schema).unwrap_or_default());
+        }
+        "diff" => {
+            let schema = schema_for!(luad_analysis::ChunkDiff);
+            println!("{}", serde_json::to_string_pretty(&schema).unwrap_or_default());
+        }
         other => {
-            eprintln!("{}: Unknown schema '{other}'. Supported: chunk, diagnostic", "error".red());
+            eprintln!(
+                "{}: Unknown schema '{other}'. Supported: chunk, diagnostic, instruction, cfg, xrefs, query, diff",
+                "error".red()
+            );
             ExitCode::UsageError.exit();
         }
     }
+
     ExitCode::Success.exit();
 }
 

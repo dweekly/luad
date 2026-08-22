@@ -13,6 +13,6 @@ luad-dialect-lua53 = { workspace = true }
 luad-dialect-lua52 = { workspace = true }
 luad-dialect-lua51 = { workspace = true }
 luad-analysis = { workspace = true }
-
+serde_json = { workspace = true }
 tempfile = "3.10"
 thiserror = { workspace = true }

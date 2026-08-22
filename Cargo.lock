@@ -369,6 +369,7 @@ dependencies = [
  "luad-dialect-lua53",
  "luad-dialect-lua54",
  "luad-dialect-lua55",
+ "serde_json",
  "tempfile",
  "thiserror",
 ]
