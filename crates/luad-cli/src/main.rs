@@ -23,21 +23,48 @@ use luad_core::limits::{ParseMode, ResourceLimits};
 use luad_core::model::Chunk;
 use luad_core::reader::SafeReader;
 use luad_core::Dialect;
-use luad_dialect_lua54::{validate_chunk_lua54, Lua54Dialect};
+use luad_dialect_lua54::Lua54Dialect;
 
 fn read_input_bytes(file_path: &str) -> Result<Vec<u8>, ExitCode> {
+    let max_bytes = ResourceLimits::default().max_input_bytes;
+
     if file_path == "-" {
         let mut buffer = Vec::new();
-        io::stdin().read_to_end(&mut buffer).map_err(|e| {
+        let mut reader = io::stdin().take((max_bytes + 1) as u64);
+        reader.read_to_end(&mut buffer).map_err(|e| {
             eprintln!("{}: Failed to read from stdin: {e}", "error".red().bold());
             ExitCode::IoError
         })?;
+        if buffer.len() > max_bytes {
+            eprintln!(
+                "{}: Stdin input exceeds safety limit of {max_bytes} bytes",
+                "error".red().bold()
+            );
+            return Err(ExitCode::LimitExceeded);
+        }
         Ok(buffer)
     } else {
         let path = Path::new(file_path);
         if !path.exists() {
             eprintln!("{}: File not found: '{}'", "error".red().bold(), file_path);
             return Err(ExitCode::IoError);
+        }
+        let metadata = fs::metadata(path).map_err(|e| {
+            eprintln!(
+                "{}: Failed to inspect metadata for '{}': {e}",
+                "error".red().bold(),
+                file_path
+            );
+            ExitCode::IoError
+        })?;
+        if metadata.len() > max_bytes as u64 {
+            eprintln!(
+                "{}: File '{}' size ({} bytes) exceeds safety limit of {max_bytes} bytes",
+                "error".red().bold(),
+                file_path,
+                metadata.len()
+            );
+            return Err(ExitCode::LimitExceeded);
         }
         fs::read(path).map_err(|e| {
             eprintln!(
@@ -143,10 +170,10 @@ fn main() {
         Commands::Diff(args) => handle_diff(args),
         Commands::Compile(_) => {
             eprintln!(
-                "{}: 'compile' command is scheduled for Phase 0/1 tooling",
-                "info".cyan()
+                "{}: 'compile' command is not supported in bytecode analysis mode",
+                "error".red().bold()
             );
-            ExitCode::Success.exit();
+            ExitCode::UnsupportedFormat.exit();
         }
     }
 }
@@ -197,7 +224,11 @@ fn handle_disasm(args: DisasmArgs) {
                 ExitCode::UsageError.exit();
             }
         };
-        find_proto(&chunk.main_proto, &path).unwrap_or(&chunk.main_proto)
+        let Some(proto) = find_proto(&chunk.main_proto, &path) else {
+            eprintln!("{}: Prototype '{path}' not found in chunk", "error".red());
+            ExitCode::UsageError.exit();
+        };
+        proto
     } else {
         &chunk.main_proto
     };
@@ -254,7 +285,11 @@ fn handle_validate(args: ValidateArgs) {
     };
 
     let (verdict, diagnostics) = match chunk.dialect.as_str() {
-        "lua5.4" => validate_chunk_lua54(&chunk),
+        "lua5.5" => luad_dialect_lua55::validate_chunk_lua55(&chunk),
+        "lua5.4" => luad_dialect_lua54::validate_chunk_lua54(&chunk),
+        "lua5.3" => luad_dialect_lua53::validate_chunk_lua53(&chunk),
+        "lua5.2" => luad_dialect_lua52::validate_chunk_lua52(&chunk),
+        "lua5.1" => luad_dialect_lua51::validate_chunk_lua51(&chunk),
         _ => (chunk.verdict, chunk.diagnostics.clone()),
     };
 
@@ -306,12 +341,19 @@ fn handle_capabilities(args: CapabilitiesArgs) {
                 tool_name: "luad".to_string(),
                 tool_version: env!("CARGO_PKG_VERSION").to_string(),
                 schema_version: 1,
-                supported_dialects: vec!["lua5.4".to_string()],
+                supported_dialects: vec![
+                    "lua5.1".to_string(),
+                    "lua5.2".to_string(),
+                    "lua5.3".to_string(),
+                    "lua5.4".to_string(),
+                    "lua5.5".to_string(),
+                ],
                 evidence: if args.evidence {
                     vec![
-                        "83/83 Lua 5.4 opcodes supported".to_string(),
-                        "Exact integer and IEEE-754 bit preservation".to_string(),
-                        "Tested against Lua 5.4.8 compiler oracle".to_string(),
+                        "100% opcode table coverage across Lua 5.1, 5.2, 5.3, 5.4, 5.5".to_string(),
+                        "Bounded SafeReader with configurable limits, varints, and recursion guards".to_string(),
+                        "Exact bit-level integer and IEEE-754 float preservation".to_string(),
+                        "Differential oracle testing against official Lua 5.1.5, 5.2.4, 5.3.6, 5.4.8, 5.5.1 binaries".to_string(),
                     ]
                 } else {
                     vec![]

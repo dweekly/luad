@@ -6,17 +6,17 @@ use luad_core::model::{Chunk, Prototype};
 use crate::opcodes::{OpMode51, RawInstruction51};
 
 /// Validate Lua 5.1 chunk invariants.
-pub fn validate_chunk_lua51(chunk: &mut Chunk) {
-    let mut diagnostics = Vec::new();
+pub fn validate_chunk_lua51(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
+    let mut diagnostics = chunk.diagnostics.clone();
     validate_proto(&chunk.main_proto, &mut diagnostics);
 
-    if !diagnostics.is_empty() {
-        let has_error = diagnostics.iter().any(|d| d.severity == Severity::Error);
-        if has_error {
-            chunk.verdict = Verdict::Invalid;
-        }
-        chunk.diagnostics.extend(diagnostics);
-    }
+    let verdict = if diagnostics.iter().any(|d| d.severity == Severity::Error) {
+        Verdict::Invalid
+    } else {
+        Verdict::ValidForParser
+    };
+
+    (verdict, diagnostics)
 }
 
 fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {

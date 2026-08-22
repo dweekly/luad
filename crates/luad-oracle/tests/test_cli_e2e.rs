@@ -11,9 +11,16 @@ fn get_luad_bin() -> String {
     let mut path = std::path::PathBuf::from(manifest_dir);
     path.pop(); // up from crates/luad-oracle
     path.pop(); // up to repo root
+    let root = path.clone();
     path.push("target");
     path.push("debug");
     path.push("luad");
+
+    let _ = Command::new("cargo")
+        .args(["build", "-p", "luad-cli", "--bin", "luad"])
+        .current_dir(&root)
+        .output();
+
     path.to_str().unwrap().to_string()
 }
 
@@ -32,6 +39,23 @@ fn test_cli_capabilities() {
     assert!(stdout.contains("lua5.3"));
     assert!(stdout.contains("lua5.2"));
     assert!(stdout.contains("lua5.1"));
+
+    // JSON capabilities
+    let json_output = Command::new(&luad)
+        .args(["capabilities", "--format", "json"])
+        .output()
+        .expect("luad capabilities --format json must run");
+    assert_eq!(json_output.status.code(), Some(0));
+    let json_val: serde_json::Value =
+        serde_json::from_slice(&json_output.stdout).expect("Valid JSON");
+    let dialects = json_val["supported_dialects"]
+        .as_array()
+        .expect("supported_dialects array");
+    let dialect_strings: Vec<&str> = dialects.iter().filter_map(|v| v.as_str()).collect();
+    assert_eq!(
+        dialect_strings,
+        vec!["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"]
+    );
 }
 
 #[test]
@@ -101,6 +125,50 @@ fn test_cli_exit_codes_contract() {
         .output()
         .expect("luad inspect must run");
     assert_eq!(unsupported.status.code(), Some(4));
+
+    // 3. Compile command fails closed with Exit code 4 (UnsupportedFormat)
+    let compile_run = Command::new(&luad)
+        .args([
+            "compile",
+            "--compiler",
+            "/bin/echo",
+            temp_file.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("luad compile must run");
+    assert_eq!(compile_run.status.code(), Some(4));
+
+    // 4. Invalid prototype selector -> Exit code 2 (UsageError)
+    let raw_54 = luad_oracle::get_fixture_bytes("lua5.4", "hello", false).unwrap();
+    let fixture_file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(fixture_file.path(), &raw_54).unwrap();
+    let bad_proto = Command::new(&luad)
+        .args([
+            "disasm",
+            "--proto",
+            "proto:0:child:9999",
+            fixture_file.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("luad disasm must run");
+    assert_eq!(bad_proto.status.code(), Some(2));
+
+    // 5. Validate on all 5 dialect fixtures
+    for dialect in &["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"] {
+        let fixture_raw = luad_oracle::get_fixture_bytes(dialect, "hello", false).unwrap();
+        let f = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(f.path(), &fixture_raw).unwrap();
+
+        let val_run = Command::new(&luad)
+            .args(["validate", f.path().to_str().unwrap()])
+            .output()
+            .expect("luad validate must run");
+        assert_eq!(
+            val_run.status.code(),
+            Some(0),
+            "Validate failed for dialect {dialect}"
+        );
+    }
 }
 
 #[test]

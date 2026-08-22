@@ -53,10 +53,11 @@ fn test_numeric_constant_fidelity() {
                 found_int = true;
             }
             luad_core::ConstantValue::Float { val, .. }
-                if (*val - 3.141592653589793).abs() < 1e-12 =>
+                if (*val - std::f64::consts::PI).abs() < 1e-12 =>
             {
                 found_float = true;
             }
+
             _ => {}
         }
     }

@@ -93,8 +93,9 @@ pub fn decode_chunk_lua55(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
         trailing_bytes,
     };
 
-    // Run VM & structural validation
-    validate_chunk_lua55(&mut chunk);
+    let (v, d) = validate_chunk_lua55(&chunk);
+    chunk.verdict = v;
+    chunk.diagnostics = d;
 
     Ok(chunk)
 }

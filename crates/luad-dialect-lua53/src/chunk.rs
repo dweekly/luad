@@ -72,7 +72,9 @@ pub fn decode_chunk_lua53(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
         trailing_bytes,
     };
 
-    validate_chunk_lua53(&mut chunk);
+    let (v, d) = validate_chunk_lua53(&chunk);
+    chunk.verdict = v;
+    chunk.diagnostics = d;
 
     Ok(chunk)
 }

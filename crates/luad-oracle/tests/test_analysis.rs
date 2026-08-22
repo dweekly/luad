@@ -14,7 +14,7 @@ fn test_cfg_block_partitioning_and_reachability() {
     let cfg = ControlFlowGraph::build(&chunk.main_proto, &lifted);
 
     assert!(cfg.blocks.len() > 5);
-    assert_eq!(cfg.blocks[0].is_entry, true);
+    assert!(cfg.blocks[0].is_entry);
     assert!(cfg.blocks.iter().any(|b| b.is_exit));
 
     // Entry block must be reachable
