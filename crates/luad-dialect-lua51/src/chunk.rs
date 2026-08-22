@@ -11,18 +11,26 @@ use luad_core::model::{
 use luad_core::provenance::SourceLocation;
 use luad_core::reader::SafeReader;
 
-use crate::header::parse_header_lua51;
+use crate::header::{parse_header_lua51, ChunkLayout, Lua51Profile};
 use crate::validator::validate_chunk_lua51;
 
-/// Decode an entire Lua 5.1 binary chunk.
+/// Decode an entire Lua 5.1 binary chunk using default stock profile.
 pub fn decode_chunk_lua51(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> {
+    decode_chunk_lua51_with_profile(reader, Lua51Profile::Stock)
+}
+
+/// Decode an entire Lua 5.1 binary chunk with explicit profile selection.
+pub fn decode_chunk_lua51_with_profile(
+    reader: &mut SafeReader,
+    profile: Lua51Profile,
+) -> Result<Chunk, Diagnostic> {
     let raw_input = reader.raw_data().to_vec();
     let sha256 = hex::encode(Sha256::digest(&raw_input));
     let byte_length = raw_input.len();
 
-    let header = parse_header_lua51(reader)?;
+    let (header, layout) = parse_header_lua51(reader, profile)?;
 
-    let main_proto = load_proto_51(reader, &ProtoPath::root(), None, header.sizeof_sizet)?;
+    let main_proto = load_proto_51(reader, &ProtoPath::root(), None, &layout)?;
 
     // Check for trailing unparsed bytes
     let trailing_bytes = if reader.has_remaining() {
@@ -105,13 +113,14 @@ fn load_proto_51(
     reader: &mut SafeReader,
     path: &ProtoPath,
     parent_source: Option<&LuaString>,
-    sizeof_sizet: u8,
+    layout: &ChunkLayout,
 ) -> Result<Prototype, Diagnostic> {
+
     let start_pos = reader.position();
     let start_cursor = reader.cursor_offset();
 
     // 1. Source name
-    let source_name_opt = load_string_51(reader, sizeof_sizet)?;
+    let source_name_opt = load_string_51(reader, layout.sizeof_sizet)?;
 
     let source_name = source_name_opt.or_else(|| parent_source.cloned());
 
@@ -176,29 +185,52 @@ fn load_proto_51(
                 ConstantValue::Boolean(b != 0)
             }
             3 => {
-                let f_val = reader.read_f64_le()?;
-                ConstantValue::Float {
-                    val: f_val,
-                    raw_hex: hex::encode(f_val.to_le_bytes()),
-                    is_nan: f_val.is_nan(),
-                    is_inf: f_val.is_infinite(),
+                if layout.lua_number_size == 4 {
+                    let raw_bits = reader.read_u32_le()?;
+                    let f32_val = f32::from_bits(raw_bits);
+                    let f_val = f64::from(f32_val);
+                    ConstantValue::Float {
+                        val: f_val,
+                        raw_hex: hex::encode(raw_bits.to_le_bytes()),
+                        is_nan: f_val.is_nan(),
+                        is_inf: f_val.is_infinite(),
+                    }
+                } else {
+                    let f_val = reader.read_f64_le()?;
+                    ConstantValue::Float {
+                        val: f_val,
+                        raw_hex: hex::encode(f_val.to_le_bytes()),
+                        is_nan: f_val.is_nan(),
+                        is_inf: f_val.is_infinite(),
+                    }
                 }
             }
             4 => {
-                let s_opt = load_string_51(reader, sizeof_sizet)?;
+                let s_opt = load_string_51(reader, layout.sizeof_sizet)?;
                 s_opt
                     .map(ConstantValue::ShortString)
                     .unwrap_or(ConstantValue::Nil)
             }
             // OpenWrt/eLua LNUM patch adds LUA_TINT = 9: a 4-byte little-endian integer
-            // constant. Widely present in OpenWrt-derived firmware (LuCI, vendor forks).
+            // constant. Explicitly gated behind Lua51Profile::Lnum.
             9 => {
-                let i_val = reader.read_i32_le()?;
-                ConstantValue::Float {
-                    val: f64::from(i_val),
-                    raw_hex: hex::encode(i_val.to_le_bytes()),
-                    is_nan: false,
-                    is_inf: false,
+                if layout.profile == Lua51Profile::Lnum {
+                    let i_val = reader.read_i32_le()?;
+                    ConstantValue::Float {
+                        val: f64::from(i_val),
+                        raw_hex: hex::encode(i_val.to_le_bytes()),
+                        is_nan: false,
+                        is_inf: false,
+                    }
+                } else {
+                    let diag = Diagnostic::error(
+                        "L51-CONST-002",
+                        DiagnosticCategory::Parse,
+                        StableId::constant(path.clone(), idx),
+                        "Invalid constant tag 9: tag 9 is an LNUM extension; use profile 'lnum' to decode",
+                    );
+                    reader.record_diagnostic(diag.clone())?;
+                    return Err(diag);
                 }
             }
             other => {
@@ -242,7 +274,7 @@ fn load_proto_51(
             &mut child_guard,
             &child_path,
             source_name.as_ref(),
-            sizeof_sizet,
+            layout,
         )?;
         protos.push(child_proto);
     }
@@ -271,7 +303,7 @@ fn load_proto_51(
         let loc_pos = reader.position();
         let loc_cursor = reader.cursor_offset();
         let varname =
-            load_string_51(reader, sizeof_sizet)?.unwrap_or_else(|| LuaString::from_bytes(b"?"));
+            load_string_51(reader, layout.sizeof_sizet)?.unwrap_or_else(|| LuaString::from_bytes(b"?"));
         let startpc = reader.read_i32_le()? as usize;
         let endpc = reader.read_i32_le()? as usize;
         let raw_bytes = reader.slice_from_cursor(loc_cursor)?;
@@ -304,13 +336,14 @@ fn load_proto_51(
     }
 
     for idx in 0..sizeupvalnames {
-        let name = load_string_51(reader, sizeof_sizet)?;
+        let name = load_string_51(reader, layout.sizeof_sizet)?;
 
         if let Some(upval) = upvalues.get_mut(idx) {
             upval.name = name.clone();
         }
         upvalue_names.push(name);
     }
+
 
     let proto_bytes = reader.slice_from_cursor(start_cursor)?;
 
