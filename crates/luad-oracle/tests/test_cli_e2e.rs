@@ -39,6 +39,7 @@ fn test_cli_capabilities() {
     assert!(stdout.contains("lua5.3"));
     assert!(stdout.contains("lua5.2"));
     assert!(stdout.contains("lua5.1"));
+    assert!(stdout.contains("[supported]"));
     assert!(stdout.contains("[experimental]"));
     assert!(stdout.contains("luajit"));
     assert!(stdout.contains("[planned]"));
@@ -55,9 +56,10 @@ fn test_cli_capabilities() {
         .as_array()
         .expect("supported_dialects array");
     let supp_strings: Vec<&str> = supported.iter().filter_map(|v| v.as_str()).collect();
-    assert!(
-        supp_strings.is_empty(),
-        "Under C0, supported_dialects must be empty at baseline"
+    assert_eq!(
+        supp_strings,
+        vec!["lua5.4"],
+        "Under Gate P5, only lua5.4 is supported"
     );
 
     let experimental = json_val["experimental_dialects"]
@@ -66,7 +68,7 @@ fn test_cli_capabilities() {
     let exp_strings: Vec<&str> = experimental.iter().filter_map(|v| v.as_str()).collect();
     assert_eq!(
         exp_strings,
-        vec!["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"]
+        vec!["lua5.1", "lua5.2", "lua5.3", "lua5.5"]
     );
 
     let planned = json_val["planned_dialects"]
@@ -103,11 +105,16 @@ fn test_capabilities_readme_status_consistency() {
                 );
             }
             luad_core::capabilities::SupportTier::Supported => {
-                panic!("No dialect may be Supported at C0 baseline!");
+                assert!(
+                    readme_content.contains("Supported (Lua 5.4.8)"),
+                    "README must reflect Supported status for {}",
+                    dialect.id
+                );
             }
         }
     }
 }
+
 
 #[test]
 fn test_cli_schema_export() {

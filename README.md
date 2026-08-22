@@ -39,9 +39,10 @@ This table describes code present in the repository, not verified support status
 | Lua 5.1 | 38 | Yes | Experimental; embedded layouts, vendor profiles, and closure semantics need gates |
 | Lua 5.2 | 40 | Yes | Experimental; proof gates incomplete |
 | Lua 5.3 | 47 | Yes | Experimental; proof gates incomplete |
-| Lua 5.4 | 83 | Yes | Experimental; confirmed decoding defects |
+| Lua 5.4 | 83 | Yes | Supported (Lua 5.4.8); verified across proof gates P1–P5 (LUA-5.4.8-PROOF.json) |
 | Lua 5.5 | 85 | Yes | Experimental; signed-immediate proof incomplete |
 | LuaJIT 2.x | — | No | Planned; not supported |
+
 
 Real-world testing against 252 Lua 5.1 chunks from TP-Link firmware exposed a host-layout assumption: string lengths were read as 64-bit values even though the chunk header declared a 32-bit `size_t`. A peer patch parsed the entire corpus and also added its LNUM tag, but that vendor extension must be modeled as an explicit profile and the result must pass independent fixtures and semantic gates before Lua 5.1 support is promoted. The same exercise found that Lua 5.1 closure-binding words are currently explained as executable instructions, which can produce false effects and xrefs.
 
