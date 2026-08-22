@@ -16,9 +16,13 @@ pub fn lift_proto_for_dialect(
     dialect: &str,
     proto: &luad_core::model::Prototype,
 ) -> Vec<luad_core::SemanticInstruction> {
-    if dialect == "lua5.5" {
-        luad_dialect_lua55::lift_proto_lua55(proto)
-    } else {
-        luad_dialect_lua54::lift_proto_lua54(proto)
+    match dialect {
+        "lua5.5" => luad_dialect_lua55::lift_proto_lua55(proto),
+        "lua5.4" => luad_dialect_lua54::lift_proto_lua54(proto),
+        "lua5.3" => luad_dialect_lua53::lift_proto_lua53(proto),
+        "lua5.2" => luad_dialect_lua52::lift_proto_lua52(proto),
+        "lua5.1" => luad_dialect_lua51::lift_proto_lua51(proto),
+        _ => luad_dialect_lua54::lift_proto_lua54(proto),
     }
 }
+

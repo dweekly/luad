@@ -72,13 +72,19 @@ fn parse_chunk(bytes: &[u8], strict: bool, dialect_override: Option<&str>) -> Re
         return Err(ExitCode::LimitExceeded);
     }
 
-    let lua54 = Lua54Dialect;
     let lua55 = luad_dialect_lua55::Lua55Dialect;
+    let lua54 = Lua54Dialect;
+    let lua53 = luad_dialect_lua53::Lua53Dialect;
+    let lua52 = luad_dialect_lua52::Lua52Dialect;
+    let lua51 = luad_dialect_lua51::Lua51Dialect;
 
     let selected_dialect: &dyn Dialect = if let Some(d) = dialect_override {
         match d {
-            "lua5.4" => &lua54,
             "lua5.5" => &lua55,
+            "lua5.4" => &lua54,
+            "lua5.3" => &lua53,
+            "lua5.2" => &lua52,
+            "lua5.1" => &lua51,
             other => {
                 eprintln!(
                     "{}: Dialect '{other}' is not yet supported in this build",
@@ -91,6 +97,12 @@ fn parse_chunk(bytes: &[u8], strict: bool, dialect_override: Option<&str>) -> Re
         &lua55
     } else if lua54.detect(bytes).is_some() {
         &lua54
+    } else if lua53.detect(bytes).is_some() {
+        &lua53
+    } else if lua52.detect(bytes).is_some() {
+        &lua52
+    } else if lua51.detect(bytes).is_some() {
+        &lua51
     } else {
         eprintln!(
             "{}: Unknown or unsupported bytecode format (header did not match known dialects)",
@@ -98,6 +110,7 @@ fn parse_chunk(bytes: &[u8], strict: bool, dialect_override: Option<&str>) -> Re
         );
         return Err(ExitCode::UnsupportedFormat);
     };
+
 
 
     let mut reader = SafeReader::with_options(bytes, 0, limits, mode);
@@ -225,11 +238,11 @@ fn handle_validate(args: ValidateArgs) {
         Err(code) => code.exit(),
     };
 
-    let (verdict, diagnostics) = if chunk.dialect == "lua5.5" {
-        (chunk.verdict, chunk.diagnostics.clone())
-    } else {
-        validate_chunk_lua54(&chunk)
+    let (verdict, diagnostics) = match chunk.dialect.as_str() {
+        "lua5.4" => validate_chunk_lua54(&chunk),
+        _ => (chunk.verdict, chunk.diagnostics.clone()),
     };
+
 
     let is_strict_invalid = args.strict
         && (verdict == Verdict::Invalid

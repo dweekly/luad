@@ -257,6 +257,9 @@ name = "luad-analysis"
 version = "0.1.0"
 dependencies = [
  "luad-core",
+ "luad-dialect-lua51",
+ "luad-dialect-lua52",
+ "luad-dialect-lua53",
  "luad-dialect-lua54",
  "luad-dialect-lua55",
  "schemars",
@@ -273,6 +276,9 @@ dependencies = [
  "hex",
  "luad-analysis",
  "luad-core",
+ "luad-dialect-lua51",
+ "luad-dialect-lua52",
+ "luad-dialect-lua53",
  "luad-dialect-lua54",
  "luad-dialect-lua55",
  "schemars",
@@ -288,6 +294,42 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
+name = "luad-dialect-lua51"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "luad-core",
+ "schemars",
+ "serde",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
+name = "luad-dialect-lua52"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "luad-core",
+ "schemars",
+ "serde",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
+name = "luad-dialect-lua53"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "luad-core",
+ "schemars",
+ "serde",
  "sha2",
  "thiserror",
 ]
@@ -322,6 +364,9 @@ version = "0.1.0"
 dependencies = [
  "luad-analysis",
  "luad-core",
+ "luad-dialect-lua51",
+ "luad-dialect-lua52",
+ "luad-dialect-lua53",
  "luad-dialect-lua54",
  "luad-dialect-lua55",
  "tempfile",

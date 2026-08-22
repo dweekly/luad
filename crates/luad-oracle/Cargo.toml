@@ -9,6 +9,10 @@ license.workspace = true
 luad-core = { workspace = true }
 luad-dialect-lua54 = { workspace = true }
 luad-dialect-lua55 = { workspace = true }
+luad-dialect-lua53 = { workspace = true }
+luad-dialect-lua52 = { workspace = true }
+luad-dialect-lua51 = { workspace = true }
 luad-analysis = { workspace = true }
+
 tempfile = "3.10"
 thiserror = { workspace = true }

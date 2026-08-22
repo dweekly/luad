@@ -3,6 +3,9 @@ members = [
     "crates/luad-core",
     "crates/luad-dialect-lua54",
     "crates/luad-dialect-lua55",
+    "crates/luad-dialect-lua53",
+    "crates/luad-dialect-lua52",
+    "crates/luad-dialect-lua51",
     "crates/luad-analysis",
     "crates/luad-cli",
     "crates/luad-oracle",
@@ -30,4 +33,7 @@ tempfile = "3.10"
 luad-core = { path = "crates/luad-core" }
 luad-dialect-lua54 = { path = "crates/luad-dialect-lua54" }
 luad-dialect-lua55 = { path = "crates/luad-dialect-lua55" }
+luad-dialect-lua53 = { path = "crates/luad-dialect-lua53" }
+luad-dialect-lua52 = { path = "crates/luad-dialect-lua52" }
+luad-dialect-lua51 = { path = "crates/luad-dialect-lua51" }
 luad-analysis = { path = "crates/luad-analysis" }
