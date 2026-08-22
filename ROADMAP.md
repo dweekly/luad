@@ -4,7 +4,7 @@ This roadmap is evidence-gated. A milestone is complete only when its named CI j
 
 ## Current status: correctness stop line
 
-No new dialect, decompiler, overlay, neighborhood, or persistence work should begin until Milestones 0–3 are complete. See [the 2026-08-22 review](docs/REVIEW-2026-08-22.md).
+No new dialect, decompiler, overlay, neighborhood, or persistence work should begin until Milestones 0–3 are complete. See [the 2026-08-22 review](docs/REVIEW-2026-08-22.md) and [TP-Link Lua 5.1 field report](docs/FIELD-REPORT-TP-LINK-LUA51.md).
 
 ## Milestone 0: Make the proof system capable of failing
 
@@ -35,6 +35,45 @@ Required outcomes:
 - Out-of-range operands prevent valid-for-analysis verdicts.
 
 Exit gate: `gate-facts-lua54` passes.
+
+## Milestone 1A: Embedded Lua 5.1 layout correctness
+
+Goal: ensure Lua 5.1 parsing follows the chunk header rather than the analyzer host's representation.
+
+Required outcomes:
+
+- Header-declared endianness, integer, `size_t`, instruction, and number layouts drive every applicable read.
+- Stock Lua 5.1 32-bit and 64-bit `size_t` fixtures pass independently.
+- LNUM tag 9 and other vendor behavior are represented by an explicit profile, not silently labeled stock Lua 5.1.
+- Diagnostics retain the exact offending byte offset and field context through error wrapping.
+- Private-corpus evidence records aggregate hashes/results without redistributing firmware.
+
+Exit gates: `gate-layout-lua51-32`, `gate-layout-lua51-64`, and `gate-profile-lua51-lnum` pass for their precisely advertised scopes.
+
+## Milestone 1B: Lua 5.1 closure and upvalue facts
+
+Goal: distinguish physical binding descriptors following `CLOSURE` from executable instructions.
+
+Required outcomes:
+
+- Descriptor words remain losslessly addressable but do not produce ordinary execution effects or CFG nodes.
+- The owning `CLOSURE` exposes ordered child-upvalue capture relations.
+- Forward and inverse xrefs trace parent registers/upvalues into child slots.
+- Descriptor count, opcode form, operand ranges, and jump restrictions are validated.
+
+Exit gate: `gate-closures-lua51` passes.
+
+## Milestone 1C: Resolved constant-bearing operands
+
+Goal: eliminate manual constant-table cross-referencing in disassembly and machine output.
+
+Required outcomes:
+
+- All dialect-defined constant-bearing operand forms resolve through typed operand metadata.
+- Text includes bounded, safely escaped previews while preserving index/ID.
+- JSON/export retains structured exact values and raw representation.
+
+Exit gate: `gate-resolved-constants` passes.
 
 ## Milestone 2: Restore trustworthy control-flow analysis
 

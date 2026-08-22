@@ -43,6 +43,8 @@ What external researchers need from `luad` is narrower:
 - a way to reapply external names and notes when viewing the same artifact;
 - reliable schemas, limits, diagnostics, and deterministic results.
 
+The TP-Link Lua 5.1 field report makes this boundary concrete. A caller should not have to reconstruct constant-table indices or closure capture chains from presentation text, because both are deterministic bytecode facts. `luad` should resolve typed constants and expose ordered parent-to-child capture relations. Deciding that a captured string is an AES key, naming the closure `dec_file`, and persisting that interpretation remain caller responsibilities.
+
 The current implementation has much of the required substrate: chunks include a SHA-256 digest, objects have `StableId` values, and the CLI exposes disassembly, CFG, xrefs, queries, diffs, and JSON schemas. This work must wait until those facts are trustworthy. Once they are, the main gaps are interpretation-scoped identity, uniform object retrieval, deterministic full-fidelity export, and presentation of externally owned interpretations.
 
 ## Product boundary
@@ -84,7 +86,7 @@ An overlay may affect presentation but must not change decoded operands, semanti
 
 ### 2. Identity is scoped to bytes and interpretation
 
-`proto:0/3:pc:14` is stable within one exact chunk and selected parse interpretation, not across recompilation or different parsing profiles. Durable external references must pair the ID with the chunk SHA-256, resolved dialect/profile, parse mode, and relevant configuration identity. `luad` must not suggest that structural IDs identify equivalent code in another artifact or interpretation.
+`proto:0/3:pc:14` is stable within one exact chunk and selected parse interpretation, not across recompilation or different parsing profiles. Durable external references must pair the ID with the chunk SHA-256, resolved dialect/profile, validated layout, parse mode, and relevant configuration identity. `luad` must not suggest that structural IDs identify equivalent code in another artifact or interpretation.
 
 ### 3. No implicit state
 
@@ -136,6 +138,7 @@ Requirements:
 
 - Validate both digests as lowercase SHA-256 values.
 - Validate that the resolved dialect/profile and parse mode match the active interpretation.
+- Define the configuration digest to commit to any layout or profile-selection input not already determined by the artifact bytes and resolved profile.
 - Include an `artifact_ref` for addressable objects in new response types.
 - Preserve the existing compact `id` field where it is convenient within a response already scoped to one artifact.
 - Add `luad schema artifact-ref`.
@@ -216,11 +219,12 @@ Recommended record sequence:
 
 1. stream header with schema version and interpretation-scoped artifact identity;
 2. chunk and prototype records;
-3. constants, instructions, debug records, and diagnostics;
+3. typed constants, physical instruction words and roles, debug records, and diagnostics;
 4. semantic instruction records whose evidence gates pass;
-5. CFG blocks and edges whose analysis gates pass;
-6. xref and other proven relation records;
-7. terminal summary with counts, truncation, and diagnostics.
+5. ordered closure-binding and other cross-prototype relation records whose gates pass;
+6. CFG blocks and edges whose analysis gates pass;
+7. xref and other proven relation records;
+8. terminal summary with counts, truncation, and diagnostics.
 
 Every record should be self-identifying:
 
@@ -247,6 +251,8 @@ Requirements:
 - No record type is exported until its underlying facts have a passing oracle or analysis gate.
 - Limits and truncation are explicit in the header and terminal summary.
 - A complete, non-truncated export can reconstruct the supported factual model without invoking multiple commands.
+- Constant-bearing instruction operands retain their encoded index and include a typed resolved value; any text preview remains a bounded presentation field.
+- Lua 5.1 closure descriptor words retain their physical PC and raw value, carry a non-executable role, and link the closure site, child upvalue, and parent register/upvalue in both traversal directions.
 - Add `luad schema export-record`.
 
 Do not add graph traversal in the first pass. If a demonstrated workflow later cannot use `export` efficiently, consider a command named `neighborhood` or `expand`. Do not use `slice`; the PRD reserves slicing for actual dataflow slicing.
@@ -353,6 +359,8 @@ Add:
 
 Existing CFG and xref implementations should be reused rather than duplicated. If an object kind cannot be resolved correctly, omit support until it can be proven rather than returning an approximate substitute.
 
+Capture traversal should extend the generalized relation/xref model. A future `upvalues` command may provide a convenient rendering of those records, but it must not create a second binding analysis or own research state.
+
 ### `luad-cli`
 
 Add:
@@ -408,7 +416,7 @@ Across sessions, the external system retains `research.json`, its own index, and
 
 ### Prerequisite: trustworthy facts
 
-Do not implement these milestones until the factual gates in [docs/CODING-AGENT-PLAN.md](docs/CODING-AGENT-PLAN.md) pass. No new command may expose a fact type that lacks a passing oracle or analysis gate.
+Do not implement these milestones until the factual gates in [docs/CODING-AGENT-PLAN.md](docs/CODING-AGENT-PLAN.md) pass, including the embedded-layout, Lua 5.1 closure-binding, and resolved-constant gates. No new command may expose a fact type that lacks a passing oracle or analysis gate.
 
 ### Milestone 1: Identity and exact retrieval
 

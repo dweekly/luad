@@ -248,10 +248,10 @@ fn test_lua54_comprehensive_opcodes_operands_and_effects() {
             .unwrap_or_else(|| panic!("Lua 5.4 opcode {op_num} must be defined"));
         assert!(!op.name().is_empty());
 
-        let a = 1u32;
-        let b = 2u32;
-        let c = 3u32;
-        let raw_word = (op_num as u32 & 0x7f) | (a << 7) | (b << 15) | (c << 23);
+        let a = 1u8;
+        let b = 2u8;
+        let c = 3u8;
+        let raw_word = luad_dialect_lua54::RawInstruction54::encode_iabc(op, a, b, c, 0);
 
         let dummy_proto = create_dummy_proto("lua5.4");
         let inst = InstructionWord {

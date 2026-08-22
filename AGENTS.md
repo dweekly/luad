@@ -8,8 +8,9 @@ Before modifying correctness-sensitive code, read:
 
 1. `docs/REVIEW-2026-08-22.md`
 2. `docs/CODING-AGENT-PLAN.md`
-3. `ARCHITECTURE.md`
-4. `CONTRIBUTING.md`
+3. `docs/FIELD-REPORT-TP-LINK-LUA51.md`
+4. `ARCHITECTURE.md`
+5. `CONTRIBUTING.md`
 
 ## Current priority
 
@@ -22,6 +23,8 @@ The project is under a correctness stop line. Work the gates in `docs/CODING-AGE
 - A required oracle may not skip when a compiler or fixture is absent.
 - Every oracle/comparator needs a negative control proving that corruption is detected.
 - Preserve raw encoded facts separately from interpreted values.
+- Never infer an artifact's layout from the build host: validate and honor declared widths and byte order, and gate vendor extensions behind explicit profiles.
+- Preserve physical words separately from executable semantics; closure-binding descriptors must not acquire standalone instruction effects.
 - Do not use `unsafe` for opcode conversion; move toward `#![forbid(unsafe_code)]`.
 - Do not silently default an unknown dialect, target, schema, or analysis mode.
 - Keep input, allocation, traversal, recursion, diagnostics, and output bounded.

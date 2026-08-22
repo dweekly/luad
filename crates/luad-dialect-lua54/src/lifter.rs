@@ -493,7 +493,7 @@ fn lift_instruction_54(
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Register { index: raw.b });
             operands.push(TypedOperand::ImmediateInt {
-                value: raw.c as i64,
+                value: raw.sc as i64,
             });
             reads.push(EffectTarget::Register { index: raw.b });
             writes.push(EffectTarget::Register { index: raw.a });
@@ -504,7 +504,7 @@ fn lift_instruction_54(
             } else {
                 "<<"
             };
-            explanation = format!("R({}) := R({}) {op_sym} {}", raw.a, raw.b, raw.c);
+            explanation = format!("R({}) := R({}) {op_sym} {}", raw.a, raw.b, raw.sc);
         }
         Opcode54::Addk
         | Opcode54::Subk
@@ -557,6 +557,16 @@ fn lift_instruction_54(
             companion_pc = prev.map(|_| pc - 1);
             let tm = tm_name(raw.c);
             metamethod_fallbacks.push(tm.to_string());
+            if op == Opcode54::Mmbini {
+                operands.push(TypedOperand::Register { index: raw.a });
+                operands.push(TypedOperand::ImmediateInt {
+                    value: raw.sb as i64,
+                });
+                operands.push(TypedOperand::ExtraArg {
+                    value: raw.c as u32,
+                });
+                operands.push(TypedOperand::Flag { value: raw.k != 0 });
+            }
             implicit_effects.push(ImplicitEffect::CompanionPair {
                 companion_pc: pc.saturating_sub(1),
                 companion_role: format!("Metamethod fallback {tm}"),
@@ -660,15 +670,38 @@ fn lift_instruction_54(
             reads.push(EffectTarget::JumpTarget { pc: dest_pc });
             explanation = format!("Unconditional jump by offset {} to PC {dest_pc}", raw.sj);
         }
+        Opcode54::Eqi | Opcode54::Lti | Opcode54::Lei | Opcode54::Gti | Opcode54::Gei => {
+            citations.push("lvm.c:1300".to_string());
+            let skip_pc = pc + 2;
+            operands.push(TypedOperand::Register { index: raw.a });
+            operands.push(TypedOperand::ImmediateInt {
+                value: raw.sb as i64,
+            });
+            operands.push(TypedOperand::Flag { value: raw.k != 0 });
+            reads.push(EffectTarget::Register { index: raw.a });
+            implicit_effects.push(ImplicitEffect::ConditionalSkip {
+                skip_target_pc: skip_pc,
+            });
+            let op_sym = match op {
+                Opcode54::Eqi => "==",
+                Opcode54::Lti => "<",
+                Opcode54::Lei => "<=",
+                Opcode54::Gti => ">",
+                Opcode54::Gei => ">=",
+                _ => "??",
+            };
+            explanation = format!(
+                "if ((R({}) {} {}) != {}) then skip next instruction (jump to PC {skip_pc})",
+                raw.a,
+                op_sym,
+                raw.sb,
+                raw.k != 0
+            );
+        }
         Opcode54::Eq
         | Opcode54::Lt
         | Opcode54::Le
         | Opcode54::Eqk
-        | Opcode54::Eqi
-        | Opcode54::Lti
-        | Opcode54::Lei
-        | Opcode54::Gti
-        | Opcode54::Gei
         | Opcode54::Test
         | Opcode54::Testset => {
             citations.push("lvm.c:1300".to_string());
@@ -678,6 +711,7 @@ fn lift_instruction_54(
             });
             explanation = format!("Conditional test: if result != k, skip following instruction (jump to PC {skip_pc})");
         }
+
         Opcode54::Call => {
             citations.push("lvm.c:1340".to_string());
             let num_args = raw.b;

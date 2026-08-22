@@ -10,13 +10,14 @@ Before cutting any release:
 
 1. Confirm a clean worktree and review every generated evidence artifact.
 2. Install and checksum-verify the exact official compiler releases required by the claimed support matrix.
-3. Run every named proof gate with no skips.
-4. Run `bash scripts/check.sh`.
-5. Run the maintained fuzz corpus and configured time-bounded fuzz jobs.
-6. Review `luad capabilities --format json --evidence` against actual gate results.
-7. Ensure README support status is generated from or identical to the evidence manifest.
-8. Update `CHANGELOG.md`, version metadata, schemas when necessary, and this release procedure.
-9. Build release artifacts on each supported target and smoke-test their CLI and schemas.
+3. Verify the fixture matrix covers every claimed architecture-dependent layout and explicit vendor profile, including stock Lua 5.1 with 32-bit and 64-bit `size_t` where claimed.
+4. Run every named proof gate with no skips.
+5. Run `bash scripts/check.sh`.
+6. Run the maintained fuzz corpus and configured time-bounded fuzz jobs.
+7. Review `luad capabilities --format json --evidence` against actual gate results.
+8. Ensure README support status is generated from or identical to the evidence manifest.
+9. Update `CHANGELOG.md`, version metadata, schemas when necessary, and this release procedure.
+10. Build release artifacts on each supported target and smoke-test their CLI and schemas.
 
 ## Evidence bundle
 
@@ -27,10 +28,13 @@ The release should include or link to a machine-readable evidence bundle contain
 - target platform;
 - official Lua archive URLs and SHA-256 values;
 - detected compiler versions;
+- resolved dialect/profile and validated chunk-layout matrix;
 - source and compiled fixture SHA-256 values;
 - gate names and results;
 - fuzz corpus revision and run summary;
 - schema major versions.
+
+Private firmware corpora may be cited as supplemental field evidence using aggregate hashes and result counts, but a release claim also requires redistributable minimized fixtures and independently reproducible gates.
 
 A capability without a passing release gate must be reported as `experimental` or omitted.
 

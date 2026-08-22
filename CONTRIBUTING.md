@@ -7,9 +7,10 @@ Thank you for helping make Lua bytecode analysis more trustworthy. Correctness a
 Before changing parser, decoder, validator, analysis, evidence, or capability code, read:
 
 1. [The current correctness review](docs/REVIEW-2026-08-22.md)
-2. [Architecture and invariants](ARCHITECTURE.md)
-3. [Remediation roadmap](ROADMAP.md)
-4. [The coding plan](docs/CODING-AGENT-PLAN.md)
+2. [The embedded Lua 5.1 field report](docs/FIELD-REPORT-TP-LINK-LUA51.md)
+3. [Architecture and invariants](ARCHITECTURE.md)
+4. [Remediation roadmap](ROADMAP.md)
+5. [The coding plan](docs/CODING-AGENT-PLAN.md)
 
 The repository is under a correctness stop line. Do not add new dialects or composability features until the fact-layer gates in the coding plan pass.
 
@@ -91,10 +92,12 @@ Follow the entire chain:
 
 ```text
 official source/layout
-  → opcode definition and mode
+  → header-derived ChunkLayout and explicit profile
+  → opcode definition, physical-word role, and mode
   → raw field decoder
   → interpreted operands
   → semantic lifter
+  → capture and other cross-prototype relations
   → validator
   → provenance citation
   → golden word tests
@@ -106,7 +109,10 @@ official source/layout
 
 Requirements:
 
+- Never assume the build host's pointer width, integer width, byte order, or number representation. Validate the artifact header and drive every layout-dependent read from it.
+- Treat vendor formats such as Lua 5.1 LNUM as explicit profiles with their own positive and negative fixtures; do not broaden the stock profile silently.
 - Preserve raw encoded values separately from interpreted signed values.
+- Preserve non-executable physical words and classify their role. In Lua 5.1, `CLOSURE` binding descriptors are not standalone `MOVE` or `GETUPVAL` effects.
 - Use explicit or generated opcode matches; do not use `unsafe transmute`.
 - Include a golden test whose expected word and operands come from an official source or independently compiled fixture.
 - Do not copy a decoder into its encoder and call the result independent.
@@ -119,14 +125,20 @@ Bundled `.luac` files are evidence artifacts, not ordinary test data. Do not reg
 Any regenerated fixture set must record:
 
 - exact Lua release;
+- dialect/vendor profile, including how it was detected or selected;
 - upstream archive URL and SHA-256;
 - platform, architecture, endianness, integer and number sizes;
+- declared `sizeof(int)`, `sizeof(size_t)`, instruction width, Lua-number width, and number-integrality flag;
 - source fixture SHA-256;
 - compiler arguments, including stripping;
 - output SHA-256;
 - generation command or script revision.
 
 Historical fixtures whose generator details are unknown must say so explicitly. Never infer provenance from a bytecode version byte alone.
+
+The Lua 5.1 fixture matrix must include both 32-bit and 64-bit `size_t`, supported byte orders and number layouts, stripped and debug-bearing chunks, and stock-versus-LNUM negative controls. Closure fixtures must cover register captures, parent-upvalue captures, zero and multiple upvalues, nested closures, and malformed descriptor sequences.
+
+Private firmware corpora can provide valuable field evidence, but they cannot be the only regression input. Record artifact counts and aggregate hashes where disclosure permits, and contribute a minimized, redistributable reproducer for each distinct defect.
 
 ## Machine-contract changes
 
@@ -136,6 +148,7 @@ When changing JSON, JSONL, IDs, diagnostics, exit codes, or capabilities:
 - add deterministic-output tests;
 - keep machine stdout free of commentary and color codes;
 - send human diagnostics to stderr;
+- preserve the deepest known byte offset as the primary diagnostic location and keep structural context separate;
 - fail closed on invalid selectors and unsupported values;
 - update [docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md);
 - do not make capability claims stronger than their evidence.

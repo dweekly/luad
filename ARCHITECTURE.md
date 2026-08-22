@@ -9,7 +9,8 @@ The intended pipeline is:
 ```text
 input bytes
   → bounded SafeReader
-  → dialect detection and decoder
+  → dialect/profile detection and validated ChunkLayout
+  → layout-driven decoder
   → lossless Chunk model + provenance
   → dialect semantic lifter and validator
   → CFG / dominators / xrefs / query / diff
@@ -26,9 +27,11 @@ Owns shared factual types and parsing primitives: chunk models, stable IDs, prov
 
 ### Dialect crates
 
-`luad-dialect-lua51` through `luad-dialect-lua55` own header detection, layout parsing, opcode fields and modes, signed-operand interpretation, semantic lifting, and dialect validation.
+`luad-dialect-lua51` through `luad-dialect-lua55` own header detection, profile selection, layout parsing, opcode fields and modes, signed-operand interpretation, semantic lifting, and dialect validation.
 
 Similar-looking layouts are not evidence of equivalence. Shared helpers are appropriate only where official formats and independent tests establish the shared rule.
+
+Each decoder must construct a validated, immutable `ChunkLayout` from the chunk header before reading layout-dependent fields. At minimum it records byte order and the declared widths of integers, `size_t`, instructions, and Lua numbers, plus number-integrality and any explicit vendor profile. No decoder may substitute the build host's widths or byte order for values declared by the artifact.
 
 ### `luad-analysis`
 
@@ -54,7 +57,10 @@ Owns test-only integration with official Lua compilers and canonical listings. I
 - Preserve exact integer values and IEEE-754 bits.
 - Preserve raw strings independently of escaped display strings.
 - Preserve encoded operands independently of interpreted signed values.
+- Preserve every physical instruction word even when the dialect assigns it a non-executable role.
 - Never overwrite factual fields with external names or interpretations.
+
+For example, the words following a Lua 5.1 `CLOSURE` describe how child upvalues bind to parent registers or parent upvalues. They occupy physical PCs but are not independently executed `MOVE` or `GETUPVAL` operations. The shared model must retain the words and provenance, assign an explicit `closure_binding` role, attach the ordered capture relation to the owning closure, and exclude the descriptor words from standalone effects and control-flow semantics.
 
 ### Provenance is structural
 
@@ -62,15 +68,20 @@ Important facts identify their source byte range and derivation. Cursor-length a
 
 ### Identity is interpretation-scoped
 
-A `StableId` is stable only within one exact artifact and selected parse interpretation. A portable reference must eventually include the artifact SHA-256, resolved dialect/vendor profile, parse mode and relevant analysis configuration, and stable object ID. No cross-build equivalence is implied.
+A `StableId` is stable only within one exact artifact and selected parse interpretation. A portable reference must eventually include the artifact SHA-256, resolved dialect/vendor profile, validated layout, parse mode and relevant analysis configuration, and stable object ID. No cross-build equivalence is implied.
 
 ### Invalid states fail closed
 
 - Unknown dialects are not decoded as a nearby version.
+- Vendor extensions such as Lua 5.1 LNUM are accepted only under a detected or explicitly selected profile, never silently as stock Lua.
 - Missing selectors do not fall back to another object.
 - Missing proof dependencies do not skip required gates.
 - Invalid register, jump, or stack references prevent valid-for-analysis verdicts where relevant.
 - Limits are checked before allocation or unbounded traversal.
+
+### Diagnostics retain the deepest known location
+
+A diagnostic's primary byte offset identifies the field or byte where the failure was detected. Wrapping an error with prototype, constant, or instruction context must not replace that offset with the caller's earlier cursor position. Human-readable context and structural paths are separate fields.
 
 ### Determinism
 

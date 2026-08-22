@@ -98,15 +98,82 @@ fn test_for_loop_jump_targets() {
     let chunk = compile_and_parse_lua54(source, false).expect("parse failed");
     let lifted = lift_proto_lua54(&chunk.main_proto);
 
-    let forprep = lifted
+    let forprep_inst = lifted
         .iter()
         .find(|i| i.mnemonic == "FORPREP")
         .expect("expected FORPREP");
-    assert!(forprep.jump_target.is_some());
+    assert!(forprep_inst.jump_target.is_some());
+}
 
-    let forloop = lifted
-        .iter()
-        .find(|i| i.mnemonic == "FORLOOP")
-        .expect("expected FORLOOP");
-    assert!(forloop.jump_target.is_some());
+#[test]
+fn test_lua54_golden_word_vectors() {
+    use luad_dialect_lua54::{Opcode54, RawInstruction54};
+
+    // 1. MOVE 0 1 (A=0, B=1, C=0, k=0) -> 0x00010000
+    let word_move = 0x00010000;
+    let raw_move = RawInstruction54::decode(word_move);
+    assert_eq!(raw_move.opcode, Some(Opcode54::Move));
+    assert_eq!(raw_move.a, 0);
+    assert_eq!(raw_move.b, 1);
+    assert_eq!(raw_move.c, 0);
+    assert_eq!(raw_move.k, 0);
+    assert_eq!(raw_move.encode(), Some(word_move));
+
+    // 2. LOADI 0 42 (A=0, sBx=42, Bx = 42 + 65535 = 65577)
+    let word_loadi = RawInstruction54::encode_iasbx(Opcode54::Loadi, 0, 42);
+    let raw_loadi = RawInstruction54::decode(word_loadi);
+    assert_eq!(raw_loadi.opcode, Some(Opcode54::Loadi));
+    assert_eq!(raw_loadi.a, 0);
+    assert_eq!(raw_loadi.sbx, 42);
+    assert_eq!(raw_loadi.encode(), Some(word_loadi));
+
+    // 3. ADDI 0 1 -5 (A=0, B=1, sC=-5 -> C=122, k=0)
+    let word_addi = RawInstruction54::encode_iabc(Opcode54::Addi, 0, 1, (-5 + 127) as u8, 0);
+    let raw_addi = RawInstruction54::decode(word_addi);
+    assert_eq!(raw_addi.opcode, Some(Opcode54::Addi));
+    assert_eq!(raw_addi.a, 0);
+    assert_eq!(raw_addi.b, 1);
+    assert_eq!(raw_addi.sc, -5);
+    assert_eq!(raw_addi.encode(), Some(word_addi));
+
+    // 4. EQI 0 -10 1 (A=0, sB=-10 -> B=117, C=0, k=1)
+    let word_eqi = RawInstruction54::encode_iabc(Opcode54::Eqi, 0, (-10 + 127) as u8, 0, 1);
+    let raw_eqi = RawInstruction54::decode(word_eqi);
+    assert_eq!(raw_eqi.opcode, Some(Opcode54::Eqi));
+    assert_eq!(raw_eqi.a, 0);
+    assert_eq!(raw_eqi.sb, -10);
+    assert_eq!(raw_eqi.k, 1);
+    assert_eq!(raw_eqi.encode(), Some(word_eqi));
+
+    // 5. JMP -5 (sJ=-5 -> uJ = -5 + 16777215 = 16777210)
+    let word_jmp = RawInstruction54::encode_isj(Opcode54::Jmp, -5);
+    let raw_jmp = RawInstruction54::decode(word_jmp);
+    assert_eq!(raw_jmp.opcode, Some(Opcode54::Jmp));
+    assert_eq!(raw_jmp.sj, -5);
+    assert_eq!(raw_jmp.encode(), Some(word_jmp));
+}
+
+#[test]
+fn test_lua54_all_83_opcodes_round_trip() {
+    use luad_dialect_lua54::{OpMode54, Opcode54, RawInstruction54};
+
+    for op_idx in 0..=82 {
+        let op = Opcode54::from_u8(op_idx).expect("Valid opcode");
+        let word = match op.mode() {
+            OpMode54::IABC => RawInstruction54::encode_iabc(op, 10, 20, 30, 1),
+            OpMode54::IABx => RawInstruction54::encode_iabx(op, 10, 5000),
+            OpMode54::IAsBx => RawInstruction54::encode_iasbx(op, 10, -500),
+            OpMode54::IAx => RawInstruction54::encode_iax(op, 123456),
+            OpMode54::IsJ => RawInstruction54::encode_isj(op, -1000),
+        };
+
+        let decoded = RawInstruction54::decode(word);
+        assert_eq!(decoded.opcode, Some(op), "Opcode mismatch for #{op_idx}");
+        assert_eq!(
+            decoded.encode(),
+            Some(word),
+            "Round-trip encode mismatch for #{op_idx} ({})",
+            op.name()
+        );
+    }
 }

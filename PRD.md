@@ -287,6 +287,11 @@ Requirement identifiers are stable references for design, implementation, tests,
 - **FR-PARSE-008:** Retain unknown tags or fields in permissive mode when a bounded recovery is possible.
 - **FR-PARSE-009:** Report trailing bytes rather than silently ignoring them.
 - **FR-PARSE-010:** Assign deterministic stable IDs based on structural paths, such as `proto:0/2/1`, and local indices, such as `proto:0/2/1:pc:37`.
+- **FR-PARSE-011:** Derive a validated chunk-layout object from every header field that controls representation, including endianness, `sizeof(int)`, `sizeof(size_t)`, instruction width, number width, and integral-number flags where the dialect declares them.
+- **FR-PARSE-012:** Use the declared chunk layout for every width- or endian-dependent read; never substitute the analyzer host's native representation or a fixed convenience width.
+- **FR-PARSE-013:** Represent stock, LNUM, and other vendor constant/layout behavior through an explicit resolved profile with provenance; accepting one vendor tag must not silently broaden the stock dialect.
+- **FR-PARSE-014:** Preserve the deepest offending byte offset when adding prototype and field context to a diagnostic.
+- **FR-PARSE-015:** Include the selected layout/profile and parse mode in the interpretation identity used to scope persistent artifact references.
 
 ### 5.3 Instruction decoding
 
@@ -299,9 +304,12 @@ Requirement identifiers are stable references for design, implementation, tests,
 - **FR-DIS-007:** Represent instructions that conditionally skip the following instruction with explicit control-flow outcomes.
 - **FR-DIS-008:** Describe fixed and variable register ranges read or written by calls, returns, varargs, concatenation, set-list operations, and loops.
 - **FR-DIS-009:** Represent top-dependent or multireturn behavior explicitly.
-- **FR-DIS-010:** Represent closure and upvalue-capture relationships.
+- **FR-DIS-010:** Represent closure and upvalue-capture relationships, including the ordered mapping from parent register/upvalue at the closure site to each child upvalue slot.
 - **FR-DIS-011:** Represent potential metamethod or runtime fallback behavior separately from the fast-path effect.
 - **FR-DIS-012:** Display raw instruction words in selectable hexadecimal, unsigned, and bit-field forms.
+- **FR-DIS-013:** Resolve every dialect-defined constant-bearing operand to its stable constant ID and typed value while preserving the encoded index; text output includes a bounded escaped preview and machine output includes a structured exact value.
+- **FR-DIS-014:** Classify every physical instruction word by semantic role, distinguishing executable instructions from companion words, closure-binding descriptors, and preserved unknown words.
+- **FR-DIS-015:** For Lua 5.1 `CLOSURE`, preserve the following `nups` binding words and physical PCs while excluding them from standalone execution effects and CFG instruction nodes.
 
 ### 5.4 Validation
 
@@ -315,6 +323,8 @@ Requirement identifiers are stable references for design, implementation, tests,
 - **FR-VAL-008:** Distinguish unsupported constructs from invalid constructs.
 - **FR-VAL-009:** In permissive mode, associate every recovered artifact with the diagnostic that made recovery necessary.
 - **FR-VAL-010:** Produce a summarized validation verdict that cannot be confused with “safe to execute.”
+- **FR-VAL-011:** Validate closure-binding descriptor count, allowed opcode form, operand ranges, child-upvalue targets, truncation, and prohibition on control-flow entry into descriptor groups.
+- **FR-VAL-012:** Report a primary byte location and a separate structural context path; wrapping an error must never replace the primary location with an enclosing offset.
 
 The verdict vocabulary is:
 
@@ -338,6 +348,7 @@ No verdict is named `safe`, because structural validation does not establish beh
 - **FR-AN-008:** Compute immediate dominators only after CFG correctness gates pass.
 - **FR-AN-009:** Label natural-loop candidates and other structured regions as derived facts, with supporting edges.
 - **FR-AN-010:** Support backward slicing as a post-version-1 analysis without changing the lossless core IR.
+- **FR-AN-011:** Build forward and inverse capture cross-references between a parent register/upvalue at a specific closure PC and the corresponding child upvalue slot.
 
 ### 5.6 Explanation and provenance
 
@@ -347,6 +358,7 @@ No verdict is named `safe`, because structural validation does not establish beh
 - **FR-EXP-004:** Mark every statement as `fact`, `derived`, or `heuristic`.
 - **FR-EXP-005:** Never use recovered debug names when they are absent; generated names must be explicitly marked synthetic.
 - **FR-EXP-006:** Expose the tool's uncertainty rather than choosing an arbitrary interpretation.
+- **FR-EXP-007:** Show resolved constants and closure captures in instruction explanations without requiring the researcher to manually join constant or child-prototype tables.
 
 ### 5.7 Search, query, and comparison
 
@@ -354,6 +366,7 @@ No verdict is named `safe`, because structural validation does not establish beh
 - **FR-QUERY-002:** Return references to stable IDs instead of duplicating full records by default.
 - **FR-QUERY-003:** Support bounded result counts, cursors, and explicit truncation metadata.
 - **FR-QUERY-004:** Provide a documented expression grammar for queries; do not evaluate arbitrary host-language code.
+- **FR-QUERY-005:** Permit bounded forward and inverse queries over closure-capture relations, preserving the closure site required to identify a parent register value.
 - **FR-DIFF-001:** Compare chunk headers, prototype trees, constants, instructions, debug data, validation results, and CFGs.
 - **FR-DIFF-002:** Support raw-index comparison and normalized semantic comparison.
 - **FR-DIFF-003:** Report when alignment is uncertain, especially after instruction insertions or prototype reordering.
@@ -589,6 +602,8 @@ The detector is bounded and side-effect free. It reads only the minimum bytes ne
 
 Each meaningful format generation has a dedicated decoder or explicitly versioned parameterization. Shared helpers may implement safe byte reading, but a generic “Lua 5.x struct” is prohibited.
 
+For architecture-dependent formats such as Lua 5.1, the decoder constructs one immutable chunk-layout value from validated header declarations and uses it throughout recursive parsing. The layout is part of the selected interpretation, not transient header trivia.
+
 #### Lossless model
 
 The lossless model mirrors serialized facts without prematurely normalizing away representation differences. It retains offsets, encoded forms, and unknown values.
@@ -596,6 +611,8 @@ The lossless model mirrors serialized facts without prematurely normalizing away
 #### Semantic lifter
 
 The lifter maps version-specific physical instructions into a normalized semantic vocabulary while preserving a link to every physical instruction. Normalization must not manufacture source constructs.
+
+Physical words are not assumed to be independently executable. Companion words and Lua 5.1 closure-binding descriptors retain raw identity and provenance but attach their meaning to the owning logical instruction. Descriptor words do not acquire ordinary execution effects merely because their bit pattern names an opcode.
 
 #### Validator
 
@@ -614,6 +631,7 @@ Renderers do not perform semantic analysis. Text and JSON must consume the same 
 A dialect module contains:
 
 - Header recognition and confidence evidence.
+- Validated serialized-layout rules for every header-declared width, endian, and numeric representation.
 - Serialized chunk decoder.
 - Instruction layouts and opcode table.
 - Operand typing rules.
@@ -637,6 +655,8 @@ Not all vendor modifications can be expressed safely as an opcode name table. Ex
 5. Compiled dialect plugin for genuinely different formats or semantics.
 
 Profiles are data, never executable scripts. A profile identifies its base dialect, declares exactly what it changes, and receives a content hash included in every output document.
+
+LNUM and similar constant-tag/numeric extensions are explicit profiles unless they materially change execution semantics enough to require a compiled dialect. Encountering a vendor tag may provide detection evidence, but it never silently changes the meaning of the stock base dialect.
 
 ### 8.5 Implementation constraints
 
@@ -714,6 +734,7 @@ For generated valid chunks:
 4. Convert both outputs into a test-only canonical comparison form.
 5. Compare prototype metadata, instruction count, opcode identity, operands, constants, lines, locals, and upvalues where the oracle exposes them.
 6. Record intentional representation differences in explicit versioned adapters, not blanket ignored fields.
+7. Run negative controls that perturb one mnemonic, operand, constant, layout width, and debug fact and prove the comparator reports each mismatch.
 
 The official loader is an oracle used only on trusted generated fixtures. It is not used to validate unknown test corpus files.
 
@@ -728,6 +749,7 @@ Every opcode has at least one minimal source fixture or hand-assembled trusted f
 - Companion-instruction behavior.
 - Debug and stripped variants.
 - Applicable numeric, metamethod, vararg, multireturn, closure, loop, and close behavior.
+- For Lua 5.1 closures, each binding-descriptor form and a multi-hop parent-to-child upvalue chain.
 
 Coverage is tracked by semantic behavior, not merely by encountering an opcode number.
 
@@ -750,6 +772,8 @@ Examples include:
 - Renaming source files or locals does not change semantic instruction analysis.
 - Reordering independent nested source definitions changes expected prototype references without corrupting unrelated prototypes.
 - Encoding a chunk with an alternate supported endian or numeric configuration preserves normalized constants and semantics.
+- Parsing equivalent 32-bit and 64-bit `size_t` fixtures uses the header-declared layout and never the analyzer host width.
+- Reinterpreting an LNUM/profile fixture as stock Lua 5.1 fails with a profile-specific diagnostic rather than desynchronizing later fields.
 - Text and JSON renderers report identical underlying facts.
 - Strict and permissive modes agree on valid input.
 
@@ -913,6 +937,11 @@ Each version is a separate subphase with the same parser, semantic, CFG, oracle,
 Additional exit requirements:
 
 - Platform matrix includes relevant endian, word-size, `size_t`, instruction-size, integer, and `lua_Number` representations where the version permits variation.
+- Lua 5.1 includes independently generated 32-bit and 64-bit `size_t` fixtures in debug and stripped forms.
+- LNUM or vendor fixtures run only under explicit profiles whose hashes appear in output provenance and capability evidence.
+- Lua 5.1 `CLOSURE` binding words are preserved as physical descriptors, excluded from executable CFG/effects, and exposed through forward/inverse capture relations.
+- Constant-bearing operands resolve to exact constant IDs/values in text and machine output.
+- Known-byte corruptions report the exact primary error offset and structural field context.
 - Constants preserve exact numeric representation across configurations.
 - Version-specific global/upvalue environment models are reflected in explanations rather than normalized misleadingly.
 - Cross-version diff distinguishes equivalent semantics from different physical opcodes only when the normalization is proven.
@@ -1053,6 +1082,7 @@ These features are not one monolithic phase. Each analysis pass declares precond
 Adoption is secondary to correctness, but useful signals include:
 
 - External regression fixtures contributed with reproducible provenance.
+- Private firmware corpora may contribute content-addressed aggregate results and minimized redistributable reproducers; private sample counts never substitute for a public proof fixture or profile definition.
 - Use in security reports or automated analysis pipelines.
 - Third-party consumers pinning and validating the JSON schema.
 - Vendor profiles maintained outside the core repository.

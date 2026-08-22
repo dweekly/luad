@@ -2,9 +2,11 @@
 
 ## Stability warning
 
-`luad` is pre-1.0 and currently has confirmed correctness defects. JSON shapes are schema-governed, but semantic correctness and compatibility are not yet production guarantees. In particular, do not rely on current Lua 5.4 decoded operands, immediate-dominator results, or `capabilities --evidence` claims until the remediation gates pass.
+`luad` is pre-1.0 and currently has confirmed correctness defects. JSON shapes are schema-governed, but semantic correctness and compatibility are not yet production guarantees. In particular, do not rely on current Lua 5.4 decoded operands, Lua 5.1 embedded-layout handling and closure effects, immediate-dominator results, or `capabilities --evidence` claims until the remediation gates pass.
 
-See [REVIEW-2026-08-22.md](REVIEW-2026-08-22.md) and [CODING-AGENT-PLAN.md](CODING-AGENT-PLAN.md).
+See [REVIEW-2026-08-22.md](REVIEW-2026-08-22.md), [FIELD-REPORT-TP-LINK-LUA51.md](FIELD-REPORT-TP-LINK-LUA51.md), and [CODING-AGENT-PLAN.md](CODING-AGENT-PLAN.md).
+
+The field report found that 252 of 252 Lua 5.1 files from a TP-Link firmware corpus initially failed because string lengths were read as 64-bit values even when the chunk header declared a 32-bit `size_t`. A peer fix parsed and validated the corpus, but production support remains experimental until the layout, profile, semantic, and regression gates pass in this repository.
 
 ## Discovery
 
@@ -79,7 +81,7 @@ proto:0/2:local:0
 diagnostic:<code>:<target-id>
 ```
 
-A `StableId` is not globally stable and does not imply equivalence across recompilation. External persistence must pair it with the exact input hash and, in the future, the resolved dialect/profile and parse configuration.
+A `StableId` is not globally stable and does not imply equivalence across recompilation. External persistence must pair it with the exact input hash and, in the future, the resolved dialect/profile, validated chunk layout, and parse configuration.
 
 Invalid or absent targets should fail closed. Report any command that silently falls back to another object.
 
@@ -91,7 +93,11 @@ Returns chunk identity, dialect detection, header, prototype tree, diagnostics, 
 
 ### `disasm`
 
-Selects a prototype and renders physical instructions. `--raw`, `--debug-info`, and `--effects` affect text presentation. Check command help and schema before assuming the JSON representation contains semantic effects.
+Selects a prototype and renders physical instruction words. `--raw`, `--debug-info`, and `--effects` affect text presentation. Check command help and schema before assuming the JSON representation contains semantic effects.
+
+The intended contract distinguishes a physical word from its semantic role. In Lua 5.1, the words following `CLOSURE` that bind child upvalues must be exposed as ordered closure-binding records, not as independently executed `MOVE` or `GETUPVAL` instructions. Until the closure gate passes, current text and effect output can state false register writes for these words.
+
+Constant-bearing operands should ultimately include both their encoded index and a typed, structured resolved value. Text output may add an escaped, bounded preview; machine consumers must not parse that preview in place of the typed value. This contract is planned and is not guaranteed by the current schema.
 
 ### `validate`
 
@@ -104,6 +110,14 @@ Currently supports instruction targets. Other target kinds are not a stable cont
 ### `cfg`, `xrefs`, `query`, and `diff`
 
 Expose analysis results with schemas and bounded query pagination. CFG immediate dominators are currently known incorrect. The current query expression syntax is intentionally narrow; unsupported expressions must not be treated as a general programming language.
+
+Capture xrefs are a required extension of the existing fact interface: callers must be able to traverse both parent register/upvalue to child upvalue and child upvalue back to its source binding. A convenience `upvalues` rendering can be added, but it must be a view of the same capture facts rather than a second analysis implementation.
+
+## Planned layout and diagnostic records
+
+Evidence-backed machine output should expose the selected dialect/profile and validated layout, including byte order, declared widths, number-integrality, and how the profile was selected. Vendor constant tags such as LNUM tag 9 must not be reported as stock Lua 5.1 support.
+
+Parse failures should report the deepest known byte offset as the primary location. Prototype paths and enclosing fields are context, not replacements for that offset. The current top-level Lua 5.1 error path has been observed reporting offset 0 for a failure near offset `0x119`; callers should treat current offsets as unreliable until the diagnostic regression gate passes.
 
 ### `compile`
 
