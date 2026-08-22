@@ -177,3 +177,102 @@ fn test_lua54_all_83_opcodes_round_trip() {
         );
     }
 }
+
+#[test]
+fn test_tforcall_tforloop_iterator_state_transitions() {
+    let source = "local t = { a = 1, b = 2 }; for k, v in pairs(t) do print(k, v) end";
+    let chunk = compile_and_parse_lua54(source, false).expect("parse failed");
+    let lifted = lift_proto_lua54(&chunk.main_proto);
+
+    let tforcall = lifted.iter().find(|i| i.mnemonic == "TFORCALL");
+    let tforloop = lifted.iter().find(|i| i.mnemonic == "TFORLOOP");
+
+    assert!(tforcall.is_some(), "Expected TFORCALL in pairs loop");
+    assert!(tforloop.is_some(), "Expected TFORLOOP in pairs loop");
+    assert!(
+        tforloop.unwrap().jump_target.is_some(),
+        "TFORLOOP must specify backward loop jump target"
+    );
+}
+
+#[test]
+fn test_upvalue_open_close_lifecycles() {
+    let source = r#"
+        local function make_scope()
+            local x = 10
+            local function inner()
+                return x
+            end
+            return inner
+        end
+        return make_scope()
+    "#;
+    let chunk = compile_and_parse_lua54(source, false).expect("parse failed");
+    let lifted = lift_proto_lua54(&chunk.main_proto);
+
+    let closure_inst = lifted.iter().find(|i| i.mnemonic == "CLOSURE");
+    assert!(closure_inst.is_some(), "Expected CLOSURE instruction");
+}
+
+#[test]
+fn test_metamethod_dispatch_companions() {
+    use luad_core::ir::ImplicitEffect;
+    use luad_core::model::InstructionWord;
+    use luad_core::SourceLocation;
+    use luad_dialect_lua54::{Opcode54, RawInstruction54};
+
+    let word_add = RawInstruction54::encode_iabc(Opcode54::Add, 0, 1, 2, 0);
+    let word_mmbin = RawInstruction54::encode_iabc(Opcode54::Mmbin, 0, 1, 0, 0); // TM_ADD = 0
+
+    let proto = luad_core::model::Prototype {
+        id: "proto:0".parse().unwrap(),
+        path: luad_core::ProtoPath::root(),
+        source_name: None,
+
+        line_defined: 1,
+        last_line_defined: 2,
+        numparams: 0,
+        is_vararg: 0,
+        maxstacksize: 10,
+        instructions: vec![
+            InstructionWord {
+                id: "proto:0:pc:0".parse().unwrap(),
+                pc: 0,
+                raw_word: word_add,
+                raw_hex: hex::encode(word_add.to_le_bytes()),
+                source: SourceLocation::new(0, &word_add.to_le_bytes()),
+            },
+            InstructionWord {
+                id: "proto:0:pc:1".parse().unwrap(),
+                pc: 1,
+                raw_word: word_mmbin,
+                raw_hex: hex::encode(word_mmbin.to_le_bytes()),
+                source: SourceLocation::new(4, &word_mmbin.to_le_bytes()),
+            },
+        ],
+        constants: vec![],
+        upvalues: vec![],
+        protos: vec![],
+        line_info: vec![],
+        abs_line_info: vec![],
+        loc_vars: vec![],
+        upvalue_names: vec![],
+        source: SourceLocation::new(0, &[]),
+    };
+
+    let lifted = lift_proto_lua54(&proto);
+    assert_eq!(lifted.len(), 2);
+    let mmbin_inst = &lifted[1];
+    assert_eq!(mmbin_inst.mnemonic, "MMBIN");
+    assert!(mmbin_inst.companion_pc == Some(0));
+    assert!(mmbin_inst
+        .metamethod_fallbacks
+        .contains(&"__add".to_string()));
+    assert!(mmbin_inst.implicit_effects.iter().any(|e| matches!(
+        e,
+        ImplicitEffect::CompanionPair {
+            companion_pc: 0,
+            ..
+        }
+    )));
+}
