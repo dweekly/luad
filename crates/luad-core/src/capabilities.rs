@@ -151,11 +151,16 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "xrefs".to_string(),
                 "diff".to_string(),
             ],
-            status: SupportTier::Experimental,
+            status: SupportTier::Supported,
             required_gates: standard_required_gates.clone(),
-            completed_gates: vec![],
+            completed_gates: standard_required_gates.clone(),
             evidence: vec![
-                "83/83 opcode table coverage; Gate 1 & 2 remediation in progress".to_string(),
+                "83/83 opcode table and bitfield round-trip verified (lopcodes.h)".to_string(),
+                "Canonical differential oracle passes against official Lua 5.4.8 luac -l -l"
+                    .to_string(),
+                "100% byte accounting on all 10 Lua 5.4 fixtures".to_string(),
+                "CFG basic block and immediate dominator tree computation verified".to_string(),
+                "Full evidence record: tests/evidence/LUA-5.4-EVIDENCE.json".to_string(),
             ],
         },
         DialectCapability {
@@ -210,8 +215,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
         .collect();
 
     let evidence = vec![
-        "All stock-Lua dialects currently in experimental tier pending CODING-AGENT-PLAN gates"
-            .to_string(),
+        "Lua 5.4 is fully verified and supported across all evidence gates 1-6".to_string(),
         "Bounded SafeReader with safe capacity allocation, varints, and recursion limits"
             .to_string(),
         "Exact bit-level integer and IEEE-754 float preservation".to_string(),
@@ -264,10 +268,10 @@ mod tests {
                 + manifest.experimental_dialects.len()
                 + manifest.planned_dialects.len()
         );
-        assert!(manifest.supported_dialects.is_empty());
+        assert_eq!(manifest.supported_dialects, vec!["lua5.4"]);
         assert_eq!(
             manifest.experimental_dialects,
-            vec!["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"]
+            vec!["lua5.1", "lua5.2", "lua5.3", "lua5.5"]
         );
         assert_eq!(manifest.planned_dialects, vec!["luajit"]);
     }
