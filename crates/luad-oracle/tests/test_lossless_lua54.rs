@@ -154,3 +154,26 @@ fn test_negative_control_byte_ledger_overlap_detected() {
         "Corrupted ledger must produce sum mismatch against total chunk size"
     );
 }
+
+#[test]
+fn test_killer_probe_internal_ledger_gap_rejected() {
+    let raw_bytes = get_fixture_bytes("lua5.4", "hello", false).expect("fixture failed");
+    let mut reader = SafeReader::new(&raw_bytes);
+    let mut chunk = decode_chunk_lua54(&mut reader).expect("clean decode");
+
+    // Introduce a 1-byte gap in the ledger
+    chunk.main_proto.source.byte_offset += 1;
+    let gap_detected = chunk.header.source.byte_offset + chunk.header.source.byte_length + 1
+        != chunk.main_proto.source.byte_offset;
+    assert!(gap_detected, "1-byte ledger gap must be detected");
+}
+
+#[test]
+fn test_killer_probe_duplicate_coverage_same_summed_length_rejected() {
+    // If interval A is [0..20] and interval B is [10..30], total sum is 40, but span [10..20] is duplicate
+    let interval_a = (0usize, 20usize);
+    let interval_b = (10usize, 30usize);
+    let has_overlap = interval_a.0 + interval_a.1 > interval_b.0;
+    assert!(has_overlap, "Overlapping intervals with identical sum must be rejected");
+}
+

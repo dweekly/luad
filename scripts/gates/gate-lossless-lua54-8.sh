@@ -1,14 +1,32 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Gate P4: Real losslessness and byte accounting for Lua 5.4.8
+# Gate R4: Lossless model serialization and complete interval-based byte accounting
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+RESULT_DIR="${1:-$(mktemp -d)}"
+SPEC_FILE="${ROOT_DIR}/tests/gates/gate-lossless-lua54-8.json"
 
 cd "${ROOT_DIR}"
 
-echo "==> Running Gate P4: Lua 5.4.8 Lossless binary roundtrip and byte ledger tests"
-cargo test -p luad-oracle --test test_lossless_lua54 -- --nocapture
+echo "==> Running Gate R4: Lossless AST model serialization and byte accounting"
+echo "==> Spec file: tests/gates/gate-lossless-lua54-8.json"
+echo "==> Output result directory: ${RESULT_DIR}"
 
-echo "==> Gate P4 passed successfully"
+mkdir -p "${RESULT_DIR}"
+
+cargo run -p luad-oracle --bin run_gate -- \
+  --spec "${SPEC_FILE}" \
+  --out-dir "${RESULT_DIR}" \
+  --require-clean \
+  --record-probes
+
+for artifact in "gate-spec.json" "gate-result.json" "release-manifest.json" "probe-rejections.json" "stdout.log"; do
+  if [[ ! -f "${RESULT_DIR}/${artifact}" ]]; then
+    echo "Error: Required artifact was not generated at ${RESULT_DIR}/${artifact}"
+    exit 1
+  fi
+done
+
+echo "==> Gate R4 passed successfully. Full proof package verified in ${RESULT_DIR}"
