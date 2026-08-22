@@ -311,6 +311,101 @@ fn test_negative_control_instruction_count_mutation() {
 }
 
 #[test]
+fn test_negative_control_signed_immediate_offset_sb() {
+    let luac_path = require_luac54();
+    let source = "local x = 5\nreturn x + 1"; // compiles to ADDI with sC = 1
+    let raw_bytes = compile_source_lua54(source, false).expect("Compiles with luac 5.4");
+    let mut reader = luad_core::reader::SafeReader::new(&raw_bytes);
+    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("Decodes chunk");
+    let dump = dump_source_luac(&luac_path, source).expect("Dumps with luac 5.4");
+
+    // Verify clean passes
+    let clean_mismatches = compare_chunk_with_luac(&chunk, &dump);
+    assert!(clean_mismatches.is_empty());
+
+    // Simulate buggy bias OFFSET_SB = 128 instead of 127
+    let addi_pc = chunk
+        .main_proto
+        .instructions
+        .iter()
+        .position(|i| {
+            luad_oracle::decode_instruction_mnemonic("lua5.4", i.raw_word).as_deref()
+                == Some("ADDI")
+        })
+        .expect("ADDI instruction present in chunk");
+
+    let addi_inst = &chunk.main_proto.instructions[addi_pc];
+    let dump_parsed = luad_oracle::parse_luac_dump(&dump);
+    let exp_addi_inst = &dump_parsed.functions[0].instructions[addi_pc];
+
+    let raw = addi_inst.raw_word;
+    let a = ((raw >> 7) & 0xff) as u8;
+    let b = ((raw >> 16) & 0xff) as u8;
+    let c = ((raw >> 24) & 0xff) as u8;
+    let buggy_sc = (c as i32) - 128; // Buggy bias 128
+    let correct_sc = (c as i32) - 127; // Correct bias 127
+
+    assert_ne!(
+        buggy_sc, correct_sc,
+        "Buggy bias 128 must differ from correct bias 127"
+    );
+    let buggy_rendered = format!("{a} {b} {buggy_sc}");
+    assert_ne!(
+        buggy_rendered.trim(),
+        exp_addi_inst.operands_raw.trim(),
+        "Buggy OFFSET_SB = 128 rendering must FAIL against luac dump"
+    );
+}
+
+#[test]
+fn test_negative_control_comparison_opcode_modes() {
+    use luad_dialect_lua54::{OpMode54, Opcode54};
+
+    // The five comparison opcodes and metamethod companions must all have OpMode::IABC
+    let comparison_opcodes = [
+        Opcode54::Eq,
+        Opcode54::Lt,
+        Opcode54::Le,
+        Opcode54::Eqk,
+        Opcode54::Eqi,
+        Opcode54::Mmbini,
+        Opcode54::Mmbink,
+    ];
+
+    for op in comparison_opcodes {
+        assert_eq!(
+            op.mode(),
+            OpMode54::IABC,
+            "Opcode {:?} must be iABC mode",
+            op
+        );
+    }
+}
+
+#[test]
+fn test_negative_control_constant_type_mismatch() {
+    let (mut chunk, dump) = get_base_test_pair();
+
+    // Replace string constant with float approximation
+    chunk.main_proto.constants[0].value = ConstantValue::Float {
+        val: 123.456,
+        raw_hex: "405edd2f1a9fbe77".to_string(),
+        is_inf: false,
+        is_nan: false,
+    };
+
+
+    let mismatches = compare_chunk_with_luac(&chunk, &dump);
+    assert!(
+        !mismatches.is_empty(),
+        "Float constant substitution for string MUST produce mismatch"
+    );
+    assert!(mismatches
+        .iter()
+        .any(|m| matches!(m, OracleMismatch::Constant { index: 0, .. })));
+}
+
+#[test]
 #[should_panic(expected = "Canonical differential oracle detected")]
 fn test_assert_chunk_matches_luac_panics_on_mismatch() {
     let (mut chunk, dump) = get_base_test_pair();
@@ -319,3 +414,4 @@ fn test_assert_chunk_matches_luac_panics_on_mismatch() {
     chunk.main_proto.instructions[0].raw_word ^= 0x7F;
     luad_oracle::assert_chunk_matches_luac(&chunk, &dump);
 }
+
