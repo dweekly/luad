@@ -48,14 +48,22 @@ pub enum TypedExpectedOperands54 {
     Invalid { raw_tokens: Vec<String> },
 }
 
+/// Typed line number info in `luac -l -l`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DumpLineInfo {
+    Known(usize),
+    Stripped,
+}
+
 /// Structured instruction representation parsed from `luac -l -l`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LuacInstDump {
     pub pc: usize, // 0-based PC
-    pub line: usize,
+    pub line_info: DumpLineInfo,
     pub mnemonic: String,
     pub expected_operands: Option<TypedExpectedOperands54>,
     pub operands_raw: String,
+    pub jump_target: Option<usize>,
     pub comment: Option<String>,
 }
 
@@ -84,6 +92,146 @@ pub struct LuacUpvalDump {
     pub name: String,
     pub instack: Option<u8>,
     pub idx: Option<u8>,
+}
+
+/// Record-level consumption tracker ensuring every parsed field in the oracle dump is verified.
+#[derive(Debug, Default)]
+pub struct RecordConsumptionLedger {
+    pub proto_fields: std::collections::BTreeMap<(usize, &'static str), bool>,
+    pub inst_fields: std::collections::BTreeMap<(usize, usize, &'static str), bool>,
+    pub const_fields: std::collections::BTreeMap<(usize, usize, &'static str), bool>,
+    pub loc_fields: std::collections::BTreeMap<(usize, usize, &'static str), bool>,
+    pub upval_fields: std::collections::BTreeMap<(usize, usize, &'static str), bool>,
+}
+
+impl RecordConsumptionLedger {
+    #[must_use]
+    pub fn from_dump(dump: &LuacDump) -> Self {
+        let mut ledger = Self::default();
+        for (i, proto) in dump.functions.iter().enumerate() {
+            ledger.proto_fields.insert((i, "is_main"), false);
+            ledger.proto_fields.insert((i, "linedefined"), false);
+            ledger.proto_fields.insert((i, "lastlinedefined"), false);
+            ledger.proto_fields.insert((i, "numparams"), false);
+            ledger.proto_fields.insert((i, "is_vararg"), false);
+            ledger.proto_fields.insert((i, "maxstacksize"), false);
+            ledger.proto_fields.insert((i, "instructions_count"), false);
+            ledger.proto_fields.insert((i, "constants_count"), false);
+            ledger.proto_fields.insert((i, "locals_count"), false);
+            ledger.proto_fields.insert((i, "upvalues_count"), false);
+
+            for (pc, inst) in proto.instructions.iter().enumerate() {
+                ledger.inst_fields.insert((i, pc, "pc"), false);
+                ledger.inst_fields.insert((i, pc, "line_info"), false);
+                ledger.inst_fields.insert((i, pc, "mnemonic"), false);
+                ledger.inst_fields.insert((i, pc, "operands"), false);
+                if inst.jump_target.is_some() || inst.comment.is_some() {
+                    ledger
+                        .inst_fields
+                        .insert((i, pc, "comment_or_jump_target"), false);
+                }
+            }
+
+            for (c_idx, _) in proto.constants.iter().enumerate() {
+                ledger.const_fields.insert((i, c_idx, "index"), false);
+                ledger.const_fields.insert((i, c_idx, "tag"), false);
+                ledger.const_fields.insert((i, c_idx, "value"), false);
+            }
+
+            for (loc_idx, _) in proto.locals.iter().enumerate() {
+                ledger.loc_fields.insert((i, loc_idx, "index"), false);
+                ledger.loc_fields.insert((i, loc_idx, "name"), false);
+                ledger.loc_fields.insert((i, loc_idx, "startpc"), false);
+                ledger.loc_fields.insert((i, loc_idx, "endpc"), false);
+            }
+
+            for (up_idx, _) in proto.upvalues.iter().enumerate() {
+                ledger.upval_fields.insert((i, up_idx, "index"), false);
+                ledger.upval_fields.insert((i, up_idx, "name"), false);
+                ledger.upval_fields.insert((i, up_idx, "instack"), false);
+                ledger.upval_fields.insert((i, up_idx, "idx"), false);
+            }
+        }
+        ledger
+    }
+
+    pub fn mark_proto_field(&mut self, proto: usize, field: &'static str) {
+        if let Some(entry) = self.proto_fields.get_mut(&(proto, field)) {
+            *entry = true;
+        }
+    }
+
+    pub fn mark_inst_field(&mut self, proto: usize, pc: usize, field: &'static str) {
+        if let Some(entry) = self.inst_fields.get_mut(&(proto, pc, field)) {
+            *entry = true;
+        }
+    }
+
+    pub fn mark_const_field(&mut self, proto: usize, idx: usize, field: &'static str) {
+        if let Some(entry) = self.const_fields.get_mut(&(proto, idx, field)) {
+            *entry = true;
+        }
+    }
+
+    pub fn mark_loc_field(&mut self, proto: usize, idx: usize, field: &'static str) {
+        if let Some(entry) = self.loc_fields.get_mut(&(proto, idx, field)) {
+            *entry = true;
+        }
+    }
+
+    pub fn mark_upval_field(&mut self, proto: usize, idx: usize, field: &'static str) {
+        if let Some(entry) = self.upval_fields.get_mut(&(proto, idx, field)) {
+            *entry = true;
+        }
+    }
+
+    pub fn sweep_unconsumed(&self, mismatches: &mut Vec<OracleMismatch>) {
+        for ((proto, field), consumed) in &self.proto_fields {
+            if !consumed {
+                mismatches.push(OracleMismatch::UnconsumedField {
+                    proto: *proto,
+                    pc: 0,
+                    field: format!("prototype field '{field}' was not consumed"),
+                });
+            }
+        }
+        for ((proto, pc, field), consumed) in &self.inst_fields {
+            if !consumed {
+                mismatches.push(OracleMismatch::UnconsumedField {
+                    proto: *proto,
+                    pc: *pc,
+                    field: format!("instruction {pc} field '{field}' was not consumed"),
+                });
+            }
+        }
+        for ((proto, idx, field), consumed) in &self.const_fields {
+            if !consumed {
+                mismatches.push(OracleMismatch::UnconsumedField {
+                    proto: *proto,
+                    pc: *idx,
+                    field: format!("constant {idx} field '{field}' was not consumed"),
+                });
+            }
+        }
+        for ((proto, idx, field), consumed) in &self.loc_fields {
+            if !consumed {
+                mismatches.push(OracleMismatch::UnconsumedField {
+                    proto: *proto,
+                    pc: *idx,
+                    field: format!("local {idx} field '{field}' was not consumed"),
+                });
+            }
+        }
+        for ((proto, idx, field), consumed) in &self.upval_fields {
+            if !consumed {
+                mismatches.push(OracleMismatch::UnconsumedField {
+                    proto: *proto,
+                    pc: *idx,
+                    field: format!("upvalue {idx} field '{field}' was not consumed"),
+                });
+            }
+        }
+    }
 }
 
 enum Section {
@@ -192,8 +340,18 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                     let pc_1based: usize = parts[0].trim().parse().unwrap_or(0);
                     let pc = if pc_1based > 0 { pc_1based - 1 } else { 0 };
 
-                    let line_str = parts[1].trim().trim_matches('[').trim_matches(']');
-                    let line_num: usize = line_str.parse().unwrap_or(0);
+                    let raw_line_tok = parts[1].trim();
+                    let line_info = if raw_line_tok == "[-]" {
+                        DumpLineInfo::Stripped
+                    } else if let Ok(l) = raw_line_tok
+                        .trim_matches('[')
+                        .trim_matches(']')
+                        .parse::<usize>()
+                    {
+                        DumpLineInfo::Known(l)
+                    } else {
+                        DumpLineInfo::Stripped
+                    };
 
                     let mnem_field = parts[2].trim();
                     let (mnemonic, maybe_ops) =
@@ -221,6 +379,20 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                         }
                     }
 
+                    let jump_target = if let Some(ref c) = comment {
+                        if let Some(to_str) = c.strip_prefix("to ") {
+                            to_str
+                                .trim()
+                                .parse::<usize>()
+                                .ok()
+                                .map(|d| if d > 0 { d - 1 } else { 0 })
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
                     let expected_operands = Some(parse_expected_operands_54(
                         &mnemonic,
                         &operands_raw,
@@ -229,10 +401,11 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
 
                     proto.instructions.push(LuacInstDump {
                         pc,
-                        line: line_num,
+                        line_info,
                         mnemonic,
                         expected_operands,
                         operands_raw,
+                        jump_target,
                         comment,
                     });
                 }
@@ -1290,11 +1463,12 @@ fn check_constant_matches_exact(
     }
 }
 
-/// Perform structured field-by-field differential comparison between `luad`'s parsed `Chunk` and `luac -l -l`.
+///// Perform structured field-by-field differential comparison between `luad`'s parsed `Chunk` and `luac -l -l`.
 #[must_use]
 pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMismatch> {
     let mut mismatches = Vec::new();
     let dump = parse_luac_dump(luac_output);
+    let mut ledger = RecordConsumptionLedger::from_dump(&dump);
 
     let mut actual_protos = Vec::new();
     flatten_protos(&chunk.main_proto, &mut actual_protos);
@@ -1318,6 +1492,7 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 expected: expected.is_main.to_string(),
             });
         }
+        ledger.mark_proto_field(i, "is_main");
 
         // 1. Lines defined
         if actual.line_defined != expected.linedefined {
@@ -1328,6 +1503,8 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 expected: expected.linedefined.to_string(),
             });
         }
+        ledger.mark_proto_field(i, "linedefined");
+
         if actual.last_line_defined != expected.lastlinedefined {
             mismatches.push(OracleMismatch::Metadata {
                 proto: i,
@@ -1336,6 +1513,7 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 expected: expected.lastlinedefined.to_string(),
             });
         }
+        ledger.mark_proto_field(i, "lastlinedefined");
 
         // 2. Parameters & stack
         if actual.numparams as usize != expected.numparams {
@@ -1346,6 +1524,8 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 expected: expected.numparams.to_string(),
             });
         }
+        ledger.mark_proto_field(i, "numparams");
+
         if (actual.is_vararg != 0) != expected.is_vararg {
             mismatches.push(OracleMismatch::Metadata {
                 proto: i,
@@ -1354,6 +1534,8 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 expected: expected.is_vararg.to_string(),
             });
         }
+        ledger.mark_proto_field(i, "is_vararg");
+
         if actual.maxstacksize as usize != expected.maxstacksize {
             mismatches.push(OracleMismatch::Metadata {
                 proto: i,
@@ -1362,6 +1544,7 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 expected: expected.maxstacksize.to_string(),
             });
         }
+        ledger.mark_proto_field(i, "maxstacksize");
 
         // 3. Instructions count, line numbers, and mnemonics
         if actual.instructions.len() != expected.instructions.len() {
@@ -1370,7 +1553,10 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 actual: actual.instructions.len(),
                 expected: expected.instructions.len(),
             });
-        } else {
+        }
+        ledger.mark_proto_field(i, "instructions_count");
+
+        if actual.instructions.len() == expected.instructions.len() {
             for (pc, (act_inst, exp_inst)) in actual
                 .instructions
                 .iter()
@@ -1388,16 +1574,33 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                         ),
                     });
                 }
+                ledger.mark_inst_field(i, pc, "pc");
 
+                // Strict typed line info verification
                 let act_line = actual.get_line_for_pc(pc);
-                if exp_inst.line > 0 && act_line > 0 && act_line != exp_inst.line {
-                    mismatches.push(OracleMismatch::Line {
-                        proto: i,
-                        pc,
-                        actual: act_line,
-                        expected: exp_inst.line,
-                    });
+                match exp_inst.line_info {
+                    DumpLineInfo::Known(l) => {
+                        if act_line == 0 || act_line != l {
+                            mismatches.push(OracleMismatch::Line {
+                                proto: i,
+                                pc,
+                                actual: act_line,
+                                expected: l,
+                            });
+                        }
+                    }
+                    DumpLineInfo::Stripped => {
+                        if act_line > 0 {
+                            mismatches.push(OracleMismatch::Line {
+                                proto: i,
+                                pc,
+                                actual: act_line,
+                                expected: 0,
+                            });
+                        }
+                    }
                 }
+                ledger.mark_inst_field(i, pc, "line_info");
 
                 // Check dialect-specific instruction comparison
                 if chunk.dialect == "lua5.4" {
@@ -1439,6 +1642,44 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                         }
                     }
                 }
+                ledger.mark_inst_field(i, pc, "mnemonic");
+                ledger.mark_inst_field(i, pc, "operands");
+
+                // Verify jump target if annotated in comment
+                if let Some(exp_target) = exp_inst.jump_target {
+                    if chunk.dialect == "lua5.4" {
+                        let indep =
+                            crate::independent_lua54_oracle::IndependentInstruction54::decode(
+                                act_inst.raw_word,
+                            );
+                        let calculated_target = match indep.opcode {
+                            Some(crate::independent_lua54_oracle::IndependentOpcode54::Jmp) => {
+                                Some(((pc as i32) + 1 + indep.sj) as usize)
+                            }
+                            Some(crate::independent_lua54_oracle::IndependentOpcode54::Forloop)
+                            | Some(
+                                crate::independent_lua54_oracle::IndependentOpcode54::Tforloop,
+                            ) => Some(((pc as i32) + 1 - (indep.bx as i32)) as usize),
+                            Some(crate::independent_lua54_oracle::IndependentOpcode54::Forprep) => {
+                                Some(((pc as i32) + 1 + (indep.bx as i32)) as usize)
+                            }
+                            _ => None,
+                        };
+                        if let Some(act_target) = calculated_target {
+                            if act_target != exp_target {
+                                mismatches.push(OracleMismatch::JumpTargetMismatch {
+                                    proto: i,
+                                    pc,
+                                    actual_target: act_target,
+                                    expected_target: exp_target,
+                                });
+                            }
+                        }
+                    }
+                }
+                if exp_inst.jump_target.is_some() || exp_inst.comment.is_some() {
+                    ledger.mark_inst_field(i, pc, "comment_or_jump_target");
+                }
             }
         }
 
@@ -1449,7 +1690,10 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 actual: actual.constants.len(),
                 expected: expected.constants.len(),
             });
-        } else {
+        }
+        ledger.mark_proto_field(i, "constants_count");
+
+        if actual.constants.len() == expected.constants.len() {
             for (c_idx, act_c) in actual.constants.iter().enumerate() {
                 if let Some(exp_c) = expected.constants.get(c_idx) {
                     // Constant index ledger verification (0-based for Lua 5.4/5.5, 1-based for Lua 5.1-5.3)
@@ -1468,6 +1712,9 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                             ),
                         });
                     }
+                    ledger.mark_const_field(i, c_idx, "index");
+                    ledger.mark_const_field(i, c_idx, "tag");
+                    ledger.mark_const_field(i, c_idx, "value");
 
                     check_constant_matches_exact(
                         i,
@@ -1488,7 +1735,10 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 actual: actual.loc_vars.len(),
                 expected: expected.locals.len(),
             });
-        } else {
+        }
+        ledger.mark_proto_field(i, "locals_count");
+
+        if actual.loc_vars.len() == expected.locals.len() {
             for (loc_idx, (act_loc, exp_loc)) in actual
                 .loc_vars
                 .iter()
@@ -1506,6 +1756,7 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                         ),
                     });
                 }
+                ledger.mark_loc_field(i, loc_idx, "index");
 
                 if act_loc.name.as_str() != exp_loc.name.as_str() {
                     mismatches.push(OracleMismatch::Local {
@@ -1516,6 +1767,8 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                         expected: exp_loc.name.clone(),
                     });
                 }
+                ledger.mark_loc_field(i, loc_idx, "name");
+
                 if act_loc.startpc != exp_loc.startpc {
                     mismatches.push(OracleMismatch::Local {
                         proto: i,
@@ -1525,6 +1778,8 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                         expected: exp_loc.startpc.to_string(),
                     });
                 }
+                ledger.mark_loc_field(i, loc_idx, "startpc");
+
                 if act_loc.endpc != exp_loc.endpc {
                     mismatches.push(OracleMismatch::Local {
                         proto: i,
@@ -1534,6 +1789,7 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                         expected: exp_loc.endpc.to_string(),
                     });
                 }
+                ledger.mark_loc_field(i, loc_idx, "endpc");
             }
         }
 
@@ -1544,7 +1800,10 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 actual: actual.upvalues.len(),
                 expected: expected.upvalues.len(),
             });
-        } else {
+        }
+        ledger.mark_proto_field(i, "upvalues_count");
+
+        if actual.upvalues.len() == expected.upvalues.len() {
             for (up_idx, (act_up, exp_up)) in actual
                 .upvalues
                 .iter()
@@ -1562,6 +1821,7 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                         ),
                     });
                 }
+                ledger.mark_upval_field(i, up_idx, "index");
 
                 let act_name = act_up.name.as_ref().map(|s| s.as_str()).unwrap_or("");
                 let exp_name = exp_up.name.as_str();
@@ -1572,9 +1832,10 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                         index: up_idx,
                         field: "name".to_string(),
                         actual: act_name.to_string(),
-                        expected: exp_up.name.clone(),
+                        expected: exp_name.to_string(),
                     });
                 }
+                ledger.mark_upval_field(i, up_idx, "name");
 
                 if let Some(exp_instack) = exp_up.instack {
                     if act_up.instack != exp_instack {
@@ -1586,7 +1847,18 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                             expected: exp_instack.to_string(),
                         });
                     }
+                    ledger.mark_upval_field(i, up_idx, "instack");
+                } else if chunk.dialect == "lua5.4" || chunk.dialect == "lua5.5" {
+                    mismatches.push(OracleMismatch::UnconsumedField {
+                        proto: i,
+                        pc: up_idx,
+                        field: "missing mandatory 'instack' column in Lua 5.4 upvalue dump"
+                            .to_string(),
+                    });
+                } else {
+                    ledger.mark_upval_field(i, up_idx, "instack");
                 }
+
                 if let Some(exp_idx) = exp_up.idx {
                     if act_up.idx != exp_idx {
                         mismatches.push(OracleMismatch::Upvalue {
@@ -1597,10 +1869,22 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                             expected: exp_idx.to_string(),
                         });
                     }
+                    ledger.mark_upval_field(i, up_idx, "idx");
+                } else if chunk.dialect == "lua5.4" || chunk.dialect == "lua5.5" {
+                    mismatches.push(OracleMismatch::UnconsumedField {
+                        proto: i,
+                        pc: up_idx,
+                        field: "missing mandatory 'idx' column in Lua 5.4 upvalue dump".to_string(),
+                    });
+                } else {
+                    ledger.mark_upval_field(i, up_idx, "idx");
                 }
             }
         }
     }
+
+    // 7. Final sweep: any unconsumed fields in the dump trigger UnconsumedField
+    ledger.sweep_unconsumed(&mut mismatches);
 
     mismatches
 }

@@ -222,7 +222,7 @@ impl Prototype {
     #[must_use]
     pub fn get_line_for_pc(&self, pc: usize) -> usize {
         if self.line_info.is_empty() && self.abs_line_info.is_empty() {
-            return self.line_defined;
+            return 0;
         }
 
         // If abs_line_info directly maps every PC (Lua 5.1..5.3):
@@ -260,7 +260,7 @@ impl Prototype {
             return current_line.max(0) as usize;
         }
 
-        self.line_defined
+        0
     }
 }
 

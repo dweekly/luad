@@ -1034,3 +1034,99 @@ fn test_negative_control_jump_target_mismatch() {
         OracleMismatch::OperandField { field, .. } if field == "sJ"
     ) || matches!(m, OracleMismatch::JumpTargetMismatch { .. })));
 }
+
+#[test]
+fn test_negative_control_line_erasure_detected() {
+    let (chunk, dump) = get_base_test_pair();
+    // Non-stripped chunk has line 1 for instruction 1: [1]
+    assert!(dump.contains("\t1\t[1]\t"));
+    // Tamper line info by erasing it to stripped marker [-]
+    let tampered_dump = dump.replace("\t1\t[1]\t", "\t1\t[-]\t");
+    assert_ne!(tampered_dump, dump);
+
+    let mismatches = compare_chunk_with_luac(&chunk, &tampered_dump);
+    assert!(
+        !mismatches.is_empty(),
+        "Erasing line info [1] to [-] in non-stripped chunk MUST produce Line mismatch"
+    );
+    assert!(mismatches.iter().any(|m| matches!(
+        m,
+        OracleMismatch::Line {
+            pc: 0,
+            actual: 1,
+            expected: 0,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn test_negative_control_missing_upvalue_columns_rejected() {
+    let (chunk, dump) = get_base_test_pair();
+    // Upvalue section has "\t0\t_ENV\t1\t0" (4 columns)
+    assert!(dump.contains("0\t_ENV\t1\t0"));
+    // Tamper dump by removing instack and idx columns
+    let tampered_dump = dump.replace("0\t_ENV\t1\t0", "0\t_ENV");
+    assert_ne!(tampered_dump, dump);
+
+    let mismatches = compare_chunk_with_luac(&chunk, &tampered_dump);
+    assert!(
+        !mismatches.is_empty(),
+        "Missing mandatory instack/idx columns in Lua 5.4 upvalues MUST produce UnconsumedField"
+    );
+    assert!(mismatches
+        .iter()
+        .any(|m| matches!(m, OracleMismatch::UnconsumedField { .. })));
+}
+
+#[test]
+fn test_negative_control_recognized_unconsumed_field_sweep() {
+    let (_chunk, dump) = get_base_test_pair();
+    let parsed_dump = luad_oracle::listing_parser::parse_luac_dump(&dump);
+    let mut ledger = luad_oracle::listing_parser::RecordConsumptionLedger::from_dump(&parsed_dump);
+
+    // Mark all clean fields as consumed
+    for v in ledger.proto_fields.values_mut() {
+        *v = true;
+    }
+    for v in ledger.inst_fields.values_mut() {
+        *v = true;
+    }
+    for v in ledger.const_fields.values_mut() {
+        *v = true;
+    }
+    for v in ledger.loc_fields.values_mut() {
+        *v = true;
+    }
+    for v in ledger.upval_fields.values_mut() {
+        *v = true;
+    }
+
+    let mut clean_mismatches = Vec::new();
+    ledger.sweep_unconsumed(&mut clean_mismatches);
+    assert!(
+        clean_mismatches.is_empty(),
+        "Fully consumed ledger must produce 0 unconsumed field mismatches"
+    );
+
+    // Deliberately register extra recognized fields in the ledger that are not marked consumed
+    ledger
+        .proto_fields
+        .insert((0, "extra_unconsumed_proto_field"), false);
+    ledger
+        .inst_fields
+        .insert((0, 0, "extra_unconsumed_inst_field"), false);
+
+    let mut mismatches = Vec::new();
+    ledger.sweep_unconsumed(&mut mismatches);
+
+    assert_eq!(mismatches.len(), 2);
+    assert!(mismatches.iter().any(|m| matches!(
+        m,
+        OracleMismatch::UnconsumedField { field, .. } if field.contains("extra_unconsumed_proto_field")
+    )));
+    assert!(mismatches.iter().any(|m| matches!(
+        m,
+        OracleMismatch::UnconsumedField { field, .. } if field.contains("extra_unconsumed_inst_field")
+    )));
+}
