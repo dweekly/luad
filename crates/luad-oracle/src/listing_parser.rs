@@ -1202,19 +1202,36 @@ fn check_constant_matches_exact(
     mismatches: &mut Vec<OracleMismatch>,
 ) {
     let exp_str = exp_c.value_str.trim();
+
+    // In Lua 5.4 and 5.5, luac -l -l dump includes explicit constant type tags (I, F, S, N, B).
+    let requires_tag = dialect == "lua5.4" || dialect == "lua5.5" || exp_c.tag.is_some();
+    if requires_tag {
+        let expected_char = match val {
+            luad_core::model::ConstantValue::Nil => 'N',
+            luad_core::model::ConstantValue::Boolean(_) => 'B',
+            luad_core::model::ConstantValue::Integer { .. } => 'I',
+            luad_core::model::ConstantValue::Float { .. } => 'F',
+            luad_core::model::ConstantValue::ShortString(_)
+            | luad_core::model::ConstantValue::LongString(_) => 'S',
+        };
+        let exp_tag_char = exp_c.tag.unwrap_or('?');
+        if exp_c.tag != Some(expected_char) {
+            mismatches.push(OracleMismatch::ConstantTagMismatch {
+                proto: proto_idx,
+                index: c_idx,
+                actual_tag: expected_char.to_string(),
+                expected_tag: if exp_c.tag.is_some() {
+                    exp_tag_char.to_string()
+                } else {
+                    "<missing>".to_string()
+                },
+            });
+            return;
+        }
+    }
+
     match val {
         luad_core::model::ConstantValue::Nil => {
-            if let Some(tag) = exp_c.tag {
-                if tag != 'N' {
-                    mismatches.push(OracleMismatch::ConstantTagMismatch {
-                        proto: proto_idx,
-                        index: c_idx,
-                        actual_tag: "Nil".to_string(),
-                        expected_tag: tag.to_string(),
-                    });
-                    return;
-                }
-            }
             if exp_str != "nil" && exp_str != "N" {
                 mismatches.push(OracleMismatch::Constant {
                     proto: proto_idx,
@@ -1224,19 +1241,7 @@ fn check_constant_matches_exact(
                 });
             }
         }
-
         luad_core::model::ConstantValue::Boolean(b) => {
-            if let Some(tag) = exp_c.tag {
-                if tag != 'B' {
-                    mismatches.push(OracleMismatch::ConstantTagMismatch {
-                        proto: proto_idx,
-                        index: c_idx,
-                        actual_tag: "Boolean".to_string(),
-                        expected_tag: tag.to_string(),
-                    });
-                    return;
-                }
-            }
             let exp_expected = if *b { "true" } else { "false" };
             if exp_str != exp_expected {
                 mismatches.push(OracleMismatch::Constant {
@@ -1248,17 +1253,6 @@ fn check_constant_matches_exact(
             }
         }
         luad_core::model::ConstantValue::Integer { val, .. } => {
-            if let Some(tag) = exp_c.tag {
-                if tag != 'I' {
-                    mismatches.push(OracleMismatch::ConstantTagMismatch {
-                        proto: proto_idx,
-                        index: c_idx,
-                        actual_tag: "Integer".to_string(),
-                        expected_tag: tag.to_string(),
-                    });
-                    return;
-                }
-            }
             let act_str = val.to_string();
             if exp_str != act_str {
                 mismatches.push(OracleMismatch::Constant {
@@ -1270,17 +1264,6 @@ fn check_constant_matches_exact(
             }
         }
         luad_core::model::ConstantValue::Float { val, .. } => {
-            if let Some(tag) = exp_c.tag {
-                if tag != 'F' {
-                    mismatches.push(OracleMismatch::ConstantTagMismatch {
-                        proto: proto_idx,
-                        index: c_idx,
-                        actual_tag: "Float".to_string(),
-                        expected_tag: tag.to_string(),
-                    });
-                    return;
-                }
-            }
             let act_float_token = canonical_luac_float_str(*val, dialect);
             if act_float_token != exp_str {
                 // Strict token match - no relative tolerance
@@ -1294,19 +1277,8 @@ fn check_constant_matches_exact(
         }
         luad_core::model::ConstantValue::ShortString(s)
         | luad_core::model::ConstantValue::LongString(s) => {
-            if let Some(tag) = exp_c.tag {
-                if tag != 'S' {
-                    mismatches.push(OracleMismatch::ConstantTagMismatch {
-                        proto: proto_idx,
-                        index: c_idx,
-                        actual_tag: "String".to_string(),
-                        expected_tag: tag.to_string(),
-                    });
-                    return;
-                }
-            }
             let formatted_luac = format_luac_string(&s.raw_bytes);
-            if exp_str != formatted_luac && exp_str != s.as_str() {
+            if exp_str != formatted_luac {
                 mismatches.push(OracleMismatch::Constant {
                     proto: proto_idx,
                     index: c_idx,
@@ -1336,6 +1308,17 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
     }
 
     for (i, (actual, expected)) in actual_protos.iter().zip(dump.functions.iter()).enumerate() {
+        // 0. is_main verification
+        let act_is_main = i == 0;
+        if act_is_main != expected.is_main {
+            mismatches.push(OracleMismatch::Metadata {
+                proto: i,
+                field: "is_main".to_string(),
+                actual: act_is_main.to_string(),
+                expected: expected.is_main.to_string(),
+            });
+        }
+
         // 1. Lines defined
         if actual.line_defined != expected.linedefined {
             mismatches.push(OracleMismatch::Metadata {
@@ -1394,6 +1377,18 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 .zip(expected.instructions.iter())
                 .enumerate()
             {
+                // Instruction PC ledger verification
+                if exp_inst.pc != pc {
+                    mismatches.push(OracleMismatch::UnconsumedField {
+                        proto: i,
+                        pc,
+                        field: format!(
+                            "instruction PC mismatch: expected {}, got position {}",
+                            exp_inst.pc, pc
+                        ),
+                    });
+                }
+
                 let act_line = actual.get_line_for_pc(pc);
                 if exp_inst.line > 0 && act_line > 0 && act_line != exp_inst.line {
                     mismatches.push(OracleMismatch::Line {
@@ -1457,6 +1452,23 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
         } else {
             for (c_idx, act_c) in actual.constants.iter().enumerate() {
                 if let Some(exp_c) = expected.constants.get(c_idx) {
+                    // Constant index ledger verification (0-based for Lua 5.4/5.5, 1-based for Lua 5.1-5.3)
+                    let expected_idx = if chunk.dialect == "lua5.4" || chunk.dialect == "lua5.5" {
+                        c_idx
+                    } else {
+                        c_idx + 1
+                    };
+                    if exp_c.index != expected_idx {
+                        mismatches.push(OracleMismatch::UnconsumedField {
+                            proto: i,
+                            pc: c_idx,
+                            field: format!(
+                                "constant index mismatch: expected {}, got position {}",
+                                exp_c.index, expected_idx
+                            ),
+                        });
+                    }
+
                     check_constant_matches_exact(
                         i,
                         c_idx,
@@ -1483,6 +1495,18 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 .zip(expected.locals.iter())
                 .enumerate()
             {
+                // Local index ledger verification
+                if exp_loc.index != loc_idx {
+                    mismatches.push(OracleMismatch::UnconsumedField {
+                        proto: i,
+                        pc: loc_idx,
+                        field: format!(
+                            "local index mismatch: expected {}, got position {}",
+                            exp_loc.index, loc_idx
+                        ),
+                    });
+                }
+
                 if act_loc.name.as_str() != exp_loc.name.as_str() {
                     mismatches.push(OracleMismatch::Local {
                         proto: i,
@@ -1527,6 +1551,18 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 .zip(expected.upvalues.iter())
                 .enumerate()
             {
+                // Upvalue index ledger verification
+                if exp_up.index != up_idx {
+                    mismatches.push(OracleMismatch::UnconsumedField {
+                        proto: i,
+                        pc: up_idx,
+                        field: format!(
+                            "upvalue index mismatch: expected {}, got position {}",
+                            exp_up.index, up_idx
+                        ),
+                    });
+                }
+
                 let act_name = act_up.name.as_ref().map(|s| s.as_str()).unwrap_or("");
                 let exp_name = exp_up.name.as_str();
                 let names_match = act_name == exp_name || (exp_name == "-" && act_name.is_empty());
@@ -2414,11 +2450,17 @@ fn compare_instruction_54(
                 IndependentOpMode54::IAx | IndependentOpMode54::IsJ => 1,
             };
             if raw_tokens.len() > expected_count {
+                let extra_tokens_str = raw_tokens[expected_count..].join(" ");
                 mismatches.push(OracleMismatch::ExtraOperand {
                     proto,
                     pc,
                     raw_word,
-                    extra_token: raw_tokens[expected_count..].join(" "),
+                    extra_token: extra_tokens_str.clone(),
+                });
+                mismatches.push(OracleMismatch::UnconsumedField {
+                    proto,
+                    pc,
+                    field: format!("extra operand token '{extra_tokens_str}'"),
                 });
             } else {
                 mismatches.push(OracleMismatch::MissingOperand {

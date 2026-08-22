@@ -366,22 +366,50 @@ fn test_negative_control_bit15_b_decoder_bug() {
 #[test]
 fn test_unpatched_pre_gate2_decoder_fails_oracle_on_all_fixtures() {
     let luac_path = require_luac54();
-    let fixtures = ["hello", "closures", "control_flow", "tables", "numerics"];
+    let fixtures = [
+        "tests/fixtures/precompiled/lua54/hello.luac",
+        "tests/fixtures/precompiled/lua54/hello_stripped.luac",
+        "tests/fixtures/precompiled/lua54/control_flow.luac",
+        "tests/fixtures/precompiled/lua54/control_flow_stripped.luac",
+        "tests/fixtures/precompiled/lua54/closures.luac",
+        "tests/fixtures/precompiled/lua54/closures_stripped.luac",
+        "tests/fixtures/precompiled/lua54/tables.luac",
+        "tests/fixtures/precompiled/lua54/tables_stripped.luac",
+        "tests/fixtures/precompiled/lua54/numerics.luac",
+        "tests/fixtures/precompiled/lua54/numerics_stripped.luac",
+    ];
 
-    for fixture in &fixtures {
-        let source = luad_oracle::load_source_fixture(fixture)
-            .unwrap_or_else(|e| panic!("Failed to load fixture {fixture}: {e}"));
-        let raw_bytes = compile_source_lua54(&source, false)
-            .unwrap_or_else(|e| panic!("Failed to compile fixture {fixture}: {e}"));
-        let dump = dump_source_luac(&luac_path, &source)
-            .unwrap_or_else(|e| panic!("Failed to dump fixture {fixture}: {e}"));
+    use luad_oracle::independent_lua54_oracle::IndependentOpcode54;
 
-        let dump_parsed = luad_oracle::parse_luac_dump(&dump);
+    for fixture_path in &fixtures {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let full_path = std::path::Path::new(manifest_dir)
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join(fixture_path);
+        let raw_bytes = std::fs::read(&full_path)
+            .unwrap_or_else(|e| panic!("Failed to read {fixture_path}: {e}"));
+
+        let output = std::process::Command::new(&luac_path)
+            .arg("-l")
+            .arg("-l")
+            .arg(&full_path)
+            .output()
+            .unwrap_or_else(|e| panic!("Failed to execute luac on {fixture_path}: {e}"));
+        assert!(
+            output.status.success(),
+            "luac -l -l failed on {fixture_path}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let luac_dump = String::from_utf8(output.stdout).expect("Valid utf8 stdout");
+        let dump_parsed = luad_oracle::parse_luac_dump(&luac_dump);
         assert!(!dump_parsed.functions.is_empty());
 
         let mut reader = luad_core::reader::SafeReader::new(&raw_bytes);
         let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader)
-            .unwrap_or_else(|e| panic!("Failed to decode fixture {fixture}: {e:?}"));
+            .unwrap_or_else(|e| panic!("Failed to decode fixture {fixture_path}: {e:?}"));
 
         let mut pre_gate2_mismatches = Vec::new();
         for (pc, inst) in chunk.main_proto.instructions.iter().enumerate() {
@@ -393,12 +421,12 @@ fn test_unpatched_pre_gate2_decoder_fails_oracle_on_all_fixtures() {
             let buggy_sc = (buggy_c as i32) - 128;
 
             if let Some(exp_inst) = dump_parsed.functions[0].instructions.get(pc) {
-                if let Some(opcode) = luad_dialect_lua54::Opcode54::from_u8(op) {
+                if let Some(opcode) = IndependentOpcode54::from_u8(op) {
                     let buggy_ops = match opcode {
-                        luad_dialect_lua54::Opcode54::Move => format!("{a} {buggy_b}"),
-                        luad_dialect_lua54::Opcode54::Addi => format!("{a} {buggy_b} {buggy_sc}"),
-                        luad_dialect_lua54::Opcode54::Add => format!("{a} {buggy_b} {buggy_c}"),
-                        luad_dialect_lua54::Opcode54::Call => format!("{a} {buggy_b} {buggy_c}"),
+                        IndependentOpcode54::Move => format!("{a} {buggy_b}"),
+                        IndependentOpcode54::Addi => format!("{a} {buggy_b} {buggy_sc}"),
+                        IndependentOpcode54::Add => format!("{a} {buggy_b} {buggy_c}"),
+                        IndependentOpcode54::Call => format!("{a} {buggy_b} {buggy_c}"),
                         _ => continue,
                     };
                     if buggy_ops.trim() != exp_inst.operands_raw.trim() {
@@ -410,7 +438,7 @@ fn test_unpatched_pre_gate2_decoder_fails_oracle_on_all_fixtures() {
 
         assert!(
             !pre_gate2_mismatches.is_empty(),
-            "Pre-Gate 2 buggy decoder MUST fail the oracle on fixture '{fixture}'"
+            "Pre-Gate 2 buggy decoder MUST fail the oracle on maintained fixture '{fixture_path}'"
         );
     }
 }
@@ -842,24 +870,24 @@ fn test_negative_control_nil_constant_wrong_tag_paired_with_nil_value() {
     assert!(mismatches.iter().any(|m| matches!(
         m,
         OracleMismatch::ConstantTagMismatch { actual_tag, expected_tag, .. }
-            if actual_tag == "Nil" && expected_tag == "I"
+            if actual_tag == "N" && expected_tag == "I"
     )));
 }
 
 #[test]
 fn test_negative_control_extra_operand_detected() {
-    let (mut chunk, dump) = get_base_test_pair();
+    let (chunk, dump) = get_base_test_pair();
+    let tampered_dump = dump.replace("VARARGPREP\t0", "VARARGPREP\t0 999 888");
+    assert_ne!(tampered_dump, dump);
 
-    chunk.main_proto.instructions[1].raw_word ^= 1 << 16;
-
-    let mismatches = compare_chunk_with_luac(&chunk, &dump);
-    assert!(!mismatches.is_empty(), "Operand mismatch must be detected");
-    assert!(mismatches.iter().any(|m| matches!(
-        m,
-        OracleMismatch::Operand { .. }
-            | OracleMismatch::OperandField { .. }
-            | OracleMismatch::ExtraOperand { .. }
-    )));
+    let mismatches = compare_chunk_with_luac(&chunk, &tampered_dump);
+    assert!(
+        !mismatches.is_empty(),
+        "Extra operands in listing MUST fail the oracle"
+    );
+    assert!(mismatches
+        .iter()
+        .any(|m| matches!(m, OracleMismatch::ExtraOperand { .. })));
 }
 
 #[test]
@@ -882,14 +910,99 @@ fn test_negative_control_missing_operand() {
 #[test]
 fn test_negative_control_unconsumed_field() {
     let (chunk, dump) = get_base_test_pair();
+
+    // 1. Extra unconsumed instruction operand tokens
     assert!(dump.contains("VARARGPREP\t0"));
-    let tampered_dump = dump.replace("VARARGPREP\t0", "VARARGPREP\t0 999 888");
+    let tampered_dump_ops = dump.replace("VARARGPREP\t0", "VARARGPREP\t0 999 888");
+    let m_ops = compare_chunk_with_luac(&chunk, &tampered_dump_ops);
+    assert!(!m_ops.is_empty());
+    assert!(m_ops
+        .iter()
+        .any(|m| matches!(m, OracleMismatch::UnconsumedField { .. })));
+
+    // 2. Unconsumed / mismatched instruction PC in ledger
+    assert!(dump.contains("\t1\t[1]\t"));
+    let tampered_dump_pc = dump.replace("\t1\t[1]\t", "\t99\t[1]\t");
+    let m_pc = compare_chunk_with_luac(&chunk, &tampered_dump_pc);
+    assert!(!m_pc.is_empty());
+    assert!(m_pc.iter().any(|m| matches!(
+        m,
+        OracleMismatch::UnconsumedField { field, .. } if field.contains("instruction PC")
+    )));
+
+    // 3. Unconsumed / mismatched constant index in ledger
+    assert!(dump.contains("0\tS\t"));
+    let tampered_dump_c = dump.replace("0\tS\t", "5\tS\t");
+    let m_c = compare_chunk_with_luac(&chunk, &tampered_dump_c);
+    assert!(!m_c.is_empty());
+    assert!(m_c.iter().any(|m| matches!(
+        m,
+        OracleMismatch::UnconsumedField { field, .. } if field.contains("constant index")
+    )));
+
+    // 4. Unconsumed / mismatched local index in ledger
+    assert!(dump.contains("0\ta\t"));
+    let tampered_dump_loc = dump.replace("0\ta\t", "7\ta\t");
+    let m_loc = compare_chunk_with_luac(&chunk, &tampered_dump_loc);
+    assert!(!m_loc.is_empty());
+    assert!(m_loc.iter().any(|m| matches!(
+        m,
+        OracleMismatch::UnconsumedField { field, .. } if field.contains("local index")
+    )));
+}
+
+#[test]
+fn test_negative_control_prototype_is_main_mismatch() {
+    let (chunk, dump) = get_base_test_pair();
+    assert!(dump.contains("main <"));
+    let tampered_dump = dump.replacen("main <", "function <", 1);
+    assert_ne!(tampered_dump, dump);
+
     let mismatches = compare_chunk_with_luac(&chunk, &tampered_dump);
-    assert!(!mismatches.is_empty());
+    assert!(
+        !mismatches.is_empty(),
+        "Mismatched is_main flag MUST produce Metadata mismatch"
+    );
     assert!(mismatches.iter().any(|m| matches!(
         m,
-        OracleMismatch::ExtraOperand { .. } | OracleMismatch::UnconsumedField { .. }
+        OracleMismatch::Metadata { field, .. } if field == "is_main"
     )));
+}
+
+#[test]
+fn test_negative_control_missing_constant_tag_rejected() {
+    let (chunk, dump) = get_base_test_pair();
+    assert!(dump.contains("0\tS\t"));
+    // Tamper dump by removing the tag column entirely for constant 0
+    let tampered_dump = dump.replace("0\tS\t\"hello_constant\"", "0\t\"hello_constant\"");
+    assert_ne!(tampered_dump, dump);
+
+    let mismatches = compare_chunk_with_luac(&chunk, &tampered_dump);
+    assert!(
+        !mismatches.is_empty(),
+        "Missing constant tag in Lua 5.4 MUST produce ConstantTagMismatch"
+    );
+    assert!(mismatches
+        .iter()
+        .any(|m| matches!(m, OracleMismatch::ConstantTagMismatch { .. })));
+}
+
+#[test]
+fn test_negative_control_string_constant_exact_formatting_required() {
+    let (chunk, dump) = get_base_test_pair();
+    assert!(dump.contains("\"hello_constant\""));
+    // Tamper dump by removing quotes (unquoted string token)
+    let tampered_dump = dump.replace("\"hello_constant\"", "hello_constant");
+    assert_ne!(tampered_dump, dump);
+
+    let mismatches = compare_chunk_with_luac(&chunk, &tampered_dump);
+    assert!(
+        !mismatches.is_empty(),
+        "Unquoted string constant in oracle dump MUST be rejected"
+    );
+    assert!(mismatches
+        .iter()
+        .any(|m| matches!(m, OracleMismatch::Constant { index: 0, .. })));
 }
 
 #[test]
