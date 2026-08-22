@@ -174,7 +174,7 @@ fn load_proto_53(
                 let b = reader.read_u8()?;
                 ConstantValue::Boolean(b != 0)
             }
-            19 => {
+            3 => {
                 let f_val = reader.read_f64_le()?;
                 ConstantValue::Float {
                     val: f_val,
@@ -183,13 +183,14 @@ fn load_proto_53(
                     is_inf: f_val.is_infinite(),
                 }
             }
-            3 => {
+            19 => {
                 let ival = reader.read_i64_le()?;
                 ConstantValue::Integer {
                     val: ival,
                     raw_hex: hex::encode(ival.to_le_bytes()),
                 }
             }
+
             4 => {
                 let s_opt = load_string_53(reader, sizeof_sizet)?;
                 s_opt

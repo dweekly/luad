@@ -210,13 +210,23 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                 }
             }
             Section::Locals => {
-                // E.g. "\t0\t(for state)\t5\t7"
+                // E.g. "\t0\t(for state)\t5\t7" (startpc and endpc are 1-based in luac.c: startpc + 1, endpc + 1)
                 let parts: Vec<&str> = line.split('\t').filter(|s| !s.is_empty()).collect();
                 if parts.len() >= 4 {
                     let idx: usize = parts[0].trim().parse().unwrap_or(0);
                     let name = parts[1].trim().to_string();
-                    let startpc: usize = parts[2].trim().parse().unwrap_or(0);
-                    let endpc: usize = parts[3].trim().parse().unwrap_or(0);
+                    let startpc_1based: usize = parts[2].trim().parse().unwrap_or(0);
+                    let endpc_1based: usize = parts[3].trim().parse().unwrap_or(0);
+                    let startpc = if startpc_1based > 0 {
+                        startpc_1based - 1
+                    } else {
+                        0
+                    };
+                    let endpc = if endpc_1based > 0 {
+                        endpc_1based - 1
+                    } else {
+                        0
+                    };
                     proto.locals.push(LuacLocVarDump {
                         index: idx,
                         name,
@@ -225,6 +235,7 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                     });
                 }
             }
+
             Section::Upvalues => {
                 // E.g. "\t0\t_ENV\t1\t0"
                 let parts: Vec<&str> = line.split('\t').filter(|s| !s.is_empty()).collect();
@@ -251,6 +262,82 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
     LuacDump { functions }
 }
 
+/// Structured mismatch variants emitted by the canonical differential comparator.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OracleMismatch {
+    PrototypeCount {
+        actual: usize,
+        expected: usize,
+    },
+    Metadata {
+        proto: usize,
+        field: String,
+        actual: String,
+        expected: String,
+    },
+    InstructionCount {
+        proto: usize,
+        actual: usize,
+        expected: usize,
+    },
+    Mnemonic {
+        proto: usize,
+        pc: usize,
+        raw_word: u32,
+        actual: String,
+        expected: String,
+    },
+    Operand {
+        proto: usize,
+        pc: usize,
+        raw_word: u32,
+        index: usize,
+        actual: String,
+        expected: String,
+    },
+    Line {
+        proto: usize,
+        pc: usize,
+        actual: usize,
+        expected: usize,
+    },
+    ConstantCount {
+        proto: usize,
+        actual: usize,
+        expected: usize,
+    },
+    Constant {
+        proto: usize,
+        index: usize,
+        actual: String,
+        expected: String,
+    },
+    LocalCount {
+        proto: usize,
+        actual: usize,
+        expected: usize,
+    },
+    Local {
+        proto: usize,
+        index: usize,
+        field: String,
+        actual: String,
+        expected: String,
+    },
+    UpvalueCount {
+        proto: usize,
+        actual: usize,
+        expected: usize,
+    },
+    Upvalue {
+        proto: usize,
+        index: usize,
+        field: String,
+        actual: String,
+        expected: String,
+    },
+}
+
 /// Recursively collect all prototypes from a root prototype in preorder.
 fn flatten_protos<'a>(proto: &'a Prototype, acc: &mut Vec<&'a Prototype>) {
     acc.push(proto);
@@ -259,133 +346,319 @@ fn flatten_protos<'a>(proto: &'a Prototype, acc: &mut Vec<&'a Prototype>) {
     }
 }
 
-/// Perform field-by-field differential comparison between `luad`'s parsed `Chunk` and `luac -l -l`.
-pub fn assert_chunk_matches_luac(chunk: &Chunk, luac_output: &str) {
+/// Decode opcode mnemonic for a given dialect and instruction word.
+#[must_use]
+pub fn decode_instruction_mnemonic(dialect: &str, raw_word: u32) -> Option<&'static str> {
+    match dialect {
+        "lua5.1" => {
+            let op = (raw_word & 0x3F) as u8;
+            luad_dialect_lua51::Opcode51::from_u8(op).map(|o| o.name())
+        }
+        "lua5.2" => {
+            let op = (raw_word & 0x3F) as u8;
+            luad_dialect_lua52::Opcode52::from_u8(op).map(|o| o.name())
+        }
+        "lua5.3" => {
+            let op = (raw_word & 0x3F) as u8;
+            luad_dialect_lua53::Opcode53::from_u8(op).map(|o| o.name())
+        }
+        "lua5.4" => {
+            let op = (raw_word & 0x7F) as u8;
+            luad_dialect_lua54::Opcode54::from_u8(op).map(|o| o.name())
+        }
+        "lua5.5" => {
+            let op = (raw_word & 0x7F) as u8;
+            luad_dialect_lua55::Opcode55::from_u8(op).map(|o| o.name())
+        }
+        _ => None,
+    }
+}
+
+fn format_luac_string(bytes: &[u8]) -> String {
+    let mut out = String::from("\"");
+    for &b in bytes {
+        match b {
+            b'"' => out.push_str("\\\""),
+            b'\\' => out.push_str("\\\\"),
+            7 => out.push_str("\\a"),
+            8 => out.push_str("\\b"),
+            12 => out.push_str("\\f"),
+            b'\n' => out.push_str("\\n"),
+            b'\r' => out.push_str("\\r"),
+            b'\t' => out.push_str("\\t"),
+            11 => out.push_str("\\v"),
+            32..=126 => out.push(b as char),
+            _ => out.push_str(&format!("\\{:03}", b)),
+        }
+    }
+    out.push('"');
+    out
+}
+
+fn check_constant_matches(val: &luad_core::model::ConstantValue, exp_raw: &str) -> bool {
+    match val {
+        luad_core::model::ConstantValue::Nil => exp_raw.to_ascii_lowercase().contains("nil"),
+        luad_core::model::ConstantValue::Boolean(b) => {
+            let s = if *b { "true" } else { "false" };
+            exp_raw.to_ascii_lowercase().contains(s)
+        }
+        luad_core::model::ConstantValue::Integer { val, .. } => exp_raw.contains(&val.to_string()),
+        luad_core::model::ConstantValue::Float { val, .. } => {
+            let mut matched = false;
+            for token in exp_raw.split_whitespace() {
+                if let Ok(parsed_f) = token.parse::<f64>() {
+                    let diff = (parsed_f - *val).abs();
+                    let scale = val.abs().max(parsed_f.abs()).max(1.0);
+                    if diff / scale < 1e-5 {
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+            matched
+        }
+        luad_core::model::ConstantValue::ShortString(s)
+        | luad_core::model::ConstantValue::LongString(s) => {
+            let formatted_luac = format_luac_string(&s.raw_bytes);
+            exp_raw.contains(&formatted_luac) || exp_raw.contains(s.as_str())
+        }
+    }
+}
+
+/// Perform structured field-by-field differential comparison between `luad`'s parsed `Chunk` and `luac -l -l`.
+#[must_use]
+pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMismatch> {
+    let mut mismatches = Vec::new();
     let dump = parse_luac_dump(luac_output);
 
     let mut actual_protos = Vec::new();
     flatten_protos(&chunk.main_proto, &mut actual_protos);
 
-    assert_eq!(
-        actual_protos.len(),
-        dump.functions.len(),
-        "Prototype count mismatch: actual {}, luac dump {}",
-        actual_protos.len(),
-        dump.functions.len()
-    );
+    if actual_protos.len() != dump.functions.len() {
+        mismatches.push(OracleMismatch::PrototypeCount {
+            actual: actual_protos.len(),
+            expected: dump.functions.len(),
+        });
+        return mismatches;
+    }
 
     for (i, (actual, expected)) in actual_protos.iter().zip(dump.functions.iter()).enumerate() {
         // 1. Lines defined
-        assert_eq!(
-            actual.line_defined, expected.linedefined,
-            "Proto #{i} line_defined mismatch: actual {}, expected {}",
-            actual.line_defined, expected.linedefined
-        );
-        assert_eq!(
-            actual.last_line_defined, expected.lastlinedefined,
-            "Proto #{i} last_line_defined mismatch: actual {}, expected {}",
-            actual.last_line_defined, expected.lastlinedefined
-        );
+        if actual.line_defined != expected.linedefined {
+            mismatches.push(OracleMismatch::Metadata {
+                proto: i,
+                field: "line_defined".to_string(),
+                actual: actual.line_defined.to_string(),
+                expected: expected.linedefined.to_string(),
+            });
+        }
+        if actual.last_line_defined != expected.lastlinedefined {
+            mismatches.push(OracleMismatch::Metadata {
+                proto: i,
+                field: "last_line_defined".to_string(),
+                actual: actual.last_line_defined.to_string(),
+                expected: expected.lastlinedefined.to_string(),
+            });
+        }
 
         // 2. Parameters & stack
-        assert_eq!(
-            actual.numparams as usize, expected.numparams,
-            "Proto #{i} numparams mismatch: actual {}, expected {}",
-            actual.numparams, expected.numparams
-        );
-        assert_eq!(
-            (actual.is_vararg != 0),
-            expected.is_vararg,
-            "Proto #{i} is_vararg mismatch: actual {}, expected {}",
-            actual.is_vararg,
-            expected.is_vararg
-        );
-        assert_eq!(
-            actual.maxstacksize as usize, expected.maxstacksize,
-            "Proto #{i} maxstacksize mismatch: actual {}, expected {}",
-            actual.maxstacksize, expected.maxstacksize
-        );
+        if actual.numparams as usize != expected.numparams {
+            mismatches.push(OracleMismatch::Metadata {
+                proto: i,
+                field: "numparams".to_string(),
+                actual: actual.numparams.to_string(),
+                expected: expected.numparams.to_string(),
+            });
+        }
+        if (actual.is_vararg != 0) != expected.is_vararg {
+            mismatches.push(OracleMismatch::Metadata {
+                proto: i,
+                field: "is_vararg".to_string(),
+                actual: (actual.is_vararg != 0).to_string(),
+                expected: expected.is_vararg.to_string(),
+            });
+        }
+        if actual.maxstacksize as usize != expected.maxstacksize {
+            mismatches.push(OracleMismatch::Metadata {
+                proto: i,
+                field: "maxstacksize".to_string(),
+                actual: actual.maxstacksize.to_string(),
+                expected: expected.maxstacksize.to_string(),
+            });
+        }
 
-        // 3. Instructions count and line numbers
-        assert_eq!(
-            actual.instructions.len(),
-            expected.instructions.len(),
-            "Proto #{i} instructions count mismatch: actual {}, expected {}",
-            actual.instructions.len(),
-            expected.instructions.len()
-        );
+        // 3. Instructions count, line numbers, and mnemonics
+        if actual.instructions.len() != expected.instructions.len() {
+            mismatches.push(OracleMismatch::InstructionCount {
+                proto: i,
+                actual: actual.instructions.len(),
+                expected: expected.instructions.len(),
+            });
+        } else {
+            for (pc, (act_inst, exp_inst)) in actual
+                .instructions
+                .iter()
+                .zip(expected.instructions.iter())
+                .enumerate()
+            {
+                let act_line = actual.get_line_for_pc(pc);
+                if exp_inst.line > 0 && act_line > 0 && act_line != exp_inst.line {
+                    mismatches.push(OracleMismatch::Line {
+                        proto: i,
+                        pc,
+                        actual: act_line,
+                        expected: exp_inst.line,
+                    });
+                }
 
-        for (pc, (act_inst, exp_inst)) in actual
-            .instructions
-            .iter()
-            .zip(expected.instructions.iter())
-            .enumerate()
-        {
-            assert_eq!(
-                act_inst.pc, exp_inst.pc,
-                "Proto #{i} PC mismatch at instruction #{pc}"
-            );
-            let act_line = actual.get_line_for_pc(pc);
-            if exp_inst.line > 0 && act_line > 0 {
-                assert_eq!(
-                    act_line, exp_inst.line,
-                    "Proto #{i} line mismatch at PC {pc}: actual {}, expected {}",
-                    act_line, exp_inst.line
-                );
+                if let Some(act_mnem) =
+                    decode_instruction_mnemonic(&chunk.dialect, act_inst.raw_word)
+                {
+                    if !act_mnem.eq_ignore_ascii_case(&exp_inst.mnemonic) {
+                        mismatches.push(OracleMismatch::Mnemonic {
+                            proto: i,
+                            pc,
+                            raw_word: act_inst.raw_word,
+                            actual: act_mnem.to_string(),
+                            expected: exp_inst.mnemonic.clone(),
+                        });
+                    }
+                }
             }
         }
 
-        // 4. Constants count
-        assert_eq!(
-            actual.constants.len(),
-            expected.constants.len(),
-            "Proto #{i} constants count mismatch: actual {}, expected {}",
-            actual.constants.len(),
-            expected.constants.len()
-        );
-
-        // 5. Locals count and names
-        assert_eq!(
-            actual.loc_vars.len(),
-            expected.locals.len(),
-            "Proto #{i} locals count mismatch: actual {}, expected {}",
-            actual.loc_vars.len(),
-            expected.locals.len()
-        );
-        for (loc_idx, (act_loc, exp_loc)) in actual
-            .loc_vars
-            .iter()
-            .zip(expected.locals.iter())
-            .enumerate()
-        {
-            assert_eq!(
-                act_loc.name.as_str(),
-                exp_loc.name.as_str(),
-                "Proto #{i} local #{loc_idx} name mismatch"
-            );
-        }
-
-        // 6. Upvalues count and names
-        assert_eq!(
-            actual.upvalues.len(),
-            expected.upvalues.len(),
-            "Proto #{i} upvalues count mismatch: actual {}, expected {}",
-            actual.upvalues.len(),
-            expected.upvalues.len()
-        );
-        for (up_idx, (act_up, exp_up)) in actual
-            .upvalues
-            .iter()
-            .zip(expected.upvalues.iter())
-            .enumerate()
-        {
-            if let Some(act_name) = &act_up.name {
-                assert_eq!(
-                    act_name.as_str(),
-                    exp_up.name.as_str(),
-                    "Proto #{i} upvalue #{up_idx} name mismatch"
-                );
+        // 4. Constants count and values
+        if actual.constants.len() != expected.constants.len() {
+            mismatches.push(OracleMismatch::ConstantCount {
+                proto: i,
+                actual: actual.constants.len(),
+                expected: expected.constants.len(),
+            });
+        } else {
+            for (c_idx, act_c) in actual.constants.iter().enumerate() {
+                if let Some(exp_c) = expected.constants.get(c_idx) {
+                    if !check_constant_matches(&act_c.value, &exp_c.raw_text) {
+                        mismatches.push(OracleMismatch::Constant {
+                            proto: i,
+                            index: c_idx,
+                            actual: format!("{:?}", act_c.value),
+                            expected: exp_c.raw_text.clone(),
+                        });
+                    }
+                }
             }
         }
+
+        // 5. Locals count and debug info
+        if actual.loc_vars.len() != expected.locals.len() {
+            mismatches.push(OracleMismatch::LocalCount {
+                proto: i,
+                actual: actual.loc_vars.len(),
+                expected: expected.locals.len(),
+            });
+        } else {
+            for (loc_idx, (act_loc, exp_loc)) in actual
+                .loc_vars
+                .iter()
+                .zip(expected.locals.iter())
+                .enumerate()
+            {
+                if act_loc.name.as_str() != exp_loc.name.as_str() {
+                    mismatches.push(OracleMismatch::Local {
+                        proto: i,
+                        index: loc_idx,
+                        field: "name".to_string(),
+                        actual: act_loc.name.as_str().to_string(),
+                        expected: exp_loc.name.clone(),
+                    });
+                }
+                if act_loc.startpc != exp_loc.startpc {
+                    mismatches.push(OracleMismatch::Local {
+                        proto: i,
+                        index: loc_idx,
+                        field: "startpc".to_string(),
+                        actual: act_loc.startpc.to_string(),
+                        expected: exp_loc.startpc.to_string(),
+                    });
+                }
+                if act_loc.endpc != exp_loc.endpc {
+                    mismatches.push(OracleMismatch::Local {
+                        proto: i,
+                        index: loc_idx,
+                        field: "endpc".to_string(),
+                        actual: act_loc.endpc.to_string(),
+                        expected: exp_loc.endpc.to_string(),
+                    });
+                }
+            }
+        }
+
+        // 6. Upvalues count and debug info
+        if actual.upvalues.len() != expected.upvalues.len() {
+            mismatches.push(OracleMismatch::UpvalueCount {
+                proto: i,
+                actual: actual.upvalues.len(),
+                expected: expected.upvalues.len(),
+            });
+        } else {
+            for (up_idx, (act_up, exp_up)) in actual
+                .upvalues
+                .iter()
+                .zip(expected.upvalues.iter())
+                .enumerate()
+            {
+                if let Some(act_name) = &act_up.name {
+                    if act_name.as_str() != exp_up.name.as_str() {
+                        mismatches.push(OracleMismatch::Upvalue {
+                            proto: i,
+                            index: up_idx,
+                            field: "name".to_string(),
+                            actual: act_name.as_str().to_string(),
+                            expected: exp_up.name.clone(),
+                        });
+                    }
+                }
+                if let Some(exp_instack) = exp_up.instack {
+                    if act_up.instack != exp_instack {
+                        mismatches.push(OracleMismatch::Upvalue {
+                            proto: i,
+                            index: up_idx,
+                            field: "instack".to_string(),
+                            actual: act_up.instack.to_string(),
+                            expected: exp_instack.to_string(),
+                        });
+                    }
+                }
+                if let Some(exp_idx) = exp_up.idx {
+                    if act_up.idx != exp_idx {
+                        mismatches.push(OracleMismatch::Upvalue {
+                            proto: i,
+                            index: up_idx,
+                            field: "idx".to_string(),
+                            actual: act_up.idx.to_string(),
+                            expected: exp_idx.to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    mismatches
+}
+
+/// Perform field-by-field differential comparison between `luad`'s parsed `Chunk` and `luac -l -l`.
+pub fn assert_chunk_matches_luac(chunk: &Chunk, luac_output: &str) {
+    let mismatches = compare_chunk_with_luac(chunk, luac_output);
+    if !mismatches.is_empty() {
+        let mut msg = format!(
+            "Canonical differential oracle detected {} mismatch(es) for dialect '{}':\n",
+            mismatches.len(),
+            chunk.dialect
+        );
+        for (idx, m) in mismatches.iter().enumerate() {
+            msg.push_str(&format!("  {}. {:?}\n", idx + 1, m));
+        }
+        panic!("{msg}");
     }
 }

@@ -9,6 +9,7 @@ This plan is intentionally ordered. Do not begin composable-workflow features, n
 Primary references:
 
 - [Correctness review](REVIEW-2026-08-22.md)
+- [TP-Link Lua 5.1 field report](FIELD-REPORT-TP-LINK-LUA51.md)
 - [Architecture and invariants](../ARCHITECTURE.md)
 - [Product requirements](../PRD.md)
 - [Roadmap](../ROADMAP.md)
@@ -57,6 +58,8 @@ Disposition:
 5. Do not update capability support tiers until evidence gates pass.
 6. Do not broaden refactors while repairing a gate unless necessary to make the gate testable.
 7. Record official-source references and exact fixture/tool hashes in test evidence.
+8. Never assume the developer host's integer, `size_t`, instruction, number, or endian layout matches the chunk header.
+9. Distinguish stock dialect behavior from LNUM or other vendor-profile behavior in parsing, output, evidence, and capabilities.
 
 ## Gate 0: Downgrade unsupported claims immediately
 
@@ -232,6 +235,135 @@ Mark historical unknowns as unknown and regenerate them under the verified proce
 
 Suggested CI jobs: `oracle-toolchains` and per-dialect oracle gates.
 
+## Gate 3A: Prove embedded Lua 5.1 layouts and profiles
+
+### Purpose
+
+Prevent parser behavior from depending on the host that built `luad`. The TP-Link field report demonstrated 252/252 failures because a declared 32-bit `size_t` was discarded and string lengths were read as 64-bit.
+
+### Layout model
+
+Create one validated Lua 5.1 layout value from the header and thread it through all parsing that depends on representation:
+
+- endianness;
+- `sizeof(int)`;
+- `sizeof(size_t)`;
+- `sizeof(Instruction)`;
+- `sizeof(lua_Number)`;
+- integral-number flag;
+- resolved stock/vendor profile.
+
+Audit every fixed-width read in the dialect. String lengths use the declared `size_t`; counts and other serialized values must use the width defined by the official format rather than a convenient Rust type.
+
+Reject unsupported sizes with an exact header-field diagnostic. Checked conversion to `usize` must occur only after width-aware decoding and configured-limit validation.
+
+### Stock versus LNUM
+
+Treat LNUM tag 9 as a declared or evidence-backed vendor profile, not implicit stock Lua 5.1 support. The selected profile must be present in diagnostics, JSON, capabilities, fixture evidence, and future interpretation-scoped artifact references.
+
+Audit the complete LNUM patch/runtime behavior used by the fixture; accepting one tag is insufficient if numeric representation or other tags also differ.
+
+### Fixtures
+
+At minimum:
+
+- stock Lua 5.1 with 32-bit `size_t`, debug and stripped;
+- stock Lua 5.1 with 64-bit `size_t`, debug and stripped;
+- LNUM/profile fixture containing tag 9;
+- strings around short/long and allocation-limit boundaries;
+- nested prototypes and closure captures;
+- alternate `lua_Number` representation supported by the capability claim;
+- big-endian fixture if advertised.
+
+If the TP-Link corpus is private, create a minimal legally redistributable reproducer and record only aggregate corpus hashes/results.
+
+### Exact diagnostics
+
+Parser errors must preserve the deepest offending byte offset when wrapped with prototype/field context. Add tests that corrupt a known string length and constant tag and assert:
+
+- exact absolute byte offset;
+- prototype path and field path;
+- diagnostic code and exit code;
+- identical location in structured and human output.
+
+### Acceptance
+
+- The pre-fix parser fails the 32-bit fixture; the corrected parser passes it.
+- A negative control that forces 64-bit string-length decoding fails at the string-length field rather than a later constant.
+- Stock parsing does not silently accept LNUM-only tags.
+- The reported private corpus remains 252/252 parseable under its explicit profile.
+- Capability output enumerates proven layout/profile coverage instead of saying only `lua5.1`.
+
+Suggested CI jobs: `gate-layout-lua51-32`, `gate-layout-lua51-64`, and `gate-profile-lua51-lnum`.
+
+## Gate 3B: Model Lua 5.1 closure bindings as non-executable facts
+
+### Purpose
+
+Lua 5.1 encodes `nups` binding descriptors in the physical words following `CLOSURE`. They are consumed by closure construction and are not independently dispatched VM instructions.
+
+### Model
+
+- Preserve descriptor raw words, source ranges, and physical PCs.
+- Add an instruction role distinguishing executable words from closure-binding descriptors.
+- Attach an ordered `UpvalueBinding` list to the preceding `CLOSURE` semantic record.
+- Represent each source as parent register or parent upvalue at the closure site.
+- Preserve the target child prototype and child upvalue index.
+- Exclude descriptor words from standalone use/def effects, explanations, CFG blocks, and ordinary execution edges.
+- Decide and document whether the owning `CLOSURE` has ordinary reads in addition to a distinct capture relation; prove that decision against VM behavior.
+
+### Validation
+
+- The number of descriptors equals the child prototype's upvalue count.
+- Each descriptor uses an allowed `MOVE` or `GETUPVAL` form.
+- Descriptor operands are in range.
+- Jumps and block entries cannot target the middle of a binding group.
+- Truncation within the binding group reports the exact missing descriptor.
+
+### Capture xrefs
+
+Add typed relations:
+
+```text
+parent register at closure PC → child upvalue
+parent upvalue at closure PC  → child upvalue
+closure instruction           → child prototype
+```
+
+A bare register index is not a durable value identity; include the prototype and closure PC. Extend the existing xref/export model first. A future `upvalues` command may be a renderer over these facts, not a separate analysis implementation.
+
+### Acceptance
+
+- A fixture with both descriptor forms renders them as captures, never executable copies.
+- Descriptor words create no false register writes or CFG nodes.
+- Forward and inverse capture queries reconstruct a multi-hop upvalue chain.
+- Removing or changing one descriptor produces a specific validation/oracle mismatch.
+
+Suggested CI job: `gate-closures-lua51`.
+
+## Gate 3C: Resolve constant-bearing operands consistently
+
+### Purpose
+
+Make common firmware-analysis work possible without manual constant-table cross-referencing.
+
+### Work
+
+- Resolve constant references from typed dialect operand metadata, not an ad hoc mnemonic list.
+- Cover `LOADK`, globals, RK operands, table operations, comparisons/arithmetic, and vendor-profile numeric constants where applicable.
+- Preserve constant index and stable ID alongside the resolved value.
+- Emit a safely escaped, bounded preview in text.
+- Emit a structured resolved constant in JSON/export, including raw length and exact numeric representation.
+- Ensure constant previews obey hostile-string and output-size policies.
+
+### Acceptance
+
+- A fixture containing a hardcoded key can be followed from `LOADK` to its exact constant without a second manual table lookup.
+- Every operand classified as constant-bearing has either a resolved value or an explicit diagnostic explaining why not.
+- Resolution is identical across disassembly, exact retrieval, explanation, and export.
+
+Suggested CI job: `gate-resolved-constants`.
+
 ## Gate 4: Correct CFG dominators and validation preconditions
 
 ### Dominators
@@ -377,7 +509,7 @@ Recommended order:
 4. Lua 5.3
 5. Lua 5.2
 
-Do not mechanically copy the 5.4 gate and assume equivalence. Each dialect needs its own official layout audit, golden words, negative controls, compiler evidence, round-trip proof, and validator preconditions.
+Urgent field fixes and regression gates such as Lua 5.1 32-bit `size_t` and closure bindings may land before full dialect promotion. Do not mechanically copy the 5.4 gate and assume equivalence. Each dialect needs its own official layout audit, golden words, negative controls, compiler evidence, round-trip proof, and validator preconditions.
 
 Before expanding beyond 5.4/5.5, resolve the product-positioning decision in `ROADMAP.md`; a practical reverse-engineering tool may prioritize LuaJIT and Luau instead.
 
@@ -402,6 +534,11 @@ static
 oracle-toolchains
 gate-oracle-negative-controls
 gate-facts-lua54
+gate-layout-lua51-32
+gate-layout-lua51-64
+gate-profile-lua51-lnum
+gate-closures-lua51
+gate-resolved-constants
 gate-analysis-cfg
 gate-lossless-lua54
 gate-effects-lua54          # may initially report not implemented, never supported

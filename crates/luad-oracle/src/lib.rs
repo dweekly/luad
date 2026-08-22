@@ -7,7 +7,12 @@ use tempfile::NamedTempFile;
 
 pub mod listing_parser;
 
-pub use listing_parser::{assert_chunk_matches_luac, parse_luac_dump, LuacDump, LuacProtoDump};
+pub use listing_parser::{
+    assert_chunk_matches_luac, compare_chunk_with_luac, decode_instruction_mnemonic,
+    parse_luac_dump, LuacConstDump, LuacDump, LuacInstDump, LuacLocVarDump, LuacProtoDump,
+    LuacUpvalDump, OracleMismatch,
+};
+
 use luad_core::limits::{ParseMode, ResourceLimits};
 use luad_core::model::Chunk;
 use luad_core::reader::SafeReader;
