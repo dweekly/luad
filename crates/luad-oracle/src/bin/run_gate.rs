@@ -1,12 +1,14 @@
 //! Executable gate runner CLI tool.
 //!
-//! Executes a GateSpec, emitting a verified GateResult, ReleaseManifest, probe rejection report, and logs.
+//! Executes a GateSpec, emitting and verifying on-disk GateResult, ReleaseManifest, probe rejection report, and logs.
 
 use luad_oracle::find_workspace_root;
 use luad_oracle::gate_runner::{
     assemble_release_manifest, execute_gate_spec, get_current_git_commit, is_git_dirty,
-    record_all_adversarial_probes, verify_gate_result, verify_release_manifest, GateSpec,
+    record_all_adversarial_probes, verify_gate_result, verify_release_manifest, GateResult,
+    GateSpec, ReleaseManifest,
 };
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
@@ -155,12 +157,12 @@ fn main() {
         exit(1);
     }
 
-    // Assemble and verify release manifest demo artifact
+    // Assemble and verify checkpoint manifest artifact
     let manifest_path = out_dir.join("release-manifest.json");
     match assemble_release_manifest(
-        &format!("release-{}", spec.gate_id),
-        "lua5.4.8",
-        "Lua 5.4.8",
+        &format!("checkpoint-{}", spec.gate_id),
+        "proof-harness-checkpoint-r1",
+        "R1-Harness-v1",
         &current_commit,
         !result.dirty,
         &[(result.clone(), spec.clone())],
@@ -171,7 +173,7 @@ fn main() {
                 &current_commit,
                 &[(result.clone(), spec.clone())],
             ) {
-                eprintln!("==> Failed to verify release manifest artifact: {e}");
+                eprintln!("==> Failed to verify checkpoint manifest artifact: {e}");
                 exit(1);
             }
             if let Ok(json_bytes) = serde_json::to_vec_pretty(&manifest) {
@@ -180,15 +182,15 @@ fn main() {
         }
         Err(e) => {
             if require_clean {
-                eprintln!("==> Failed to assemble release manifest: {e}");
+                eprintln!("==> Failed to assemble checkpoint manifest: {e}");
                 exit(1);
             }
         }
     }
 
-    // Record all 11 adversarial probes rejection report
+    // Record all adversarial probes rejection report
+    let probes_path = out_dir.join("probe-rejections.json");
     if record_probes {
-        let probes_path = out_dir.join("probe-rejections.json");
         if let Err(e) = record_all_adversarial_probes(&workspace_root, &probes_path) {
             eprintln!("==> Failed to record adversarial probe reports: {e}");
             exit(1);
@@ -199,9 +201,72 @@ fn main() {
         );
     }
 
+    // Re-read and re-verify written artifacts on disk
+    let disk_result_bytes = match std::fs::read(&result_path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("Error re-reading result artifact from disk: {e}");
+            exit(1);
+        }
+    };
+    let disk_result: GateResult = match serde_json::from_slice(&disk_result_bytes) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Error parsing on-disk GateResult JSON: {e}");
+            exit(1);
+        }
+    };
+    if disk_result.compute_hash() != result.compute_hash() {
+        eprintln!("Error: On-disk GateResult hash does not match in-memory result hash");
+        exit(1);
+    }
+
+    // Verify stdout and stderr logs on disk
+    let stdout_bytes = std::fs::read(out_dir.join("stdout.log")).unwrap_or_default();
+    let mut stdout_hasher = Sha256::new();
+    stdout_hasher.update(&stdout_bytes);
+    let disk_stdout_sha = format!("{:x}", stdout_hasher.finalize());
+    if disk_stdout_sha != disk_result.stdout_sha256 {
+        eprintln!("Error: stdout.log SHA-256 on disk does not match recorded result hash");
+        exit(1);
+    }
+
+    let stderr_bytes = std::fs::read(out_dir.join("stderr.log")).unwrap_or_default();
+    let mut stderr_hasher = Sha256::new();
+    stderr_hasher.update(&stderr_bytes);
+    let disk_stderr_sha = format!("{:x}", stderr_hasher.finalize());
+    if disk_stderr_sha != disk_result.stderr_sha256 {
+        eprintln!("Error: stderr.log SHA-256 on disk does not match recorded result hash");
+        exit(1);
+    }
+
+    // Re-verify on-disk manifest
+    let disk_manifest_bytes = match std::fs::read(&manifest_path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("Error re-reading manifest from disk: {e}");
+            exit(1);
+        }
+    };
+    let disk_manifest: ReleaseManifest = match serde_json::from_slice(&disk_manifest_bytes) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Error parsing on-disk ReleaseManifest JSON: {e}");
+            exit(1);
+        }
+    };
+    if let Err(e) = verify_release_manifest(
+        &disk_manifest,
+        &current_commit,
+        &[(disk_result.clone(), spec.clone())],
+    ) {
+        eprintln!("Error verifying on-disk ReleaseManifest: {e}");
+        exit(1);
+    }
+
     println!(
         "==> Gate '{}' PASSED: {} tests passed, 0 failed, 0 ignored.",
-        result.gate_id, result.passed_count
+        disk_result.gate_id, disk_result.passed_count
     );
     println!("==> GateSpec artifact: {}", spec_copy_path.display());
     println!("==> GateResult artifact: {}", result_path.display());

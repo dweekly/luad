@@ -10,6 +10,51 @@ use luad_oracle::gate_runner::{
 use std::fs;
 use tempfile::NamedTempFile;
 
+fn mock_valid_spec(gate_id: &str) -> GateSpec {
+    GateSpec {
+        schema_version: 1,
+        gate_id: gate_id.to_string(),
+        command_argv: vec!["cargo".to_string(), "test".to_string()],
+        expected_tests: vec!["test_sample".to_string()],
+        required_compiler_version: None,
+        required_compiler_sha256: None,
+        required_fixtures: vec![],
+        required_profile: None,
+        prerequisite_gates: vec![],
+        allowed_capability_mutations: vec![],
+    }
+}
+
+fn mock_valid_result(gate_id: &str) -> GateResult {
+    let spec = mock_valid_spec(gate_id);
+    GateResult {
+        schema_version: 1,
+        gate_id: gate_id.to_string(),
+        spec_hash: spec.compute_hash(),
+        command_argv: spec.command_argv,
+        exit_code: 0,
+        success: true,
+        enumerated_tests: vec!["test_sample".to_string()],
+        passed_count: 1,
+        failed_count: 0,
+        ignored_count: 0,
+        missing_expected_tests: vec![],
+        git_commit: "feedface00000000000000000000000000000000".to_string(),
+        dirty: false,
+        compiler_path: None,
+        compiler_version: None,
+        compiler_sha256: None,
+        profile: None,
+        fixture_hashes: vec![],
+        platform: "macos".to_string(),
+        arch: "aarch64".to_string(),
+        start_timestamp: "2026-08-22T12:00:00Z".to_string(),
+        end_timestamp: "2026-08-22T12:00:01Z".to_string(),
+        stdout_sha256: "abc".to_string(),
+        stderr_sha256: "def".to_string(),
+    }
+}
+
 #[test]
 fn test_probe_1_zero_tests_executed_rejected() {
     let root = find_workspace_root();
@@ -28,10 +73,13 @@ fn test_probe_1_zero_tests_executed_rejected() {
     };
 
     let res = execute_gate_spec(&spec, tmp.path(), &root, None);
-    match res {
-        Err(GateRunnerError::ZeroTestsExecuted(id)) => assert_eq!(id, "test-gate"),
-        other => panic!("Expected ZeroTestsExecuted error, got {other:?}"),
-    }
+    assert!(
+        matches!(
+            res,
+            Err(GateRunnerError::UntrustedRunner(..)) | Err(GateRunnerError::ZeroTestsExecuted(..))
+        ),
+        "Echo command must be rejected by trusted runner adapter: got {res:?}"
+    );
 }
 
 #[test]
@@ -64,29 +112,16 @@ fn test_probe_2_nonexistent_test_filter_rejected() {
 
 #[test]
 fn test_probe_3_ignored_test_rejected() {
-    let root = find_workspace_root();
-    let tmp = NamedTempFile::new().unwrap();
-    let spec = GateSpec {
-        schema_version: 1,
-        gate_id: "test-gate".to_string(),
-        command_argv: vec![
-            "echo".to_string(),
-            "test test_foo ... ok\ntest result: ok. 1 passed; 1 ignored; 0 failed".to_string(),
-        ],
-        expected_tests: vec!["test_foo".to_string()],
-        required_compiler_version: None,
-        required_compiler_sha256: None,
-        required_fixtures: vec![],
-        required_profile: None,
-        prerequisite_gates: vec![],
-        allowed_capability_mutations: vec![],
-    };
-
-    let res = execute_gate_spec(&spec, tmp.path(), &root, None);
+    let spec = mock_valid_spec("probe-3-ignored");
+    let mut fake_res = mock_valid_result("probe-3-ignored");
+    fake_res.ignored_count = 1;
+    fake_res.spec_hash = spec.compute_hash();
+    fake_res.success = false;
+    let res = verify_gate_result(&fake_res, &spec, None, false);
     match res {
         Err(GateRunnerError::SkippedTests(skipped, id)) => {
             assert_eq!(skipped, 1);
-            assert_eq!(id, "test-gate");
+            assert_eq!(id, "probe-3-ignored");
         }
         other => panic!("Expected SkippedTests error, got {other:?}"),
     }
@@ -124,6 +159,7 @@ fn test_probe_4_stale_git_commit_rejected() {
         compiler_path: None,
         compiler_version: None,
         compiler_sha256: None,
+        profile: None,
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "arm64".to_string(),
@@ -180,6 +216,7 @@ fn test_probe_5_dirty_result_rejected_for_promotion() {
         compiler_path: None,
         compiler_version: None,
         compiler_sha256: None,
+        profile: None,
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "arm64".to_string(),
@@ -237,7 +274,9 @@ fn test_probe_6_wrong_compiler_binary_sha256_rejected() {
         compiler_sha256: Some(
             "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string(),
         ),
+        profile: None,
         fixture_hashes: vec![],
+
         platform: "macos".to_string(),
         arch: "arm64".to_string(),
         start_timestamp: "0".to_string(),
@@ -294,6 +333,7 @@ fn test_probe_7_wrong_compiler_version_rejected() {
         compiler_path: Some("/usr/bin/luac".to_string()),
         compiler_version: Some("Lua 5.4.7".to_string()),
         compiler_sha256: None,
+        profile: None,
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "arm64".to_string(),
@@ -409,6 +449,7 @@ fn test_probe_10_mutated_result_after_manifest_assembly_rejected() {
         compiler_path: None,
         compiler_version: None,
         compiler_sha256: None,
+        profile: None,
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "arm64".to_string(),
@@ -471,6 +512,7 @@ fn test_probe_11_success_boolean_flip_rejected() {
         compiler_path: None,
         compiler_version: None,
         compiler_sha256: None,
+        profile: None,
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "arm64".to_string(),
@@ -482,8 +524,41 @@ fn test_probe_11_success_boolean_flip_rejected() {
 
     let verified = verify_gate_result(&flipped_result, &spec, None, false);
     assert!(
-        matches!(verified, Err(GateRunnerError::TamperDetected(..))),
-        "Flipped success boolean must be rejected by derived verifier"
+        matches!(
+            verified,
+            Err(GateRunnerError::TamperDetected(..))
+                | Err(GateRunnerError::NonzeroExitCode(..))
+                | Err(GateRunnerError::FailedTests(..))
+        ),
+        "Flipped success boolean must be rejected by verifier: got {verified:?}"
+    );
+}
+
+#[test]
+fn test_probe_12_printf_spoofed_libtest_output_rejected() {
+    let root = find_workspace_root();
+    let tmp = NamedTempFile::new().unwrap();
+    let spec = GateSpec {
+        schema_version: 1,
+        gate_id: "probe-12-printf-spoof".to_string(),
+        command_argv: vec![
+            "printf".to_string(),
+            "test fake_required_test ... ok\ntest result: ok. 1 passed; 0 failed; 0 ignored\n"
+                .to_string(),
+        ],
+        expected_tests: vec!["fake_required_test".to_string()],
+        required_compiler_version: None,
+        required_compiler_sha256: None,
+        required_fixtures: vec![],
+        required_profile: None,
+        prerequisite_gates: vec![],
+        allowed_capability_mutations: vec![],
+    };
+
+    let res = execute_gate_spec(&spec, tmp.path(), &root, None);
+    assert!(
+        matches!(res, Err(GateRunnerError::UntrustedRunner(..))),
+        "Printf spoofing libtest output must be rejected by trusted runner adapter: got {res:?}"
     );
 }
 
@@ -507,48 +582,73 @@ fn test_fixture_manifest_records_complete_provenance() {
     let fixtures = json["fixtures"].as_array().expect("fixtures array");
     assert_eq!(fixtures.len(), 50, "Must record all 50 fixtures");
 
+    let empty_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
     for f in fixtures {
         assert!(f["dialect"].as_str().is_some(), "dialect must be present");
         assert!(
             f["fixture_name"].as_str().is_some(),
             "fixture_name must be present"
         );
+
+        let src_path = f["source_path"].as_str().expect("source_path string");
         assert!(
-            f["source_path"].as_str().is_some(),
-            "source_path must be present"
+            root.join(src_path).exists(),
+            "source_path file must exist on disk"
         );
+
+        let bin_path = f["binary_path"].as_str().expect("binary_path string");
         assert!(
-            f["source_sha256"].as_str().is_some(),
-            "source_sha256 must be present"
+            root.join(bin_path).exists(),
+            "binary_path file must exist on disk"
         );
-        assert!(
-            f["binary_path"].as_str().is_some(),
-            "binary_path must be present"
-        );
-        assert!(
-            f["binary_sha256"].as_str().is_some(),
-            "binary_sha256 must be present"
-        );
-        assert!(
-            f["byte_length"].as_u64().is_some(),
-            "byte_length must be present"
-        );
+
+        let src_sha = f["source_sha256"].as_str().expect("source_sha256 string");
+        assert_ne!(src_sha, empty_hash, "source_sha256 must not be empty hash");
+
+        let bin_sha = f["binary_sha256"].as_str().expect("binary_sha256 string");
+        assert_ne!(bin_sha, empty_hash, "binary_sha256 must not be empty hash");
+
+        let byte_len = f["byte_length"].as_u64().expect("byte_length number");
+        assert!(byte_len > 0, "byte_length must be > 0");
+
         assert!(
             f["is_stripped"].as_bool().is_some(),
-            "is_stripped must be present"
+            "is_stripped must be boolean"
         );
+
+        let arc_url = f["source_archive_url"]
+            .as_str()
+            .expect("source_archive_url string");
         assert!(
-            f["source_archive_url"].as_str().is_some(),
-            "source_archive_url must be present"
+            arc_url.starts_with("https://www.lua.org/"),
+            "source_archive_url must be official lua.org URL"
         );
+
+        let arc_sha = f["source_archive_sha256"]
+            .as_str()
+            .expect("source_archive_sha256 string");
+        assert_ne!(
+            arc_sha, empty_hash,
+            "source_archive_sha256 must not be empty hash"
+        );
+
+        let comp_sha = f["compiler_binary_sha256"]
+            .as_str()
+            .expect("compiler_binary_sha256 string");
+        assert_ne!(
+            comp_sha, empty_hash,
+            "compiler_binary_sha256 must not be placeholder empty hash"
+        );
+
+        let comp_ver = f["compiler_version"]
+            .as_str()
+            .expect("compiler_version string");
         assert!(
-            f["source_archive_sha256"].as_str().is_some(),
-            "source_archive_sha256 must be present"
+            comp_ver.starts_with("Lua 5."),
+            "compiler_version must be official version string"
         );
-        assert!(
-            f["compiler_binary_sha256"].as_str().is_some(),
-            "compiler_binary_sha256 must be present"
-        );
+
         assert!(
             f["target_layout"].as_str().is_some(),
             "target_layout must be present"

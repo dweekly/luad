@@ -68,6 +68,7 @@ fn test_killer_probe_dirty_result_rejects_promotion() {
         compiler_path: None,
         compiler_version: Some("Lua 5.4.8".to_string()),
         compiler_sha256: None,
+        profile: None,
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "arm64".to_string(),
@@ -125,6 +126,7 @@ fn test_killer_probe_missing_prerequisite_result_rejects_verification() {
         compiler_path: None,
         compiler_version: None,
         compiler_sha256: None,
+        profile: None,
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "arm64".to_string(),
@@ -184,6 +186,7 @@ fn test_killer_probe_tampered_success_flag_rejects_verification() {
         compiler_path: None,
         compiler_version: None,
         compiler_sha256: None,
+        profile: None,
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "arm64".to_string(),
@@ -209,8 +212,11 @@ fn test_killer_probe_tampered_success_flag_rejects_verification() {
 
     let verify_res = verify_release_manifest(&manifest, "1111", &[(tampered_result, spec)]);
     assert!(
-        matches!(verify_res, Err(GateRunnerError::TamperDetected(..))),
-        "Tampered result must be rejected"
+        matches!(
+            verify_res,
+            Err(GateRunnerError::TamperDetected(..)) | Err(GateRunnerError::NonzeroExitCode(..))
+        ),
+        "Tampered result must be rejected: got {verify_res:?}"
     );
 }
 
@@ -246,6 +252,7 @@ fn test_killer_probe_unqualified_dialect_string_rejected() {
         compiler_path: None,
         compiler_version: None,
         compiler_sha256: None,
+        profile: None,
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "arm64".to_string(),

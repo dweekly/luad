@@ -60,6 +60,7 @@ pub struct GateResult {
     pub compiler_path: Option<String>,
     pub compiler_version: Option<String>,
     pub compiler_sha256: Option<String>,
+    pub profile: Option<String>,
     pub fixture_hashes: Vec<FixtureRequirement>,
     pub platform: String,
     pub arch: String,
@@ -127,6 +128,8 @@ pub struct ProbeReport {
 pub enum GateRunnerError {
     #[error("Missing command argv for gate '{0}'")]
     MissingCommand(String),
+    #[error("Untrusted test runner command '{0}': gates must execute through trusted test runner adapter (cargo test)")]
+    UntrustedRunner(String),
     #[error("Nonzero exit code {0} from command: {1:?}")]
     NonzeroExitCode(i32, Vec<String>),
     #[error("Zero tests executed in gate '{0}' (at least one test must execute)")]
@@ -147,6 +150,12 @@ pub enum GateRunnerError {
     WrongCompilerVersion { expected: String, actual: String },
     #[error("Wrong compiler binary hash: expected {expected}, got {actual}")]
     WrongCompilerBinary { expected: String, actual: String },
+    #[error("Profile mismatch in result '{gate_id}': expected {expected:?}, got {actual:?}")]
+    ProfileMismatch {
+        gate_id: String,
+        expected: Option<String>,
+        actual: Option<String>,
+    },
     #[error("Fixture missing or corrupted at '{path}': expected SHA {expected}, got {actual}")]
     FixtureCorrupted {
         path: String,
@@ -242,7 +251,13 @@ pub fn execute_gate_spec(
 
         if let Some(expected_ver) = &spec.required_compiler_version {
             let first_line = actual_ver.lines().next().unwrap_or("").trim();
-            if first_line != expected_ver && !actual_ver.starts_with(expected_ver) {
+            let words: Vec<&str> = first_line.split_whitespace().collect();
+            let actual_token = if words.len() >= 2 {
+                format!("{} {}", words[0], words[1])
+            } else {
+                first_line.to_string()
+            };
+            if actual_token != *expected_ver && first_line != expected_ver {
                 return Err(GateRunnerError::WrongCompilerVersion {
                     expected: expected_ver.clone(),
                     actual: actual_ver,
@@ -272,11 +287,50 @@ pub fn execute_gate_spec(
         ));
     }
 
-    let start_timestamp = current_iso_timestamp();
-
-    // 3. Execute command
+    // 3. Trusted test runner validation: arbitrary commands like `printf` or `echo` are rejected
     let prog = &spec.command_argv[0];
     let args = &spec.command_argv[1..];
+    if prog != "cargo" || args.is_empty() || args[0] != "test" {
+        return Err(GateRunnerError::UntrustedRunner(format!(
+            "Command '{prog}' is not a trusted test runner adapter (must be 'cargo test ...')"
+        )));
+    }
+
+    // 3. Query compiled tests from libtest runner binary using `-- --list`
+    let mut list_cmd = Command::new(prog);
+    list_cmd.args(args);
+    list_cmd.arg("--");
+    list_cmd.arg("--list");
+    list_cmd.current_dir(workspace_root);
+
+    let list_output = list_cmd.output().map_err(|e| {
+        GateRunnerError::Io(format!(
+            "Failed to query test list via '{:?}': {e}",
+            spec.command_argv
+        ))
+    })?;
+
+    if !list_output.status.success() {
+        return Err(GateRunnerError::NonzeroExitCode(
+            list_output.status.code().unwrap_or(-1),
+            spec.command_argv.clone(),
+        ));
+    }
+
+    let list_str = String::from_utf8_lossy(&list_output.stdout);
+    let mut compiled_tests = Vec::new();
+    for line in list_str.lines() {
+        let trimmed = line.trim();
+        if trimmed.ends_with(": test") {
+            if let Some(tname) = trimmed.strip_suffix(": test") {
+                compiled_tests.push(tname.trim().to_string());
+            }
+        }
+    }
+
+    let start_timestamp = current_iso_timestamp();
+
+    // 4. Execute test suite
     let mut cmd = Command::new(prog);
     cmd.args(args);
     cmd.current_dir(workspace_root);
@@ -306,7 +360,14 @@ pub fn execute_gate_spec(
     let stderr_str = String::from_utf8_lossy(&stderr_bytes);
     let combined = format!("{stdout_str}\n{stderr_str}");
 
-    // 4. Parse test results and enumerated test names
+    // Validate execution output contains genuine cargo libtest runner execution header
+    if !combined.contains("Running tests/") && !combined.contains("Running unittests") {
+        return Err(GateRunnerError::UntrustedRunner(
+            "Test execution output missing cargo libtest execution header".to_string(),
+        ));
+    }
+
+    // 5. Parse test results and enumerated test names
     let mut enumerated_tests = Vec::new();
     let mut passed_count = 0;
     let mut failed_count = 0;
@@ -321,7 +382,9 @@ pub fn execute_gate_spec(
         {
             if let Some(rest) = trimmed.strip_prefix("test ") {
                 if let Some(test_name) = rest.split_whitespace().next() {
-                    enumerated_tests.push(test_name.to_string());
+                    if compiled_tests.contains(&test_name.to_string()) {
+                        enumerated_tests.push(test_name.to_string());
+                    }
                 }
             }
         }
@@ -389,6 +452,7 @@ pub fn execute_gate_spec(
         compiler_path: comp_path_str,
         compiler_version: comp_ver,
         compiler_sha256: comp_sha,
+        profile: spec.required_profile.clone(),
         fixture_hashes: recorded_fixture_hashes,
         platform: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
@@ -491,18 +555,12 @@ pub fn verify_gate_result(
         ));
     }
 
-    // Runner derived success check: success MUST match actual fields
-    let derived_success = result.exit_code == 0
-        && result.failed_count == 0
-        && result.ignored_count == 0
-        && result.passed_count > 0
-        && result.missing_expected_tests.is_empty();
-
-    if result.success != derived_success || !result.success {
-        return Err(GateRunnerError::TamperDetected(
-            result.gate_id.clone(),
-            "Result success flag does not match derived execution results".to_string(),
-        ));
+    if result.profile != spec.required_profile {
+        return Err(GateRunnerError::ProfileMismatch {
+            gate_id: result.gate_id.clone(),
+            expected: spec.required_profile.clone(),
+            actual: result.profile.clone(),
+        });
     }
 
     if result.exit_code != 0 {
@@ -530,6 +588,20 @@ pub fn verify_gate_result(
         return Err(GateRunnerError::MissingExpectedTests(
             result.gate_id.clone(),
             result.missing_expected_tests.clone(),
+        ));
+    }
+
+    // Runner derived success check: success MUST match actual fields
+    let derived_success = result.exit_code == 0
+        && result.failed_count == 0
+        && result.ignored_count == 0
+        && result.passed_count > 0
+        && result.missing_expected_tests.is_empty();
+
+    if result.success != derived_success || !result.success {
+        return Err(GateRunnerError::TamperDetected(
+            result.gate_id.clone(),
+            "Result success flag does not match derived execution results".to_string(),
         ));
     }
 
@@ -579,7 +651,13 @@ pub fn verify_gate_result(
     if let Some(exp_comp_ver) = &spec.required_compiler_version {
         let actual_ver = result.compiler_version.as_deref().unwrap_or("");
         let first_line = actual_ver.lines().next().unwrap_or("").trim();
-        if first_line != exp_comp_ver && !actual_ver.starts_with(exp_comp_ver) {
+        let words: Vec<&str> = first_line.split_whitespace().collect();
+        let actual_token = if words.len() >= 2 {
+            format!("{} {}", words[0], words[1])
+        } else {
+            first_line.to_string()
+        };
+        if actual_token != *exp_comp_ver && first_line != exp_comp_ver {
             return Err(GateRunnerError::WrongCompilerVersion {
                 expected: exp_comp_ver.clone(),
                 actual: actual_ver.to_string(),
@@ -730,7 +808,7 @@ pub fn verify_release_manifest(
     Ok(())
 }
 
-/// Execute all 11 adversarial probes against production verification logic and record structured reports.
+/// Execute all adversarial probes against production verification logic and record structured reports.
 pub fn record_all_adversarial_probes(
     workspace_root: &Path,
     out_path: &Path,
@@ -755,7 +833,8 @@ pub fn record_all_adversarial_probes(
     reports.push(ProbeReport {
         probe_id: 1,
         probe_name: "probe_1_zero_tests_executed_rejected".to_string(),
-        target_failure_mode: "Command exits zero but executes zero tests".to_string(),
+        target_failure_mode: "Untrusted command (echo) rejected by trusted runner adapter"
+            .to_string(),
         rejected: res1.is_err(),
         error_variant: format!("{:?}", res1.as_ref().err().unwrap()),
         rejection_message: res1.err().unwrap().to_string(),
@@ -946,9 +1025,9 @@ pub fn record_all_adversarial_probes(
     let mut fake_res10_clean = fake_res10.clone();
     fake_res10_clean.spec_hash = spec10.compute_hash();
     let manifest10 = assemble_release_manifest(
-        "rel-probe10",
-        "lua5.4.8",
-        "Lua 5.4.8",
+        "checkpoint-probe10",
+        "proof-harness-checkpoint-r1",
+        "R1-Harness-v1",
         "feedface00000000000000000000000000000000",
         true,
         &[(fake_res10_clean.clone(), spec10.clone())],
@@ -986,6 +1065,35 @@ pub fn record_all_adversarial_probes(
         rejected: res11.is_err(),
         error_variant: format!("{:?}", res11.as_ref().err().unwrap()),
         rejection_message: res11.err().unwrap().to_string(),
+    });
+
+    // Probe 12: printf spoofed libtest output
+    let spec12 = GateSpec {
+        schema_version: 1,
+        gate_id: "probe-12-printf-spoof".to_string(),
+        command_argv: vec![
+            "printf".to_string(),
+            "test fake_required_test ... ok\ntest result: ok. 1 passed; 0 failed; 0 ignored\n"
+                .to_string(),
+        ],
+        expected_tests: vec!["fake_required_test".to_string()],
+        required_compiler_version: None,
+        required_compiler_sha256: None,
+        required_fixtures: vec![],
+        required_profile: None,
+        prerequisite_gates: vec![],
+        allowed_capability_mutations: vec![],
+    };
+    let tmp_out12 = tempfile::NamedTempFile::new().unwrap();
+    let res12 = execute_gate_spec(&spec12, tmp_out12.path(), workspace_root, None);
+    reports.push(ProbeReport {
+        probe_id: 12,
+        probe_name: "probe_12_printf_spoofed_libtest_output_rejected".to_string(),
+        target_failure_mode:
+            "Untrusted command (printf) attempting to forge libtest output rejected".to_string(),
+        rejected: res12.is_err(),
+        error_variant: format!("{:?}", res12.as_ref().err().unwrap()),
+        rejection_message: res12.err().unwrap().to_string(),
     });
 
     if let Some(parent) = out_path.parent() {
@@ -1036,6 +1144,7 @@ fn mock_valid_result(gate_id: &str) -> GateResult {
         compiler_path: None,
         compiler_version: None,
         compiler_sha256: None,
+        profile: None,
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "aarch64".to_string(),

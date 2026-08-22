@@ -18,7 +18,7 @@
       "byte_length": 277,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
       "source_archive_sha256": "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
       "target_layout": "lua51-stock-64bit",
       "generator_revision": "5.1.5",
       "generation_command": "luac -o tests/fixtures/precompiled/lua51/hello.luac tests/fixtures/hello.lua"
@@ -36,7 +36,7 @@
       "byte_length": 173,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
       "source_archive_sha256": "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
       "target_layout": "lua51-stock-64bit",
       "generator_revision": "5.1.5",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua51/hello_stripped.luac tests/fixtures/hello.lua"
@@ -54,7 +54,7 @@
       "byte_length": 507,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
       "source_archive_sha256": "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
       "target_layout": "lua51-stock-64bit",
       "generator_revision": "5.1.5",
       "generation_command": "luac -o tests/fixtures/precompiled/lua51/control_flow.luac tests/fixtures/control_flow.lua"
@@ -72,7 +72,7 @@
       "byte_length": 227,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
       "source_archive_sha256": "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
       "target_layout": "lua51-stock-64bit",
       "generator_revision": "5.1.5",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua51/control_flow_stripped.luac tests/fixtures/control_flow.lua"
@@ -90,7 +90,7 @@
       "byte_length": 749,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
       "source_archive_sha256": "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
       "target_layout": "lua51-stock-64bit",
       "generator_revision": "5.1.5",
       "generation_command": "luac -o tests/fixtures/precompiled/lua51/closures.luac tests/fixtures/closures.lua"
@@ -108,7 +108,7 @@
       "byte_length": 373,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
       "source_archive_sha256": "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
       "target_layout": "lua51-stock-64bit",
       "generator_revision": "5.1.5",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua51/closures_stripped.luac tests/fixtures/closures.lua"
@@ -126,7 +126,7 @@
       "byte_length": 623,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
       "source_archive_sha256": "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
       "target_layout": "lua51-stock-64bit",
       "generator_revision": "5.1.5",
       "generation_command": "luac -o tests/fixtures/precompiled/lua51/tables.luac tests/fixtures/tables.lua"
@@ -144,7 +144,7 @@
       "byte_length": 409,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
       "source_archive_sha256": "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
       "target_layout": "lua51-stock-64bit",
       "generator_revision": "5.1.5",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua51/tables_stripped.luac tests/fixtures/tables.lua"
@@ -162,7 +162,7 @@
       "byte_length": 404,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
       "source_archive_sha256": "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
       "target_layout": "lua51-stock-64bit",
       "generator_revision": "5.1.5",
       "generation_command": "luac -o tests/fixtures/precompiled/lua51/numerics.luac tests/fixtures/numerics.lua"
@@ -180,7 +180,7 @@
       "byte_length": 166,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
       "source_archive_sha256": "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
       "target_layout": "lua51-stock-64bit",
       "generator_revision": "5.1.5",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua51/numerics_stripped.luac tests/fixtures/numerics.lua"
@@ -198,7 +198,7 @@
       "byte_length": 301,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.2.4.tar.gz",
       "source_archive_sha256": "b9e2e4aad6789e395e14560423884764904d0fb8061b31e6797e3d673fe6eea8",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f9c391541b15f620a50bf07f729e3c72dd63aa5af0bad3722a939673588d6c0b",
       "target_layout": "lua52-stock-64bit",
       "generator_revision": "5.2.4",
       "generation_command": "luac -o tests/fixtures/precompiled/lua52/hello.luac tests/fixtures/hello.lua"
@@ -216,7 +216,7 @@
       "byte_length": 184,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.2.4.tar.gz",
       "source_archive_sha256": "b9e2e4aad6789e395e14560423884764904d0fb8061b31e6797e3d673fe6eea8",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f9c391541b15f620a50bf07f729e3c72dd63aa5af0bad3722a939673588d6c0b",
       "target_layout": "lua52-stock-64bit",
       "generator_revision": "5.2.4",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua52/hello_stripped.luac tests/fixtures/hello.lua"
@@ -234,7 +234,7 @@
       "byte_length": 523,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.2.4.tar.gz",
       "source_archive_sha256": "b9e2e4aad6789e395e14560423884764904d0fb8061b31e6797e3d673fe6eea8",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f9c391541b15f620a50bf07f729e3c72dd63aa5af0bad3722a939673588d6c0b",
       "target_layout": "lua52-stock-64bit",
       "generator_revision": "5.2.4",
       "generation_command": "luac -o tests/fixtures/precompiled/lua52/control_flow.luac tests/fixtures/control_flow.lua"
@@ -252,7 +252,7 @@
       "byte_length": 234,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.2.4.tar.gz",
       "source_archive_sha256": "b9e2e4aad6789e395e14560423884764904d0fb8061b31e6797e3d673fe6eea8",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f9c391541b15f620a50bf07f729e3c72dd63aa5af0bad3722a939673588d6c0b",
       "target_layout": "lua52-stock-64bit",
       "generator_revision": "5.2.4",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua52/control_flow_stripped.luac tests/fixtures/control_flow.lua"
@@ -270,7 +270,7 @@
       "byte_length": 857,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.2.4.tar.gz",
       "source_archive_sha256": "b9e2e4aad6789e395e14560423884764904d0fb8061b31e6797e3d673fe6eea8",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f9c391541b15f620a50bf07f729e3c72dd63aa5af0bad3722a939673588d6c0b",
       "target_layout": "lua52-stock-64bit",
       "generator_revision": "5.2.4",
       "generation_command": "luac -o tests/fixtures/precompiled/lua52/closures.luac tests/fixtures/closures.lua"
@@ -288,7 +288,7 @@
       "byte_length": 389,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.2.4.tar.gz",
       "source_archive_sha256": "b9e2e4aad6789e395e14560423884764904d0fb8061b31e6797e3d673fe6eea8",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f9c391541b15f620a50bf07f729e3c72dd63aa5af0bad3722a939673588d6c0b",
       "target_layout": "lua52-stock-64bit",
       "generator_revision": "5.2.4",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua52/closures_stripped.luac tests/fixtures/closures.lua"
@@ -306,7 +306,7 @@
       "byte_length": 677,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.2.4.tar.gz",
       "source_archive_sha256": "b9e2e4aad6789e395e14560423884764904d0fb8061b31e6797e3d673fe6eea8",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f9c391541b15f620a50bf07f729e3c72dd63aa5af0bad3722a939673588d6c0b",
       "target_layout": "lua52-stock-64bit",
       "generator_revision": "5.2.4",
       "generation_command": "luac -o tests/fixtures/precompiled/lua52/tables.luac tests/fixtures/tables.lua"
@@ -324,7 +324,7 @@
       "byte_length": 423,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.2.4.tar.gz",
       "source_archive_sha256": "b9e2e4aad6789e395e14560423884764904d0fb8061b31e6797e3d673fe6eea8",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f9c391541b15f620a50bf07f729e3c72dd63aa5af0bad3722a939673588d6c0b",
       "target_layout": "lua52-stock-64bit",
       "generator_revision": "5.2.4",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua52/tables_stripped.luac tests/fixtures/tables.lua"
@@ -342,7 +342,7 @@
       "byte_length": 428,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.2.4.tar.gz",
       "source_archive_sha256": "b9e2e4aad6789e395e14560423884764904d0fb8061b31e6797e3d673fe6eea8",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f9c391541b15f620a50bf07f729e3c72dd63aa5af0bad3722a939673588d6c0b",
       "target_layout": "lua52-stock-64bit",
       "generator_revision": "5.2.4",
       "generation_command": "luac -o tests/fixtures/precompiled/lua52/numerics.luac tests/fixtures/numerics.lua"
@@ -360,7 +360,7 @@
       "byte_length": 177,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.2.4.tar.gz",
       "source_archive_sha256": "b9e2e4aad6789e395e14560423884764904d0fb8061b31e6797e3d673fe6eea8",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f9c391541b15f620a50bf07f729e3c72dd63aa5af0bad3722a939673588d6c0b",
       "target_layout": "lua52-stock-64bit",
       "generator_revision": "5.2.4",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua52/numerics_stripped.luac tests/fixtures/numerics.lua"
@@ -378,7 +378,7 @@
       "byte_length": 261,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.3.6.tar.gz",
       "source_archive_sha256": "fc5fd69bb8736323f97bc3694106940cc687e78a4d97d896942683070ba9712c",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f78a04d412ca144c8aefe0275f74c5cde4dc83225996a71575be66ce581cfaa1",
       "target_layout": "lua53-stock-64bit",
       "generator_revision": "5.3.6",
       "generation_command": "luac -o tests/fixtures/precompiled/lua53/hello.luac tests/fixtures/hello.lua"
@@ -396,7 +396,7 @@
       "byte_length": 169,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.3.6.tar.gz",
       "source_archive_sha256": "fc5fd69bb8736323f97bc3694106940cc687e78a4d97d896942683070ba9712c",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f78a04d412ca144c8aefe0275f74c5cde4dc83225996a71575be66ce581cfaa1",
       "target_layout": "lua53-stock-64bit",
       "generator_revision": "5.3.6",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua53/hello_stripped.luac tests/fixtures/hello.lua"
@@ -414,7 +414,7 @@
       "byte_length": 475,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.3.6.tar.gz",
       "source_archive_sha256": "fc5fd69bb8736323f97bc3694106940cc687e78a4d97d896942683070ba9712c",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f78a04d412ca144c8aefe0275f74c5cde4dc83225996a71575be66ce581cfaa1",
       "target_layout": "lua53-stock-64bit",
       "generator_revision": "5.3.6",
       "generation_command": "luac -o tests/fixtures/precompiled/lua53/control_flow.luac tests/fixtures/control_flow.lua"
@@ -432,7 +432,7 @@
       "byte_length": 243,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.3.6.tar.gz",
       "source_archive_sha256": "fc5fd69bb8736323f97bc3694106940cc687e78a4d97d896942683070ba9712c",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f78a04d412ca144c8aefe0275f74c5cde4dc83225996a71575be66ce581cfaa1",
       "target_layout": "lua53-stock-64bit",
       "generator_revision": "5.3.6",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua53/control_flow_stripped.luac tests/fixtures/control_flow.lua"
@@ -450,7 +450,7 @@
       "byte_length": 669,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.3.6.tar.gz",
       "source_archive_sha256": "fc5fd69bb8736323f97bc3694106940cc687e78a4d97d896942683070ba9712c",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f78a04d412ca144c8aefe0275f74c5cde4dc83225996a71575be66ce581cfaa1",
       "target_layout": "lua53-stock-64bit",
       "generator_revision": "5.3.6",
       "generation_command": "luac -o tests/fixtures/precompiled/lua53/closures.luac tests/fixtures/closures.lua"
@@ -468,7 +468,7 @@
       "byte_length": 377,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.3.6.tar.gz",
       "source_archive_sha256": "fc5fd69bb8736323f97bc3694106940cc687e78a4d97d896942683070ba9712c",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f78a04d412ca144c8aefe0275f74c5cde4dc83225996a71575be66ce581cfaa1",
       "target_layout": "lua53-stock-64bit",
       "generator_revision": "5.3.6",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua53/closures_stripped.luac tests/fixtures/closures.lua"
@@ -486,7 +486,7 @@
       "byte_length": 539,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.3.6.tar.gz",
       "source_archive_sha256": "fc5fd69bb8736323f97bc3694106940cc687e78a4d97d896942683070ba9712c",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f78a04d412ca144c8aefe0275f74c5cde4dc83225996a71575be66ce581cfaa1",
       "target_layout": "lua53-stock-64bit",
       "generator_revision": "5.3.6",
       "generation_command": "luac -o tests/fixtures/precompiled/lua53/tables.luac tests/fixtures/tables.lua"
@@ -504,7 +504,7 @@
       "byte_length": 353,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.3.6.tar.gz",
       "source_archive_sha256": "fc5fd69bb8736323f97bc3694106940cc687e78a4d97d896942683070ba9712c",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f78a04d412ca144c8aefe0275f74c5cde4dc83225996a71575be66ce581cfaa1",
       "target_layout": "lua53-stock-64bit",
       "generator_revision": "5.3.6",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua53/tables_stripped.luac tests/fixtures/tables.lua"
@@ -522,7 +522,7 @@
       "byte_length": 380,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.3.6.tar.gz",
       "source_archive_sha256": "fc5fd69bb8736323f97bc3694106940cc687e78a4d97d896942683070ba9712c",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f78a04d412ca144c8aefe0275f74c5cde4dc83225996a71575be66ce581cfaa1",
       "target_layout": "lua53-stock-64bit",
       "generator_revision": "5.3.6",
       "generation_command": "luac -o tests/fixtures/precompiled/lua53/numerics.luac tests/fixtures/numerics.lua"
@@ -540,7 +540,7 @@
       "byte_length": 186,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.3.6.tar.gz",
       "source_archive_sha256": "fc5fd69bb8736323f97bc3694106940cc687e78a4d97d896942683070ba9712c",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "f78a04d412ca144c8aefe0275f74c5cde4dc83225996a71575be66ce581cfaa1",
       "target_layout": "lua53-stock-64bit",
       "generator_revision": "5.3.6",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua53/numerics_stripped.luac tests/fixtures/numerics.lua"
@@ -558,7 +558,7 @@
       "byte_length": 191,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.4.8.tar.gz",
       "source_archive_sha256": "a93b45579f18a6797f1f0a1c1d8aa49f191b7d53b9be00e5ce2813fbef0ee234",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",
       "target_layout": "lua54-stock-64bit",
       "generator_revision": "5.4.8",
       "generation_command": "luac -o tests/fixtures/precompiled/lua54/hello.luac tests/fixtures/hello.lua"
@@ -576,7 +576,7 @@
       "byte_length": 137,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.4.8.tar.gz",
       "source_archive_sha256": "a93b45579f18a6797f1f0a1c1d8aa49f191b7d53b9be00e5ce2813fbef0ee234",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",
       "target_layout": "lua54-stock-64bit",
       "generator_revision": "5.4.8",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua54/hello_stripped.luac tests/fixtures/hello.lua"
@@ -594,7 +594,7 @@
       "byte_length": 311,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.4.8.tar.gz",
       "source_archive_sha256": "a93b45579f18a6797f1f0a1c1d8aa49f191b7d53b9be00e5ce2813fbef0ee234",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",
       "target_layout": "lua54-stock-64bit",
       "generator_revision": "5.4.8",
       "generation_command": "luac -o tests/fixtures/precompiled/lua54/control_flow.luac tests/fixtures/control_flow.lua"
@@ -612,7 +612,7 @@
       "byte_length": 186,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.4.8.tar.gz",
       "source_archive_sha256": "a93b45579f18a6797f1f0a1c1d8aa49f191b7d53b9be00e5ce2813fbef0ee234",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",
       "target_layout": "lua54-stock-64bit",
       "generator_revision": "5.4.8",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua54/control_flow_stripped.luac tests/fixtures/control_flow.lua"
@@ -630,7 +630,7 @@
       "byte_length": 398,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.4.8.tar.gz",
       "source_archive_sha256": "a93b45579f18a6797f1f0a1c1d8aa49f191b7d53b9be00e5ce2813fbef0ee234",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",
       "target_layout": "lua54-stock-64bit",
       "generator_revision": "5.4.8",
       "generation_command": "luac -o tests/fixtures/precompiled/lua54/closures.luac tests/fixtures/closures.lua"
@@ -648,7 +648,7 @@
       "byte_length": 250,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.4.8.tar.gz",
       "source_archive_sha256": "a93b45579f18a6797f1f0a1c1d8aa49f191b7d53b9be00e5ce2813fbef0ee234",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",
       "target_layout": "lua54-stock-64bit",
       "generator_revision": "5.4.8",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua54/closures_stripped.luac tests/fixtures/closures.lua"
@@ -666,7 +666,7 @@
       "byte_length": 357,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.4.8.tar.gz",
       "source_archive_sha256": "a93b45579f18a6797f1f0a1c1d8aa49f191b7d53b9be00e5ce2813fbef0ee234",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",
       "target_layout": "lua54-stock-64bit",
       "generator_revision": "5.4.8",
       "generation_command": "luac -o tests/fixtures/precompiled/lua54/tables.luac tests/fixtures/tables.lua"
@@ -684,7 +684,7 @@
       "byte_length": 274,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.4.8.tar.gz",
       "source_archive_sha256": "a93b45579f18a6797f1f0a1c1d8aa49f191b7d53b9be00e5ce2813fbef0ee234",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",
       "target_layout": "lua54-stock-64bit",
       "generator_revision": "5.4.8",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua54/tables_stripped.luac tests/fixtures/tables.lua"
@@ -702,7 +702,7 @@
       "byte_length": 271,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.4.8.tar.gz",
       "source_archive_sha256": "a93b45579f18a6797f1f0a1c1d8aa49f191b7d53b9be00e5ce2813fbef0ee234",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",
       "target_layout": "lua54-stock-64bit",
       "generator_revision": "5.4.8",
       "generation_command": "luac -o tests/fixtures/precompiled/lua54/numerics.luac tests/fixtures/numerics.lua"
@@ -720,7 +720,7 @@
       "byte_length": 154,
       "source_archive_url": "https://www.lua.org/ftp/lua-5.4.8.tar.gz",
       "source_archive_sha256": "a93b45579f18a6797f1f0a1c1d8aa49f191b7d53b9be00e5ce2813fbef0ee234",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "compiler_binary_sha256": "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",
       "target_layout": "lua54-stock-64bit",
       "generator_revision": "5.4.8",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua54/numerics_stripped.luac tests/fixtures/numerics.lua"
@@ -736,11 +736,11 @@
       "compiler_version": "Lua 5.5.1",
       "compiler_flags": "-o <out> <src>",
       "byte_length": 208,
-      "source_archive_url": "https://www.lua.org/work/lua-5.5.0-work1.tar.gz",
-      "source_archive_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_archive_url": "https://www.lua.org/ftp/lua-5.5.1.tar.gz",
+      "source_archive_sha256": "c5d18d4511d7373f73ecffbb8997ef31e427771765c95a0ebef3967812903511",
+      "compiler_binary_sha256": "2e916949110e641c3aee9922e79d4d4f8e48e0fcfcc42cc5316721bed2cb34e0",
       "target_layout": "lua55-stock-64bit",
-      "generator_revision": "5.5.0-work1",
+      "generator_revision": "5.5.1",
       "generation_command": "luac -o tests/fixtures/precompiled/lua55/hello.luac tests/fixtures/hello.lua"
     },
     {
@@ -754,11 +754,11 @@
       "compiler_version": "Lua 5.5.1",
       "compiler_flags": "-s -o <out> <src>",
       "byte_length": 151,
-      "source_archive_url": "https://www.lua.org/work/lua-5.5.0-work1.tar.gz",
-      "source_archive_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_archive_url": "https://www.lua.org/ftp/lua-5.5.1.tar.gz",
+      "source_archive_sha256": "c5d18d4511d7373f73ecffbb8997ef31e427771765c95a0ebef3967812903511",
+      "compiler_binary_sha256": "2e916949110e641c3aee9922e79d4d4f8e48e0fcfcc42cc5316721bed2cb34e0",
       "target_layout": "lua55-stock-64bit",
-      "generator_revision": "5.5.0-work1",
+      "generator_revision": "5.5.1",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua55/hello_stripped.luac tests/fixtures/hello.lua"
     },
     {
@@ -772,11 +772,11 @@
       "compiler_version": "Lua 5.5.1",
       "compiler_flags": "-o <out> <src>",
       "byte_length": 306,
-      "source_archive_url": "https://www.lua.org/work/lua-5.5.0-work1.tar.gz",
-      "source_archive_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_archive_url": "https://www.lua.org/ftp/lua-5.5.1.tar.gz",
+      "source_archive_sha256": "c5d18d4511d7373f73ecffbb8997ef31e427771765c95a0ebef3967812903511",
+      "compiler_binary_sha256": "2e916949110e641c3aee9922e79d4d4f8e48e0fcfcc42cc5316721bed2cb34e0",
       "target_layout": "lua55-stock-64bit",
-      "generator_revision": "5.5.0-work1",
+      "generator_revision": "5.5.1",
       "generation_command": "luac -o tests/fixtures/precompiled/lua55/control_flow.luac tests/fixtures/control_flow.lua"
     },
     {
@@ -790,11 +790,11 @@
       "compiler_version": "Lua 5.5.1",
       "compiler_flags": "-s -o <out> <src>",
       "byte_length": 198,
-      "source_archive_url": "https://www.lua.org/work/lua-5.5.0-work1.tar.gz",
-      "source_archive_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_archive_url": "https://www.lua.org/ftp/lua-5.5.1.tar.gz",
+      "source_archive_sha256": "c5d18d4511d7373f73ecffbb8997ef31e427771765c95a0ebef3967812903511",
+      "compiler_binary_sha256": "2e916949110e641c3aee9922e79d4d4f8e48e0fcfcc42cc5316721bed2cb34e0",
       "target_layout": "lua55-stock-64bit",
-      "generator_revision": "5.5.0-work1",
+      "generator_revision": "5.5.1",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua55/control_flow_stripped.luac tests/fixtures/control_flow.lua"
     },
     {
@@ -808,11 +808,11 @@
       "compiler_version": "Lua 5.5.1",
       "compiler_flags": "-o <out> <src>",
       "byte_length": 409,
-      "source_archive_url": "https://www.lua.org/work/lua-5.5.0-work1.tar.gz",
-      "source_archive_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_archive_url": "https://www.lua.org/ftp/lua-5.5.1.tar.gz",
+      "source_archive_sha256": "c5d18d4511d7373f73ecffbb8997ef31e427771765c95a0ebef3967812903511",
+      "compiler_binary_sha256": "2e916949110e641c3aee9922e79d4d4f8e48e0fcfcc42cc5316721bed2cb34e0",
       "target_layout": "lua55-stock-64bit",
-      "generator_revision": "5.5.0-work1",
+      "generator_revision": "5.5.1",
       "generation_command": "luac -o tests/fixtures/precompiled/lua55/closures.luac tests/fixtures/closures.lua"
     },
     {
@@ -826,11 +826,11 @@
       "compiler_version": "Lua 5.5.1",
       "compiler_flags": "-s -o <out> <src>",
       "byte_length": 260,
-      "source_archive_url": "https://www.lua.org/work/lua-5.5.0-work1.tar.gz",
-      "source_archive_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_archive_url": "https://www.lua.org/ftp/lua-5.5.1.tar.gz",
+      "source_archive_sha256": "c5d18d4511d7373f73ecffbb8997ef31e427771765c95a0ebef3967812903511",
+      "compiler_binary_sha256": "2e916949110e641c3aee9922e79d4d4f8e48e0fcfcc42cc5316721bed2cb34e0",
       "target_layout": "lua55-stock-64bit",
-      "generator_revision": "5.5.0-work1",
+      "generator_revision": "5.5.1",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua55/closures_stripped.luac tests/fixtures/closures.lua"
     },
     {
@@ -844,11 +844,11 @@
       "compiler_version": "Lua 5.5.1",
       "compiler_flags": "-o <out> <src>",
       "byte_length": 369,
-      "source_archive_url": "https://www.lua.org/work/lua-5.5.0-work1.tar.gz",
-      "source_archive_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_archive_url": "https://www.lua.org/ftp/lua-5.5.1.tar.gz",
+      "source_archive_sha256": "c5d18d4511d7373f73ecffbb8997ef31e427771765c95a0ebef3967812903511",
+      "compiler_binary_sha256": "2e916949110e641c3aee9922e79d4d4f8e48e0fcfcc42cc5316721bed2cb34e0",
       "target_layout": "lua55-stock-64bit",
-      "generator_revision": "5.5.0-work1",
+      "generator_revision": "5.5.1",
       "generation_command": "luac -o tests/fixtures/precompiled/lua55/tables.luac tests/fixtures/tables.lua"
     },
     {
@@ -862,11 +862,11 @@
       "compiler_version": "Lua 5.5.1",
       "compiler_flags": "-s -o <out> <src>",
       "byte_length": 283,
-      "source_archive_url": "https://www.lua.org/work/lua-5.5.0-work1.tar.gz",
-      "source_archive_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_archive_url": "https://www.lua.org/ftp/lua-5.5.1.tar.gz",
+      "source_archive_sha256": "c5d18d4511d7373f73ecffbb8997ef31e427771765c95a0ebef3967812903511",
+      "compiler_binary_sha256": "2e916949110e641c3aee9922e79d4d4f8e48e0fcfcc42cc5316721bed2cb34e0",
       "target_layout": "lua55-stock-64bit",
-      "generator_revision": "5.5.0-work1",
+      "generator_revision": "5.5.1",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua55/tables_stripped.luac tests/fixtures/tables.lua"
     },
     {
@@ -880,11 +880,11 @@
       "compiler_version": "Lua 5.5.1",
       "compiler_flags": "-o <out> <src>",
       "byte_length": 291,
-      "source_archive_url": "https://www.lua.org/work/lua-5.5.0-work1.tar.gz",
-      "source_archive_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_archive_url": "https://www.lua.org/ftp/lua-5.5.1.tar.gz",
+      "source_archive_sha256": "c5d18d4511d7373f73ecffbb8997ef31e427771765c95a0ebef3967812903511",
+      "compiler_binary_sha256": "2e916949110e641c3aee9922e79d4d4f8e48e0fcfcc42cc5316721bed2cb34e0",
       "target_layout": "lua55-stock-64bit",
-      "generator_revision": "5.5.0-work1",
+      "generator_revision": "5.5.1",
       "generation_command": "luac -o tests/fixtures/precompiled/lua55/numerics.luac tests/fixtures/numerics.lua"
     },
     {
@@ -898,11 +898,11 @@
       "compiler_version": "Lua 5.5.1",
       "compiler_flags": "-s -o <out> <src>",
       "byte_length": 167,
-      "source_archive_url": "https://www.lua.org/work/lua-5.5.0-work1.tar.gz",
-      "source_archive_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "compiler_binary_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source_archive_url": "https://www.lua.org/ftp/lua-5.5.1.tar.gz",
+      "source_archive_sha256": "c5d18d4511d7373f73ecffbb8997ef31e427771765c95a0ebef3967812903511",
+      "compiler_binary_sha256": "2e916949110e641c3aee9922e79d4d4f8e48e0fcfcc42cc5316721bed2cb34e0",
       "target_layout": "lua55-stock-64bit",
-      "generator_revision": "5.5.0-work1",
+      "generator_revision": "5.5.1",
       "generation_command": "luac -s -o tests/fixtures/precompiled/lua55/numerics_stripped.luac tests/fixtures/numerics.lua"
     }
   ]

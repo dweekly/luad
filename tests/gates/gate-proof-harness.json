@@ -23,6 +23,7 @@
     "test_probe_9_mutated_fixture_rejected_before_evaluation",
     "test_probe_10_mutated_result_after_manifest_assembly_rejected",
     "test_probe_11_success_boolean_flip_rejected",
+    "test_probe_12_printf_spoofed_libtest_output_rejected",
     "test_fixture_manifest_records_complete_provenance"
   ],
   "required_compiler_version": null,
