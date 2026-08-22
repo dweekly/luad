@@ -18,6 +18,52 @@ fn print_usage() {
     );
 }
 
+fn resolve_compiler_path_for_spec(
+    spec: &GateSpec,
+    compiler_path: Option<&Path>,
+) -> Option<PathBuf> {
+    if let Some(cp) = compiler_path {
+        return Some(cp.to_path_buf());
+    }
+    if let Some(req_ver) = &spec.required_compiler_version {
+        let candidates = if req_ver.contains("5.4") {
+            vec![
+                PathBuf::from("/tmp/lua-tools/bin/luac5.4"),
+                PathBuf::from("/usr/local/bin/luac5.4"),
+                PathBuf::from("/opt/homebrew/bin/luac5.4"),
+            ]
+        } else if req_ver.contains("5.1") {
+            vec![
+                PathBuf::from("/tmp/lua-tools/bin/luac5.1"),
+                PathBuf::from("/usr/local/bin/luac5.1"),
+            ]
+        } else if req_ver.contains("5.2") {
+            vec![
+                PathBuf::from("/tmp/lua-tools/bin/luac5.2"),
+                PathBuf::from("/usr/local/bin/luac5.2"),
+            ]
+        } else if req_ver.contains("5.3") {
+            vec![
+                PathBuf::from("/tmp/lua-tools/bin/luac5.3"),
+                PathBuf::from("/usr/local/bin/luac5.3"),
+            ]
+        } else if req_ver.contains("5.5") {
+            vec![
+                PathBuf::from("/tmp/lua-tools/bin/luac5.5"),
+                PathBuf::from("/usr/local/bin/luac5.5"),
+            ]
+        } else {
+            vec![]
+        };
+        for cand in candidates {
+            if cand.exists() {
+                return Some(cand);
+            }
+        }
+    }
+    None
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut spec_path: Option<PathBuf> = None;
@@ -138,48 +184,8 @@ fn main() {
     }
 
     let result_path = out_dir.join("gate-result.json");
-    let mut resolved_compiler_path = compiler_path;
-    if resolved_compiler_path.is_none() {
-        if let Some(req_ver) = &spec.required_compiler_version {
-            let candidates = if req_ver.contains("5.4") {
-                vec![
-                    PathBuf::from("/tmp/lua-tools/bin/luac5.4"),
-                    PathBuf::from("/usr/local/bin/luac5.4"),
-                    PathBuf::from("/opt/homebrew/bin/luac5.4"),
-                ]
-            } else if req_ver.contains("5.1") {
-                vec![
-                    PathBuf::from("/tmp/lua-tools/bin/luac5.1"),
-                    PathBuf::from("/usr/local/bin/luac5.1"),
-                ]
-            } else if req_ver.contains("5.2") {
-                vec![
-                    PathBuf::from("/tmp/lua-tools/bin/luac5.2"),
-                    PathBuf::from("/usr/local/bin/luac5.2"),
-                ]
-            } else if req_ver.contains("5.3") {
-                vec![
-                    PathBuf::from("/tmp/lua-tools/bin/luac5.3"),
-                    PathBuf::from("/usr/local/bin/luac5.3"),
-                ]
-            } else if req_ver.contains("5.5") {
-                vec![
-                    PathBuf::from("/tmp/lua-tools/bin/luac5.5"),
-                    PathBuf::from("/usr/local/bin/luac5.5"),
-                ]
-            } else {
-                vec![]
-            };
-            for cand in candidates {
-                if cand.exists() {
-                    resolved_compiler_path = Some(cand);
-                    break;
-                }
-            }
-        }
-    }
-
-    let comp_ref: Option<&Path> = resolved_compiler_path.as_deref();
+    let resolved_comp = resolve_compiler_path_for_spec(&spec, compiler_path.as_deref());
+    let comp_ref: Option<&Path> = resolved_comp.as_deref();
 
     println!("==> Executing GateSpec '{}'...", spec.gate_id);
     let result = match execute_gate_spec(&spec, &result_path, &workspace_root, comp_ref) {
@@ -226,14 +232,21 @@ fn main() {
 
         let prereq_temp_dir = tempfile::tempdir().unwrap();
         let prereq_result_path = prereq_temp_dir.path().join("gate-result.json");
-        let prereq_result =
-            match execute_gate_spec(&prereq_spec, &prereq_result_path, &workspace_root, None) {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("Error executing prerequisite gate '{prereq_id}': {e}");
-                    exit(1);
-                }
-            };
+        let prereq_comp = resolve_compiler_path_for_spec(&prereq_spec, compiler_path.as_deref());
+        let prereq_comp_ref: Option<&Path> = prereq_comp.as_deref();
+
+        let prereq_result = match execute_gate_spec(
+            &prereq_spec,
+            &prereq_result_path,
+            &workspace_root,
+            prereq_comp_ref,
+        ) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("Error executing prerequisite gate '{prereq_id}': {e}");
+                exit(1);
+            }
+        };
         if let Err(e) = verify_gate_result(
             &prereq_result,
             &prereq_spec,
