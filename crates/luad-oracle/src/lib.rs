@@ -6,6 +6,7 @@ use std::process::Command;
 use tempfile::NamedTempFile;
 
 pub mod gate_runner;
+pub mod independent_lua54_oracle;
 pub mod listing_parser;
 
 pub use gate_runner::{

@@ -26,12 +26,35 @@ pub struct LuacProtoDump {
     pub upvalues: Vec<LuacUpvalDump>,
 }
 
+/// Typed expected operands for Lua 5.4 instructions.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TypedExpectedOperands54 {
+    Return0,
+    A { a: u8 },
+    Ax { ax: u32 },
+    SJ { sj: i32, target: Option<usize> },
+    AB { a: u8, b: u8 },
+    AsBx { a: u8, sbx: i32 },
+    ABx { a: u8, bx: u32 },
+    AC { a: u8, c: u8 },
+    Ak { a: u8, k: u8 },
+    ABk { a: u8, b: u8, k: u8 },
+    AsBk { a: u8, sb: i32, k: u8 },
+    ABsC { a: u8, b: u8, sc: i32 },
+    ABC { a: u8, b: u8, c: u8 },
+    ABCk { a: u8, b: u8, c: u8, k: bool },
+    AsBCk { a: u8, sb: i32, c: u8, k: u8 },
+    ABCKk { a: u8, b: u8, c: u8, k: u8 },
+    Invalid { raw_tokens: Vec<String> },
+}
+
 /// Structured instruction representation parsed from `luac -l -l`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LuacInstDump {
     pub pc: usize, // 0-based PC
     pub line: usize,
     pub mnemonic: String,
+    pub expected_operands: Option<TypedExpectedOperands54>,
     pub operands_raw: String,
     pub comment: Option<String>,
 }
@@ -198,15 +221,23 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
                         }
                     }
 
+                    let expected_operands = Some(parse_expected_operands_54(
+                        &mnemonic,
+                        &operands_raw,
+                        comment.as_deref(),
+                    ));
+
                     proto.instructions.push(LuacInstDump {
                         pc,
                         line: line_num,
                         mnemonic,
+                        expected_operands,
                         operands_raw,
                         comment,
                     });
                 }
             }
+
             Section::Constants => {
                 // E.g. "	0	S	\"hello\"" (Lua 5.4/5.5) or "	1	\"hello\"" (Lua 5.1-5.3)
                 let tokens: Vec<&str> = trimmed.split_whitespace().collect();
@@ -290,6 +321,289 @@ pub fn parse_luac_dump(output: &str) -> LuacDump {
     }
 
     LuacDump { functions }
+}
+
+/// Parse typed expected operands for Lua 5.4 instructions from string tokens.
+#[must_use]
+pub fn parse_expected_operands_54(
+    mnemonic: &str,
+    operands_raw: &str,
+    comment: Option<&str>,
+) -> TypedExpectedOperands54 {
+    let tokens: Vec<&str> = operands_raw.split_whitespace().collect();
+    let Some(op) = crate::independent_lua54_oracle::IndependentOpcode54::from_name(mnemonic) else {
+        return TypedExpectedOperands54::Invalid {
+            raw_tokens: tokens.into_iter().map(String::from).collect(),
+        };
+    };
+
+    use crate::independent_lua54_oracle::IndependentOpcode54 as Op54;
+
+    match op {
+        Op54::Return0 => {
+            if tokens.is_empty() {
+                TypedExpectedOperands54::Return0
+            } else {
+                TypedExpectedOperands54::Invalid {
+                    raw_tokens: tokens.into_iter().map(String::from).collect(),
+                }
+            }
+        }
+        Op54::Loadkx
+        | Op54::Loadfalse
+        | Op54::Lfalseskip
+        | Op54::Loadtrue
+        | Op54::Close
+        | Op54::Tbc
+        | Op54::Return1
+        | Op54::Varargprep => {
+            if tokens.len() == 1 {
+                if let Ok(a) = tokens[0].parse::<u8>() {
+                    return TypedExpectedOperands54::A { a };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+        Op54::Extraarg => {
+            if tokens.len() == 1 {
+                if let Ok(ax) = tokens[0].parse::<u32>() {
+                    return TypedExpectedOperands54::Ax { ax };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+        Op54::Jmp => {
+            if tokens.len() == 1 {
+                if let Ok(sj) = tokens[0].parse::<i32>() {
+                    let mut target = None;
+                    if let Some(c) = comment {
+                        if let Some(to_str) = c.strip_prefix("to ") {
+                            if let Ok(target_1based) = to_str.trim().parse::<usize>() {
+                                target = Some(if target_1based > 0 {
+                                    target_1based - 1
+                                } else {
+                                    0
+                                });
+                            }
+                        }
+                    }
+                    return TypedExpectedOperands54::SJ { sj, target };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+        Op54::Move
+        | Op54::Loadnil
+        | Op54::Getupval
+        | Op54::Setupval
+        | Op54::Unm
+        | Op54::Bnot
+        | Op54::Not
+        | Op54::Len
+        | Op54::Concat => {
+            if tokens.len() == 2 {
+                if let (Ok(a), Ok(b)) = (tokens[0].parse::<u8>(), tokens[1].parse::<u8>()) {
+                    return TypedExpectedOperands54::AB { a, b };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+        Op54::Loadi | Op54::Loadf => {
+            if tokens.len() == 2 {
+                if let (Ok(a), Ok(sbx)) = (tokens[0].parse::<u8>(), tokens[1].parse::<i32>()) {
+                    return TypedExpectedOperands54::AsBx { a, sbx };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+        Op54::Loadk
+        | Op54::Forloop
+        | Op54::Forprep
+        | Op54::Tforprep
+        | Op54::Tforloop
+        | Op54::Closure => {
+            if tokens.len() == 2 {
+                if let (Ok(a), Ok(bx)) = (tokens[0].parse::<u8>(), tokens[1].parse::<u32>()) {
+                    return TypedExpectedOperands54::ABx { a, bx };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+        Op54::Tforcall => {
+            if tokens.len() == 2 {
+                if let (Ok(a), Ok(c)) = (tokens[0].parse::<u8>(), tokens[1].parse::<u8>()) {
+                    return TypedExpectedOperands54::AC { a, c };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+        Op54::Test => {
+            if tokens.len() == 2 {
+                if let (Ok(a), Ok(k)) = (tokens[0].parse::<u8>(), tokens[1].parse::<u8>()) {
+                    return TypedExpectedOperands54::Ak { a, k };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+        Op54::Testset | Op54::Eq | Op54::Lt | Op54::Le | Op54::Eqk => {
+            if tokens.len() == 3 {
+                if let (Ok(a), Ok(b), Ok(k)) = (
+                    tokens[0].parse::<u8>(),
+                    tokens[1].parse::<u8>(),
+                    tokens[2].parse::<u8>(),
+                ) {
+                    return TypedExpectedOperands54::ABk { a, b, k };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+        Op54::Eqi | Op54::Lti | Op54::Lei | Op54::Gti | Op54::Gei => {
+            if tokens.len() == 3 {
+                if let (Ok(a), Ok(sb), Ok(k)) = (
+                    tokens[0].parse::<u8>(),
+                    tokens[1].parse::<i32>(),
+                    tokens[2].parse::<u8>(),
+                ) {
+                    return TypedExpectedOperands54::AsBk { a, sb, k };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+        Op54::Addi | Op54::Shri | Op54::Shli => {
+            if tokens.len() == 3 {
+                if let (Ok(a), Ok(b), Ok(sc)) = (
+                    tokens[0].parse::<u8>(),
+                    tokens[1].parse::<u8>(),
+                    tokens[2].parse::<i32>(),
+                ) {
+                    return TypedExpectedOperands54::ABsC { a, b, sc };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+        Op54::Gettabup
+        | Op54::Gettable
+        | Op54::Geti
+        | Op54::Getfield
+        | Op54::Newtable
+        | Op54::Addk
+        | Op54::Subk
+        | Op54::Mulk
+        | Op54::Modk
+        | Op54::Powk
+        | Op54::Divk
+        | Op54::Idivk
+        | Op54::Bandk
+        | Op54::Bork
+        | Op54::Bxork
+        | Op54::Add
+        | Op54::Sub
+        | Op54::Mul
+        | Op54::Mod
+        | Op54::Pow
+        | Op54::Div
+        | Op54::Idiv
+        | Op54::Band
+        | Op54::Bor
+        | Op54::Bxor
+        | Op54::Shl
+        | Op54::Shr
+        | Op54::Mmbin
+        | Op54::Call => {
+            if tokens.len() == 3 {
+                if let (Ok(a), Ok(b), Ok(c)) = (
+                    tokens[0].parse::<u8>(),
+                    tokens[1].parse::<u8>(),
+                    tokens[2].parse::<u8>(),
+                ) {
+                    return TypedExpectedOperands54::ABC { a, b, c };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+        Op54::Settabup
+        | Op54::Settable
+        | Op54::Seti
+        | Op54::Setfield
+        | Op54::SelfOp
+        | Op54::Tailcall
+        | Op54::Return
+        | Op54::Setlist
+        | Op54::Vararg => {
+            if tokens.len() == 3 {
+                let tok2 = tokens[2];
+                let (c_str, k) = if let Some(stripped) = tok2.strip_suffix('k') {
+                    (stripped, true)
+                } else {
+                    (tok2, false)
+                };
+                if let (Ok(a), Ok(b), Ok(c)) = (
+                    tokens[0].parse::<u8>(),
+                    tokens[1].parse::<u8>(),
+                    c_str.parse::<u8>(),
+                ) {
+                    return TypedExpectedOperands54::ABCk { a, b, c, k };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+        Op54::Mmbini => {
+            if tokens.len() == 4 {
+                if let (Ok(a), Ok(sb), Ok(c), Ok(k)) = (
+                    tokens[0].parse::<u8>(),
+                    tokens[1].parse::<i32>(),
+                    tokens[2].parse::<u8>(),
+                    tokens[3].parse::<u8>(),
+                ) {
+                    return TypedExpectedOperands54::AsBCk { a, sb, c, k };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+        Op54::Mmbink => {
+            if tokens.len() == 4 {
+                if let (Ok(a), Ok(b), Ok(c), Ok(k)) = (
+                    tokens[0].parse::<u8>(),
+                    tokens[1].parse::<u8>(),
+                    tokens[2].parse::<u8>(),
+                    tokens[3].parse::<u8>(),
+                ) {
+                    return TypedExpectedOperands54::ABCKk { a, b, c, k };
+                }
+            }
+            TypedExpectedOperands54::Invalid {
+                raw_tokens: tokens.into_iter().map(String::from).collect(),
+            }
+        }
+    }
 }
 
 /// Structured mismatch variants emitted by the canonical differential comparator.
@@ -891,7 +1205,7 @@ fn check_constant_matches_exact(
     match val {
         luad_core::model::ConstantValue::Nil => {
             if let Some(tag) = exp_c.tag {
-                if tag != 'N' && exp_str != "nil" {
+                if tag != 'N' {
                     mismatches.push(OracleMismatch::ConstantTagMismatch {
                         proto: proto_idx,
                         index: c_idx,
@@ -910,6 +1224,7 @@ fn check_constant_matches_exact(
                 });
             }
         }
+
         luad_core::model::ConstantValue::Boolean(b) => {
             if let Some(tag) = exp_c.tag {
                 if tag != 'B' {
@@ -1213,7 +1528,9 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                 .enumerate()
             {
                 let act_name = act_up.name.as_ref().map(|s| s.as_str()).unwrap_or("");
-                if act_name != exp_up.name.as_str() {
+                let exp_name = exp_up.name.as_str();
+                let names_match = act_name == exp_name || (exp_name == "-" && act_name.is_empty());
+                if !names_match {
                     mismatches.push(OracleMismatch::Upvalue {
                         proto: i,
                         index: up_idx,
@@ -1222,6 +1539,7 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                         expected: exp_up.name.clone(),
                     });
                 }
+
                 if let Some(exp_instack) = exp_up.instack {
                     if act_up.instack != exp_instack {
                         mismatches.push(OracleMismatch::Upvalue {
@@ -1251,74 +1569,7 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
     mismatches
 }
 
-/// Strict typed operand field verification and field-consumption accounting for Lua 5.4.8.
-struct InstructionFieldChecker<'a> {
-    proto: usize,
-    pc: usize,
-    raw_word: u32,
-    exp_tokens: &'a [&'a str],
-    consumed_count: usize,
-}
-
-impl<'a> InstructionFieldChecker<'a> {
-    fn new(proto: usize, pc: usize, raw_word: u32, exp_tokens: &'a [&'a str]) -> Self {
-        Self {
-            proto,
-            pc,
-            raw_word,
-            exp_tokens,
-            consumed_count: 0,
-        }
-    }
-
-    fn check(&mut self, field_name: &str, actual_val: &str, mismatches: &mut Vec<OracleMismatch>) {
-        if self.consumed_count < self.exp_tokens.len() {
-            let exp_token = self.exp_tokens[self.consumed_count];
-            self.consumed_count += 1;
-            if actual_val != exp_token {
-                mismatches.push(OracleMismatch::OperandField {
-                    proto: self.proto,
-                    pc: self.pc,
-                    raw_word: self.raw_word,
-                    field: field_name.to_string(),
-                    actual: actual_val.to_string(),
-                    expected: exp_token.to_string(),
-                });
-                mismatches.push(OracleMismatch::Operand {
-                    proto: self.proto,
-                    pc: self.pc,
-                    raw_word: self.raw_word,
-                    index: self.consumed_count - 1,
-                    actual: actual_val.to_string(),
-                    expected: exp_token.to_string(),
-                });
-            }
-        } else {
-            mismatches.push(OracleMismatch::MissingOperand {
-                proto: self.proto,
-                pc: self.pc,
-                raw_word: self.raw_word,
-                field_name: field_name.to_string(),
-                expected: actual_val.to_string(),
-            });
-        }
-    }
-
-    fn check_remaining(&self, mismatches: &mut Vec<OracleMismatch>) {
-        if self.consumed_count < self.exp_tokens.len() {
-            for extra in &self.exp_tokens[self.consumed_count..] {
-                mismatches.push(OracleMismatch::ExtraOperand {
-                    proto: self.proto,
-                    pc: self.pc,
-                    raw_word: self.raw_word,
-                    extra_token: (*extra).to_string(),
-                });
-            }
-        }
-    }
-}
-
-/// Strict typed operand field verification and field-consumption accounting for Lua 5.4.8.
+///// Strict typed operand field verification and field-consumption accounting for Lua 5.4.8.
 fn compare_instruction_54(
     proto: usize,
     pc: usize,
@@ -1326,8 +1577,8 @@ fn compare_instruction_54(
     exp_inst: &LuacInstDump,
     mismatches: &mut Vec<OracleMismatch>,
 ) {
-    let raw = luad_dialect_lua54::RawInstruction54::decode(raw_word);
-    let Some(act_opcode) = raw.opcode else {
+    let indep = crate::independent_lua54_oracle::IndependentInstruction54::decode(raw_word);
+    let Some(act_opcode) = indep.opcode else {
         mismatches.push(OracleMismatch::UnknownActualOpcode {
             proto,
             pc,
@@ -1339,6 +1590,15 @@ fn compare_instruction_54(
 
     let act_mnem = act_opcode.name();
     if !act_mnem.eq_ignore_ascii_case(&exp_inst.mnemonic) {
+        if crate::independent_lua54_oracle::IndependentOpcode54::from_name(&exp_inst.mnemonic)
+            .is_none()
+        {
+            mismatches.push(OracleMismatch::UnknownExpectedMnemonic {
+                proto,
+                pc,
+                mnemonic: exp_inst.mnemonic.clone(),
+            });
+        }
         mismatches.push(OracleMismatch::Mnemonic {
             proto,
             pc,
@@ -1349,189 +1609,837 @@ fn compare_instruction_54(
         return;
     }
 
-    let exp_tokens: Vec<&str> = exp_inst.operands_raw.split_whitespace().collect();
-    let mut checker = InstructionFieldChecker::new(proto, pc, raw_word, &exp_tokens);
+    let Some(ref expected_ops) = exp_inst.expected_operands else {
+        mismatches.push(OracleMismatch::MissingOperand {
+            proto,
+            pc,
+            raw_word,
+            field_name: "operands".to_string(),
+            expected: String::new(),
+        });
+        return;
+    };
 
-    let k_suffix = if raw.k != 0 { "k" } else { "" };
+    use crate::independent_lua54_oracle::IndependentOpcode54 as Op54;
 
-    match act_opcode {
-        luad_dialect_lua54::Opcode54::Return0 => {
-            // 0 operands
+    match (act_opcode, expected_ops) {
+        (Op54::Return0, TypedExpectedOperands54::Return0) => {}
+        (
+            Op54::Loadkx
+            | Op54::Loadfalse
+            | Op54::Lfalseskip
+            | Op54::Loadtrue
+            | Op54::Close
+            | Op54::Tbc
+            | Op54::Return1
+            | Op54::Varargprep,
+            TypedExpectedOperands54::A { a },
+        ) => {
+            if indep.a != *a {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "A".to_string(),
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+            }
         }
-        luad_dialect_lua54::Opcode54::Loadkx
-        | luad_dialect_lua54::Opcode54::Loadfalse
-        | luad_dialect_lua54::Opcode54::Lfalseskip
-        | luad_dialect_lua54::Opcode54::Loadtrue
-        | luad_dialect_lua54::Opcode54::Close
-        | luad_dialect_lua54::Opcode54::Tbc
-        | luad_dialect_lua54::Opcode54::Return1
-        | luad_dialect_lua54::Opcode54::Varargprep => {
-            // 1 operand: A
-            checker.check("A", &raw.a.to_string(), mismatches);
+        (Op54::Extraarg, TypedExpectedOperands54::Ax { ax }) => {
+            if indep.ax != *ax {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "Ax".to_string(),
+                    actual: indep.ax.to_string(),
+                    expected: ax.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.ax.to_string(),
+                    expected: ax.to_string(),
+                });
+            }
         }
-        luad_dialect_lua54::Opcode54::Extraarg => {
-            // 1 operand: Ax
-            checker.check("Ax", &raw.ax.to_string(), mismatches);
-        }
-        luad_dialect_lua54::Opcode54::Jmp => {
-            // 1 operand: sJ
-            checker.check("sJ", &raw.sj.to_string(), mismatches);
-
-            // Verify resolved jump target against comment if present (e.g. "; to 5")
-            if let Some(comment) = &exp_inst.comment {
-                if let Some(target_str) = comment.strip_prefix("to ") {
-                    if let Ok(exp_1based_target) = target_str.trim().parse::<usize>() {
-                        let exp_target = if exp_1based_target > 0 {
-                            exp_1based_target - 1
-                        } else {
-                            0
-                        };
-                        let act_target = (pc as isize + 1 + raw.sj as isize).max(0) as usize;
-                        if act_target != exp_target {
-                            mismatches.push(OracleMismatch::JumpTargetMismatch {
-                                proto,
-                                pc,
-                                actual_target: act_target,
-                                expected_target: exp_target,
-                            });
-                        }
-                    }
+        (Op54::Jmp, TypedExpectedOperands54::SJ { sj, target }) => {
+            if indep.sj != *sj {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "sJ".to_string(),
+                    actual: indep.sj.to_string(),
+                    expected: sj.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.sj.to_string(),
+                    expected: sj.to_string(),
+                });
+            }
+            if let Some(exp_target) = target {
+                let act_target = (pc as isize + 1 + indep.sj as isize).max(0) as usize;
+                if act_target != *exp_target {
+                    mismatches.push(OracleMismatch::JumpTargetMismatch {
+                        proto,
+                        pc,
+                        actual_target: act_target,
+                        expected_target: *exp_target,
+                    });
                 }
             }
         }
-        luad_dialect_lua54::Opcode54::Move
-        | luad_dialect_lua54::Opcode54::Loadnil
-        | luad_dialect_lua54::Opcode54::Getupval
-        | luad_dialect_lua54::Opcode54::Setupval
-        | luad_dialect_lua54::Opcode54::Unm
-        | luad_dialect_lua54::Opcode54::Bnot
-        | luad_dialect_lua54::Opcode54::Not
-        | luad_dialect_lua54::Opcode54::Len
-        | luad_dialect_lua54::Opcode54::Concat => {
-            // 2 operands: A, B
-            checker.check("A", &raw.a.to_string(), mismatches);
-            checker.check("B", &raw.b.to_string(), mismatches);
+        (
+            Op54::Move
+            | Op54::Loadnil
+            | Op54::Getupval
+            | Op54::Setupval
+            | Op54::Unm
+            | Op54::Bnot
+            | Op54::Not
+            | Op54::Len
+            | Op54::Concat,
+            TypedExpectedOperands54::AB { a, b },
+        ) => {
+            if indep.a != *a {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "A".to_string(),
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+            }
+            if indep.b != *b {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "B".to_string(),
+                    actual: indep.b.to_string(),
+                    expected: b.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 1,
+                    actual: indep.b.to_string(),
+                    expected: b.to_string(),
+                });
+            }
         }
-        luad_dialect_lua54::Opcode54::Loadi | luad_dialect_lua54::Opcode54::Loadf => {
-            // 2 operands: A, sBx
-            checker.check("A", &raw.a.to_string(), mismatches);
-            checker.check("sBx", &raw.sbx.to_string(), mismatches);
+        (Op54::Loadi | Op54::Loadf, TypedExpectedOperands54::AsBx { a, sbx }) => {
+            if indep.a != *a {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "A".to_string(),
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+            }
+            if indep.sbx != *sbx {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "sBx".to_string(),
+                    actual: indep.sbx.to_string(),
+                    expected: sbx.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 1,
+                    actual: indep.sbx.to_string(),
+                    expected: sbx.to_string(),
+                });
+            }
         }
-        luad_dialect_lua54::Opcode54::Loadk
-        | luad_dialect_lua54::Opcode54::Forloop
-        | luad_dialect_lua54::Opcode54::Forprep
-        | luad_dialect_lua54::Opcode54::Tforprep
-        | luad_dialect_lua54::Opcode54::Tforloop
-        | luad_dialect_lua54::Opcode54::Closure => {
-            // 2 operands: A, Bx
-            checker.check("A", &raw.a.to_string(), mismatches);
-            checker.check("Bx", &raw.bx.to_string(), mismatches);
+        (
+            Op54::Loadk
+            | Op54::Forloop
+            | Op54::Forprep
+            | Op54::Tforprep
+            | Op54::Tforloop
+            | Op54::Closure,
+            TypedExpectedOperands54::ABx { a, bx },
+        ) => {
+            if indep.a != *a {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "A".to_string(),
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+            }
+            if indep.bx != *bx {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "Bx".to_string(),
+                    actual: indep.bx.to_string(),
+                    expected: bx.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 1,
+                    actual: indep.bx.to_string(),
+                    expected: bx.to_string(),
+                });
+            }
         }
-        luad_dialect_lua54::Opcode54::Tforcall => {
-            // 2 operands: A, C
-            checker.check("A", &raw.a.to_string(), mismatches);
-            checker.check("C", &raw.c.to_string(), mismatches);
+        (Op54::Tforcall, TypedExpectedOperands54::AC { a, c }) => {
+            if indep.a != *a {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "A".to_string(),
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+            }
+            if indep.c != *c {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "C".to_string(),
+                    actual: indep.c.to_string(),
+                    expected: c.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 1,
+                    actual: indep.c.to_string(),
+                    expected: c.to_string(),
+                });
+            }
         }
-        luad_dialect_lua54::Opcode54::Test => {
-            // 2 operands: A, k
-            checker.check("A", &raw.a.to_string(), mismatches);
-            checker.check("k", &raw.k.to_string(), mismatches);
+        (Op54::Test, TypedExpectedOperands54::Ak { a, k }) => {
+            if indep.a != *a {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "A".to_string(),
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+            }
+            if indep.k != *k {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "k".to_string(),
+                    actual: indep.k.to_string(),
+                    expected: k.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 1,
+                    actual: indep.k.to_string(),
+                    expected: k.to_string(),
+                });
+            }
         }
-        luad_dialect_lua54::Opcode54::Testset
-        | luad_dialect_lua54::Opcode54::Eq
-        | luad_dialect_lua54::Opcode54::Lt
-        | luad_dialect_lua54::Opcode54::Le
-        | luad_dialect_lua54::Opcode54::Eqk => {
-            // 3 operands: A, B, k
-            checker.check("A", &raw.a.to_string(), mismatches);
-            checker.check("B", &raw.b.to_string(), mismatches);
-            checker.check("k", &raw.k.to_string(), mismatches);
+        (
+            Op54::Testset | Op54::Eq | Op54::Lt | Op54::Le | Op54::Eqk,
+            TypedExpectedOperands54::ABk { a, b, k },
+        ) => {
+            if indep.a != *a {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "A".to_string(),
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+            }
+            if indep.b != *b {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "B".to_string(),
+                    actual: indep.b.to_string(),
+                    expected: b.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 1,
+                    actual: indep.b.to_string(),
+                    expected: b.to_string(),
+                });
+            }
+            if indep.k != *k {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "k".to_string(),
+                    actual: indep.k.to_string(),
+                    expected: k.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 2,
+                    actual: indep.k.to_string(),
+                    expected: k.to_string(),
+                });
+            }
         }
-        luad_dialect_lua54::Opcode54::Eqi
-        | luad_dialect_lua54::Opcode54::Lti
-        | luad_dialect_lua54::Opcode54::Lei
-        | luad_dialect_lua54::Opcode54::Gti
-        | luad_dialect_lua54::Opcode54::Gei => {
-            // 3 operands: A, sB, k
-            checker.check("A", &raw.a.to_string(), mismatches);
-            checker.check("sB", &raw.sb.to_string(), mismatches);
-            checker.check("k", &raw.k.to_string(), mismatches);
+        (
+            Op54::Eqi | Op54::Lti | Op54::Lei | Op54::Gti | Op54::Gei,
+            TypedExpectedOperands54::AsBk { a, sb, k },
+        ) => {
+            if indep.a != *a {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "A".to_string(),
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+            }
+            if indep.sb != *sb {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "sB".to_string(),
+                    actual: indep.sb.to_string(),
+                    expected: sb.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 1,
+                    actual: indep.sb.to_string(),
+                    expected: sb.to_string(),
+                });
+            }
+            if indep.k != *k {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "k".to_string(),
+                    actual: indep.k.to_string(),
+                    expected: k.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 2,
+                    actual: indep.k.to_string(),
+                    expected: k.to_string(),
+                });
+            }
         }
-        luad_dialect_lua54::Opcode54::Addi
-        | luad_dialect_lua54::Opcode54::Shri
-        | luad_dialect_lua54::Opcode54::Shli => {
-            // 3 operands: A, B, sC
-            checker.check("A", &raw.a.to_string(), mismatches);
-            checker.check("B", &raw.b.to_string(), mismatches);
-            checker.check("sC", &raw.sc.to_string(), mismatches);
+        (Op54::Addi | Op54::Shri | Op54::Shli, TypedExpectedOperands54::ABsC { a, b, sc }) => {
+            if indep.a != *a {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "A".to_string(),
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+            }
+            if indep.b != *b {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "B".to_string(),
+                    actual: indep.b.to_string(),
+                    expected: b.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 1,
+                    actual: indep.b.to_string(),
+                    expected: b.to_string(),
+                });
+            }
+            if indep.sc != *sc {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "sC".to_string(),
+                    actual: indep.sc.to_string(),
+                    expected: sc.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 2,
+                    actual: indep.sc.to_string(),
+                    expected: sc.to_string(),
+                });
+            }
         }
-        luad_dialect_lua54::Opcode54::Gettabup
-        | luad_dialect_lua54::Opcode54::Gettable
-        | luad_dialect_lua54::Opcode54::Geti
-        | luad_dialect_lua54::Opcode54::Getfield
-        | luad_dialect_lua54::Opcode54::Newtable
-        | luad_dialect_lua54::Opcode54::Addk
-        | luad_dialect_lua54::Opcode54::Subk
-        | luad_dialect_lua54::Opcode54::Mulk
-        | luad_dialect_lua54::Opcode54::Modk
-        | luad_dialect_lua54::Opcode54::Powk
-        | luad_dialect_lua54::Opcode54::Divk
-        | luad_dialect_lua54::Opcode54::Idivk
-        | luad_dialect_lua54::Opcode54::Bandk
-        | luad_dialect_lua54::Opcode54::Bork
-        | luad_dialect_lua54::Opcode54::Bxork
-        | luad_dialect_lua54::Opcode54::Add
-        | luad_dialect_lua54::Opcode54::Sub
-        | luad_dialect_lua54::Opcode54::Mul
-        | luad_dialect_lua54::Opcode54::Mod
-        | luad_dialect_lua54::Opcode54::Pow
-        | luad_dialect_lua54::Opcode54::Div
-        | luad_dialect_lua54::Opcode54::Idiv
-        | luad_dialect_lua54::Opcode54::Band
-        | luad_dialect_lua54::Opcode54::Bor
-        | luad_dialect_lua54::Opcode54::Bxor
-        | luad_dialect_lua54::Opcode54::Shl
-        | luad_dialect_lua54::Opcode54::Shr
-        | luad_dialect_lua54::Opcode54::Mmbin
-        | luad_dialect_lua54::Opcode54::Call => {
-            // 3 operands: A, B, C
-            checker.check("A", &raw.a.to_string(), mismatches);
-            checker.check("B", &raw.b.to_string(), mismatches);
-            checker.check("C", &raw.c.to_string(), mismatches);
+        (
+            Op54::Gettabup
+            | Op54::Gettable
+            | Op54::Geti
+            | Op54::Getfield
+            | Op54::Newtable
+            | Op54::Addk
+            | Op54::Subk
+            | Op54::Mulk
+            | Op54::Modk
+            | Op54::Powk
+            | Op54::Divk
+            | Op54::Idivk
+            | Op54::Bandk
+            | Op54::Bork
+            | Op54::Bxork
+            | Op54::Add
+            | Op54::Sub
+            | Op54::Mul
+            | Op54::Mod
+            | Op54::Pow
+            | Op54::Div
+            | Op54::Idiv
+            | Op54::Band
+            | Op54::Bor
+            | Op54::Bxor
+            | Op54::Shl
+            | Op54::Shr
+            | Op54::Mmbin
+            | Op54::Call,
+            TypedExpectedOperands54::ABC { a, b, c },
+        ) => {
+            if indep.a != *a {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "A".to_string(),
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+            }
+            if indep.b != *b {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "B".to_string(),
+                    actual: indep.b.to_string(),
+                    expected: b.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 1,
+                    actual: indep.b.to_string(),
+                    expected: b.to_string(),
+                });
+            }
+            if indep.c != *c {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "C".to_string(),
+                    actual: indep.c.to_string(),
+                    expected: c.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 2,
+                    actual: indep.c.to_string(),
+                    expected: c.to_string(),
+                });
+            }
         }
-        luad_dialect_lua54::Opcode54::Settabup
-        | luad_dialect_lua54::Opcode54::Settable
-        | luad_dialect_lua54::Opcode54::Seti
-        | luad_dialect_lua54::Opcode54::Setfield
-        | luad_dialect_lua54::Opcode54::SelfOp
-        | luad_dialect_lua54::Opcode54::Tailcall
-        | luad_dialect_lua54::Opcode54::Return
-        | luad_dialect_lua54::Opcode54::Setlist
-        | luad_dialect_lua54::Opcode54::Vararg => {
-            // 3 operands: A, B, C (with k suffix if raw.k != 0)
-            checker.check("A", &raw.a.to_string(), mismatches);
-            checker.check("B", &raw.b.to_string(), mismatches);
-            let expected_c_str = format!("{}{}", raw.c, k_suffix);
-            checker.check("C", &expected_c_str, mismatches);
+        (
+            Op54::Settabup
+            | Op54::Settable
+            | Op54::Seti
+            | Op54::Setfield
+            | Op54::SelfOp
+            | Op54::Tailcall
+            | Op54::Return
+            | Op54::Setlist
+            | Op54::Vararg,
+            TypedExpectedOperands54::ABCk { a, b, c, k },
+        ) => {
+            if indep.a != *a {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "A".to_string(),
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+            }
+            if indep.b != *b {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "B".to_string(),
+                    actual: indep.b.to_string(),
+                    expected: b.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 1,
+                    actual: indep.b.to_string(),
+                    expected: b.to_string(),
+                });
+            }
+            let act_k_bool = indep.k != 0;
+            let act_c_str = format!("{}{}", indep.c, if act_k_bool { "k" } else { "" });
+            let exp_c_str = format!("{}{}", c, if *k { "k" } else { "" });
+            if indep.c != *c || act_k_bool != *k {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "C".to_string(),
+                    actual: act_c_str.clone(),
+                    expected: exp_c_str.clone(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 2,
+                    actual: act_c_str,
+                    expected: exp_c_str,
+                });
+            }
         }
-        luad_dialect_lua54::Opcode54::Mmbini => {
-            // 4 operands: A, sB, C, k
-            checker.check("A", &raw.a.to_string(), mismatches);
-            checker.check("sB", &raw.sb.to_string(), mismatches);
-            checker.check("C", &raw.c.to_string(), mismatches);
-            checker.check("k", &raw.k.to_string(), mismatches);
+        (Op54::Mmbini, TypedExpectedOperands54::AsBCk { a, sb, c, k }) => {
+            if indep.a != *a {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "A".to_string(),
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+            }
+            if indep.sb != *sb {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "sB".to_string(),
+                    actual: indep.sb.to_string(),
+                    expected: sb.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 1,
+                    actual: indep.sb.to_string(),
+                    expected: sb.to_string(),
+                });
+            }
+            if indep.c != *c {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "C".to_string(),
+                    actual: indep.c.to_string(),
+                    expected: c.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 2,
+                    actual: indep.c.to_string(),
+                    expected: c.to_string(),
+                });
+            }
+            if indep.k != *k {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "k".to_string(),
+                    actual: indep.k.to_string(),
+                    expected: k.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 3,
+                    actual: indep.k.to_string(),
+                    expected: k.to_string(),
+                });
+            }
         }
-        luad_dialect_lua54::Opcode54::Mmbink => {
-            // 4 operands: A, B, C, k
-            checker.check("A", &raw.a.to_string(), mismatches);
-            checker.check("B", &raw.b.to_string(), mismatches);
-            checker.check("C", &raw.c.to_string(), mismatches);
-            checker.check("k", &raw.k.to_string(), mismatches);
+        (Op54::Mmbink, TypedExpectedOperands54::ABCKk { a, b, c, k }) => {
+            if indep.a != *a {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "A".to_string(),
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 0,
+                    actual: indep.a.to_string(),
+                    expected: a.to_string(),
+                });
+            }
+            if indep.b != *b {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "B".to_string(),
+                    actual: indep.b.to_string(),
+                    expected: b.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 1,
+                    actual: indep.b.to_string(),
+                    expected: b.to_string(),
+                });
+            }
+            if indep.c != *c {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "C".to_string(),
+                    actual: indep.c.to_string(),
+                    expected: c.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 2,
+                    actual: indep.c.to_string(),
+                    expected: c.to_string(),
+                });
+            }
+            if indep.k != *k {
+                mismatches.push(OracleMismatch::OperandField {
+                    proto,
+                    pc,
+                    raw_word,
+                    field: "k".to_string(),
+                    actual: indep.k.to_string(),
+                    expected: k.to_string(),
+                });
+                mismatches.push(OracleMismatch::Operand {
+                    proto,
+                    pc,
+                    raw_word,
+                    index: 3,
+                    actual: indep.k.to_string(),
+                    expected: k.to_string(),
+                });
+            }
+        }
+        (op, TypedExpectedOperands54::Invalid { raw_tokens }) => {
+            use crate::independent_lua54_oracle::IndependentOpMode54;
+            let expected_count = match op.mode() {
+                IndependentOpMode54::IABC => match op {
+                    Op54::Return0 => 0,
+                    Op54::Loadkx
+                    | Op54::Loadfalse
+                    | Op54::Lfalseskip
+                    | Op54::Loadtrue
+                    | Op54::Close
+                    | Op54::Tbc
+                    | Op54::Return1
+                    | Op54::Varargprep => 1,
+                    Op54::Tforcall | Op54::Test => 2,
+                    Op54::Mmbini | Op54::Mmbink => 4,
+                    _ => 3,
+                },
+                IndependentOpMode54::IABx | IndependentOpMode54::IAsBx => 2,
+                IndependentOpMode54::IAx | IndependentOpMode54::IsJ => 1,
+            };
+            if raw_tokens.len() > expected_count {
+                mismatches.push(OracleMismatch::ExtraOperand {
+                    proto,
+                    pc,
+                    raw_word,
+                    extra_token: raw_tokens[expected_count..].join(" "),
+                });
+            } else {
+                mismatches.push(OracleMismatch::MissingOperand {
+                    proto,
+                    pc,
+                    raw_word,
+                    field_name: format!("{:?}", op),
+                    expected: exp_inst.operands_raw.clone(),
+                });
+            }
+        }
+        _ => {
+            mismatches.push(OracleMismatch::MissingOperand {
+                proto,
+                pc,
+                raw_word,
+                field_name: format!("{:?}", act_opcode),
+                expected: exp_inst.operands_raw.clone(),
+            });
         }
     }
-
-    // Field-consumption accounting: verify no trailing unconsumed operands exist
-    checker.check_remaining(mismatches);
 }
 
 /// Perform field-by-field differential comparison between `luad`'s parsed `Chunk` and `luac -l -l`.
