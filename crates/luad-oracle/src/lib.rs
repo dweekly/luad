@@ -5,13 +5,18 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::NamedTempFile;
 
+pub mod gate_runner;
 pub mod listing_parser;
 
+pub use gate_runner::{
+    execute_and_record_gate, verify_gate_artifact_integrity, GateResult, GateRunnerError,
+};
 pub use listing_parser::{
     assert_chunk_matches_luac, compare_chunk_with_luac, decode_instruction_mnemonic,
     decode_instruction_operands, parse_luac_dump, LuacConstDump, LuacDump, LuacInstDump,
     LuacLocVarDump, LuacProtoDump, LuacUpvalDump, OracleMismatch,
 };
+
 
 use luad_core::limits::{ParseMode, ResourceLimits};
 use luad_core::model::Chunk;
@@ -106,39 +111,66 @@ pub fn get_fixture_bytes(
     }
 }
 
-/// Locate Lua 5.4 compiler binary on host system.
-#[must_use]
-pub fn find_luac54() -> Option<PathBuf> {
-    let candidate_paths = [
-        "/tmp/lua-tools/bin/luac5.4",
-        "/opt/homebrew/opt/lua@5.4/bin/luac",
-        "/usr/local/opt/lua@5.4/bin/luac",
-        "luac5.4",
-        "luac-5.4",
-        "luac",
-    ];
+/// Locate compiler binary checking LUAD_ORACLE_BIN_DIR first, then candidate paths, verifying version output.
+pub fn find_compiler_binary(bin_name: &str, candidates: &[&str], expected_version_substr: &str) -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("LUAD_ORACLE_BIN_DIR") {
+        let p = Path::new(&dir).join(bin_name);
+        if p.exists() {
+            if let Ok(output) = Command::new(&p).arg("-v").output() {
+                let v = format!(
+                    "{}{}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                if v.contains(expected_version_substr) {
+                    return Some(p);
+                }
+            }
+        }
+    }
 
-    for candidate in candidate_paths {
+    for candidate in candidates {
         let path = Path::new(candidate);
         if path.exists() {
-            // Verify version output
             if let Ok(output) = Command::new(path).arg("-v").output() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                if stdout.contains("5.4") || stderr.contains("5.4") {
+                let v = format!(
+                    "{}{}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                if v.contains(expected_version_substr) {
                     return Some(path.to_path_buf());
                 }
             }
         } else if let Ok(output) = Command::new(candidate).arg("-v").output() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            if stdout.contains("5.4") || stderr.contains("5.4") {
+            let v = format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            if v.contains(expected_version_substr) {
                 return Some(PathBuf::from(candidate));
             }
         }
     }
 
     None
+}
+
+/// Locate Lua 5.4 compiler binary on host system.
+#[must_use]
+pub fn find_luac54() -> Option<PathBuf> {
+    find_compiler_binary(
+        "luac5.4",
+        &[
+            "/tmp/lua-tools/bin/luac5.4",
+            "/opt/homebrew/opt/lua@5.4/bin/luac",
+            "/usr/local/opt/lua@5.4/bin/luac",
+            "luac5.4",
+            "luac-5.4",
+        ],
+        "5.4",
+    )
 }
 
 /// Compile Lua 5.4 source code to binary chunk using host `luac`.
@@ -178,31 +210,20 @@ pub fn compile_and_parse_lua54(source: &str, strip: bool) -> Result<Chunk, Strin
 /// Locate Lua 5.5 compiler binary on host system.
 #[must_use]
 pub fn find_luac55() -> Option<PathBuf> {
-    let candidate_paths = [
-        "/tmp/lua-tools/bin/luac5.5",
-        "/opt/homebrew/bin/luac",
-        "/opt/homebrew/Cellar/lua/5.5.1/bin/luac",
-        "/usr/local/bin/luac",
+    find_compiler_binary(
         "luac5.5",
-        "luac-5.5",
-        "luac",
-    ];
-
-    for candidate in candidate_paths {
-        let path = Path::new(candidate);
-        if path.exists() {
-            if let Ok(output) = Command::new(path).arg("-v").output() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                if stdout.contains("5.5") || stderr.contains("5.5") {
-                    return Some(path.to_path_buf());
-                }
-            }
-        }
-    }
-
-    None
+        &[
+            "/tmp/lua-tools/bin/luac5.5",
+            "/opt/homebrew/bin/luac",
+            "/opt/homebrew/Cellar/lua/5.5.1/bin/luac",
+            "/usr/local/bin/luac",
+            "luac5.5",
+            "luac-5.5",
+        ],
+        "5.5",
+    )
 }
+
 
 /// Compile Lua 5.5 source code to binary chunk using host `luac`.
 pub fn compile_source_lua55(source: &str, strip: bool) -> Result<Vec<u8>, String> {
@@ -251,26 +272,16 @@ pub fn dump_source_luac(compiler_path: &Path, source: &str) -> Result<String, St
 /// Locate Lua 5.3 compiler binary on host system.
 #[must_use]
 pub fn find_luac53() -> Option<PathBuf> {
-    let candidate_paths = [
-        "/tmp/lua-tools/bin/luac5.3",
-        "/opt/homebrew/bin/luac5.3",
+    find_compiler_binary(
         "luac5.3",
-        "luac-5.3",
-    ];
-
-    for candidate in candidate_paths {
-        let path = Path::new(candidate);
-        if path.exists() {
-            if let Ok(output) = Command::new(path).arg("-v").output() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                if stdout.contains("5.3") || stderr.contains("5.3") {
-                    return Some(path.to_path_buf());
-                }
-            }
-        }
-    }
-    None
+        &[
+            "/tmp/lua-tools/bin/luac5.3",
+            "/opt/homebrew/bin/luac5.3",
+            "luac5.3",
+            "luac-5.3",
+        ],
+        "5.3",
+    )
 }
 
 /// Compile Lua 5.3 source code to binary chunk using host `luac`.
@@ -307,26 +318,16 @@ pub fn compile_and_parse_lua53(source: &str, strip: bool) -> Result<Chunk, Strin
 /// Locate Lua 5.2 compiler binary on host system.
 #[must_use]
 pub fn find_luac52() -> Option<PathBuf> {
-    let candidate_paths = [
-        "/tmp/lua-tools/bin/luac5.2",
-        "/opt/homebrew/bin/luac5.2",
+    find_compiler_binary(
         "luac5.2",
-        "luac-5.2",
-    ];
-
-    for candidate in candidate_paths {
-        let path = Path::new(candidate);
-        if path.exists() {
-            if let Ok(output) = Command::new(path).arg("-v").output() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                if stdout.contains("5.2") || stderr.contains("5.2") {
-                    return Some(path.to_path_buf());
-                }
-            }
-        }
-    }
-    None
+        &[
+            "/tmp/lua-tools/bin/luac5.2",
+            "/opt/homebrew/bin/luac5.2",
+            "luac5.2",
+            "luac-5.2",
+        ],
+        "5.2",
+    )
 }
 
 /// Compile Lua 5.2 source code to binary chunk using host `luac`.
@@ -363,27 +364,18 @@ pub fn compile_and_parse_lua52(source: &str, strip: bool) -> Result<Chunk, Strin
 /// Locate Lua 5.1 compiler binary on host system.
 #[must_use]
 pub fn find_luac51() -> Option<PathBuf> {
-    let candidate_paths = [
-        "/tmp/lua-tools/bin/luac5.1",
-        "/opt/homebrew/bin/luac5.1",
+    find_compiler_binary(
         "luac5.1",
-        "luac-5.1",
-    ];
-
-    for candidate in candidate_paths {
-        let path = Path::new(candidate);
-        if path.exists() {
-            if let Ok(output) = Command::new(path).arg("-v").output() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                if stdout.contains("5.1") || stderr.contains("5.1") {
-                    return Some(path.to_path_buf());
-                }
-            }
-        }
-    }
-    None
+        &[
+            "/tmp/lua-tools/bin/luac5.1",
+            "/opt/homebrew/bin/luac5.1",
+            "luac5.1",
+            "luac-5.1",
+        ],
+        "5.1",
+    )
 }
+
 
 /// Compile Lua 5.1 source code to binary chunk using host `luac`.
 pub fn compile_source_lua51(source: &str, strip: bool) -> Result<Vec<u8>, String> {
