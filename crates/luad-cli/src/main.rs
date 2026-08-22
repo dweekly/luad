@@ -509,6 +509,19 @@ fn handle_cfg(args: CfgArgs) {
         Err(code) => code.exit(),
     };
 
+    if let Err(diags) = luad_analysis::validate_for_analysis(&chunk) {
+        eprintln!(
+            "{}: Analysis refused: chunk failed validation checks",
+            "error".red()
+        );
+        for d in diags {
+            if d.severity == Severity::Error {
+                eprintln!("  - [{}] {}", d.code, d.message);
+            }
+        }
+        ExitCode::InvalidInput.exit();
+    }
+
     let target_id: StableId = match args.proto.parse() {
         Ok(id) => id,
         Err(e) => {
@@ -553,6 +566,19 @@ fn handle_xrefs(args: XrefsArgs) {
         Ok(c) => c,
         Err(code) => code.exit(),
     };
+
+    if let Err(diags) = luad_analysis::validate_for_analysis(&chunk) {
+        eprintln!(
+            "{}: Analysis refused: chunk failed validation checks",
+            "error".red()
+        );
+        for d in diags {
+            if d.severity == Severity::Error {
+                eprintln!("  - [{}] {}", d.code, d.message);
+            }
+        }
+        ExitCode::InvalidInput.exit();
+    }
 
     let index = luad_analysis::XrefIndex::build(&chunk);
 
@@ -602,6 +628,19 @@ fn handle_query(args: QueryArgs) {
         Err(code) => code.exit(),
     };
 
+    if let Err(diags) = luad_analysis::validate_for_analysis(&chunk) {
+        eprintln!(
+            "{}: Analysis refused: chunk failed validation checks",
+            "error".red()
+        );
+        for d in diags {
+            if d.severity == Severity::Error {
+                eprintln!("  - [{}] {}", d.code, d.message);
+            }
+        }
+        ExitCode::InvalidInput.exit();
+    }
+
     let response = luad_analysis::execute_query(
         &chunk,
         args.r#where.as_deref(),
@@ -640,6 +679,32 @@ fn handle_diff(args: DiffArgs) {
         Ok(c) => c,
         Err(code) => code.exit(),
     };
+
+    if let Err(diags) = luad_analysis::validate_for_analysis(&old_chunk) {
+        eprintln!(
+            "{}: Analysis refused: old chunk failed validation checks",
+            "error".red()
+        );
+        for d in diags {
+            if d.severity == Severity::Error {
+                eprintln!("  - [{}] {}", d.code, d.message);
+            }
+        }
+        ExitCode::InvalidInput.exit();
+    }
+
+    if let Err(diags) = luad_analysis::validate_for_analysis(&new_chunk) {
+        eprintln!(
+            "{}: Analysis refused: new chunk failed validation checks",
+            "error".red()
+        );
+        for d in diags {
+            if d.severity == Severity::Error {
+                eprintln!("  - [{}] {}", d.code, d.message);
+            }
+        }
+        ExitCode::InvalidInput.exit();
+    }
 
     let ignore_debug = args.ignore.as_deref() == Some("debug");
     let diff = luad_analysis::diff_chunks(&old_chunk, &new_chunk, args.semantic, ignore_debug);

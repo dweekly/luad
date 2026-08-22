@@ -10,6 +10,31 @@ pub use diff::{diff_chunks, ChunkDiff, InstructionDiff, ProtoDiff};
 pub use query::{execute_query, QueryMatch, QueryResponse};
 pub use xrefs::{XrefEntry, XrefIndex, XrefRelation};
 
+/// Validate chunk for analysis preconditions.
+pub fn validate_for_analysis(
+    chunk: &luad_core::model::Chunk,
+) -> Result<(), Vec<luad_core::diagnostic::Diagnostic>> {
+    let (verdict, diagnostics) = match chunk.dialect.as_str() {
+        "lua5.5" => luad_dialect_lua55::validate_chunk_lua55(chunk),
+        "lua5.4" => luad_dialect_lua54::validate_chunk_lua54(chunk),
+        "lua5.3" => luad_dialect_lua53::validate_chunk_lua53(chunk),
+        "lua5.2" => luad_dialect_lua52::validate_chunk_lua52(chunk),
+        "lua5.1" => luad_dialect_lua51::validate_chunk_lua51(chunk),
+        _ => (chunk.verdict, chunk.diagnostics.clone()),
+    };
+
+    let has_errors = verdict == luad_core::diagnostic::Verdict::Invalid
+        || diagnostics
+            .iter()
+            .any(|d| d.severity == luad_core::diagnostic::Severity::Error);
+
+    if has_errors {
+        Err(diagnostics)
+    } else {
+        Ok(())
+    }
+}
+
 /// Lift prototype instructions into semantic IR using the appropriate dialect lifter.
 #[must_use]
 pub fn lift_proto_for_dialect(

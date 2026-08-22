@@ -84,3 +84,64 @@ fn test_chunk_diffing() {
     assert!(!diff.is_identical);
     assert_ne!(diff.old_sha256, diff.new_sha256);
 }
+
+#[test]
+fn test_cfg_dominator_tree_golden_topologies() {
+    let raw_bytes = get_fixture_bytes("lua5.4", "control_flow", false).expect("fixture failed");
+    let mut reader = SafeReader::new(&raw_bytes);
+    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("parse failed");
+
+    let lifted = lift_proto_lua54(&chunk.main_proto);
+    let cfg = ControlFlowGraph::build(&chunk.main_proto, &lifted);
+
+    // Entry block (0) dominates reachable blocks
+    assert_eq!(cfg.blocks[0].immediate_dominator, None);
+
+    for block in &cfg.blocks {
+        if block.is_reachable && block.index != 0 {
+            assert!(
+                block.immediate_dominator.is_some(),
+                "Reachable block {} must have immediate dominator",
+                block.index
+            );
+            let idom = block.immediate_dominator.unwrap();
+            assert!(
+                idom < block.index || cfg.blocks[idom].is_reachable,
+                "Immediate dominator {idom} must be valid"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_analysis_refuses_invalid_chunks() {
+    use luad_analysis::validate_for_analysis;
+    use luad_core::model::InstructionWord;
+    use luad_core::SourceLocation;
+
+    let raw_bytes = get_fixture_bytes("lua5.4", "hello", false).expect("fixture failed");
+    let mut reader = SafeReader::new(&raw_bytes);
+    let mut chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("parse failed");
+
+    // Clean chunk passes validation
+    assert!(validate_for_analysis(&chunk).is_ok());
+
+    // Corrupt with out-of-bounds jump (JMP +5000)
+    let bad_jmp_word =
+        luad_dialect_lua54::RawInstruction54::encode_isj(luad_dialect_lua54::Opcode54::Jmp, 5000);
+    chunk.main_proto.instructions.push(InstructionWord {
+        id: luad_core::id::StableId::instruction(chunk.main_proto.path.clone(), 99),
+        pc: 99,
+        raw_word: bad_jmp_word,
+        raw_hex: hex::encode(bad_jmp_word.to_le_bytes()),
+        source: SourceLocation::new(0, &bad_jmp_word.to_le_bytes()),
+    });
+
+    let res = validate_for_analysis(&chunk);
+    assert!(res.is_err(), "Must refuse invalid jump destination");
+    let diags = res.unwrap_err();
+    assert!(
+        diags.iter().any(|d| d.code == "L54-VAL-JUMP-001"),
+        "Expected L54-VAL-JUMP-001 diagnostic"
+    );
+}
