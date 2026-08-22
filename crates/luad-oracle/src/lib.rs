@@ -441,6 +441,61 @@ pub fn verify_truncation_safety(raw_bytes: &[u8]) {
     verify_truncation_safety_for_dialect(raw_bytes, &dialect);
 }
 
+/// Locate Lua 5.1 compiler binary on host system, failing closed if missing.
+#[must_use]
+pub fn require_luac51() -> PathBuf {
+    find_luac51().unwrap_or_else(|| {
+        panic!(
+            "Required official Lua 5.1 compiler not found.\n\
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+        )
+    })
+}
+
+/// Locate Lua 5.2 compiler binary on host system, failing closed if missing.
+#[must_use]
+pub fn require_luac52() -> PathBuf {
+    find_luac52().unwrap_or_else(|| {
+        panic!(
+            "Required official Lua 5.2 compiler not found.\n\
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+        )
+    })
+}
+
+/// Locate Lua 5.3 compiler binary on host system, failing closed if missing.
+#[must_use]
+pub fn require_luac53() -> PathBuf {
+    find_luac53().unwrap_or_else(|| {
+        panic!(
+            "Required official Lua 5.3 compiler not found.\n\
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+        )
+    })
+}
+
+/// Locate Lua 5.4 compiler binary on host system, failing closed if missing.
+#[must_use]
+pub fn require_luac54() -> PathBuf {
+    find_luac54().unwrap_or_else(|| {
+        panic!(
+            "Required official Lua 5.4 compiler not found.\n\
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+        )
+    })
+}
+
+/// Locate Lua 5.5 compiler binary on host system, failing closed if missing.
+#[must_use]
+pub fn require_luac55() -> PathBuf {
+    find_luac55().unwrap_or_else(|| {
+        panic!(
+            "Required official Lua 5.5 compiler not found.\n\
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+        )
+    })
+}
+
 /// Verify that truncating valid chunk at every byte offset 0..N terminates gracefully without panic for a given dialect.
 pub fn verify_truncation_safety_for_dialect(raw_bytes: &[u8], dialect: &dyn Dialect) {
     for len in 0..raw_bytes.len() {

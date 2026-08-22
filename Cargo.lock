@@ -411,6 +411,7 @@ dependencies = [
  "luad-dialect-lua55",
  "proptest",
  "serde_json",
+ "sha2",
  "tempfile",
  "thiserror",
 ]

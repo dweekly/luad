@@ -7,7 +7,8 @@ use luad_dialect_lua54::Lua54Dialect;
 use luad_dialect_lua55::Lua55Dialect;
 use luad_oracle::{
     assert_chunk_matches_luac, compile_source_lua54, compile_source_lua55, dump_source_luac,
-    find_luac54, find_luac55, load_source_fixture,
+    load_source_fixture, require_luac51, require_luac52, require_luac53, require_luac54,
+    require_luac55,
 };
 
 const TEST_SOURCES: &[(&str, &str)] = &[
@@ -35,11 +36,7 @@ const TEST_SOURCES: &[(&str, &str)] = &[
 
 #[test]
 fn test_canonical_differential_oracle_lua54() {
-    let Some(luac_path) = find_luac54() else {
-        eprintln!("Skipping test_canonical_differential_oracle_lua54: luac 5.4 not installed");
-        return;
-    };
-
+    let luac_path = require_luac54();
     let dialect = Lua54Dialect;
 
     // Test synthetic test cases
@@ -85,11 +82,7 @@ fn test_canonical_differential_oracle_lua54() {
 
 #[test]
 fn test_canonical_differential_oracle_lua55() {
-    let Some(luac_path) = find_luac55() else {
-        eprintln!("Skipping test_canonical_differential_oracle_lua55: luac 5.5 not installed");
-        return;
-    };
-
+    let luac_path = require_luac55();
     let dialect = Lua55Dialect;
 
     // Test synthetic test cases
@@ -135,11 +128,7 @@ fn test_canonical_differential_oracle_lua55() {
 
 #[test]
 fn test_canonical_differential_oracle_lua53() {
-    let Some(luac_path) = luad_oracle::find_luac53() else {
-        eprintln!("Skipping test_canonical_differential_oracle_lua53: luac 5.3 not installed");
-        return;
-    };
-
+    let luac_path = require_luac53();
     let dialect = luad_dialect_lua53::Lua53Dialect;
 
     for (name, source) in TEST_SOURCES {
@@ -160,11 +149,7 @@ fn test_canonical_differential_oracle_lua53() {
 
 #[test]
 fn test_canonical_differential_oracle_lua52() {
-    let Some(luac_path) = luad_oracle::find_luac52() else {
-        eprintln!("Skipping test_canonical_differential_oracle_lua52: luac 5.2 not installed");
-        return;
-    };
-
+    let luac_path = require_luac52();
     let dialect = luad_dialect_lua52::Lua52Dialect;
 
     for (name, source) in TEST_SOURCES {
@@ -185,11 +170,7 @@ fn test_canonical_differential_oracle_lua52() {
 
 #[test]
 fn test_canonical_differential_oracle_lua51() {
-    let Some(luac_path) = luad_oracle::find_luac51() else {
-        eprintln!("Skipping test_canonical_differential_oracle_lua51: luac 5.1 not installed");
-        return;
-    };
-
+    let luac_path = require_luac51();
     let dialect = luad_dialect_lua51::Lua51Dialect;
 
     for (name, source) in TEST_SOURCES {
