@@ -494,9 +494,10 @@ pub fn encode_chunk_lua54(chunk: &Chunk) -> Vec<u8> {
     buf.push(0x00); // Format 0
     buf.extend_from_slice(LUAC_DATA_54); // 6 bytes: "\x19\x93\r\n\x1a\n"
 
-    buf.push(chunk.header.instruction_size as u8); // 4
-    buf.push(chunk.header.lua_integer_size as u8); // 8
-    buf.push(chunk.header.lua_number_size as u8); // 8
+    buf.push(chunk.header.instruction_size); // 4
+    buf.push(chunk.header.lua_integer_size); // 8
+    buf.push(chunk.header.lua_number_size); // 8
+
     buf.extend_from_slice(&0x5678i64.to_le_bytes()); // LUAC_INT test integer
     buf.extend_from_slice(&370.5f64.to_le_bytes()); // LUAC_NUM test float
 

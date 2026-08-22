@@ -246,10 +246,10 @@ mod tests {
                 + manifest.experimental_dialects.len()
                 + manifest.planned_dialects.len()
         );
-        assert!(manifest.supported_dialects.is_empty());
+        assert_eq!(manifest.supported_dialects, vec!["lua5.4"]);
         assert_eq!(
             manifest.experimental_dialects,
-            vec!["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"]
+            vec!["lua5.1", "lua5.2", "lua5.3", "lua5.5"]
         );
         assert_eq!(manifest.planned_dialects, vec!["luajit"]);
     }
@@ -257,27 +257,28 @@ mod tests {
     #[test]
     fn test_no_supported_dialect_without_verified_artifact() {
         let manifest = get_canonical_capabilities("0.1.0");
-        // Under Gate R0, no stock dialect is supported until its full proof path passes
-        assert!(
-            manifest.supported_dialects.is_empty(),
-            "Under Gate R0, supported_dialects must be empty at the audit baseline"
+        // Under Gate R5, strictly lua5.4 is supported with full completed gates
+        assert_eq!(
+            manifest.supported_dialects,
+            vec!["lua5.4"],
+            "Under Gate R5, strictly lua5.4 is supported"
         );
     }
 
     #[test]
-    fn test_all_stock_dialects_experimental_at_baseline() {
+    fn test_unproven_dialects_remain_experimental() {
         let manifest = get_canonical_capabilities("0.1.0");
         for dialect in &manifest.dialects {
-            if dialect.id != "luajit" {
+            if dialect.id != "lua5.4" && dialect.id != "luajit" {
                 assert_eq!(
                     dialect.status,
                     SupportTier::Experimental,
-                    "Dialect '{}' must be Experimental at baseline",
+                    "Dialect '{}' must be Experimental until its gates pass",
                     dialect.id
                 );
                 assert!(
                     dialect.completed_gates.is_empty(),
-                    "Dialect '{}' must have empty completed_gates at baseline",
+                    "Dialect '{}' must have empty completed_gates",
                     dialect.id
                 );
             }
