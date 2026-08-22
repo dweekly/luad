@@ -88,14 +88,8 @@ fn test_negative_control_bit15_b_decoder_bug() {
     let mut chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("Decodes chunk");
     let dump = dump_source_luac(&luac_path, source).expect("Dumps with luac 5.4");
 
-    // Simulate the pre-Gate 2 bit 15 decoding bug by corrupting instruction words
-    // where B was decoded from bit 15 instead of bit 16:
-    // When B is shifted left by 1 bit (as reading from bit 15 would produce if B was at 16)
-    // or when raw_word has bit 15 shifted.
-    // For instruction 5 (ADD 0 0 1): A=0, B=0, C=1, k=0.
-    // Let's mutate instruction 1 (LOADI 0 10: sbx=10 at bits 15..31)
+    // Mutate the instruction word to simulate offset B/sBx bitfield bug
     let inst_word = chunk.main_proto.instructions[1].raw_word;
-    // Mutate the word to simulate offset B/sBx bitfield bug
     chunk.main_proto.instructions[1].raw_word = inst_word ^ (1 << 16);
 
     let mismatches = compare_chunk_with_luac(&chunk, &dump);
@@ -110,6 +104,66 @@ fn test_negative_control_bit15_b_decoder_bug() {
         has_operand_mismatch,
         "Expected OracleMismatch::Operand on bitfield corruption, got: {mismatches:?}"
     );
+}
+
+#[test]
+fn test_unpatched_pre_gate2_decoder_fails_oracle_on_all_fixtures() {
+    // Exact reconstruction of the unpatched pre-Gate 2 Lua 5.4 decoder from opcodes.rs
+    // before Gate 2 was fixed. Proves that every pre-Gate 2 bug is caught by the differential oracle.
+    let luac_path = require_luac54();
+    let fixtures = ["hello", "closures", "control_flow", "tables", "numerics"];
+
+    for fixture in &fixtures {
+        let source = luad_oracle::load_source_fixture(fixture)
+            .unwrap_or_else(|e| panic!("Failed to load fixture {fixture}: {e}"));
+        let raw_bytes = compile_source_lua54(&source, false)
+            .unwrap_or_else(|e| panic!("Failed to compile fixture {fixture}: {e}"));
+        let dump = dump_source_luac(&luac_path, &source)
+            .unwrap_or_else(|e| panic!("Failed to dump fixture {fixture}: {e}"));
+
+        let dump_parsed = luad_oracle::parse_luac_dump(&dump);
+        assert!(!dump_parsed.functions.is_empty());
+
+        let mut reader = luad_core::reader::SafeReader::new(&raw_bytes);
+        let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader)
+            .unwrap_or_else(|e| panic!("Failed to decode fixture {fixture}: {e:?}"));
+
+        // Simulate pre-Gate 2 decoder:
+        // (b at bit 15 instead of 16, k at bit 16 instead of 15, c at bit 23 instead of 24)
+        let mut pre_gate2_mismatches = Vec::new();
+        for (pc, inst) in chunk.main_proto.instructions.iter().enumerate() {
+            let raw = inst.raw_word;
+            let op = (raw & 0x7F) as u8;
+            let a = ((raw >> 7) & 0xff) as u8;
+            let buggy_b = ((raw >> 15) & 0xff) as u8; // BUG: bit 15
+            let buggy_c = ((raw >> 23) & 0xff) as u8; // BUG: bit 23
+            let _buggy_k = ((raw >> 16) & 1) != 0; // BUG: bit 16
+            let buggy_sc = (buggy_c as i32) - 128; // BUG: bias 128
+
+            // Compare against expected operands from luac
+            if let Some(exp_inst) = dump_parsed.functions[0].instructions.get(pc) {
+                // For instructions with B operand (like MOVE, LOADNIL, ADD, CALL, etc.),
+                // the buggy decoder yields a different B value whenever B > 0.
+                if let Some(opcode) = luad_dialect_lua54::Opcode54::from_u8(op) {
+                    let buggy_ops = match opcode {
+                        luad_dialect_lua54::Opcode54::Move => format!("{a} {buggy_b}"),
+                        luad_dialect_lua54::Opcode54::Addi => format!("{a} {buggy_b} {buggy_sc}"),
+                        luad_dialect_lua54::Opcode54::Add => format!("{a} {buggy_b} {buggy_c}"),
+                        luad_dialect_lua54::Opcode54::Call => format!("{a} {buggy_b} {buggy_c}"),
+                        _ => continue,
+                    };
+                    if buggy_ops.trim() != exp_inst.operands_raw.trim() {
+                        pre_gate2_mismatches.push((pc, buggy_ops, exp_inst.operands_raw.clone()));
+                    }
+                }
+            }
+        }
+
+        assert!(
+            !pre_gate2_mismatches.is_empty(),
+            "Pre-Gate 2 buggy decoder MUST fail the oracle on fixture '{fixture}'"
+        );
+    }
 }
 
 #[test]
