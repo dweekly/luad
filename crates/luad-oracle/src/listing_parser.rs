@@ -803,22 +803,36 @@ fn check_constant_matches(val: &luad_core::model::ConstantValue, exp_c: &LuacCon
                     return false;
                 }
             }
-            if let Ok(parsed_f) = exp_str.parse::<f64>() {
-                if (val.is_nan() && parsed_f.is_nan()) || val.to_bits() == parsed_f.to_bits() {
+            if val.is_nan() {
+                exp_str == "nan" || exp_str == "-nan"
+            } else if *val == 0.0 && val.is_sign_negative() {
+                exp_str == "-0.0" || exp_str == "-0"
+            } else if *val == 0.0 && val.is_sign_positive() {
+                exp_str == "0.0" || exp_str == "0"
+            } else if let Ok(parsed_f) = exp_str.parse::<f64>() {
+                if val.to_bits() == parsed_f.to_bits() {
                     true
                 } else {
                     let val_str = format!("{}", val);
+                    let val_str_float = if !val_str.contains('.')
+                        && !val_str.contains('e')
+                        && !val_str.contains('E')
+                    {
+                        format!("{}.0", val_str)
+                    } else {
+                        val_str.clone()
+                    };
                     val_str == exp_str
-                        || (*val - parsed_f).abs() <= f64::EPSILON
+                        || val_str_float == exp_str
                         || (val.is_finite()
                             && parsed_f.is_finite()
-                            && (*val - parsed_f).abs() / (val.abs().max(parsed_f.abs()).max(1.0))
-                                < 1e-12)
+                            && (*val - parsed_f).abs() / val.abs().max(1.0) < 1e-13)
                 }
             } else {
                 false
             }
         }
+
         luad_core::model::ConstantValue::ShortString(s)
         | luad_core::model::ConstantValue::LongString(s) => {
             if let Some(tag) = exp_c.tag {

@@ -412,3 +412,119 @@ fn test_assert_chunk_matches_luac_panics_on_mismatch() {
     chunk.main_proto.instructions[0].raw_word ^= 0x7F;
     luad_oracle::assert_chunk_matches_luac(&chunk, &dump);
 }
+
+#[test]
+fn test_negative_control_unknown_actual_opcode() {
+    let (mut chunk, dump) = get_base_test_pair();
+    // Opcode 120 is invalid in Lua 5.4 (valid are 0..82)
+    chunk.main_proto.instructions[0].raw_word =
+        (chunk.main_proto.instructions[0].raw_word & !0x7F) | 120;
+    let mismatches = compare_chunk_with_luac(&chunk, &dump);
+    assert!(
+        !mismatches.is_empty(),
+        "Unknown opcode must produce mismatch"
+    );
+    assert!(mismatches.iter().any(
+        |m| matches!(m, OracleMismatch::Mnemonic { pc: 0, actual, .. } if actual == "<unknown>")
+    ));
+}
+
+#[test]
+fn test_negative_control_constant_float_token_character_mutation() {
+    let luac_path = require_luac54();
+    let source = "local s = \"str\"\nlocal f = 3.141592653589793\nreturn s, f";
+    let raw_bytes = compile_source_lua54(source, false).expect("Compiles with luac 5.4");
+    let mut reader = luad_core::reader::SafeReader::new(&raw_bytes);
+    let mut chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("Decodes chunk");
+    let dump = dump_source_luac(&luac_path, source).expect("Dumps with luac 5.4");
+
+    // Clean check
+    assert!(compare_chunk_with_luac(&chunk, &dump).is_empty());
+
+    // Mutate float token (constant 1) - changes character in canonical luac float token
+    chunk.main_proto.constants[1].value = ConstantValue::Float {
+        val: 3.15,
+        raw_hex: "4009333333333333".to_string(),
+        is_inf: false,
+        is_nan: false,
+    };
+
+    let mismatches = compare_chunk_with_luac(&chunk, &dump);
+    assert!(
+        !mismatches.is_empty(),
+        "Mutated float token must produce mismatch"
+    );
+    assert!(mismatches
+        .iter()
+        .any(|m| matches!(m, OracleMismatch::Constant { index: 1, .. })));
+}
+
+#[test]
+fn test_negative_control_signed_zero_float() {
+    let luac_path = require_luac54();
+    let source = "local s = \"str\"\nlocal f = 3.141592653589793\nreturn s, f";
+    let raw_bytes = compile_source_lua54(source, false).expect("Compiles with luac 5.4");
+    let mut reader = luad_core::reader::SafeReader::new(&raw_bytes);
+    let mut chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("Decodes chunk");
+    let dump = dump_source_luac(&luac_path, source).expect("Dumps with luac 5.4");
+
+    assert!(compare_chunk_with_luac(&chunk, &dump).is_empty());
+
+    // Mutate float to negative zero -0.0
+    chunk.main_proto.constants[1].value = ConstantValue::Float {
+        val: -0.0,
+        raw_hex: "8000000000000000".to_string(),
+        is_inf: false,
+        is_nan: false,
+    };
+
+    let mismatches = compare_chunk_with_luac(&chunk, &dump);
+    assert!(!mismatches.is_empty(), "-0.0 vs +0.0 must produce mismatch");
+    assert!(mismatches
+        .iter()
+        .any(|m| matches!(m, OracleMismatch::Constant { index: 1, .. })));
+}
+
+#[test]
+fn test_negative_control_integer_vs_float_constant_tag() {
+    let luac_path = require_luac54();
+    let source = "local s = \"str\"\nlocal i = 9223372036854775807\nreturn s, i";
+    let raw_bytes = compile_source_lua54(source, false).expect("Compiles with luac 5.4");
+    let mut reader = luad_core::reader::SafeReader::new(&raw_bytes);
+    let mut chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("Decodes chunk");
+    let dump = dump_source_luac(&luac_path, source).expect("Dumps with luac 5.4");
+
+    assert!(compare_chunk_with_luac(&chunk, &dump).is_empty());
+
+    // Replace integer constant with float constant with same value
+    chunk.main_proto.constants[1].value = ConstantValue::Float {
+        val: 9223372036854775807.0,
+        raw_hex: "43e0000000000000".to_string(),
+        is_inf: false,
+        is_nan: false,
+    };
+
+    let mismatches = compare_chunk_with_luac(&chunk, &dump);
+    assert!(
+        !mismatches.is_empty(),
+        "Integer vs Float tag mismatch must produce mismatch"
+    );
+    assert!(mismatches
+        .iter()
+        .any(|m| matches!(m, OracleMismatch::Constant { index: 1, .. })));
+}
+
+#[test]
+fn test_negative_control_extra_operand_detected() {
+    let (mut chunk, dump) = get_base_test_pair();
+
+    // Mutate the raw instruction word to change operand count / operands
+    // Instruction 1 is LOADS (opcode 2) - mutate it
+    chunk.main_proto.instructions[1].raw_word ^= 1 << 16;
+
+    let mismatches = compare_chunk_with_luac(&chunk, &dump);
+    assert!(!mismatches.is_empty(), "Operand mismatch must be detected");
+    assert!(mismatches
+        .iter()
+        .any(|m| matches!(m, OracleMismatch::Operand { .. })));
+}
