@@ -174,6 +174,8 @@ fn test_killer_probe_duplicate_coverage_same_summed_length_rejected() {
     let interval_a = (0usize, 20usize);
     let interval_b = (10usize, 30usize);
     let has_overlap = interval_a.0 + interval_a.1 > interval_b.0;
-    assert!(has_overlap, "Overlapping intervals with identical sum must be rejected");
+    assert!(
+        has_overlap,
+        "Overlapping intervals with identical sum must be rejected"
+    );
 }
-
