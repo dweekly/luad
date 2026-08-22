@@ -43,7 +43,12 @@ pub fn execute_query(
     let start_index: usize = cursor.and_then(|c| c.parse().ok()).unwrap_or(0);
     let mut all_matches = Vec::new();
 
-    collect_proto_matches(&chunk.dialect, &chunk.main_proto, where_expr, &mut all_matches);
+    collect_proto_matches(
+        &chunk.dialect,
+        &chunk.main_proto,
+        where_expr,
+        &mut all_matches,
+    );
 
     let total_matches = all_matches.len();
     let page_items: Vec<QueryMatch> = all_matches
@@ -94,7 +99,8 @@ fn collect_proto_matches(
                 let is_match = match &c.value {
                     ConstantValue::ShortString(s) | ConstantValue::LongString(s) => {
                         if let Some((_, pattern)) = expr.split_once("contains(") {
-                            let clean_pat = pattern.trim_matches(|c| c == ')' || c == '"' || c == '\'');
+                            let clean_pat =
+                                pattern.trim_matches(|c| c == ')' || c == '"' || c == '\'');
                             s.display.contains(clean_pat)
                         } else {
                             true
@@ -118,8 +124,11 @@ fn collect_proto_matches(
     }
 }
 
-
-fn matches_predicate(sem: &SemanticInstruction, _proto: &Prototype, where_expr: Option<&str>) -> bool {
+fn matches_predicate(
+    sem: &SemanticInstruction,
+    _proto: &Prototype,
+    where_expr: Option<&str>,
+) -> bool {
     let Some(expr) = where_expr else {
         return true;
     };
@@ -130,11 +139,7 @@ fn matches_predicate(sem: &SemanticInstruction, _proto: &Prototype, where_expr: 
     if let Some((_, val)) = expr.split_once("==") {
         let val_clean = val.trim().trim_matches('"').trim_matches('\'');
         let val_upper = val_clean.to_uppercase();
-        let target_mnem = if val_upper.starts_with("OP_") {
-            &val_upper[3..]
-        } else {
-            &val_upper
-        };
+        let target_mnem = val_upper.strip_prefix("OP_").unwrap_or(&val_upper);
 
         if expr.contains("opcode") || expr.contains("mnemonic") {
             return sem.mnemonic == target_mnem;
@@ -142,13 +147,19 @@ fn matches_predicate(sem: &SemanticInstruction, _proto: &Prototype, where_expr: 
 
         if expr.contains("effect.write.upvalue") || expr.contains("write.upvalue") {
             if let Ok(idx) = val_clean.parse::<u8>() {
-                return sem.writes.iter().any(|w| matches!(w, EffectTarget::Upvalue { index, .. } if *index == idx));
+                return sem
+                    .writes
+                    .iter()
+                    .any(|w| matches!(w, EffectTarget::Upvalue { index, .. } if *index == idx));
             }
         }
 
         if expr.contains("effect.read.upvalue") || expr.contains("read.upvalue") {
             if let Ok(idx) = val_clean.parse::<u8>() {
-                return sem.reads.iter().any(|r| matches!(r, EffectTarget::Upvalue { index, .. } if *index == idx));
+                return sem
+                    .reads
+                    .iter()
+                    .any(|r| matches!(r, EffectTarget::Upvalue { index, .. } if *index == idx));
             }
         }
     }
@@ -158,7 +169,11 @@ fn matches_predicate(sem: &SemanticInstruction, _proto: &Prototype, where_expr: 
         return true;
     }
 
-    if sem.explanation.to_lowercase().contains(&expr.to_lowercase()) {
+    if sem
+        .explanation
+        .to_lowercase()
+        .contains(&expr.to_lowercase())
+    {
         return true;
     }
 

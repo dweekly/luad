@@ -1,7 +1,7 @@
 //! Lua 5.1 opcode definitions and bitfield decoder.
 
-use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 pub const BITRK_51: u32 = 1 << 8; // 256
 
@@ -53,7 +53,7 @@ impl Opcode51 {
     #[must_use]
     pub fn from_u8(val: u8) -> Option<Self> {
         if val <= 37 {
-            Some(unsafe { std::mem::transmute(val) })
+            Some(unsafe { std::mem::transmute::<u8, Opcode51>(val) })
         } else {
             None
         }
@@ -106,12 +106,37 @@ impl Opcode51 {
     #[must_use]
     pub fn mode(self) -> OpMode51 {
         match self {
-            Self::Move | Self::LoadBool | Self::LoadNil | Self::GetUpval | Self::GetTable
-            | Self::SetUpval | Self::SetTable | Self::NewTable | Self::SelfOp | Self::Add
-            | Self::Sub | Self::Mul | Self::Div | Self::Mod | Self::Pow | Self::Unm
-            | Self::Not | Self::Len | Self::Concat | Self::Eq | Self::Lt | Self::Le
-            | Self::Test | Self::TestSet | Self::Call | Self::TailCall | Self::Return
-            | Self::TForLoop | Self::SetList | Self::Close | Self::VarArg => OpMode51::IABC,
+            Self::Move
+            | Self::LoadBool
+            | Self::LoadNil
+            | Self::GetUpval
+            | Self::GetTable
+            | Self::SetUpval
+            | Self::SetTable
+            | Self::NewTable
+            | Self::SelfOp
+            | Self::Add
+            | Self::Sub
+            | Self::Mul
+            | Self::Div
+            | Self::Mod
+            | Self::Pow
+            | Self::Unm
+            | Self::Not
+            | Self::Len
+            | Self::Concat
+            | Self::Eq
+            | Self::Lt
+            | Self::Le
+            | Self::Test
+            | Self::TestSet
+            | Self::Call
+            | Self::TailCall
+            | Self::Return
+            | Self::TForLoop
+            | Self::SetList
+            | Self::Close
+            | Self::VarArg => OpMode51::IABC,
             Self::LoadK | Self::GetGlobal | Self::SetGlobal | Self::Closure => OpMode51::IABx,
             Self::Jmp | Self::ForLoop | Self::ForPrep => OpMode51::IAsBx,
         }

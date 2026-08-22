@@ -9,23 +9,55 @@ use luad_dialect_lua54::{OpMode54, RawInstruction54};
 pub fn render_inspect(chunk: &Chunk, summary: bool) {
     println!("{}", "=== Chunk Overview ===".bold());
     println!("{:<18} {}", "SHA-256:".dimmed(), chunk.sha256);
-    println!("{:<18} {} bytes", "Byte Length:".dimmed(), chunk.byte_length);
-    println!("{:<18} {}", "Dialect:".dimmed(), chunk.dialect.green().bold());
+    println!(
+        "{:<18} {} bytes",
+        "Byte Length:".dimmed(),
+        chunk.byte_length
+    );
+    println!(
+        "{:<18} {}",
+        "Dialect:".dimmed(),
+        chunk.dialect.green().bold()
+    );
     println!("{:<18} {:?}", "Verdict:".dimmed(), chunk.verdict);
 
     if let Some(trailing) = &chunk.trailing_bytes {
-        println!("{:<18} {} hex bytes", "Trailing Bytes:".yellow(), trailing.len() / 2);
+        println!(
+            "{:<18} {} hex bytes",
+            "Trailing Bytes:".yellow(),
+            trailing.len() / 2
+        );
     }
 
     if summary {
         println!();
         println!("{}", "=== Summary Metrics ===".bold());
         println!("{:<18} {}", "Main Proto ID:".dimmed(), chunk.main_proto.id);
-        println!("{:<18} {}", "Instructions:".dimmed(), chunk.main_proto.instructions.len());
-        println!("{:<18} {}", "Constants:".dimmed(), chunk.main_proto.constants.len());
-        println!("{:<18} {}", "Upvalues:".dimmed(), chunk.main_proto.upvalues.len());
-        println!("{:<18} {}", "Child Protos:".dimmed(), chunk.main_proto.protos.len());
-        println!("{:<18} {}", "Diagnostics:".dimmed(), chunk.diagnostics.len());
+        println!(
+            "{:<18} {}",
+            "Instructions:".dimmed(),
+            chunk.main_proto.instructions.len()
+        );
+        println!(
+            "{:<18} {}",
+            "Constants:".dimmed(),
+            chunk.main_proto.constants.len()
+        );
+        println!(
+            "{:<18} {}",
+            "Upvalues:".dimmed(),
+            chunk.main_proto.upvalues.len()
+        );
+        println!(
+            "{:<18} {}",
+            "Child Protos:".dimmed(),
+            chunk.main_proto.protos.len()
+        );
+        println!(
+            "{:<18} {}",
+            "Diagnostics:".dimmed(),
+            chunk.diagnostics.len()
+        );
         return;
     }
 
@@ -35,9 +67,21 @@ pub fn render_inspect(chunk: &Chunk, summary: bool) {
     println!("{:<18} 0x{:02x}", "Version:".dimmed(), chunk.header.version);
     println!("{:<18} {}", "Format:".dimmed(), chunk.header.format);
     println!("{:<18} {}", "LUAC_DATA:".dimmed(), chunk.header.luac_data);
-    println!("{:<18} {}", "Instruction Size:".dimmed(), chunk.header.instruction_size);
-    println!("{:<18} {}", "Integer Size:".dimmed(), chunk.header.lua_integer_size);
-    println!("{:<18} {}", "Number Size:".dimmed(), chunk.header.lua_number_size);
+    println!(
+        "{:<18} {}",
+        "Instruction Size:".dimmed(),
+        chunk.header.instruction_size
+    );
+    println!(
+        "{:<18} {}",
+        "Integer Size:".dimmed(),
+        chunk.header.lua_integer_size
+    );
+    println!(
+        "{:<18} {}",
+        "Number Size:".dimmed(),
+        chunk.header.lua_number_size
+    );
     println!("{:<18} 0x{:x}", "LUAC_INT:".dimmed(), chunk.header.luac_int);
     println!("{:<18} {}", "LUAC_NUM:".dimmed(), chunk.header.luac_num);
 
@@ -84,9 +128,7 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
         .map(|s| s.display.as_str())
         .unwrap_or("<stripped>");
 
-    println!(
-        "; =========================================================================="
-    );
+    println!("; ==========================================================================");
     println!(
         "; {} (source: {}, lines {}-{}, stack: {})",
         proto.id.to_string().bold(),
@@ -102,9 +144,7 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
         proto.instructions.len(),
         proto.constants.len()
     );
-    println!(
-        "; =========================================================================="
-    );
+    println!("; ==========================================================================");
 
     if !proto.constants.is_empty() {
         println!("; Constants:");
@@ -153,16 +193,26 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
                     match op.mode() {
                         luad_dialect_lua55::OpMode55::IABC => {
                             if raw_info.k != 0 {
-                                format!("{} {} {} (k={})", raw_info.a, raw_info.b, raw_info.c, raw_info.k)
+                                format!(
+                                    "{} {} {} (k={})",
+                                    raw_info.a, raw_info.b, raw_info.c, raw_info.k
+                                )
                             } else {
                                 format!("{} {} {}", raw_info.a, raw_info.b, raw_info.c)
                             }
                         }
                         luad_dialect_lua55::OpMode55::IvABC => {
-                            format!("{} {} {} (k={})", raw_info.a, raw_info.vb, raw_info.vc, raw_info.k)
+                            format!(
+                                "{} {} {} (k={})",
+                                raw_info.a, raw_info.vb, raw_info.vc, raw_info.k
+                            )
                         }
-                        luad_dialect_lua55::OpMode55::IABx => format!("{} {}", raw_info.a, raw_info.bx),
-                        luad_dialect_lua55::OpMode55::IAsBx => format!("{} {}", raw_info.a, raw_info.sbx),
+                        luad_dialect_lua55::OpMode55::IABx => {
+                            format!("{} {}", raw_info.a, raw_info.bx)
+                        }
+                        luad_dialect_lua55::OpMode55::IAsBx => {
+                            format!("{} {}", raw_info.a, raw_info.sbx)
+                        }
                         luad_dialect_lua55::OpMode55::IAx => format!("{}", raw_info.ax),
                         luad_dialect_lua55::OpMode55::IsJ => format!("{}", raw_info.sj),
                     }
@@ -177,12 +227,24 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
                 let ops = if let Some(op) = raw_info.opcode {
                     match op.mode() {
                         luad_dialect_lua53::OpMode53::IABC => {
-                            let b_str = if raw_info.is_b_k() { format!("k({})", raw_info.b_index_k()) } else { raw_info.b.to_string() };
-                            let c_str = if raw_info.is_c_k() { format!("k({})", raw_info.c_index_k()) } else { raw_info.c.to_string() };
+                            let b_str = if raw_info.is_b_k() {
+                                format!("k({})", raw_info.b_index_k())
+                            } else {
+                                raw_info.b.to_string()
+                            };
+                            let c_str = if raw_info.is_c_k() {
+                                format!("k({})", raw_info.c_index_k())
+                            } else {
+                                raw_info.c.to_string()
+                            };
                             format!("{} {} {}", raw_info.a, b_str, c_str)
                         }
-                        luad_dialect_lua53::OpMode53::IABx => format!("{} {}", raw_info.a, raw_info.bx),
-                        luad_dialect_lua53::OpMode53::IAsBx => format!("{} {}", raw_info.a, raw_info.sbx),
+                        luad_dialect_lua53::OpMode53::IABx => {
+                            format!("{} {}", raw_info.a, raw_info.bx)
+                        }
+                        luad_dialect_lua53::OpMode53::IAsBx => {
+                            format!("{} {}", raw_info.a, raw_info.sbx)
+                        }
                         luad_dialect_lua53::OpMode53::IAx => format!("{}", raw_info.ax),
                     }
                 } else {
@@ -196,12 +258,24 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
                 let ops = if let Some(op) = raw_info.opcode {
                     match op.mode() {
                         luad_dialect_lua52::OpMode52::IABC => {
-                            let b_str = if raw_info.is_b_k() { format!("k({})", raw_info.b_index_k()) } else { raw_info.b.to_string() };
-                            let c_str = if raw_info.is_c_k() { format!("k({})", raw_info.c_index_k()) } else { raw_info.c.to_string() };
+                            let b_str = if raw_info.is_b_k() {
+                                format!("k({})", raw_info.b_index_k())
+                            } else {
+                                raw_info.b.to_string()
+                            };
+                            let c_str = if raw_info.is_c_k() {
+                                format!("k({})", raw_info.c_index_k())
+                            } else {
+                                raw_info.c.to_string()
+                            };
                             format!("{} {} {}", raw_info.a, b_str, c_str)
                         }
-                        luad_dialect_lua52::OpMode52::IABx => format!("{} {}", raw_info.a, raw_info.bx),
-                        luad_dialect_lua52::OpMode52::IAsBx => format!("{} {}", raw_info.a, raw_info.sbx),
+                        luad_dialect_lua52::OpMode52::IABx => {
+                            format!("{} {}", raw_info.a, raw_info.bx)
+                        }
+                        luad_dialect_lua52::OpMode52::IAsBx => {
+                            format!("{} {}", raw_info.a, raw_info.sbx)
+                        }
                         luad_dialect_lua52::OpMode52::IAx => format!("{}", raw_info.ax),
                     }
                 } else {
@@ -215,12 +289,24 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
                 let ops = if let Some(op) = raw_info.opcode {
                     match op.mode() {
                         luad_dialect_lua51::OpMode51::IABC => {
-                            let b_str = if raw_info.is_b_k() { format!("k({})", raw_info.b_index_k()) } else { raw_info.b.to_string() };
-                            let c_str = if raw_info.is_c_k() { format!("k({})", raw_info.c_index_k()) } else { raw_info.c.to_string() };
+                            let b_str = if raw_info.is_b_k() {
+                                format!("k({})", raw_info.b_index_k())
+                            } else {
+                                raw_info.b.to_string()
+                            };
+                            let c_str = if raw_info.is_c_k() {
+                                format!("k({})", raw_info.c_index_k())
+                            } else {
+                                raw_info.c.to_string()
+                            };
                             format!("{} {} {}", raw_info.a, b_str, c_str)
                         }
-                        luad_dialect_lua51::OpMode51::IABx => format!("{} {}", raw_info.a, raw_info.bx),
-                        luad_dialect_lua51::OpMode51::IAsBx => format!("{} {}", raw_info.a, raw_info.sbx),
+                        luad_dialect_lua51::OpMode51::IABx => {
+                            format!("{} {}", raw_info.a, raw_info.bx)
+                        }
+                        luad_dialect_lua51::OpMode51::IAsBx => {
+                            format!("{} {}", raw_info.a, raw_info.sbx)
+                        }
                     }
                 } else {
                     format!("(raw=0x{:08x})", inst.raw_word)
@@ -234,7 +320,10 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
                     match op.mode() {
                         OpMode54::IABC => {
                             if raw_info.k != 0 {
-                                format!("{} {} {} (k={})", raw_info.a, raw_info.b, raw_info.c, raw_info.k)
+                                format!(
+                                    "{} {} {} (k={})",
+                                    raw_info.a, raw_info.b, raw_info.c, raw_info.k
+                                )
                             } else {
                                 format!("{} {} {}", raw_info.a, raw_info.b, raw_info.c)
                             }
@@ -298,7 +387,9 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
 pub fn render_validate(verdict: Verdict, diagnostics: &[Diagnostic]) {
     println!("{}", "=== Validation Report ===".bold());
     let verdict_str = match verdict {
-        Verdict::ValidForParser | Verdict::ValidForAnalysis => format!("{verdict:?}").green().bold(),
+        Verdict::ValidForParser | Verdict::ValidForAnalysis => {
+            format!("{verdict:?}").green().bold()
+        }
         Verdict::Incomplete | Verdict::Ambiguous => format!("{verdict:?}").yellow().bold(),
         Verdict::Invalid => format!("{verdict:?}").red().bold(),
     };
@@ -332,17 +423,39 @@ pub fn render_validate(verdict: Verdict, diagnostics: &[Diagnostic]) {
 /// Render tool capabilities.
 pub fn render_capabilities(evidence: bool) {
     println!("{}", "=== luad Capabilities ===".bold());
-    println!("{:<20} {}", "Tool Name:".dimmed(), "luad");
-    println!("{:<20} {}", "Tool Version:".dimmed(), env!("CARGO_PKG_VERSION"));
-    println!("{:<20} {}", "Schema Version:".dimmed(), "1");
+    println!("{:<20} luad", "Tool Name:".dimmed());
+    println!(
+        "{:<20} {}",
+        "Tool Version:".dimmed(),
+        env!("CARGO_PKG_VERSION")
+    );
+    println!("{:<20} 1", "Schema Version:".dimmed());
     println!();
     println!("{}", "Supported Dialects:".bold());
-    println!("  - {:<12} {}", "lua5.5".green().bold(), "Lua 5.5.0 - 5.5.1 (lossless parse, string reuse, ivABC, disasm, validate)");
-    println!("  - {:<12} {}", "lua5.4".green().bold(), "Lua 5.4.0 - 5.4.8 (lossless parse, disasm, validate, CFG, xrefs, diff)");
-    println!("  - {:<12} {}", "lua5.3".green().bold(), "Lua 5.3.0 - 5.3.6 (lossless parse, disasm, validate, CFG, xrefs, diff)");
-    println!("  - {:<12} {}", "lua5.2".green().bold(), "Lua 5.2.0 - 5.2.4 (lossless parse, disasm, validate, CFG, xrefs, diff)");
-    println!("  - {:<12} {}", "lua5.1".green().bold(), "Lua 5.1.0 - 5.1.5 (lossless parse, disasm, validate, CFG, xrefs, diff)");
-    println!("  - {:<12} {}", "luajit".dimmed(), "LuaJIT 2.0/2.1 (Phase 8 planned)");
+    println!(
+        "  - {:<12} Lua 5.5.0 - 5.5.1 (lossless parse, string reuse, ivABC, disasm, validate)",
+        "lua5.5".green().bold()
+    );
+    println!(
+        "  - {:<12} Lua 5.4.0 - 5.4.8 (lossless parse, disasm, validate, CFG, xrefs, diff)",
+        "lua5.4".green().bold()
+    );
+    println!(
+        "  - {:<12} Lua 5.3.0 - 5.3.6 (lossless parse, disasm, validate, CFG, xrefs, diff)",
+        "lua5.3".green().bold()
+    );
+    println!(
+        "  - {:<12} Lua 5.2.0 - 5.2.4 (lossless parse, disasm, validate, CFG, xrefs, diff)",
+        "lua5.2".green().bold()
+    );
+    println!(
+        "  - {:<12} Lua 5.1.0 - 5.1.5 (lossless parse, disasm, validate, CFG, xrefs, diff)",
+        "lua5.1".green().bold()
+    );
+    println!(
+        "  - {:<12} LuaJIT 2.0/2.1 (Phase 8 planned)",
+        "luajit".dimmed()
+    );
 
     if evidence {
         println!();
@@ -352,16 +465,28 @@ pub fn render_capabilities(evidence: bool) {
         println!("  - Exact bit-level integer and IEEE-754 float preservation");
         println!("  - Differential oracle testing against official Lua 5.1.5, 5.2.4, 5.3.6, 5.4.8, 5.5.1 binaries");
     }
-
 }
 
 /// Render instruction explanation with provenance and source citations.
 pub fn render_explain_instruction(inst: &luad_core::SemanticInstruction) {
     println!("{}", "=== Instruction Explanation ===".bold());
-    println!("{:<20} {}", "Target ID:".dimmed(), inst.id.to_string().bold());
+    println!(
+        "{:<20} {}",
+        "Target ID:".dimmed(),
+        inst.id.to_string().bold()
+    );
     println!("{:<20} {}", "PC:".dimmed(), inst.pc);
-    println!("{:<20} {}", "Raw Word:".dimmed(), format!("0x{:08x} ({})", inst.raw_word, inst.raw_hex));
-    println!("{:<20} {}", "Mnemonic:".dimmed(), inst.mnemonic.green().bold());
+    println!(
+        "{:<20} 0x{:08x} ({})",
+        "Raw Word:".dimmed(),
+        inst.raw_word,
+        inst.raw_hex
+    );
+    println!(
+        "{:<20} {}",
+        "Mnemonic:".dimmed(),
+        inst.mnemonic.green().bold()
+    );
     println!("{:<20} {:?}", "Confidence:".dimmed(), inst.confidence);
 
     println!();
@@ -411,13 +536,22 @@ pub fn render_explain_instruction(inst: &luad_core::SemanticInstruction) {
     }
 
     println!();
-    println!("{:<20} offset {}, length {} bytes", "Source Location:".dimmed(), inst.source.byte_offset, inst.source.byte_length);
+    println!(
+        "{:<20} offset {}, length {} bytes",
+        "Source Location:".dimmed(),
+        inst.source.byte_offset,
+        inst.source.byte_length
+    );
 }
 
 /// Render CFG overview.
 pub fn render_cfg(cfg: &luad_analysis::ControlFlowGraph) {
     println!("{}", "=== Control Flow Graph ===".bold());
-    println!("{:<18} {}", "Target Proto:".dimmed(), cfg.proto_id.to_string().bold());
+    println!(
+        "{:<18} {}",
+        "Target Proto:".dimmed(),
+        cfg.proto_id.to_string().bold()
+    );
     println!("{:<18} {}", "Basic Blocks:".dimmed(), cfg.blocks.len());
     println!("{:<18} {}", "Instructions:".dimmed(), cfg.instruction_count);
 
@@ -476,11 +610,21 @@ pub fn render_xrefs(entries: &[&luad_analysis::XrefEntry]) {
     }
 
     println!();
-    println!("{:<24} {:<14} {}", "SOURCE".dimmed(), "RELATION".dimmed(), "TARGET".dimmed());
+    println!(
+        "{:<24} {:<14} {}",
+        "SOURCE".dimmed(),
+        "RELATION".dimmed(),
+        "TARGET".dimmed()
+    );
     println!("{}", "-".repeat(70).dimmed());
 
     for e in entries {
-        println!("{:<24} {:<14} {}", e.source.to_string().cyan(), format!("{:?}", e.relation).bold(), e.target);
+        println!(
+            "{:<24} {:<14} {}",
+            e.source.to_string().cyan(),
+            format!("{:?}", e.relation).bold(),
+            e.target
+        );
     }
 }
 
@@ -489,7 +633,10 @@ pub fn render_query(response: &luad_analysis::QueryResponse) {
     println!("{}", "=== Query Results ===".bold());
     println!("{:<18} {}", "Matches:".dimmed(), response.count);
     if response.is_truncated {
-        println!("{:<18} {}", "Truncated:".yellow(), "yes (use --cursor to continue)");
+        println!(
+            "{:<18} yes (use --cursor to continue)",
+            "Truncated:".yellow()
+        );
         if let Some(cursor) = &response.next_cursor {
             println!("{:<18} {}", "Next Cursor:".dimmed(), cursor);
         }
@@ -502,7 +649,12 @@ pub fn render_query(response: &luad_analysis::QueryResponse) {
 
     println!();
     for m in &response.matches {
-        println!("[{}] {}: {}", m.kind.dimmed(), m.id.to_string().bold(), m.summary);
+        println!(
+            "[{}] {}: {}",
+            m.kind.dimmed(),
+            m.id.to_string().bold(),
+            m.summary
+        );
     }
 }
 
@@ -554,5 +706,3 @@ pub fn render_diff(diff: &luad_analysis::ChunkDiff) {
         }
     }
 }
-
-

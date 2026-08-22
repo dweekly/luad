@@ -105,6 +105,22 @@ impl<'a> SafeReader<'a> {
         &self.current_proto_path
     }
 
+    /// Access current resource limits.
+    #[must_use]
+    pub fn limits(&self) -> &ResourceLimits {
+        &self.limits
+    }
+
+    /// Calculate safe vector pre-allocation capacity bounded by remaining input bytes.
+    #[must_use]
+    pub fn safe_capacity(&self, requested_count: usize, element_min_bytes: usize) -> usize {
+        let max_possible = self
+            .remaining()
+            .checked_div(element_min_bytes)
+            .unwrap_or_else(|| self.remaining());
+        requested_count.min(max_possible).min(1024)
+    }
+
     /// Total number of prototypes encountered so far.
     #[must_use]
     pub fn total_prototypes(&self) -> usize {
@@ -292,8 +308,6 @@ impl<'a> SafeReader<'a> {
         Ok(())
     }
 
-
-
     /// Read a size_t encoded integer in Lua 5.4 (used for string length, table sizes, etc.).
     pub fn read_size_lua54(&mut self) -> Result<(usize, SourceLocation), Diagnostic> {
         let (val, loc) = self.read_varint_lua54()?;
@@ -337,11 +351,17 @@ impl<'a> SafeReader<'a> {
 
         let content = self.read_exact(content_len)?;
         let raw_bytes = &self.data[start_cursor..self.cursor];
-        Ok((Some(content.to_vec()), SourceLocation::new(start_pos, raw_bytes)))
+        Ok((
+            Some(content.to_vec()),
+            SourceLocation::new(start_pos, raw_bytes),
+        ))
     }
 
     /// Enter a child prototype context, enforcing depth and prototype count limits.
-    pub fn enter_proto(&mut self, child_index: usize) -> Result<ProtoPathGuard<'a, '_>, Diagnostic> {
+    pub fn enter_proto(
+        &mut self,
+        child_index: usize,
+    ) -> Result<ProtoPathGuard<'a, '_>, Diagnostic> {
         let child_path = self.current_proto_path.child(child_index);
         let depth = child_path.depth();
 
@@ -390,7 +410,8 @@ pub struct ProtoPathGuard<'a, 'r> {
 
 impl<'a, 'r> Drop for ProtoPathGuard<'a, 'r> {
     fn drop(&mut self) {
-        self.reader.current_proto_path = std::mem::replace(&mut self.previous_path, ProtoPath::root());
+        self.reader.current_proto_path =
+            std::mem::replace(&mut self.previous_path, ProtoPath::root());
     }
 }
 

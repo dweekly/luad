@@ -1,7 +1,7 @@
 //! End-to-end CLI command and exit code verification test suite.
 
-use std::process::Command;
 use luad_oracle::{compile_source_lua54, find_luac54};
+use std::process::Command;
 
 fn get_luad_bin() -> String {
     if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
@@ -16,7 +16,6 @@ fn get_luad_bin() -> String {
     path.push("luad");
     path.to_str().unwrap().to_string()
 }
-
 
 #[test]
 fn test_cli_capabilities() {
@@ -38,7 +37,15 @@ fn test_cli_capabilities() {
 #[test]
 fn test_cli_schema_export() {
     let luad = get_luad_bin();
-    for schema_name in &["chunk", "diagnostic", "instruction", "cfg", "xrefs", "query", "diff"] {
+    for schema_name in &[
+        "chunk",
+        "diagnostic",
+        "instruction",
+        "cfg",
+        "xrefs",
+        "query",
+        "diff",
+    ] {
         let output = Command::new(&luad)
             .args(["schema", schema_name, "--schema-version", "1"])
             .output()
@@ -46,8 +53,8 @@ fn test_cli_schema_export() {
 
         assert_eq!(output.status.code(), Some(0));
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let parsed: serde_json::Value = serde_json::from_str(&stdout)
-            .expect("Schema output must be valid JSON");
+        let parsed: serde_json::Value =
+            serde_json::from_str(&stdout).expect("Schema output must be valid JSON");
         assert!(parsed.get("$schema").is_some() || parsed.get("title").is_some());
     }
 

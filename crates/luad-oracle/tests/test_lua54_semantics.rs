@@ -1,6 +1,6 @@
+use std::fs;
 use std::process::Command;
 use tempfile::NamedTempFile;
-use std::fs;
 
 use luad_core::ir::EffectTarget;
 use luad_dialect_lua54::lift_proto_lua54;
@@ -75,10 +75,21 @@ fn test_calls_and_multireturn_effects() {
     let chunk = compile_and_parse_lua54(source, false).expect("parse failed");
     let lifted = lift_proto_lua54(&chunk.main_proto);
 
-    let call_inst = lifted.iter().find(|i| i.mnemonic == "CALL").expect("expected CALL");
-    assert!(call_inst.metamethod_fallbacks.contains(&"__call".to_string()));
-    assert!(call_inst.reads.iter().any(|r| matches!(r, EffectTarget::Register { .. })));
-    assert!(call_inst.writes.iter().any(|w| matches!(w, EffectTarget::RegisterRange { .. })));
+    let call_inst = lifted
+        .iter()
+        .find(|i| i.mnemonic == "CALL")
+        .expect("expected CALL");
+    assert!(call_inst
+        .metamethod_fallbacks
+        .contains(&"__call".to_string()));
+    assert!(call_inst
+        .reads
+        .iter()
+        .any(|r| matches!(r, EffectTarget::Register { .. })));
+    assert!(call_inst
+        .writes
+        .iter()
+        .any(|w| matches!(w, EffectTarget::RegisterRange { .. })));
 }
 
 #[test]
@@ -87,9 +98,15 @@ fn test_for_loop_jump_targets() {
     let chunk = compile_and_parse_lua54(source, false).expect("parse failed");
     let lifted = lift_proto_lua54(&chunk.main_proto);
 
-    let forprep = lifted.iter().find(|i| i.mnemonic == "FORPREP").expect("expected FORPREP");
+    let forprep = lifted
+        .iter()
+        .find(|i| i.mnemonic == "FORPREP")
+        .expect("expected FORPREP");
     assert!(forprep.jump_target.is_some());
 
-    let forloop = lifted.iter().find(|i| i.mnemonic == "FORLOOP").expect("expected FORLOOP");
+    let forloop = lifted
+        .iter()
+        .find(|i| i.mnemonic == "FORLOOP")
+        .expect("expected FORLOOP");
     assert!(forloop.jump_target.is_some());
 }

@@ -1,6 +1,9 @@
 //! Lua 5.5 Dialect Implementation for luad.
 
+#![allow(clippy::result_large_err)]
+
 pub mod chunk;
+
 pub mod header;
 pub mod lifter;
 pub mod opcodes;

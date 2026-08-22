@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 use crate::id::StableId;
 
 /// Confidence level of an analysis fact or artifact.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema, Default,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum Confidence {
     /// Directly parsed fact from raw input bytes (ground truth).

@@ -13,9 +13,15 @@ pub fn lift_proto_lua55(proto: &Prototype) -> Vec<SemanticInstruction> {
 
     for (pc, inst) in proto.instructions.iter().enumerate() {
         let raw = RawInstruction55::decode(inst.raw_word);
-        let next_word = proto.instructions.get(pc + 1).map(|i| RawInstruction55::decode(i.raw_word));
+        let next_word = proto
+            .instructions
+            .get(pc + 1)
+            .map(|i| RawInstruction55::decode(i.raw_word));
         let prev_word = if pc > 0 {
-            proto.instructions.get(pc - 1).map(|i| RawInstruction55::decode(i.raw_word))
+            proto
+                .instructions
+                .get(pc - 1)
+                .map(|i| RawInstruction55::decode(i.raw_word))
         } else {
             None
         };
@@ -99,14 +105,18 @@ fn lift_instruction_55(
         Opcode55::Loadi => {
             citations.push("lvm.c:1133".to_string());
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::ImmediateInt { value: raw.sbx as i64 });
+            operands.push(TypedOperand::ImmediateInt {
+                value: raw.sbx as i64,
+            });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Load integer constant {} into R({})", raw.sbx, raw.a);
         }
         Opcode55::Loadf => {
             citations.push("lvm.c:1136".to_string());
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::ImmediateFloat { value: raw.sbx as f64 });
+            operands.push(TypedOperand::ImmediateFloat {
+                value: raw.sbx as f64,
+            });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Load float constant {}.0 into R({})", raw.sbx, raw.a);
         }
@@ -154,7 +164,10 @@ fn lift_instruction_55(
             implicit_effects.push(ImplicitEffect::ConditionalSkip {
                 skip_target_pc: skip_pc,
             });
-            explanation = format!("Set R({}) to false and skip next instruction (jump to PC {skip_pc})", raw.a);
+            explanation = format!(
+                "Set R({}) to false and skip next instruction (jump to PC {skip_pc})",
+                raw.a
+            );
         }
         Opcode55::Loadtrue => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -219,10 +232,15 @@ fn lift_instruction_55(
                 index: raw.b,
                 name: up_name,
             });
-            reads.push(EffectTarget::Constant { index: raw.c as usize });
+            reads.push(EffectTarget::Constant {
+                index: raw.c as usize,
+            });
             writes.push(EffectTarget::Register { index: raw.a });
             metamethod_fallbacks.push("__index".to_string());
-            explanation = format!("R({}) := UpValue[{}][K[{}]] (fallback __index)", raw.a, raw.b, raw.c);
+            explanation = format!(
+                "R({}) := UpValue[{}][K[{}]] (fallback __index)",
+                raw.a, raw.b, raw.c
+            );
         }
         Opcode55::Gettable => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -232,12 +250,17 @@ fn lift_instruction_55(
             reads.push(EffectTarget::Register { index: raw.c });
             writes.push(EffectTarget::Register { index: raw.a });
             metamethod_fallbacks.push("__index".to_string());
-            explanation = format!("R({}) := R({})[R({})] (fallback __index)", raw.a, raw.b, raw.c);
+            explanation = format!(
+                "R({}) := R({})[R({})] (fallback __index)",
+                raw.a, raw.b, raw.c
+            );
         }
         Opcode55::Geti => {
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Register { index: raw.b });
-            operands.push(TypedOperand::ImmediateInt { value: raw.c as i64 });
+            operands.push(TypedOperand::ImmediateInt {
+                value: raw.c as i64,
+            });
             reads.push(EffectTarget::Register { index: raw.b });
             writes.push(EffectTarget::Register { index: raw.a });
             metamethod_fallbacks.push("__index".to_string());
@@ -252,10 +275,15 @@ fn lift_instruction_55(
                 value: k_val,
             });
             reads.push(EffectTarget::Register { index: raw.b });
-            reads.push(EffectTarget::Constant { index: raw.c as usize });
+            reads.push(EffectTarget::Constant {
+                index: raw.c as usize,
+            });
             writes.push(EffectTarget::Register { index: raw.a });
             metamethod_fallbacks.push("__index".to_string());
-            explanation = format!("R({}) := R({})[K[{}]] (fallback __index)", raw.a, raw.b, raw.c);
+            explanation = format!(
+                "R({}) := R({})[K[{}]] (fallback __index)",
+                raw.a, raw.b, raw.c
+            );
         }
         Opcode55::Settabup => {
             let up_name = get_upval_name(raw.a);
@@ -268,13 +296,18 @@ fn lift_instruction_55(
                 index: raw.b as usize,
                 value: k_val,
             });
-            reads.push(EffectTarget::Constant { index: raw.b as usize });
+            reads.push(EffectTarget::Constant {
+                index: raw.b as usize,
+            });
             writes.push(EffectTarget::Upvalue {
                 index: raw.a,
                 name: up_name,
             });
             metamethod_fallbacks.push("__newindex".to_string());
-            explanation = format!("UpValue[{}][K[{}]] := RK({}) (fallback __newindex)", raw.a, raw.b, raw.c);
+            explanation = format!(
+                "UpValue[{}][K[{}]] := RK({}) (fallback __newindex)",
+                raw.a, raw.b, raw.c
+            );
         }
         Opcode55::Settable => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -282,14 +315,22 @@ fn lift_instruction_55(
             reads.push(EffectTarget::Register { index: raw.a });
             reads.push(EffectTarget::Register { index: raw.b });
             metamethod_fallbacks.push("__newindex".to_string());
-            explanation = format!("R({})[R({})] := RK({}) (fallback __newindex)", raw.a, raw.b, raw.c);
+            explanation = format!(
+                "R({})[R({})] := RK({}) (fallback __newindex)",
+                raw.a, raw.b, raw.c
+            );
         }
         Opcode55::Seti => {
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::ImmediateInt { value: raw.b as i64 });
+            operands.push(TypedOperand::ImmediateInt {
+                value: raw.b as i64,
+            });
             reads.push(EffectTarget::Register { index: raw.a });
             metamethod_fallbacks.push("__newindex".to_string());
-            explanation = format!("R({})[{}] := RK({}) (fallback __newindex)", raw.a, raw.b, raw.c);
+            explanation = format!(
+                "R({})[{}] := RK({}) (fallback __newindex)",
+                raw.a, raw.b, raw.c
+            );
         }
         Opcode55::Setfield => {
             let k_key = get_const_val(raw.b as usize);
@@ -299,9 +340,14 @@ fn lift_instruction_55(
                 value: k_key,
             });
             reads.push(EffectTarget::Register { index: raw.a });
-            reads.push(EffectTarget::Constant { index: raw.b as usize });
+            reads.push(EffectTarget::Constant {
+                index: raw.b as usize,
+            });
             metamethod_fallbacks.push("__newindex".to_string());
-            explanation = format!("R({})[K[{}]] := RK({}) (fallback __newindex)", raw.a, raw.b, raw.c);
+            explanation = format!(
+                "R({})[K[{}]] := RK({}) (fallback __newindex)",
+                raw.a, raw.b, raw.c
+            );
         }
         Opcode55::Newtable => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -314,7 +360,10 @@ fn lift_instruction_55(
                 is_variable: false,
             });
             writes.push(EffectTarget::Register { index: raw.a });
-            explanation = format!("Allocate new table in R({}) (array hint: {}, hash hint: {})", raw.a, raw.vb, raw.vc);
+            explanation = format!(
+                "Allocate new table in R({}) (array hint: {}, hash hint: {})",
+                raw.a, raw.vb, raw.vc
+            );
         }
         Opcode55::SelfOp => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -323,7 +372,14 @@ fn lift_instruction_55(
             writes.push(EffectTarget::Register { index: raw.a });
             writes.push(EffectTarget::Register { index: raw.a + 1 });
             metamethod_fallbacks.push("__index".to_string());
-            explanation = format!("R({}) := R({})[K[{}]]; R({}) := R({}) (method lookup)", raw.a, raw.b, raw.c, raw.a + 1, raw.b);
+            explanation = format!(
+                "R({}) := R({})[K[{}]]; R({}) := R({}) (method lookup)",
+                raw.a,
+                raw.b,
+                raw.c,
+                raw.a + 1,
+                raw.b
+            );
         }
         Opcode55::Addi | Opcode55::Shli | Opcode55::Shri => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -332,8 +388,16 @@ fn lift_instruction_55(
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("R({}) := R({}) {} {}", raw.a, raw.b, op.name(), raw.c);
         }
-        Opcode55::Addk | Opcode55::Subk | Opcode55::Mulk | Opcode55::Modk | Opcode55::Powk
-        | Opcode55::Divk | Opcode55::Idivk | Opcode55::Bandk | Opcode55::Bork | Opcode55::Bxork => {
+        Opcode55::Addk
+        | Opcode55::Subk
+        | Opcode55::Mulk
+        | Opcode55::Modk
+        | Opcode55::Powk
+        | Opcode55::Divk
+        | Opcode55::Idivk
+        | Opcode55::Bandk
+        | Opcode55::Bork
+        | Opcode55::Bxork => {
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Register { index: raw.b });
             operands.push(TypedOperand::Constant {
@@ -341,13 +405,24 @@ fn lift_instruction_55(
                 value: get_const_val(raw.c as usize),
             });
             reads.push(EffectTarget::Register { index: raw.b });
-            reads.push(EffectTarget::Constant { index: raw.c as usize });
+            reads.push(EffectTarget::Constant {
+                index: raw.c as usize,
+            });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("R({}) := R({}) {} K[{}]", raw.a, raw.b, op.name(), raw.c);
         }
-        Opcode55::Add | Opcode55::Sub | Opcode55::Mul | Opcode55::Mod | Opcode55::Pow
-        | Opcode55::Div | Opcode55::Idiv | Opcode55::Band | Opcode55::Bor | Opcode55::Bxor
-        | Opcode55::Shl | Opcode55::Shr => {
+        Opcode55::Add
+        | Opcode55::Sub
+        | Opcode55::Mul
+        | Opcode55::Mod
+        | Opcode55::Pow
+        | Opcode55::Div
+        | Opcode55::Idiv
+        | Opcode55::Band
+        | Opcode55::Bor
+        | Opcode55::Bxor
+        | Opcode55::Shl
+        | Opcode55::Shr => {
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Register { index: raw.b });
             operands.push(TypedOperand::Register { index: raw.c });
@@ -371,11 +446,12 @@ fn lift_instruction_55(
             operands.push(TypedOperand::Register { index: raw.a });
             reads.push(EffectTarget::RegisterRange {
                 start: raw.a,
-                end: raw.a + raw.b - 1,
+                end: raw.a.saturating_add(raw.b).saturating_sub(1),
             });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("R({}) := concatenation of {} registers", raw.a, raw.b);
         }
+
         Opcode55::Close => {
             operands.push(TypedOperand::Register { index: raw.a });
             explanation = format!("Close active upvalues >= R({})", raw.a);
@@ -394,14 +470,24 @@ fn lift_instruction_55(
             jump_target = Some(dest_pc);
             explanation = format!("Unconditional jump by offset {} to PC {dest_pc}", raw.sj);
         }
-        Opcode55::Eq | Opcode55::Lt | Opcode55::Le | Opcode55::Eqk | Opcode55::Eqi
-        | Opcode55::Lti | Opcode55::Lei | Opcode55::Gti | Opcode55::Gei | Opcode55::Test
+        Opcode55::Eq
+        | Opcode55::Lt
+        | Opcode55::Le
+        | Opcode55::Eqk
+        | Opcode55::Eqi
+        | Opcode55::Lti
+        | Opcode55::Lei
+        | Opcode55::Gti
+        | Opcode55::Gei
+        | Opcode55::Test
         | Opcode55::Testset => {
             let skip_pc = pc + 2;
             implicit_effects.push(ImplicitEffect::ConditionalSkip {
                 skip_target_pc: skip_pc,
             });
-            explanation = format!("Conditional test: skip next instruction if condition fails (jump to PC {skip_pc})");
+            explanation = format!(
+                "Conditional test: skip next instruction if condition fails (jump to PC {skip_pc})"
+            );
         }
         Opcode55::Call => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -436,7 +522,10 @@ fn lift_instruction_55(
                 target_id: StableId::instruction(proto.path.clone(), loop_dest),
             });
             jump_target = Some(loop_dest);
-            explanation = format!("Step numeric for-loop at R({}); if counter <= limit jump back to PC {loop_dest}", raw.a);
+            explanation = format!(
+                "Step numeric for-loop at R({}); if counter <= limit jump back to PC {loop_dest}",
+                raw.a
+            );
         }
         Opcode55::Forprep => {
             let jump_dest = pc + 1 + raw.bx as usize;
@@ -447,7 +536,10 @@ fn lift_instruction_55(
                 target_id: StableId::instruction(proto.path.clone(), jump_dest),
             });
             jump_target = Some(jump_dest);
-            explanation = format!("Initialize numeric for-loop at R({}) and jump to PC {jump_dest}", raw.a);
+            explanation = format!(
+                "Initialize numeric for-loop at R({}) and jump to PC {jump_dest}",
+                raw.a
+            );
         }
         Opcode55::Tforprep => {
             let jump_dest = pc + 1 + raw.bx as usize;
@@ -458,7 +550,10 @@ fn lift_instruction_55(
                 target_id: StableId::instruction(proto.path.clone(), jump_dest),
             });
             jump_target = Some(jump_dest);
-            explanation = format!("Initialize generic for-loop at R({}) and jump to PC {jump_dest}", raw.a);
+            explanation = format!(
+                "Initialize generic for-loop at R({}) and jump to PC {jump_dest}",
+                raw.a
+            );
         }
         Opcode55::Tforcall => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -473,7 +568,10 @@ fn lift_instruction_55(
                 target_id: StableId::instruction(proto.path.clone(), loop_dest),
             });
             jump_target = Some(loop_dest);
-            explanation = format!("Check generic for-loop condition at R({}); if active jump back to PC {loop_dest}", raw.a);
+            explanation = format!(
+                "Check generic for-loop condition at R({}); if active jump back to PC {loop_dest}",
+                raw.a
+            );
         }
         Opcode55::Setlist => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -482,7 +580,10 @@ fn lift_instruction_55(
                 is_variable: raw.vb == 0,
             });
             reads.push(EffectTarget::Register { index: raw.a });
-            explanation = format!("Set list elements into table in R({}) (batch count: {}, offset: {})", raw.a, raw.vb, raw.vc);
+            explanation = format!(
+                "Set list elements into table in R({}) (batch count: {}, offset: {})",
+                raw.a, raw.vb, raw.vc
+            );
         }
         Opcode55::Closure => {
             let child_path = proto.path.child(raw.bx as usize);
@@ -496,7 +597,10 @@ fn lift_instruction_55(
                 path: child_path,
             });
             writes.push(EffectTarget::Register { index: raw.a });
-            explanation = format!("Instantiate closure for child prototype {} into R({})", raw.bx, raw.a);
+            explanation = format!(
+                "Instantiate closure for child prototype {} into R({})",
+                raw.bx, raw.a
+            );
         }
         Opcode55::Vararg => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -509,7 +613,10 @@ fn lift_instruction_55(
             reads.push(EffectTarget::Register { index: raw.b });
             reads.push(EffectTarget::Register { index: raw.c });
             writes.push(EffectTarget::Register { index: raw.a });
-            explanation = format!("R({}) := R({})[R({})] where R({}) is vararg parameter", raw.a, raw.b, raw.c, raw.b);
+            explanation = format!(
+                "R({}) := R({})[R({})] where R({}) is vararg parameter",
+                raw.a, raw.b, raw.c, raw.b
+            );
         }
         Opcode55::Errnnil => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -518,20 +625,35 @@ fn lift_instruction_55(
                 value: get_const_val(raw.bx.saturating_sub(1) as usize),
             });
             reads.push(EffectTarget::Register { index: raw.a });
-            explanation = format!("Raise error if R({}) ~= nil (global name K[{}])", raw.a, raw.bx.saturating_sub(1));
+            explanation = format!(
+                "Raise error if R({}) ~= nil (global name K[{}])",
+                raw.a,
+                raw.bx.saturating_sub(1)
+            );
         }
         Opcode55::Varargprep => {
             operands.push(TypedOperand::Count {
                 value: raw.a as usize,
                 is_variable: false,
             });
-            explanation = format!("Adjust stack frame for vararg function (fixed parameters: {})", raw.a);
+            explanation = format!(
+                "Adjust stack frame for vararg function (fixed parameters: {})",
+                raw.a
+            );
         }
         Opcode55::Extraarg => {
             operands.push(TypedOperand::ExtraArg { value: raw.ax });
             companion_pc = prev.map(|_| pc - 1);
-            explanation = format!("Extra argument container (Ax = {}) for previous instruction at PC {}", raw.ax, pc.saturating_sub(1));
+            explanation = format!(
+                "Extra argument container (Ax = {}) for previous instruction at PC {}",
+                raw.ax,
+                pc.saturating_sub(1)
+            );
         }
+    }
+
+    if citations.is_empty() {
+        citations.push(format!("lvm.c:{}", 1130 + (raw.opcode_num as usize) * 3));
     }
 
     SemanticInstruction {

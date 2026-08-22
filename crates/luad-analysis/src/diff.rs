@@ -158,15 +158,25 @@ fn diff_prototype(
 
     for pc in 0..max_insts {
         let old_desc = if let Some(lifted) = &old_lifted {
-            lifted.get(pc).map(|i| format!("{:<10} {}", i.mnemonic, i.explanation))
+            lifted
+                .get(pc)
+                .map(|i| format!("{:<10} {}", i.mnemonic, i.explanation))
         } else {
-            old_p.instructions.get(pc).map(|i| format!("0x{:08x}", i.raw_word))
+            old_p
+                .instructions
+                .get(pc)
+                .map(|i| format!("0x{:08x}", i.raw_word))
         };
 
         let new_desc = if let Some(lifted) = &new_lifted {
-            lifted.get(pc).map(|i| format!("{:<10} {}", i.mnemonic, i.explanation))
+            lifted
+                .get(pc)
+                .map(|i| format!("{:<10} {}", i.mnemonic, i.explanation))
         } else {
-            new_p.instructions.get(pc).map(|i| format!("0x{:08x}", i.raw_word))
+            new_p
+                .instructions
+                .get(pc)
+                .map(|i| format!("0x{:08x}", i.raw_word))
         };
 
         if old_desc != new_desc {
@@ -206,4 +216,3 @@ fn diff_prototype(
         );
     }
 }
-

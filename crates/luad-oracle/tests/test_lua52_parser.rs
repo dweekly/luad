@@ -1,41 +1,31 @@
-use std::fs;
 use luad_core::diagnostic::Verdict;
 use luad_dialect_lua52::Lua52Dialect;
-use luad_oracle::{compile_and_parse_lua52, compile_source_lua52, find_luac52, verify_truncation_safety_for_dialect};
-
+use luad_oracle::{get_fixture_bytes, verify_truncation_safety_for_dialect};
 
 #[test]
 fn test_all_fixtures_lua52_parsing_and_truncation() {
-    if find_luac52().is_none() {
-        eprintln!("Skipping test: Lua 5.2 compiler not found on system");
-        return;
-    }
-
-    let fixture_files = [
-        "../../tests/fixtures/hello.lua",
-        "../../tests/fixtures/control_flow.lua",
-        "../../tests/fixtures/closures.lua",
-        "../../tests/fixtures/tables.lua",
-        "../../tests/fixtures/numerics.lua",
-    ];
+    let fixture_names = ["hello", "control_flow", "closures", "tables", "numerics"];
 
     let dialect = Lua52Dialect;
 
-    for fixture_path in fixture_files {
-        let source = fs::read_to_string(fixture_path)
-            .unwrap_or_else(|_| panic!("Failed to read {fixture_path}"));
-
+    for fixture_name in fixture_names {
         // 1. Test normal debug chunk
-        let raw_debug = compile_source_lua52(&source, false).expect("Compilation must succeed");
-        let chunk_debug = compile_and_parse_lua52(&source, false).expect("Parsing must succeed");
+        let raw_debug = get_fixture_bytes("lua5.2", fixture_name, false)
+            .unwrap_or_else(|e| panic!("Failed to get debug fixture '{fixture_name}': {e}"));
+        let mut reader_debug = luad_core::reader::SafeReader::new(&raw_debug);
+        let chunk_debug = luad_dialect_lua52::decode_chunk_lua52(&mut reader_debug)
+            .expect("Parsing debug chunk must succeed");
         assert_eq!(chunk_debug.dialect, "lua5.2");
         assert_eq!(chunk_debug.verdict, Verdict::ValidForParser);
         assert_eq!(chunk_debug.byte_length, raw_debug.len());
         assert!(chunk_debug.diagnostics.is_empty());
 
         // 2. Test stripped chunk (-s)
-        let raw_stripped = compile_source_lua52(&source, true).expect("Stripped compilation must succeed");
-        let chunk_stripped = compile_and_parse_lua52(&source, true).expect("Parsing stripped chunk must succeed");
+        let raw_stripped = get_fixture_bytes("lua5.2", fixture_name, true)
+            .unwrap_or_else(|e| panic!("Failed to get stripped fixture '{fixture_name}': {e}"));
+        let mut reader_stripped = luad_core::reader::SafeReader::new(&raw_stripped);
+        let chunk_stripped = luad_dialect_lua52::decode_chunk_lua52(&mut reader_stripped)
+            .expect("Parsing stripped chunk must succeed");
         assert_eq!(chunk_stripped.dialect, "lua5.2");
         assert_eq!(chunk_stripped.verdict, Verdict::ValidForParser);
         assert_eq!(chunk_stripped.byte_length, raw_stripped.len());

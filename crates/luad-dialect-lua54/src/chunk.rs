@@ -5,8 +5,8 @@ use sha2::{Digest, Sha256};
 use luad_core::diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
 use luad_core::id::{ProtoPath, StableId};
 use luad_core::model::{
-    AbsLineInfo, Chunk, Constant, ConstantValue, InstructionWord, LocalVar, LuaString,
-    Prototype, UpvalueDesc,
+    AbsLineInfo, Chunk, Constant, ConstantValue, InstructionWord, LocalVar, LuaString, Prototype,
+    UpvalueDesc,
 };
 use luad_core::provenance::SourceLocation;
 use luad_core::reader::SafeReader;
@@ -60,9 +60,7 @@ pub fn decode_chunk_lua54(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
     };
 
     let diagnostics = reader.take_diagnostics();
-    let has_errors = diagnostics
-        .iter()
-        .any(|d| d.severity == Severity::Error);
+    let has_errors = diagnostics.iter().any(|d| d.severity == Severity::Error);
     let verdict = if has_errors {
         Verdict::Invalid
     } else {
@@ -115,7 +113,7 @@ pub fn decode_proto_lua54(
     let (code_size_val, _) = reader.read_varint_lua54()?;
     let code_size = code_size_val as usize;
 
-    if code_size > 1_000_000 {
+    if code_size > reader.limits().max_instructions_per_proto {
         let diag = Diagnostic::error(
             "L54-CODE-001",
             DiagnosticCategory::Parse,
@@ -126,7 +124,7 @@ pub fn decode_proto_lua54(
         return Err(diag);
     }
 
-    let mut instructions = Vec::with_capacity(code_size);
+    let mut instructions = Vec::with_capacity(reader.safe_capacity(code_size, 4));
     for pc in 0..code_size {
         let word_pos = reader.position();
         let word = reader.read_u32_le()?;
@@ -144,7 +142,7 @@ pub fn decode_proto_lua54(
     let (k_size_val, _) = reader.read_varint_lua54()?;
     let k_size = k_size_val as usize;
 
-    if k_size > 262_144 {
+    if k_size > reader.limits().max_constants_per_proto {
         let diag = Diagnostic::error(
             "L54-CONST-001",
             DiagnosticCategory::Parse,
@@ -155,7 +153,7 @@ pub fn decode_proto_lua54(
         return Err(diag);
     }
 
-    let mut constants = Vec::with_capacity(k_size);
+    let mut constants = Vec::with_capacity(reader.safe_capacity(k_size, 1));
     for k_idx in 0..k_size {
         let k_pos = reader.position();
         let k_cursor = reader.cursor_offset();
@@ -218,7 +216,18 @@ pub fn decode_proto_lua54(
     let (upvalues_size_val, _) = reader.read_varint_lua54()?;
     let upvalues_size = upvalues_size_val as usize;
 
-    let mut upvalues = Vec::with_capacity(upvalues_size);
+    if upvalues_size > reader.limits().max_upvalues_per_proto {
+        let diag = Diagnostic::error(
+            "L54-UPVAL-001",
+            DiagnosticCategory::Parse,
+            id.clone(),
+            format!("Upvalue count {upvalues_size} exceeds safety limit"),
+        );
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
+
+    let mut upvalues = Vec::with_capacity(reader.safe_capacity(upvalues_size, 3));
     for u_idx in 0..upvalues_size {
         let u_pos = reader.position();
         let u_cursor = reader.cursor_offset();
@@ -242,7 +251,18 @@ pub fn decode_proto_lua54(
     let (protos_size_val, _) = reader.read_varint_lua54()?;
     let protos_size = protos_size_val as usize;
 
-    let mut protos = Vec::with_capacity(protos_size);
+    if protos_size > reader.limits().max_total_prototypes {
+        let diag = Diagnostic::error(
+            "L54-PROTO-001",
+            DiagnosticCategory::Parse,
+            id.clone(),
+            format!("Prototype count {protos_size} exceeds safety limit"),
+        );
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
+
+    let mut protos = Vec::with_capacity(reader.safe_capacity(protos_size, 10));
     for p_idx in 0..protos_size {
         let mut child_guard = reader.enter_proto(p_idx)?;
         let child_proto = decode_proto_lua54(
@@ -252,7 +272,6 @@ pub fn decode_proto_lua54(
         )?;
         protos.push(child_proto);
     }
-
 
     // 6. Debug metadata
     // Line info
@@ -264,7 +283,7 @@ pub fn decode_proto_lua54(
     // Absolute line info
     let (abslineinfo_size_val, _) = reader.read_varint_lua54()?;
     let abslineinfo_size = abslineinfo_size_val as usize;
-    let mut abs_line_info = Vec::with_capacity(abslineinfo_size);
+    let mut abs_line_info = Vec::with_capacity(reader.safe_capacity(abslineinfo_size, 2));
     for _ in 0..abslineinfo_size {
         let abs_pos = reader.position();
         let abs_cursor = reader.cursor_offset();
@@ -281,23 +300,23 @@ pub fn decode_proto_lua54(
     // Local variables
     let (locvars_size_val, _) = reader.read_varint_lua54()?;
     let locvars_size = locvars_size_val as usize;
-    let mut loc_vars = Vec::with_capacity(locvars_size);
+    let mut loc_vars = Vec::with_capacity(reader.safe_capacity(locvars_size, 2));
     for l_idx in 0..locvars_size {
         let loc_pos = reader.position();
         let loc_cursor = reader.cursor_offset();
-        let (name_bytes, _) = reader.read_string_lua54()?;
+        let (varname_bytes, _) = reader.read_string_lua54()?;
         let (startpc_val, _) = reader.read_varint_lua54()?;
         let (endpc_val, _) = reader.read_varint_lua54()?;
         let raw_bytes = reader.slice_from_cursor(loc_cursor)?;
 
-        let name = name_bytes
+        let varname = varname_bytes
             .map(|b| LuaString::from_bytes(&b))
-            .unwrap_or_else(|| LuaString::from_bytes(b"(null)"));
+            .unwrap_or_else(|| LuaString::from_bytes(b"?"));
 
         loc_vars.push(LocalVar {
             id: StableId::local(proto_path.clone(), l_idx),
             index: l_idx,
-            name,
+            name: varname,
             startpc: startpc_val as usize,
             endpc: endpc_val as usize,
             source: SourceLocation::new(loc_pos, raw_bytes),
@@ -305,16 +324,16 @@ pub fn decode_proto_lua54(
     }
 
     // Upvalue names
-    let (upvalue_names_size_val, _) = reader.read_varint_lua54()?;
-    let upvalue_names_size = upvalue_names_size_val as usize;
-    let mut upvalue_names = Vec::with_capacity(upvalue_names_size);
-    for u_idx in 0..upvalue_names_size {
+    let (upvalnames_size_val, _) = reader.read_varint_lua54()?;
+    let upvalnames_size = upvalnames_size_val as usize;
+    let mut upvalue_names = Vec::with_capacity(reader.safe_capacity(upvalnames_size, 1));
+    for u_idx in 0..upvalnames_size {
         let (name_bytes, _) = reader.read_string_lua54()?;
-        let name = name_bytes.map(|b| LuaString::from_bytes(&b));
-        if u_idx < upvalues.len() {
-            upvalues[u_idx].name = name.clone();
+        let name_opt = name_bytes.map(|b| LuaString::from_bytes(&b));
+        if let Some(upval) = upvalues.get_mut(u_idx) {
+            upval.name = name_opt.clone();
         }
-        upvalue_names.push(name);
+        upvalue_names.push(name_opt);
     }
 
     let raw_proto_bytes = reader.slice_from_cursor(start_cursor)?;

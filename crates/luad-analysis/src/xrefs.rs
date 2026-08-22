@@ -8,7 +8,9 @@ use luad_core::ir::EffectTarget;
 use luad_core::model::{Chunk, Prototype};
 
 /// Semantic nature of a reference.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum XrefRelation {
     /// Source reads from target.
@@ -107,11 +109,14 @@ impl XrefIndex {
         }
     }
 
-
     fn effect_to_stable_id(&self, proto: &Prototype, effect: &EffectTarget) -> Option<StableId> {
         match effect {
-            EffectTarget::Constant { index } => Some(StableId::constant(proto.path.clone(), *index)),
-            EffectTarget::Upvalue { index, .. } => Some(StableId::upvalue(proto.path.clone(), *index as usize)),
+            EffectTarget::Constant { index } => {
+                Some(StableId::constant(proto.path.clone(), *index))
+            }
+            EffectTarget::Upvalue { index, .. } => {
+                Some(StableId::upvalue(proto.path.clone(), *index as usize))
+            }
             EffectTarget::Prototype { path, .. } => Some(StableId::proto(path.clone())),
             EffectTarget::JumpTarget { pc } => Some(StableId::instruction(proto.path.clone(), *pc)),
             _ => None,
@@ -121,12 +126,18 @@ impl XrefIndex {
     /// Query all cross-references pointing TO a given target StableId.
     #[must_use]
     pub fn query_to(&self, target: &StableId) -> Vec<&XrefEntry> {
-        self.entries.iter().filter(|e| &e.target == target).collect()
+        self.entries
+            .iter()
+            .filter(|e| &e.target == target)
+            .collect()
     }
 
     /// Query all cross-references originating FROM a given source StableId.
     #[must_use]
     pub fn query_from(&self, source: &StableId) -> Vec<&XrefEntry> {
-        self.entries.iter().filter(|e| &e.source == source).collect()
+        self.entries
+            .iter()
+            .filter(|e| &e.source == source)
+            .collect()
     }
 }

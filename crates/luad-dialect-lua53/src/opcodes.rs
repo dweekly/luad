@@ -1,7 +1,7 @@
 //! Lua 5.3 opcode definitions and raw instruction decoder.
 
-use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 pub const BITRK_53: u32 = 1 << 8; // 256
 
@@ -62,7 +62,7 @@ impl Opcode53 {
     #[must_use]
     pub fn from_u8(val: u8) -> Option<Self> {
         if val <= 46 {
-            Some(unsafe { std::mem::transmute(val) })
+            Some(unsafe { std::mem::transmute::<u8, Opcode53>(val) })
         } else {
             None
         }
@@ -124,15 +124,45 @@ impl Opcode53 {
     #[must_use]
     pub fn mode(self) -> OpMode53 {
         match self {
-            Self::Move | Self::LoadBool | Self::LoadNil | Self::GetUpval | Self::GetTabUp
-            | Self::GetTable | Self::SetTabUp | Self::SetUpval | Self::SetTable | Self::NewTable
-            | Self::SelfOp | Self::Add | Self::Sub | Self::Mul | Self::Mod | Self::Pow
-            | Self::Div | Self::IDiv | Self::BAnd | Self::BOr | Self::BXor | Self::Shl
-            | Self::Shr | Self::Unm | Self::BNot | Self::Not | Self::Len | Self::Concat
-            | Self::Eq | Self::Lt | Self::Le | Self::Test | Self::TestSet | Self::Call
-            | Self::TailCall | Self::Return | Self::TForCall | Self::SetList | Self::VarArg => {
-                OpMode53::IABC
-            }
+            Self::Move
+            | Self::LoadBool
+            | Self::LoadNil
+            | Self::GetUpval
+            | Self::GetTabUp
+            | Self::GetTable
+            | Self::SetTabUp
+            | Self::SetUpval
+            | Self::SetTable
+            | Self::NewTable
+            | Self::SelfOp
+            | Self::Add
+            | Self::Sub
+            | Self::Mul
+            | Self::Mod
+            | Self::Pow
+            | Self::Div
+            | Self::IDiv
+            | Self::BAnd
+            | Self::BOr
+            | Self::BXor
+            | Self::Shl
+            | Self::Shr
+            | Self::Unm
+            | Self::BNot
+            | Self::Not
+            | Self::Len
+            | Self::Concat
+            | Self::Eq
+            | Self::Lt
+            | Self::Le
+            | Self::Test
+            | Self::TestSet
+            | Self::Call
+            | Self::TailCall
+            | Self::Return
+            | Self::TForCall
+            | Self::SetList
+            | Self::VarArg => OpMode53::IABC,
             Self::LoadK | Self::Closure => OpMode53::IABx,
             Self::Jmp | Self::ForLoop | Self::ForPrep | Self::TForLoop => OpMode53::IAsBx,
             Self::LoadKx | Self::ExtraArg => OpMode53::IAx,

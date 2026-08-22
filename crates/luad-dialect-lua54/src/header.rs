@@ -114,7 +114,10 @@ pub fn parse_header_lua54(reader: &mut SafeReader) -> Result<Header, Diagnostic>
             StableId::Chunk,
             format!("Unsupported instruction size: expected 4, found {instruction_size}"),
         )
-        .with_source(SourceLocation::new(reader.position() - 1, &[instruction_size]));
+        .with_source(SourceLocation::new(
+            reader.position() - 1,
+            &[instruction_size],
+        ));
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -128,7 +131,10 @@ pub fn parse_header_lua54(reader: &mut SafeReader) -> Result<Header, Diagnostic>
             StableId::Chunk,
             format!("Unsupported lua_Integer size: expected 8, found {lua_integer_size}"),
         )
-        .with_source(SourceLocation::new(reader.position() - 1, &[lua_integer_size]));
+        .with_source(SourceLocation::new(
+            reader.position() - 1,
+            &[lua_integer_size],
+        ));
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -142,7 +148,10 @@ pub fn parse_header_lua54(reader: &mut SafeReader) -> Result<Header, Diagnostic>
             StableId::Chunk,
             format!("Unsupported lua_Number size: expected 8, found {lua_number_size}"),
         )
-        .with_source(SourceLocation::new(reader.position() - 1, &[lua_number_size]));
+        .with_source(SourceLocation::new(
+            reader.position() - 1,
+            &[lua_number_size],
+        ));
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -197,4 +206,3 @@ pub fn parse_header_lua54(reader: &mut SafeReader) -> Result<Header, Diagnostic>
         source,
     })
 }
-

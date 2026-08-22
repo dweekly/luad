@@ -8,7 +8,9 @@ use crate::model::ConstantValue;
 use crate::provenance::{Confidence, SourceLocation};
 
 /// Target or source of a read or write effect.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum EffectTarget {
     /// Virtual register R(index).
@@ -34,20 +36,11 @@ pub enum TypedOperand {
     /// Virtual machine register R(index).
     Register { index: u8 },
     /// Resolved constant from prototype's constant table.
-    Constant {
-        index: usize,
-        value: ConstantValue,
-    },
+    Constant { index: usize, value: ConstantValue },
     /// Upvalue reference.
-    Upvalue {
-        index: u8,
-        name: Option<String>,
-    },
+    Upvalue { index: u8, name: Option<String> },
     /// Child prototype reference.
-    Prototype {
-        index: usize,
-        path: ProtoPath,
-    },
+    Prototype { index: usize, path: ProtoPath },
     /// Immediate integer literal (signed 64-bit).
     ImmediateInt { value: i64 },
     /// Immediate float literal.
@@ -84,7 +77,10 @@ pub enum ImplicitEffect {
     /// Sets table elements in batch (`SETLIST`).
     SetListBatch { start_index: usize, count: usize },
     /// Companion instruction relation (pairs with preceding or succeeding PC).
-    CompanionPair { companion_pc: usize, companion_role: String },
+    CompanionPair {
+        companion_pc: usize,
+        companion_role: String,
+    },
 }
 
 /// Normalized semantic instruction representing a lifted Lua bytecode operation.

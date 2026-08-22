@@ -25,4 +25,3 @@ pub fn lift_proto_for_dialect(
         _ => luad_dialect_lua54::lift_proto_lua54(proto),
     }
 }
-

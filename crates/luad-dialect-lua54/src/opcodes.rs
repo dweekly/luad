@@ -20,7 +20,9 @@ pub enum OpMode54 {
 }
 
 /// Enumeration of all 83 Lua 5.4 opcodes (Lua 5.4.0 through 5.4.8).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[repr(u8)]
 pub enum Opcode54 {

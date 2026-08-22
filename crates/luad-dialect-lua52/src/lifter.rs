@@ -14,9 +14,15 @@ pub fn lift_proto_lua52(proto: &Prototype) -> Vec<SemanticInstruction> {
 
     for (pc, inst) in proto.instructions.iter().enumerate() {
         let raw = RawInstruction52::decode(inst.raw_word);
-        let next_word = proto.instructions.get(pc + 1).map(|i| RawInstruction52::decode(i.raw_word));
+        let next_word = proto
+            .instructions
+            .get(pc + 1)
+            .map(|i| RawInstruction52::decode(i.raw_word));
         let prev_word = if pc > 0 {
-            proto.instructions.get(pc - 1).map(|i| RawInstruction52::decode(i.raw_word))
+            proto
+                .instructions
+                .get(pc - 1)
+                .map(|i| RawInstruction52::decode(i.raw_word))
         } else {
             None
         };
@@ -72,21 +78,26 @@ fn lift_instruction_52(
     let explanation;
 
     let get_k_val = |idx: usize| -> ConstantValue {
-        proto.constants.get(idx).map(|c| c.value.clone()).unwrap_or(ConstantValue::Nil)
+        proto
+            .constants
+            .get(idx)
+            .map(|c| c.value.clone())
+            .unwrap_or(ConstantValue::Nil)
     };
 
-    let parse_rk = |is_k: bool, idx: usize, reads: &mut Vec<EffectTarget>, ops: &mut Vec<TypedOperand>| {
-        if is_k {
-            reads.push(EffectTarget::Constant { index: idx });
-            ops.push(TypedOperand::Constant {
-                index: idx,
-                value: get_k_val(idx),
-            });
-        } else {
-            reads.push(EffectTarget::Register { index: idx as u8 });
-            ops.push(TypedOperand::Register { index: idx as u8 });
-        }
-    };
+    let parse_rk =
+        |is_k: bool, idx: usize, reads: &mut Vec<EffectTarget>, ops: &mut Vec<TypedOperand>| {
+            if is_k {
+                reads.push(EffectTarget::Constant { index: idx });
+                ops.push(TypedOperand::Constant {
+                    index: idx,
+                    value: get_k_val(idx),
+                });
+            } else {
+                reads.push(EffectTarget::Register { index: idx as u8 });
+                ops.push(TypedOperand::Register { index: idx as u8 });
+            }
+        };
 
     match op {
         Opcode52::Move => {
@@ -103,7 +114,9 @@ fn lift_instruction_52(
                 index: raw.bx as usize,
                 value: get_k_val(raw.bx as usize),
             });
-            reads.push(EffectTarget::Constant { index: raw.bx as usize });
+            reads.push(EffectTarget::Constant {
+                index: raw.bx as usize,
+            });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Load constant K[{}] into R({})", raw.bx, raw.a);
             citations.push("lvm.c:1135".to_string());
@@ -121,7 +134,10 @@ fn lift_instruction_52(
             writes.push(EffectTarget::Register { index: raw.a });
             let val = raw.b != 0;
             explanation = if raw.c != 0 {
-                format!("Load boolean {} into R({}) and skip next instruction", val, raw.a)
+                format!(
+                    "Load boolean {} into R({}) and skip next instruction",
+                    val, raw.a
+                )
             } else {
                 format!("Load boolean {} into R({})", val, raw.a)
             };
@@ -129,7 +145,10 @@ fn lift_instruction_52(
         }
         Opcode52::LoadNil => {
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::Count { value: raw.b as usize, is_variable: false });
+            operands.push(TypedOperand::Count {
+                value: raw.b as usize,
+                is_variable: false,
+            });
             writes.push(EffectTarget::RegisterRange {
                 start: raw.a,
                 end: raw.a + raw.b as u8,
@@ -141,11 +160,17 @@ fn lift_instruction_52(
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Upvalue {
                 index: raw.b as u8,
-                name: proto.upvalues.get(raw.b as usize).and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
+                name: proto
+                    .upvalues
+                    .get(raw.b as usize)
+                    .and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
             });
             reads.push(EffectTarget::Upvalue {
                 index: raw.b as u8,
-                name: proto.upvalues.get(raw.b as usize).and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
+                name: proto
+                    .upvalues
+                    .get(raw.b as usize)
+                    .and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
             });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Load Upvalue[{}] into R({})", raw.b, raw.a);
@@ -155,11 +180,17 @@ fn lift_instruction_52(
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Upvalue {
                 index: raw.b as u8,
-                name: proto.upvalues.get(raw.b as usize).and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
+                name: proto
+                    .upvalues
+                    .get(raw.b as usize)
+                    .and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
             });
             reads.push(EffectTarget::Upvalue {
                 index: raw.b as u8,
-                name: proto.upvalues.get(raw.b as usize).and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
+                name: proto
+                    .upvalues
+                    .get(raw.b as usize)
+                    .and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
             });
             parse_rk(raw.is_c_k(), raw.c_index_k(), &mut reads, &mut operands);
             writes.push(EffectTarget::Register { index: raw.a });
@@ -180,11 +211,17 @@ fn lift_instruction_52(
         Opcode52::SetTabUp => {
             operands.push(TypedOperand::Upvalue {
                 index: raw.a,
-                name: proto.upvalues.get(raw.a as usize).and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
+                name: proto
+                    .upvalues
+                    .get(raw.a as usize)
+                    .and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
             });
             reads.push(EffectTarget::Upvalue {
                 index: raw.a,
-                name: proto.upvalues.get(raw.a as usize).and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
+                name: proto
+                    .upvalues
+                    .get(raw.a as usize)
+                    .and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
             });
             parse_rk(raw.is_b_k(), raw.b_index_k(), &mut reads, &mut operands);
             parse_rk(raw.is_c_k(), raw.c_index_k(), &mut reads, &mut operands);
@@ -196,12 +233,18 @@ fn lift_instruction_52(
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Upvalue {
                 index: raw.b as u8,
-                name: proto.upvalues.get(raw.b as usize).and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
+                name: proto
+                    .upvalues
+                    .get(raw.b as usize)
+                    .and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
             });
             reads.push(EffectTarget::Register { index: raw.a });
             writes.push(EffectTarget::Upvalue {
                 index: raw.b as u8,
-                name: proto.upvalues.get(raw.b as usize).and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
+                name: proto
+                    .upvalues
+                    .get(raw.b as usize)
+                    .and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
             });
             explanation = format!("Store R({}) into Upvalue[{}]", raw.a, raw.b);
             citations.push("lvm.c:1190".to_string());
@@ -217,8 +260,14 @@ fn lift_instruction_52(
         }
         Opcode52::NewTable => {
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::Count { value: raw.b as usize, is_variable: false });
-            operands.push(TypedOperand::Count { value: raw.c as usize, is_variable: false });
+            operands.push(TypedOperand::Count {
+                value: raw.b as usize,
+                is_variable: false,
+            });
+            operands.push(TypedOperand::Count {
+                value: raw.c as usize,
+                is_variable: false,
+            });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Create new table in R({})", raw.a);
             citations.push("lvm.c:1210".to_string());
@@ -231,10 +280,18 @@ fn lift_instruction_52(
             writes.push(EffectTarget::Register { index: raw.a + 1 });
             writes.push(EffectTarget::Register { index: raw.a });
             metamethods.push("__index".to_string());
-            explanation = format!("Method lookup: R({}+1) := R({}), R({}) := R({})[C]", raw.a, raw.b, raw.a, raw.b);
+            explanation = format!(
+                "Method lookup: R({}+1) := R({}), R({}) := R({})[C]",
+                raw.a, raw.b, raw.a, raw.b
+            );
             citations.push("lvm.c:1220".to_string());
         }
-        Opcode52::Add | Opcode52::Sub | Opcode52::Mul | Opcode52::Div | Opcode52::Mod | Opcode52::Pow => {
+        Opcode52::Add
+        | Opcode52::Sub
+        | Opcode52::Mul
+        | Opcode52::Div
+        | Opcode52::Mod
+        | Opcode52::Pow => {
             operands.push(TypedOperand::Register { index: raw.a });
             parse_rk(raw.is_b_k(), raw.b_index_k(), &mut reads, &mut operands);
             parse_rk(raw.is_c_k(), raw.c_index_k(), &mut reads, &mut operands);
@@ -297,7 +354,11 @@ fn lift_instruction_52(
             implicit_effects.push(ImplicitEffect::ConditionalSkip {
                 skip_target_pc: skip_pc,
             });
-            explanation = format!("Comparison {}: if (B op C) != {} skip next instruction", op.name(), raw.a);
+            explanation = format!(
+                "Comparison {}: if (B op C) != {} skip next instruction",
+                op.name(),
+                raw.a
+            );
             citations.push("lvm.c:1290".to_string());
         }
         Opcode52::Test => {
@@ -326,8 +387,14 @@ fn lift_instruction_52(
         }
         Opcode52::Call => {
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::Count { value: raw.b as usize, is_variable: raw.b == 0 });
-            operands.push(TypedOperand::Count { value: raw.c as usize, is_variable: raw.c == 0 });
+            operands.push(TypedOperand::Count {
+                value: raw.b as usize,
+                is_variable: raw.b == 0,
+            });
+            operands.push(TypedOperand::Count {
+                value: raw.c as usize,
+                is_variable: raw.c == 0,
+            });
             reads.push(EffectTarget::Register { index: raw.a });
             if raw.b > 1 {
                 reads.push(EffectTarget::RegisterRange {
@@ -347,7 +414,10 @@ fn lift_instruction_52(
         }
         Opcode52::TailCall => {
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::Count { value: raw.b as usize, is_variable: raw.b == 0 });
+            operands.push(TypedOperand::Count {
+                value: raw.b as usize,
+                is_variable: raw.b == 0,
+            });
             reads.push(EffectTarget::Register { index: raw.a });
             if raw.b > 1 {
                 reads.push(EffectTarget::RegisterRange {
@@ -361,7 +431,10 @@ fn lift_instruction_52(
         }
         Opcode52::Return => {
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::Count { value: raw.b as usize, is_variable: raw.b == 0 });
+            operands.push(TypedOperand::Count {
+                value: raw.b as usize,
+                is_variable: raw.b == 0,
+            });
             if raw.b > 1 {
                 reads.push(EffectTarget::RegisterRange {
                     start: raw.a,
@@ -408,7 +481,10 @@ fn lift_instruction_52(
         }
         Opcode52::TForCall => {
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::Count { value: raw.c as usize, is_variable: false });
+            operands.push(TypedOperand::Count {
+                value: raw.c as usize,
+                is_variable: false,
+            });
             reads.push(EffectTarget::RegisterRange {
                 start: raw.a,
                 end: raw.a + 2,
@@ -431,13 +507,22 @@ fn lift_instruction_52(
             jump_target = Some(target);
             reads.push(EffectTarget::Register { index: raw.a + 1 });
             writes.push(EffectTarget::Register { index: raw.a });
-            explanation = format!("Generic for-loop step; if R({}+1) != nil jump to PC {target}", raw.a);
+            explanation = format!(
+                "Generic for-loop step; if R({}+1) != nil jump to PC {target}",
+                raw.a
+            );
             citations.push("lvm.c:1380".to_string());
         }
         Opcode52::SetList => {
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::Count { value: raw.b as usize, is_variable: raw.b == 0 });
-            operands.push(TypedOperand::Count { value: raw.c as usize, is_variable: false });
+            operands.push(TypedOperand::Count {
+                value: raw.b as usize,
+                is_variable: raw.b == 0,
+            });
+            operands.push(TypedOperand::Count {
+                value: raw.c as usize,
+                is_variable: false,
+            });
             reads.push(EffectTarget::RegisterRange {
                 start: raw.a + 1,
                 end: raw.a + (if raw.b == 0 { 1 } else { raw.b as u8 }),
@@ -458,7 +543,10 @@ fn lift_instruction_52(
         }
         Opcode52::VarArg => {
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::Count { value: raw.b as usize, is_variable: raw.b == 0 });
+            operands.push(TypedOperand::Count {
+                value: raw.b as usize,
+                is_variable: raw.b == 0,
+            });
             if raw.b > 1 {
                 writes.push(EffectTarget::RegisterRange {
                     start: raw.a,

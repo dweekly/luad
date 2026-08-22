@@ -36,11 +36,7 @@ fn read_input_bytes(file_path: &str) -> Result<Vec<u8>, ExitCode> {
     } else {
         let path = Path::new(file_path);
         if !path.exists() {
-            eprintln!(
-                "{}: File not found: '{}'",
-                "error".red().bold(),
-                file_path
-            );
+            eprintln!("{}: File not found: '{}'", "error".red().bold(), file_path);
             return Err(ExitCode::IoError);
         }
         fs::read(path).map_err(|e| {
@@ -54,7 +50,11 @@ fn read_input_bytes(file_path: &str) -> Result<Vec<u8>, ExitCode> {
     }
 }
 
-fn parse_chunk(bytes: &[u8], strict: bool, dialect_override: Option<&str>) -> Result<Chunk, ExitCode> {
+fn parse_chunk(
+    bytes: &[u8],
+    strict: bool,
+    dialect_override: Option<&str>,
+) -> Result<Chunk, ExitCode> {
     let mode = if strict {
         ParseMode::Strict
     } else {
@@ -111,8 +111,6 @@ fn parse_chunk(bytes: &[u8], strict: bool, dialect_override: Option<&str>) -> Re
         return Err(ExitCode::UnsupportedFormat);
     };
 
-
-
     let mut reader = SafeReader::with_options(bytes, 0, limits, mode);
     match selected_dialect.decode_chunk(&mut reader) {
         Ok(chunk) => Ok(chunk),
@@ -144,12 +142,14 @@ fn main() {
         Commands::Query(args) => handle_query(args),
         Commands::Diff(args) => handle_diff(args),
         Commands::Compile(_) => {
-            eprintln!("{}: 'compile' command is scheduled for Phase 0/1 tooling", "info".cyan());
+            eprintln!(
+                "{}: 'compile' command is scheduled for Phase 0/1 tooling",
+                "info".cyan()
+            );
             ExitCode::Success.exit();
         }
     }
 }
-
 
 fn handle_inspect(args: InspectArgs) {
     let bytes = match read_input_bytes(&args.file) {
@@ -190,7 +190,10 @@ fn handle_disasm(args: DisasmArgs) {
         let path: StableId = match path_str.parse() {
             Ok(p) => p,
             Err(e) => {
-                eprintln!("{}: Invalid prototype selector '{path_str}': {e}", "error".red());
+                eprintln!(
+                    "{}: Invalid prototype selector '{path_str}': {e}",
+                    "error".red()
+                );
                 ExitCode::UsageError.exit();
             }
         };
@@ -201,13 +204,22 @@ fn handle_disasm(args: DisasmArgs) {
 
     match args.format {
         OutputFormat::Text => {
-            render::render_disasm(&chunk.dialect, target_proto, args.raw, args.debug_info, args.effects);
+            render::render_disasm(
+                &chunk.dialect,
+                target_proto,
+                args.raw,
+                args.debug_info,
+                args.effects,
+            );
         }
 
         OutputFormat::Json => render::print_json(target_proto),
         OutputFormat::Jsonl => render::print_jsonl(&target_proto.instructions),
         OutputFormat::Dot => {
-            eprintln!("{}: Use 'luad cfg --format dot' for graphviz output", "error".red());
+            eprintln!(
+                "{}: Use 'luad cfg --format dot' for graphviz output",
+                "error".red()
+            );
             ExitCode::UsageError.exit();
         }
     }
@@ -215,7 +227,10 @@ fn handle_disasm(args: DisasmArgs) {
     ExitCode::Success.exit();
 }
 
-fn find_proto<'a>(proto: &'a luad_core::model::Prototype, target_id: &StableId) -> Option<&'a luad_core::model::Prototype> {
+fn find_proto<'a>(
+    proto: &'a luad_core::model::Prototype,
+    target_id: &StableId,
+) -> Option<&'a luad_core::model::Prototype> {
     if &proto.id == target_id {
         return Some(proto);
     }
@@ -243,10 +258,11 @@ fn handle_validate(args: ValidateArgs) {
         _ => (chunk.verdict, chunk.diagnostics.clone()),
     };
 
-
-    let is_strict_invalid = args.strict
-        && (verdict == Verdict::Invalid
-            || diagnostics.iter().any(|d| d.severity == Severity::Error));
+    let is_invalid = verdict == Verdict::Invalid
+        || (args.strict
+            && (diagnostics
+                .iter()
+                .any(|d| d.severity == Severity::Error || d.severity == Severity::Warning)));
 
     match args.format {
         OutputFormat::Text => render::render_validate(verdict, &diagnostics),
@@ -267,13 +283,12 @@ fn handle_validate(args: ValidateArgs) {
         }
     }
 
-    if is_strict_invalid {
+    if is_invalid {
         ExitCode::InvalidInput.exit();
     } else {
         ExitCode::Success.exit();
     }
 }
-
 
 fn handle_capabilities(args: CapabilitiesArgs) {
     match args.format {
@@ -323,31 +338,52 @@ fn handle_schema(args: SchemaArgs) {
     match args.name.as_str() {
         "chunk" => {
             let schema = schema_for!(Chunk);
-            println!("{}", serde_json::to_string_pretty(&schema).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            );
         }
         "diagnostic" => {
             let schema = schema_for!(Diagnostic);
-            println!("{}", serde_json::to_string_pretty(&schema).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            );
         }
         "instruction" => {
             let schema = schema_for!(luad_core::SemanticInstruction);
-            println!("{}", serde_json::to_string_pretty(&schema).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            );
         }
         "cfg" => {
             let schema = schema_for!(luad_analysis::ControlFlowGraph);
-            println!("{}", serde_json::to_string_pretty(&schema).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            );
         }
         "xrefs" => {
             let schema = schema_for!(luad_analysis::XrefEntry);
-            println!("{}", serde_json::to_string_pretty(&schema).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            );
         }
         "query" => {
             let schema = schema_for!(luad_analysis::QueryResponse);
-            println!("{}", serde_json::to_string_pretty(&schema).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            );
         }
         "diff" => {
             let schema = schema_for!(luad_analysis::ChunkDiff);
-            println!("{}", serde_json::to_string_pretty(&schema).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            );
         }
         other => {
             eprintln!(
@@ -381,7 +417,11 @@ fn handle_explain(args: ExplainArgs) {
     let target_id: StableId = match args.target.parse() {
         Ok(id) => id,
         Err(e) => {
-            eprintln!("{}: Invalid target StableId '{}': {e}", "error".red(), args.target);
+            eprintln!(
+                "{}: Invalid target StableId '{}': {e}",
+                "error".red(),
+                args.target
+            );
             ExitCode::UsageError.exit();
         }
     };
@@ -390,7 +430,11 @@ fn handle_explain(args: ExplainArgs) {
         StableId::Instruction { proto, pc } => {
             let proto_id = StableId::Proto(proto);
             let Some(target_proto) = find_proto(&chunk.main_proto, &proto_id) else {
-                eprintln!("{}: Prototype '{}' not found in chunk", "error".red(), proto_id);
+                eprintln!(
+                    "{}: Prototype '{}' not found in chunk",
+                    "error".red(),
+                    proto_id
+                );
                 ExitCode::UsageError.exit();
             };
 
@@ -441,13 +485,21 @@ fn handle_cfg(args: CfgArgs) {
     let target_id: StableId = match args.proto.parse() {
         Ok(id) => id,
         Err(e) => {
-            eprintln!("{}: Invalid prototype selector '{}': {e}", "error".red(), args.proto);
+            eprintln!(
+                "{}: Invalid prototype selector '{}': {e}",
+                "error".red(),
+                args.proto
+            );
             ExitCode::UsageError.exit();
         }
     };
 
     let Some(target_proto) = find_proto(&chunk.main_proto, &target_id) else {
-        eprintln!("{}: Prototype '{}' not found in chunk", "error".red(), target_id);
+        eprintln!(
+            "{}: Prototype '{}' not found in chunk",
+            "error".red(),
+            target_id
+        );
         ExitCode::UsageError.exit();
     };
 
@@ -577,5 +629,3 @@ fn handle_diff(args: DiffArgs) {
 
     ExitCode::Success.exit();
 }
-
-

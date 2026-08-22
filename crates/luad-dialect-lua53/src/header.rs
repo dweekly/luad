@@ -141,7 +141,10 @@ pub fn parse_header_lua53(reader: &mut SafeReader) -> Result<Header, Diagnostic>
             StableId::Chunk,
             format!("Unsupported Instruction size: expected 4, found {instruction_size}"),
         )
-        .with_source(SourceLocation::new(reader.position() - 1, &[instruction_size]));
+        .with_source(SourceLocation::new(
+            reader.position() - 1,
+            &[instruction_size],
+        ));
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -155,7 +158,10 @@ pub fn parse_header_lua53(reader: &mut SafeReader) -> Result<Header, Diagnostic>
             StableId::Chunk,
             format!("Unsupported lua_Integer size: expected 4 or 8, found {lua_integer_size}"),
         )
-        .with_source(SourceLocation::new(reader.position() - 1, &[lua_integer_size]));
+        .with_source(SourceLocation::new(
+            reader.position() - 1,
+            &[lua_integer_size],
+        ));
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -169,7 +175,10 @@ pub fn parse_header_lua53(reader: &mut SafeReader) -> Result<Header, Diagnostic>
             StableId::Chunk,
             format!("Unsupported lua_Number size: expected 4 or 8, found {lua_number_size}"),
         )
-        .with_source(SourceLocation::new(reader.position() - 1, &[lua_number_size]));
+        .with_source(SourceLocation::new(
+            reader.position() - 1,
+            &[lua_number_size],
+        ));
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -187,7 +196,10 @@ pub fn parse_header_lua53(reader: &mut SafeReader) -> Result<Header, Diagnostic>
             StableId::Chunk,
             format!("Endianness mismatch: expected 0x5678, found 0x{luac_int:x}"),
         )
-        .with_source(SourceLocation::new(reader.position() - lua_integer_size as usize, &luac_int.to_le_bytes()));
+        .with_source(SourceLocation::new(
+            reader.position() - lua_integer_size as usize,
+            &luac_int.to_le_bytes(),
+        ));
         reader.record_diagnostic(diag)?;
     }
 
@@ -198,7 +210,6 @@ pub fn parse_header_lua53(reader: &mut SafeReader) -> Result<Header, Diagnostic>
         let b = reader.read_exact(4)?;
         f32::from_le_bytes(b.try_into().unwrap_or_default()) as f64
     };
-
 
     let header_bytes = reader.slice_from_cursor(start_cursor)?;
     let loc = SourceLocation::new(start_pos, header_bytes);

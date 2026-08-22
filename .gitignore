@@ -1,5 +1,7 @@
 /target/
 **/*.rs.bk
 *.luac
+!tests/fixtures/precompiled/**
 *.out
 .DS_Store
+

@@ -11,6 +11,93 @@ use luad_core::reader::SafeReader;
 use luad_core::Dialect;
 use luad_dialect_lua54::Lua54Dialect;
 
+/// Locate repository root directory in a CWD-independent manner.
+#[must_use]
+pub fn find_workspace_root() -> PathBuf {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+    let mut current = manifest_dir;
+    loop {
+        let cargo_toml = current.join("Cargo.toml");
+        if cargo_toml.exists() {
+            if let Ok(content) = fs::read_to_string(&cargo_toml) {
+                if content.contains("[workspace]") {
+                    return current;
+                }
+            }
+        }
+        if !current.pop() {
+            break;
+        }
+    }
+    PathBuf::from(".")
+}
+
+/// Load a test fixture Lua source string in a CWD-independent manner.
+pub fn load_source_fixture(fixture_name: &str) -> Result<String, String> {
+    let root = find_workspace_root();
+    let path = root
+        .join("tests")
+        .join("fixtures")
+        .join(format!("{fixture_name}.lua"));
+    fs::read_to_string(&path).map_err(|e| format!("Failed to read fixture '{path:?}': {e}"))
+}
+
+/// Load a precompiled bytecode fixture binary in a CWD-independent manner.
+pub fn load_precompiled_fixture(
+    dialect: &str,
+    fixture_name: &str,
+    strip: bool,
+) -> Result<Vec<u8>, String> {
+    let root = find_workspace_root();
+    let filename = if strip {
+        format!("{fixture_name}_stripped.luac")
+    } else {
+        format!("{fixture_name}.luac")
+    };
+    let path = root
+        .join("tests")
+        .join("fixtures")
+        .join("precompiled")
+        .join(dialect)
+        .join(filename);
+    fs::read(&path).map_err(|e| format!("Failed to read precompiled fixture '{path:?}': {e}"))
+}
+
+/// Obtain bytecode for a fixture: compiles dynamically if host compiler is available, or falls back to bundled precompiled bytecode.
+pub fn get_fixture_bytes(
+    dialect: &str,
+    fixture_name: &str,
+    strip: bool,
+) -> Result<Vec<u8>, String> {
+    let live_result = match dialect {
+        "lua5.5" => load_source_fixture(fixture_name).and_then(|s| compile_source_lua55(&s, strip)),
+        "lua5.4" => load_source_fixture(fixture_name).and_then(|s| compile_source_lua54(&s, strip)),
+        "lua5.3" => load_source_fixture(fixture_name).and_then(|s| compile_source_lua53(&s, strip)),
+        "lua5.2" => load_source_fixture(fixture_name).and_then(|s| compile_source_lua52(&s, strip)),
+        "lua5.1" => load_source_fixture(fixture_name).and_then(|s| compile_source_lua51(&s, strip)),
+        _ => Err(format!("Unknown dialect {dialect}")),
+    };
+
+    match live_result {
+        Ok(bytes) => Ok(bytes),
+        Err(_) => load_precompiled_fixture(
+            match dialect {
+                "lua5.5" => "lua55",
+                "lua5.4" => "lua54",
+                "lua5.3" => "lua53",
+                "lua5.2" => "lua52",
+                "lua5.1" => "lua51",
+                other => other,
+            },
+            fixture_name,
+            strip,
+        ),
+    }
+}
+
 /// Locate Lua 5.4 compiler binary on host system.
 #[must_use]
 pub fn find_luac54() -> Option<PathBuf> {
@@ -74,12 +161,8 @@ pub fn compile_source_lua54(source: &str, strip: bool) -> Result<Vec<u8>, String
 pub fn compile_and_parse_lua54(source: &str, strip: bool) -> Result<Chunk, String> {
     let bytes = compile_source_lua54(source, strip)?;
     let dialect = Lua54Dialect;
-    let mut reader = SafeReader::with_options(
-        &bytes,
-        0,
-        ResourceLimits::default(),
-        ParseMode::Strict,
-    );
+    let mut reader =
+        SafeReader::with_options(&bytes, 0, ResourceLimits::default(), ParseMode::Strict);
     dialect.decode_chunk(&mut reader).map_err(|d| d.message)
 }
 
@@ -140,12 +223,8 @@ pub fn compile_source_lua55(source: &str, strip: bool) -> Result<Vec<u8>, String
 pub fn compile_and_parse_lua55(source: &str, strip: bool) -> Result<Chunk, String> {
     let bytes = compile_source_lua55(source, strip)?;
     let dialect = luad_dialect_lua55::Lua55Dialect;
-    let mut reader = SafeReader::with_options(
-        &bytes,
-        0,
-        ResourceLimits::default(),
-        ParseMode::Strict,
-    );
+    let mut reader =
+        SafeReader::with_options(&bytes, 0, ResourceLimits::default(), ParseMode::Strict);
     dialect.decode_chunk(&mut reader).map_err(|d| d.message)
 }
 
@@ -200,12 +279,8 @@ pub fn compile_source_lua53(source: &str, strip: bool) -> Result<Vec<u8>, String
 pub fn compile_and_parse_lua53(source: &str, strip: bool) -> Result<Chunk, String> {
     let bytes = compile_source_lua53(source, strip)?;
     let dialect = luad_dialect_lua53::Lua53Dialect;
-    let mut reader = SafeReader::with_options(
-        &bytes,
-        0,
-        ResourceLimits::default(),
-        ParseMode::Strict,
-    );
+    let mut reader =
+        SafeReader::with_options(&bytes, 0, ResourceLimits::default(), ParseMode::Strict);
     dialect.decode_chunk(&mut reader).map_err(|d| d.message)
 }
 
@@ -260,12 +335,8 @@ pub fn compile_source_lua52(source: &str, strip: bool) -> Result<Vec<u8>, String
 pub fn compile_and_parse_lua52(source: &str, strip: bool) -> Result<Chunk, String> {
     let bytes = compile_source_lua52(source, strip)?;
     let dialect = luad_dialect_lua52::Lua52Dialect;
-    let mut reader = SafeReader::with_options(
-        &bytes,
-        0,
-        ResourceLimits::default(),
-        ParseMode::Strict,
-    );
+    let mut reader =
+        SafeReader::with_options(&bytes, 0, ResourceLimits::default(), ParseMode::Strict);
     dialect.decode_chunk(&mut reader).map_err(|d| d.message)
 }
 
@@ -320,16 +391,10 @@ pub fn compile_source_lua51(source: &str, strip: bool) -> Result<Vec<u8>, String
 pub fn compile_and_parse_lua51(source: &str, strip: bool) -> Result<Chunk, String> {
     let bytes = compile_source_lua51(source, strip)?;
     let dialect = luad_dialect_lua51::Lua51Dialect;
-    let mut reader = SafeReader::with_options(
-        &bytes,
-        0,
-        ResourceLimits::default(),
-        ParseMode::Strict,
-    );
+    let mut reader =
+        SafeReader::with_options(&bytes, 0, ResourceLimits::default(), ParseMode::Strict);
     dialect.decode_chunk(&mut reader).map_err(|d| d.message)
 }
-
-
 
 /// Verify that 100% of bytes in a valid chunk are accounted for.
 pub fn verify_byte_accounting(chunk: &Chunk, raw_bytes: &[u8]) {
@@ -350,8 +415,6 @@ pub fn verify_byte_accounting(chunk: &Chunk, raw_bytes: &[u8]) {
     );
 }
 
-
-
 /// Verify that truncating valid chunk at every byte offset 0..N terminates gracefully without panic.
 pub fn verify_truncation_safety(raw_bytes: &[u8]) {
     let dialect = Lua54Dialect;
@@ -362,12 +425,8 @@ pub fn verify_truncation_safety(raw_bytes: &[u8]) {
 pub fn verify_truncation_safety_for_dialect(raw_bytes: &[u8], dialect: &dyn Dialect) {
     for len in 0..raw_bytes.len() {
         let truncated = &raw_bytes[..len];
-        let mut reader = SafeReader::with_options(
-            truncated,
-            0,
-            ResourceLimits::default(),
-            ParseMode::Strict,
-        );
+        let mut reader =
+            SafeReader::with_options(truncated, 0, ResourceLimits::default(), ParseMode::Strict);
         let _ = dialect.decode_chunk(&mut reader);
 
         // Also test permissive mode
@@ -380,4 +439,3 @@ pub fn verify_truncation_safety_for_dialect(raw_bytes: &[u8], dialect: &dyn Dial
         let _ = dialect.decode_chunk(&mut perm_reader);
     }
 }
-

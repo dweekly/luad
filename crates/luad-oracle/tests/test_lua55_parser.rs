@@ -1,73 +1,67 @@
-use std::fs;
 use luad_core::diagnostic::Verdict;
+use luad_core::reader::SafeReader;
 use luad_core::Dialect;
-use luad_oracle::{compile_and_parse_lua55, compile_source_lua55, verify_truncation_safety};
+use luad_dialect_lua55::Lua55Dialect;
+use luad_oracle::{get_fixture_bytes, verify_truncation_safety_for_dialect};
 
 #[test]
 fn test_all_fixtures_lua55_parsing_and_truncation() {
-    let fixture_files = [
-        "../../tests/fixtures/hello.lua",
-        "../../tests/fixtures/control_flow.lua",
-        "../../tests/fixtures/closures.lua",
-        "../../tests/fixtures/tables.lua",
-        "../../tests/fixtures/numerics.lua",
-    ];
+    let fixture_names = ["hello", "control_flow", "closures", "tables", "numerics"];
 
-    for fixture_path in fixture_files {
-        let source = fs::read_to_string(fixture_path)
-            .unwrap_or_else(|_| panic!("Failed to read {fixture_path}"));
+    let dialect = Lua55Dialect;
 
+    for fixture_name in fixture_names {
         // 1. Test normal debug chunk
-        let raw_debug = compile_source_lua55(&source, false)
-            .unwrap_or_else(|e| panic!("Failed to compile {fixture_path} with Lua 5.5: {e}"));
-        let chunk_debug = compile_and_parse_lua55(&source, false)
-            .unwrap_or_else(|e| panic!("Failed to parse {fixture_path} with Lua 5.5: {e}"));
+        let raw_debug = get_fixture_bytes("lua5.5", fixture_name, false).unwrap_or_else(|e| {
+            panic!("Failed to get debug fixture '{fixture_name}' for Lua 5.5: {e:?}")
+        });
+        let mut reader_debug = SafeReader::new(&raw_debug);
+        let chunk_debug =
+            luad_dialect_lua55::decode_chunk_lua55(&mut reader_debug).unwrap_or_else(|e| {
+                panic!("Failed to parse debug fixture '{fixture_name}' for Lua 5.5: {e:?}")
+            });
 
         assert_eq!(chunk_debug.dialect, "lua5.5");
         assert_eq!(chunk_debug.verdict, Verdict::ValidForParser);
         assert_eq!(chunk_debug.byte_length, raw_debug.len());
 
         // 2. Test stripped chunk (luac -s)
-        let raw_stripped = compile_source_lua55(&source, true)
-            .unwrap_or_else(|e| panic!("Failed to compile stripped {fixture_path} with Lua 5.5: {e}"));
-        let chunk_stripped = compile_and_parse_lua55(&source, true)
-            .unwrap_or_else(|e| panic!("Failed to parse stripped {fixture_path} with Lua 5.5: {e}"));
+        let raw_stripped = get_fixture_bytes("lua5.5", fixture_name, true).unwrap_or_else(|e| {
+            panic!("Failed to get stripped fixture '{fixture_name}' for Lua 5.5: {e:?}")
+        });
+        let mut reader_stripped = SafeReader::new(&raw_stripped);
+        let chunk_stripped = luad_dialect_lua55::decode_chunk_lua55(&mut reader_stripped)
+            .unwrap_or_else(|e| {
+                panic!("Failed to parse stripped fixture '{fixture_name}' for Lua 5.5: {e:?}")
+            });
 
         assert_eq!(chunk_stripped.dialect, "lua5.5");
         assert_eq!(chunk_stripped.verdict, Verdict::ValidForParser);
         assert_eq!(chunk_stripped.byte_length, raw_stripped.len());
 
         // 3. Truncation safety across every byte boundary
-        verify_truncation_safety(&raw_debug);
-        verify_truncation_safety(&raw_stripped);
+        verify_truncation_safety_for_dialect(&raw_debug, &dialect);
+        verify_truncation_safety_for_dialect(&raw_stripped, &dialect);
     }
 }
 
 #[test]
 fn test_lua55_string_reuse_table() {
-    // String reuse: "repeated_name" occurs multiple times across locals, upvalues, and table keys
-    let source = r#"
-        local repeated_name = "hello"
-        local function f()
-            local repeated_name = "hello"
-            return repeated_name
-        end
-        return repeated_name, f()
-    "#;
-
-    let chunk = compile_and_parse_lua55(source, false).expect("parse failed");
+    let raw_bytes = get_fixture_bytes("lua5.5", "closures", false).expect("get fixture failed");
+    let mut reader = SafeReader::new(&raw_bytes);
+    let chunk = luad_dialect_lua55::decode_chunk_lua55(&mut reader).expect("parse failed");
     assert_eq!(chunk.dialect, "lua5.5");
     assert_eq!(chunk.verdict, Verdict::ValidForParser);
+    assert!(!chunk.main_proto.protos.is_empty());
 }
 
 #[test]
 fn test_lua55_corrupted_header() {
-    let source = "return 42";
-    let mut raw = compile_source_lua55(source, false).expect("compilation failed");
+    let mut raw_bytes = get_fixture_bytes("lua5.5", "hello", false).expect("get fixture failed");
+    raw_bytes[4] = 0x99; // Corrupted version byte
 
-    // Corrupt signature
-    raw[0] = b'Z';
-    let dialect = luad_dialect_lua55::Lua55Dialect;
-    let mut reader = luad_core::SafeReader::new(&raw);
-    assert!(dialect.decode_chunk(&mut reader).is_err());
+    let dialect = Lua55Dialect;
+    let mut reader = SafeReader::new(&raw_bytes);
+    let result = dialect.decode_chunk(&mut reader);
+    assert!(result.is_err());
 }

@@ -22,7 +22,9 @@ pub enum OpMode55 {
 }
 
 /// Enumeration of all 85 opcodes supported in Lua 5.5.0 - 5.5.1.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 #[repr(u8)]
 pub enum Opcode55 {
     Move = 0,
@@ -330,8 +332,8 @@ impl RawInstruction55 {
         let c = ((raw >> 24) & 0xFF) as u8;
 
         // ivABC layout
-        let vb = ((raw >> 16) & 0x3F) as u8;       // 6 bits (16..21)
-        let vc = ((raw >> 22) & 0x3FF) as u16;     // 10 bits (22..31)
+        let vb = ((raw >> 16) & 0x3F) as u8; // 6 bits (16..21)
+        let vc = ((raw >> 22) & 0x3FF) as u16; // 10 bits (22..31)
 
         // iABx layout (17 bits from bit 15)
         let bx = raw >> 15;

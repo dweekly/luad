@@ -7,7 +7,9 @@ use crate::id::StableId;
 use crate::provenance::SourceLocation;
 
 /// Diagnostic severity level.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum Severity {
     /// Informational note or hint.

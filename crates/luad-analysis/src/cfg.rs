@@ -1,15 +1,17 @@
 //! Control-flow graph construction, basic block partitioning, and immediate dominator computation.
 
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use luad_core::id::StableId;
 use luad_core::ir::SemanticInstruction;
 use luad_core::model::Prototype;
 
 /// Classification of control-flow edges.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum CfgEdgeKind {
     /// Normal straight-line execution into subsequent basic block.
@@ -81,6 +83,7 @@ pub struct ControlFlowGraph {
 impl ControlFlowGraph {
     /// Build a control-flow graph from lifted semantic instructions of a prototype.
     #[must_use]
+    #[allow(clippy::needless_range_loop)]
     pub fn build(proto: &Prototype, instructions: &[SemanticInstruction]) -> Self {
         if instructions.is_empty() {
             return Self {
@@ -202,7 +205,12 @@ impl ControlFlowGraph {
             if !last_inst.mnemonic.starts_with("RETURN") && last_inst.mnemonic != "JMP" {
                 let next_pc = end_pc + 1;
                 if let Some(&next_b_idx) = pc_to_block.get(&next_pc) {
-                    if next_b_idx != b_idx && !blocks[b_idx].successors.iter().any(|e| e.to_block == next_b_idx) {
+                    if next_b_idx != b_idx
+                        && !blocks[b_idx]
+                            .successors
+                            .iter()
+                            .any(|e| e.to_block == next_b_idx)
+                    {
                         blocks[b_idx].successors.push(CfgEdge {
                             from_block: b_idx,
                             to_block: next_b_idx,
@@ -217,7 +225,10 @@ impl ControlFlowGraph {
         let mut preds_map: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
         for block in &blocks {
             for edge in &block.successors {
-                preds_map.entry(edge.to_block).or_default().push(block.index);
+                preds_map
+                    .entry(edge.to_block)
+                    .or_default()
+                    .push(block.index);
             }
         }
         for block in &mut blocks {
@@ -373,11 +384,8 @@ fn compute_immediate_dominators(blocks: &mut [BasicBlock]) {
         }
 
         if let Some(block_doms) = doms.get(&b_idx) {
-            let strict_doms: Vec<usize> = block_doms
-                .iter()
-                .copied()
-                .filter(|&d| d != b_idx)
-                .collect();
+            let strict_doms: Vec<usize> =
+                block_doms.iter().copied().filter(|&d| d != b_idx).collect();
 
             // The immediate dominator idom(n) is the unique strict dominator d of n that does not dominate any other strict dominator of n
             let mut idom = None;

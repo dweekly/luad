@@ -1,6 +1,9 @@
 //! Core types, safe parsing primitives, stable identifiers, diagnostics, and domain models for `luad`.
 
+#![allow(clippy::result_large_err)]
+
 pub mod diagnostic;
+
 pub mod dialect;
 pub mod id;
 pub mod ir;

@@ -1,10 +1,10 @@
 //! Deterministic stable identity taxonomy for chunks, prototypes, instructions,
 //! blocks, constants, upvalues, locals, and diagnostics.
 
-use std::fmt;
-use std::str::FromStr;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::fmt;
+use std::str::FromStr;
 
 /// Prototype structural path, representing nesting hierarchy (e.g. "0/2/1").
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -202,11 +202,26 @@ impl FromStr for StableId {
                     .parse::<usize>()
                     .map_err(|e| format!("Invalid index in ID '{s}': {e}"))?;
                 return match kind {
-                    "pc" => Ok(Self::Instruction { proto: path, pc: idx }),
-                    "block" => Ok(Self::Block { proto: path, index: idx }),
-                    "k" => Ok(Self::Constant { proto: path, index: idx }),
-                    "upvalue" => Ok(Self::Upvalue { proto: path, index: idx }),
-                    "local" => Ok(Self::Local { proto: path, index: idx }),
+                    "pc" => Ok(Self::Instruction {
+                        proto: path,
+                        pc: idx,
+                    }),
+                    "block" => Ok(Self::Block {
+                        proto: path,
+                        index: idx,
+                    }),
+                    "k" => Ok(Self::Constant {
+                        proto: path,
+                        index: idx,
+                    }),
+                    "upvalue" => Ok(Self::Upvalue {
+                        proto: path,
+                        index: idx,
+                    }),
+                    "local" => Ok(Self::Local {
+                        proto: path,
+                        index: idx,
+                    }),
                     _ => Err(format!("Unknown artifact kind '{kind}' in ID: '{s}'")),
                 };
             }

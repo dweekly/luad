@@ -13,9 +13,15 @@ pub fn lift_proto_lua54(proto: &Prototype) -> Vec<SemanticInstruction> {
 
     for (pc, inst) in proto.instructions.iter().enumerate() {
         let raw = RawInstruction54::decode(inst.raw_word);
-        let next_word = proto.instructions.get(pc + 1).map(|i| RawInstruction54::decode(i.raw_word));
+        let next_word = proto
+            .instructions
+            .get(pc + 1)
+            .map(|i| RawInstruction54::decode(i.raw_word));
         let prev_word = if pc > 0 {
-            proto.instructions.get(pc - 1).map(|i| RawInstruction54::decode(i.raw_word))
+            proto
+                .instructions
+                .get(pc - 1)
+                .map(|i| RawInstruction54::decode(i.raw_word))
         } else {
             None
         };
@@ -100,14 +106,18 @@ fn lift_instruction_54(
         Opcode54::Loadi => {
             citations.push("lvm.c:1123".to_string());
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::ImmediateInt { value: raw.sbx as i64 });
+            operands.push(TypedOperand::ImmediateInt {
+                value: raw.sbx as i64,
+            });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Load integer constant {} into R({})", raw.sbx, raw.a);
         }
         Opcode54::Loadf => {
             citations.push("lvm.c:1126".to_string());
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::ImmediateFloat { value: raw.sbx as f64 });
+            operands.push(TypedOperand::ImmediateFloat {
+                value: raw.sbx as f64,
+            });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Load float constant {}.0 into R({})", raw.sbx, raw.a);
         }
@@ -161,7 +171,10 @@ fn lift_instruction_54(
             implicit_effects.push(ImplicitEffect::ConditionalSkip {
                 skip_target_pc: skip_pc,
             });
-            explanation = format!("Set R({}) to false and skip next instruction (jump to PC {skip_pc})", raw.a);
+            explanation = format!(
+                "Set R({}) to false and skip next instruction (jump to PC {skip_pc})",
+                raw.a
+            );
         }
         Opcode54::Loadtrue => {
             citations.push("lvm.c:1143".to_string());
@@ -238,7 +251,9 @@ fn lift_instruction_54(
                     index: raw.c as usize,
                     value: k_val,
                 });
-                reads.push(EffectTarget::Constant { index: raw.c as usize });
+                reads.push(EffectTarget::Constant {
+                    index: raw.c as usize,
+                });
                 format!("K[{}]", raw.c)
             } else {
                 operands.push(TypedOperand::Register { index: raw.c });
@@ -265,13 +280,18 @@ fn lift_instruction_54(
             reads.push(EffectTarget::Register { index: raw.c });
             writes.push(EffectTarget::Register { index: raw.a });
             metamethod_fallbacks.push("__index".to_string());
-            explanation = format!("R({}) := R({})[R({})] (fallback __index)", raw.a, raw.b, raw.c);
+            explanation = format!(
+                "R({}) := R({})[R({})] (fallback __index)",
+                raw.a, raw.b, raw.c
+            );
         }
         Opcode54::Geti => {
             citations.push("lvm.c:1168".to_string());
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Register { index: raw.b });
-            operands.push(TypedOperand::ImmediateInt { value: raw.c as i64 });
+            operands.push(TypedOperand::ImmediateInt {
+                value: raw.c as i64,
+            });
             reads.push(EffectTarget::Register { index: raw.b });
             writes.push(EffectTarget::Register { index: raw.a });
             metamethod_fallbacks.push("__index".to_string());
@@ -287,10 +307,15 @@ fn lift_instruction_54(
                 value: k_val,
             });
             reads.push(EffectTarget::Register { index: raw.b });
-            reads.push(EffectTarget::Constant { index: raw.c as usize });
+            reads.push(EffectTarget::Constant {
+                index: raw.c as usize,
+            });
             writes.push(EffectTarget::Register { index: raw.a });
             metamethod_fallbacks.push("__index".to_string());
-            explanation = format!("R({}) := R({})[K[{}]] (fallback __index)", raw.a, raw.b, raw.c);
+            explanation = format!(
+                "R({}) := R({})[K[{}]] (fallback __index)",
+                raw.a, raw.b, raw.c
+            );
         }
         Opcode54::Settabup => {
             citations.push("lvm.c:1176".to_string());
@@ -305,7 +330,9 @@ fn lift_instruction_54(
                     index: raw.b as usize,
                     value: k_val,
                 });
-                reads.push(EffectTarget::Constant { index: raw.b as usize });
+                reads.push(EffectTarget::Constant {
+                    index: raw.b as usize,
+                });
                 format!("K[{}]", raw.b)
             } else {
                 operands.push(TypedOperand::Register { index: raw.b });
@@ -335,7 +362,9 @@ fn lift_instruction_54(
                     index: raw.c as usize,
                     value: k_val,
                 });
-                reads.push(EffectTarget::Constant { index: raw.c as usize });
+                reads.push(EffectTarget::Constant {
+                    index: raw.c as usize,
+                });
                 format!("K[{}]", raw.c)
             } else {
                 operands.push(TypedOperand::Register { index: raw.c });
@@ -345,19 +374,26 @@ fn lift_instruction_54(
             reads.push(EffectTarget::Register { index: raw.a });
             reads.push(EffectTarget::Register { index: raw.b });
             metamethod_fallbacks.push("__newindex".to_string());
-            explanation = format!("R({})[R({})] := {val_str} (fallback __newindex)", raw.a, raw.b);
+            explanation = format!(
+                "R({})[R({})] := {val_str} (fallback __newindex)",
+                raw.a, raw.b
+            );
         }
         Opcode54::Seti => {
             citations.push("lvm.c:1186".to_string());
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::ImmediateInt { value: raw.b as i64 });
+            operands.push(TypedOperand::ImmediateInt {
+                value: raw.b as i64,
+            });
             let val_str = if raw.k != 0 {
                 let k_val = get_const_val(raw.c as usize);
                 operands.push(TypedOperand::Constant {
                     index: raw.c as usize,
                     value: k_val,
                 });
-                reads.push(EffectTarget::Constant { index: raw.c as usize });
+                reads.push(EffectTarget::Constant {
+                    index: raw.c as usize,
+                });
                 format!("K[{}]", raw.c)
             } else {
                 operands.push(TypedOperand::Register { index: raw.c });
@@ -382,7 +418,9 @@ fn lift_instruction_54(
                     index: raw.c as usize,
                     value: k_val,
                 });
-                reads.push(EffectTarget::Constant { index: raw.c as usize });
+                reads.push(EffectTarget::Constant {
+                    index: raw.c as usize,
+                });
                 format!("K[{}]", raw.c)
             } else {
                 operands.push(TypedOperand::Register { index: raw.c });
@@ -390,9 +428,14 @@ fn lift_instruction_54(
                 format!("R({})", raw.c)
             };
             reads.push(EffectTarget::Register { index: raw.a });
-            reads.push(EffectTarget::Constant { index: raw.b as usize });
+            reads.push(EffectTarget::Constant {
+                index: raw.b as usize,
+            });
             metamethod_fallbacks.push("__newindex".to_string());
-            explanation = format!("R({})[K[{}]] := {val_str} (fallback __newindex)", raw.a, raw.b);
+            explanation = format!(
+                "R({})[K[{}]] := {val_str} (fallback __newindex)",
+                raw.a, raw.b
+            );
         }
         Opcode54::Newtable => {
             citations.push("lvm.c:1194".to_string());
@@ -423,7 +466,9 @@ fn lift_instruction_54(
                     index: raw.c as usize,
                     value: k_val,
                 });
-                reads.push(EffectTarget::Constant { index: raw.c as usize });
+                reads.push(EffectTarget::Constant {
+                    index: raw.c as usize,
+                });
                 format!("K[{}]", raw.c)
             } else {
                 operands.push(TypedOperand::Register { index: raw.c });
@@ -436,21 +481,41 @@ fn lift_instruction_54(
             metamethod_fallbacks.push("__index".to_string());
             explanation = format!(
                 "R({}) := R({})[{}]; R({}) := R({}) (method lookup)",
-                raw.a, raw.b, key_str, raw.a + 1, raw.b
+                raw.a,
+                raw.b,
+                key_str,
+                raw.a + 1,
+                raw.b
             );
         }
         Opcode54::Addi | Opcode54::Shri | Opcode54::Shli => {
             citations.push("lvm.c:1218".to_string());
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Register { index: raw.b });
-            operands.push(TypedOperand::ImmediateInt { value: raw.c as i64 });
+            operands.push(TypedOperand::ImmediateInt {
+                value: raw.c as i64,
+            });
             reads.push(EffectTarget::Register { index: raw.b });
             writes.push(EffectTarget::Register { index: raw.a });
-            let op_sym = if op == Opcode54::Addi { "+" } else if op == Opcode54::Shri { ">>" } else { "<<" };
+            let op_sym = if op == Opcode54::Addi {
+                "+"
+            } else if op == Opcode54::Shri {
+                ">>"
+            } else {
+                "<<"
+            };
             explanation = format!("R({}) := R({}) {op_sym} {}", raw.a, raw.b, raw.c);
         }
-        Opcode54::Addk | Opcode54::Subk | Opcode54::Mulk | Opcode54::Modk | Opcode54::Powk
-        | Opcode54::Divk | Opcode54::Idivk | Opcode54::Bandk | Opcode54::Bork | Opcode54::Bxork => {
+        Opcode54::Addk
+        | Opcode54::Subk
+        | Opcode54::Mulk
+        | Opcode54::Modk
+        | Opcode54::Powk
+        | Opcode54::Divk
+        | Opcode54::Idivk
+        | Opcode54::Bandk
+        | Opcode54::Bork
+        | Opcode54::Bxork => {
             citations.push("lvm.c:1225".to_string());
             let k_val = get_const_val(raw.c as usize);
             operands.push(TypedOperand::Register { index: raw.a });
@@ -460,13 +525,24 @@ fn lift_instruction_54(
                 value: k_val,
             });
             reads.push(EffectTarget::Register { index: raw.b });
-            reads.push(EffectTarget::Constant { index: raw.c as usize });
+            reads.push(EffectTarget::Constant {
+                index: raw.c as usize,
+            });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("R({}) := R({}) {} K[{}]", raw.a, raw.b, op.name(), raw.c);
         }
-        Opcode54::Add | Opcode54::Sub | Opcode54::Mul | Opcode54::Mod | Opcode54::Pow
-        | Opcode54::Div | Opcode54::Idiv | Opcode54::Band | Opcode54::Bor | Opcode54::Bxor
-        | Opcode54::Shl | Opcode54::Shr => {
+        Opcode54::Add
+        | Opcode54::Sub
+        | Opcode54::Mul
+        | Opcode54::Mod
+        | Opcode54::Pow
+        | Opcode54::Div
+        | Opcode54::Idiv
+        | Opcode54::Band
+        | Opcode54::Bor
+        | Opcode54::Bxor
+        | Opcode54::Shl
+        | Opcode54::Shr => {
             citations.push("lvm.c:1240".to_string());
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Register { index: raw.b });
@@ -483,7 +559,10 @@ fn lift_instruction_54(
                 companion_pc: pc.saturating_sub(1),
                 companion_role: "Metamethod fallback companion".to_string(),
             });
-            explanation = format!("Companion instruction specifying metamethod fallback for PC {}", pc.saturating_sub(1));
+            explanation = format!(
+                "Companion instruction specifying metamethod fallback for PC {}",
+                pc.saturating_sub(1)
+            );
         }
         Opcode54::Unm => {
             citations.push("lvm.c:1260".to_string());
@@ -492,7 +571,10 @@ fn lift_instruction_54(
             reads.push(EffectTarget::Register { index: raw.b });
             writes.push(EffectTarget::Register { index: raw.a });
             metamethod_fallbacks.push("__unm".to_string());
-            explanation = format!("R({}) := -R({}) (unary minus, fallback __unm)", raw.a, raw.b);
+            explanation = format!(
+                "R({}) := -R({}) (unary minus, fallback __unm)",
+                raw.a, raw.b
+            );
         }
         Opcode54::Bnot => {
             citations.push("lvm.c:1264".to_string());
@@ -501,7 +583,10 @@ fn lift_instruction_54(
             reads.push(EffectTarget::Register { index: raw.b });
             writes.push(EffectTarget::Register { index: raw.a });
             metamethod_fallbacks.push("__bnot".to_string());
-            explanation = format!("R({}) := ~R({}) (bitwise not, fallback __bnot)", raw.a, raw.b);
+            explanation = format!(
+                "R({}) := ~R({}) (bitwise not, fallback __bnot)",
+                raw.a, raw.b
+            );
         }
         Opcode54::Not => {
             citations.push("lvm.c:1268".to_string());
@@ -518,11 +603,14 @@ fn lift_instruction_54(
             reads.push(EffectTarget::Register { index: raw.b });
             writes.push(EffectTarget::Register { index: raw.a });
             metamethod_fallbacks.push("__len".to_string());
-            explanation = format!("R({}) := #R({}) (length operator, fallback __len)", raw.a, raw.b);
+            explanation = format!(
+                "R({}) := #R({}) (length operator, fallback __len)",
+                raw.a, raw.b
+            );
         }
         Opcode54::Concat => {
             citations.push("lvm.c:1276".to_string());
-            let end_reg = raw.a + raw.b - 1;
+            let end_reg = raw.a.saturating_add(raw.b).saturating_sub(1);
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Count {
                 value: raw.b as usize,
@@ -534,7 +622,10 @@ fn lift_instruction_54(
             });
             writes.push(EffectTarget::Register { index: raw.a });
             metamethod_fallbacks.push("__concat".to_string());
-            explanation = format!("R({}) := R({})....R({end_reg}) (string concatenation)", raw.a, raw.a);
+            explanation = format!(
+                "R({}) := R({})....R({end_reg}) (string concatenation)",
+                raw.a, raw.a
+            );
         }
         Opcode54::Close => {
             citations.push("lvm.c:1282".to_string());
@@ -548,7 +639,10 @@ fn lift_instruction_54(
             citations.push("lvm.c:1286".to_string());
             operands.push(TypedOperand::Register { index: raw.a });
             metamethod_fallbacks.push("__close".to_string());
-            explanation = format!("Mark R({}) as a to-be-closed variable (will invoke __close on scope exit)", raw.a);
+            explanation = format!(
+                "Mark R({}) as a to-be-closed variable (will invoke __close on scope exit)",
+                raw.a
+            );
         }
         Opcode54::Jmp => {
             citations.push("lvm.c:1290".to_string());
@@ -563,8 +657,16 @@ fn lift_instruction_54(
             reads.push(EffectTarget::JumpTarget { pc: dest_pc });
             explanation = format!("Unconditional jump by offset {} to PC {dest_pc}", raw.sj);
         }
-        Opcode54::Eq | Opcode54::Lt | Opcode54::Le | Opcode54::Eqk | Opcode54::Eqi
-        | Opcode54::Lti | Opcode54::Lei | Opcode54::Gti | Opcode54::Gei | Opcode54::Test
+        Opcode54::Eq
+        | Opcode54::Lt
+        | Opcode54::Le
+        | Opcode54::Eqk
+        | Opcode54::Eqi
+        | Opcode54::Lti
+        | Opcode54::Lei
+        | Opcode54::Gti
+        | Opcode54::Gei
+        | Opcode54::Test
         | Opcode54::Testset => {
             citations.push("lvm.c:1300".to_string());
             let skip_pc = pc + 2;
@@ -580,11 +682,19 @@ fn lift_instruction_54(
 
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Count {
-                value: if num_args > 0 { (num_args - 1) as usize } else { 0 },
+                value: if num_args > 0 {
+                    (num_args - 1) as usize
+                } else {
+                    0
+                },
                 is_variable: num_args == 0,
             });
             operands.push(TypedOperand::Count {
-                value: if num_results > 0 { (num_results - 1) as usize } else { 0 },
+                value: if num_results > 0 {
+                    (num_results - 1) as usize
+                } else {
+                    0
+                },
                 is_variable: num_results == 0,
             });
 
@@ -592,12 +702,10 @@ fn lift_instruction_54(
             if num_args > 1 {
                 reads.push(EffectTarget::RegisterRange {
                     start: raw.a + 1,
-                    end: raw.a + num_args - 1,
+                    end: raw.a.saturating_add(num_args).saturating_sub(1),
                 });
             } else if num_args == 0 {
-                reads.push(EffectTarget::RegisterRangeToTop {
-                    start: raw.a + 1,
-                });
+                reads.push(EffectTarget::RegisterRangeToTop { start: raw.a + 1 });
             }
 
             if num_results > 1 {
@@ -606,22 +714,35 @@ fn lift_instruction_54(
                     end: raw.a + num_results - 2,
                 });
             } else if num_results == 0 {
-                writes.push(EffectTarget::RegisterRangeToTop {
-                    start: raw.a,
-                });
+                writes.push(EffectTarget::RegisterRangeToTop { start: raw.a });
             }
 
             metamethod_fallbacks.push("__call".to_string());
-            let args_str = if num_args == 0 { "top".to_string() } else { format!("{}", num_args - 1) };
-            let rets_str = if num_results == 0 { "top".to_string() } else { format!("{}", num_results - 1) };
-            explanation = format!("Call function in R({}) with {args_str} arguments, expecting {rets_str} results", raw.a);
+            let args_str = if num_args == 0 {
+                "top".to_string()
+            } else {
+                format!("{}", num_args - 1)
+            };
+            let rets_str = if num_results == 0 {
+                "top".to_string()
+            } else {
+                format!("{}", num_results - 1)
+            };
+            explanation = format!(
+                "Call function in R({}) with {args_str} arguments, expecting {rets_str} results",
+                raw.a
+            );
         }
         Opcode54::Tailcall => {
             citations.push("lvm.c:1360".to_string());
             let num_args = raw.b;
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Count {
-                value: if num_args > 0 { (num_args - 1) as usize } else { 0 },
+                value: if num_args > 0 {
+                    (num_args - 1) as usize
+                } else {
+                    0
+                },
                 is_variable: num_args == 0,
             });
             reads.push(EffectTarget::Register { index: raw.a });
@@ -633,7 +754,11 @@ fn lift_instruction_54(
             let num_ret = raw.b;
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Count {
-                value: if num_ret > 0 { (num_ret - 1) as usize } else { 0 },
+                value: if num_ret > 0 {
+                    (num_ret - 1) as usize
+                } else {
+                    0
+                },
                 is_variable: num_ret == 0,
             });
             if num_ret > 1 {
@@ -642,9 +767,7 @@ fn lift_instruction_54(
                     end: raw.a + num_ret - 2,
                 });
             } else if num_ret == 0 {
-                reads.push(EffectTarget::RegisterRangeToTop {
-                    start: raw.a,
-                });
+                reads.push(EffectTarget::RegisterRangeToTop { start: raw.a });
             }
             explanation = format!("Return values from R({})", raw.a);
         }
@@ -668,7 +791,10 @@ fn lift_instruction_54(
                 target_id: StableId::instruction(proto.path.clone(), jump_dest),
             });
             jump_target = Some(jump_dest);
-            explanation = format!("Initialize numeric for-loop at R({}) and jump to PC {jump_dest}", raw.a);
+            explanation = format!(
+                "Initialize numeric for-loop at R({}) and jump to PC {jump_dest}",
+                raw.a
+            );
         }
         Opcode54::Forloop => {
             citations.push("lvm.c:1405".to_string());
@@ -680,7 +806,10 @@ fn lift_instruction_54(
                 target_id: StableId::instruction(proto.path.clone(), loop_dest),
             });
             jump_target = Some(loop_dest);
-            explanation = format!("Step numeric for-loop at R({}); if counter <= limit jump back to PC {loop_dest}", raw.a);
+            explanation = format!(
+                "Step numeric for-loop at R({}); if counter <= limit jump back to PC {loop_dest}",
+                raw.a
+            );
         }
         Opcode54::Tforprep => {
             citations.push("lvm.c:1415".to_string());
@@ -692,7 +821,10 @@ fn lift_instruction_54(
                 target_id: StableId::instruction(proto.path.clone(), jump_dest),
             });
             jump_target = Some(jump_dest);
-            explanation = format!("Initialize generic for-loop at R({}) and jump to PC {jump_dest}", raw.a);
+            explanation = format!(
+                "Initialize generic for-loop at R({}) and jump to PC {jump_dest}",
+                raw.a
+            );
         }
         Opcode54::Tforcall => {
             citations.push("lvm.c:1422".to_string());
@@ -709,7 +841,12 @@ fn lift_instruction_54(
                 start: raw.a + 3,
                 end: raw.a + 2 + raw.c,
             });
-            explanation = format!("Call iterator function R({}) with state R({}) and control R({})", raw.a, raw.a + 1, raw.a + 2);
+            explanation = format!(
+                "Call iterator function R({}) with state R({}) and control R({})",
+                raw.a,
+                raw.a + 1,
+                raw.a + 2
+            );
         }
         Opcode54::Tforloop => {
             citations.push("lvm.c:1428".to_string());
@@ -721,7 +858,10 @@ fn lift_instruction_54(
                 target_id: StableId::instruction(proto.path.clone(), loop_dest),
             });
             jump_target = Some(loop_dest);
-            explanation = format!("Check generic for-loop condition at R({}); if active jump back to PC {loop_dest}", raw.a);
+            explanation = format!(
+                "Check generic for-loop condition at R({}); if active jump back to PC {loop_dest}",
+                raw.a
+            );
         }
 
         Opcode54::Setlist => {
@@ -747,14 +887,21 @@ fn lift_instruction_54(
                 path: child_path,
             });
             writes.push(EffectTarget::Register { index: raw.a });
-            explanation = format!("Instantiate closure for child prototype {} into R({})", raw.bx, raw.a);
+            explanation = format!(
+                "Instantiate closure for child prototype {} into R({})",
+                raw.bx, raw.a
+            );
         }
         Opcode54::Vararg => {
             citations.push("lvm.c:1455".to_string());
             let num_results = raw.c;
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Count {
-                value: if num_results > 0 { (num_results - 1) as usize } else { 0 },
+                value: if num_results > 0 {
+                    (num_results - 1) as usize
+                } else {
+                    0
+                },
                 is_variable: num_results == 0,
             });
             explanation = format!("Load vararg values into R({})", raw.a);
@@ -765,13 +912,20 @@ fn lift_instruction_54(
                 value: raw.a as usize,
                 is_variable: false,
             });
-            explanation = format!("Adjust stack frame for vararg function (fixed parameters: {})", raw.a);
+            explanation = format!(
+                "Adjust stack frame for vararg function (fixed parameters: {})",
+                raw.a
+            );
         }
         Opcode54::Extraarg => {
             citations.push("lopcodes.h:280".to_string());
             operands.push(TypedOperand::ExtraArg { value: raw.ax });
             companion_pc = prev.map(|_| pc - 1);
-            explanation = format!("Extra argument container (Ax = {}) for previous instruction at PC {}", raw.ax, pc.saturating_sub(1));
+            explanation = format!(
+                "Extra argument container (Ax = {}) for previous instruction at PC {}",
+                raw.ax,
+                pc.saturating_sub(1)
+            );
         }
     }
 

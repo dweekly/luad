@@ -59,7 +59,10 @@ pub fn decode_chunk_lua55(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
             "L55-CHUNK-001",
             DiagnosticCategory::Structure,
             StableId::Chunk,
-            format!("Chunk contains {} unparsed trailing bytes at EOF", trailing_raw.len()),
+            format!(
+                "Chunk contains {} unparsed trailing bytes at EOF",
+                trailing_raw.len()
+            ),
         )
         .with_source(SourceLocation::new(trailing_pos, &trailing_raw));
         reader.record_diagnostic(diag)?;
@@ -70,7 +73,10 @@ pub fn decode_chunk_lua55(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
     };
 
     let diagnostics = reader.take_diagnostics();
-    let verdict = if diagnostics.iter().any(|d| d.severity == luad_core::diagnostic::Severity::Error) {
+    let verdict = if diagnostics
+        .iter()
+        .any(|d| d.severity == luad_core::diagnostic::Severity::Error)
+    {
         Verdict::Invalid
     } else {
         Verdict::ValidForParser
@@ -144,10 +150,21 @@ fn load_proto_55(
 
     // 2. Instructions
     let (sizecode, _) = reader.read_varint_lua55()?;
+    let code_len = sizecode as usize;
+    if code_len > reader.limits().max_instructions_per_proto {
+        let diag = Diagnostic::error(
+            "L55-CODE-001",
+            DiagnosticCategory::Parse,
+            StableId::proto(path.clone()),
+            format!("Instruction count {code_len} exceeds safety limit"),
+        );
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
     reader.align_to(4)?;
 
-    let mut instructions = Vec::with_capacity(sizecode as usize);
-    for pc in 0..(sizecode as usize) {
+    let mut instructions = Vec::with_capacity(reader.safe_capacity(code_len, 4));
+    for pc in 0..code_len {
         let inst_pos = reader.position();
         let inst_cursor = reader.cursor_offset();
         let raw_word = reader.read_u32_le()?;
@@ -164,8 +181,19 @@ fn load_proto_55(
 
     // 3. Constants
     let (sizek, _) = reader.read_varint_lua55()?;
-    let mut constants = Vec::with_capacity(sizek as usize);
-    for idx in 0..(sizek as usize) {
+    let k_len = sizek as usize;
+    if k_len > reader.limits().max_constants_per_proto {
+        let diag = Diagnostic::error(
+            "L55-CONST-001",
+            DiagnosticCategory::Parse,
+            StableId::proto(path.clone()),
+            format!("Constant count {k_len} exceeds safety limit"),
+        );
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
+    let mut constants = Vec::with_capacity(reader.safe_capacity(k_len, 1));
+    for idx in 0..k_len {
         let const_pos = reader.position();
         let const_cursor = reader.cursor_offset();
         let tag = reader.read_u8()?;
@@ -231,8 +259,19 @@ fn load_proto_55(
 
     // 4. Upvalues
     let (sizeupvalues, _) = reader.read_varint_lua55()?;
-    let mut upvalues = Vec::with_capacity(sizeupvalues as usize);
-    for idx in 0..(sizeupvalues as usize) {
+    let u_len = sizeupvalues as usize;
+    if u_len > reader.limits().max_upvalues_per_proto {
+        let diag = Diagnostic::error(
+            "L55-UPVAL-001",
+            DiagnosticCategory::Parse,
+            StableId::proto(path.clone()),
+            format!("Upvalue count {u_len} exceeds safety limit"),
+        );
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
+    let mut upvalues = Vec::with_capacity(reader.safe_capacity(u_len, 3));
+    for idx in 0..u_len {
         let u_pos = reader.position();
         let u_cursor = reader.cursor_offset();
         let instack = reader.read_u8()?;
@@ -253,8 +292,19 @@ fn load_proto_55(
 
     // 5. Child Prototypes
     let (sizep, _) = reader.read_varint_lua55()?;
-    let mut protos = Vec::with_capacity(sizep as usize);
-    for child_idx in 0..(sizep as usize) {
+    let p_len = sizep as usize;
+    if p_len > reader.limits().max_total_prototypes {
+        let diag = Diagnostic::error(
+            "L55-PROTO-001",
+            DiagnosticCategory::Parse,
+            StableId::proto(path.clone()),
+            format!("Prototype count {p_len} exceeds safety limit"),
+        );
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
+    let mut protos = Vec::with_capacity(reader.safe_capacity(p_len, 10));
+    for child_idx in 0..p_len {
         let child_path = path.child(child_idx);
         let mut child_guard = reader.enter_proto(child_idx)?;
         let child_proto = load_proto_55(&mut child_guard, table, &child_path)?;
@@ -271,10 +321,11 @@ fn load_proto_55(
 
     // 8. Absolute line info
     let (sizeabslineinfo, _) = reader.read_varint_lua55()?;
-    let mut abs_line_info = Vec::with_capacity(sizeabslineinfo as usize);
-    if sizeabslineinfo > 0 {
+    let abs_len = sizeabslineinfo as usize;
+    let mut abs_line_info = Vec::with_capacity(reader.safe_capacity(abs_len, 8));
+    if abs_len > 0 {
         reader.align_to(4)?;
-        for _ in 0..sizeabslineinfo {
+        for _ in 0..abs_len {
             let abs_pos = reader.position();
             let abs_cursor = reader.cursor_offset();
             let pc = reader.read_i32_le()? as usize;
@@ -290,8 +341,9 @@ fn load_proto_55(
 
     // 9. Local variables
     let (sizelocvars, _) = reader.read_varint_lua55()?;
-    let mut loc_vars = Vec::with_capacity(sizelocvars as usize);
-    for idx in 0..(sizelocvars as usize) {
+    let loc_len = sizelocvars as usize;
+    let mut loc_vars = Vec::with_capacity(reader.safe_capacity(loc_len, 2));
+    for idx in 0..loc_len {
         let loc_pos = reader.position();
         let loc_cursor = reader.cursor_offset();
         let varname = load_string_55(reader, table)?.unwrap_or_else(|| LuaString::from_bytes(b"?"));
@@ -342,4 +394,3 @@ fn load_proto_55(
         source: SourceLocation::new(start_pos, proto_bytes),
     })
 }
-

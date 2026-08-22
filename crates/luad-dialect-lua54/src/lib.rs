@@ -1,4 +1,6 @@
-//! Lua 5.4 dialect implementation for `luad`.
+//! Lua 5.4 Dialect Implementation for luad.
+
+#![allow(clippy::result_large_err)]
 
 pub mod chunk;
 pub mod header;

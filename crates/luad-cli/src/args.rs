@@ -255,7 +255,6 @@ pub struct SchemaArgs {
     pub schema_version: u32,
 }
 
-
 #[derive(Args, Debug)]
 pub struct CompletionsArgs {
     /// Target shell to generate completions for.

@@ -1,9 +1,9 @@
 //! Structural and VM invariant validator for Lua 5.4 chunks.
 
+use crate::opcodes::{Opcode54, RawInstruction54};
 use luad_core::diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
 use luad_core::id::StableId;
 use luad_core::model::{Chunk, Prototype};
-use crate::opcodes::{Opcode54, RawInstruction54};
 
 /// Validate all structural and VM invariants of a parsed Lua 5.4 chunk.
 pub fn validate_chunk_lua54(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
@@ -122,7 +122,11 @@ fn validate_proto_lua54(proto: &Prototype, diagnostics: &mut Vec<Diagnostic>) {
                 }
             }
             Opcode54::Gettabup | Opcode54::Settabup => {
-                let upval_idx = if op == Opcode54::Gettabup { raw.b } else { raw.a };
+                let upval_idx = if op == Opcode54::Gettabup {
+                    raw.b
+                } else {
+                    raw.a
+                };
                 if (upval_idx as usize) >= num_upvalues {
                     diagnostics.push(Diagnostic::error(
                         "L54-VAL-UPVAL-002",

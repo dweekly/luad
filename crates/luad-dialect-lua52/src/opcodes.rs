@@ -1,7 +1,7 @@
 //! Lua 5.2 opcode definitions and bitfield decoder.
 
-use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 pub const BITRK_52: u32 = 1 << 8; // 256
 
@@ -55,7 +55,7 @@ impl Opcode52 {
     #[must_use]
     pub fn from_u8(val: u8) -> Option<Self> {
         if val <= 39 {
-            Some(unsafe { std::mem::transmute(val) })
+            Some(unsafe { std::mem::transmute::<u8, Opcode52>(val) })
         } else {
             None
         }
@@ -110,12 +110,38 @@ impl Opcode52 {
     #[must_use]
     pub fn mode(self) -> OpMode52 {
         match self {
-            Self::Move | Self::LoadBool | Self::LoadNil | Self::GetUpval | Self::GetTabUp
-            | Self::GetTable | Self::SetTabUp | Self::SetUpval | Self::SetTable | Self::NewTable
-            | Self::SelfOp | Self::Add | Self::Sub | Self::Mul | Self::Div | Self::Mod
-            | Self::Pow | Self::Unm | Self::Not | Self::Len | Self::Concat | Self::Eq
-            | Self::Lt | Self::Le | Self::Test | Self::TestSet | Self::Call | Self::TailCall
-            | Self::Return | Self::TForCall | Self::SetList | Self::VarArg => OpMode52::IABC,
+            Self::Move
+            | Self::LoadBool
+            | Self::LoadNil
+            | Self::GetUpval
+            | Self::GetTabUp
+            | Self::GetTable
+            | Self::SetTabUp
+            | Self::SetUpval
+            | Self::SetTable
+            | Self::NewTable
+            | Self::SelfOp
+            | Self::Add
+            | Self::Sub
+            | Self::Mul
+            | Self::Div
+            | Self::Mod
+            | Self::Pow
+            | Self::Unm
+            | Self::Not
+            | Self::Len
+            | Self::Concat
+            | Self::Eq
+            | Self::Lt
+            | Self::Le
+            | Self::Test
+            | Self::TestSet
+            | Self::Call
+            | Self::TailCall
+            | Self::Return
+            | Self::TForCall
+            | Self::SetList
+            | Self::VarArg => OpMode52::IABC,
             Self::LoadK | Self::Closure => OpMode52::IABx,
             Self::Jmp | Self::ForLoop | Self::ForPrep | Self::TForLoop => OpMode52::IAsBx,
             Self::LoadKx | Self::ExtraArg => OpMode52::IAx,
