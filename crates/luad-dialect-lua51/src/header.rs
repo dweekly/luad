@@ -80,8 +80,9 @@ pub fn parse_header_lua51(reader: &mut SafeReader) -> Result<Header, Diagnostic>
     // 5. sizeof(int)
     let sizeof_int = reader.read_u8()?;
 
-    // 6. sizeof(size_t)
-    let _sizeof_sizet = reader.read_u8()?;
+    // 6. sizeof(size_t) -- governs the width of every string length field in the chunk.
+    let sizeof_sizet = reader.read_u8()?;
+    crate::chunk::set_sizet_width(sizeof_sizet);
 
     // 7. sizeof(Instruction)
     let instruction_size = reader.read_u8()?;

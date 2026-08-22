@@ -11,6 +11,17 @@ use luad_core::model::{
 use luad_core::provenance::SourceLocation;
 use luad_core::reader::SafeReader;
 
+thread_local! {
+    /// Width in bytes of size_t for the chunk currently being parsed, taken from the header.
+    static SIZET_WIDTH: std::cell::Cell<u8> = const { std::cell::Cell::new(8) };
+}
+
+/// Record the size_t width declared by the chunk header before parsing prototypes.
+pub fn set_sizet_width(width: u8) {
+    SIZET_WIDTH.with(|w| w.set(width));
+}
+
+
 use crate::header::parse_header_lua51;
 use crate::validator::validate_chunk_lua51;
 
@@ -77,7 +88,13 @@ pub fn decode_chunk_lua51(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
 }
 
 fn load_string_51(reader: &mut SafeReader) -> Result<Option<LuaString>, Diagnostic> {
-    let size = reader.read_u64_le()? as usize;
+    // Lua 5.1 encodes string lengths as size_t, whose width is declared in the chunk
+    // header (byte 8). It is 4 on 32-bit targets, which covers virtually all embedded
+    // and router firmware. Reading a fixed u64 here desynchronises every 32-bit chunk.
+    let size = match SIZET_WIDTH.with(|w| w.get()) {
+        4 => reader.read_u32_le()? as usize,
+        _ => reader.read_u64_le()? as usize,
+    };
     if size == 0 {
         Ok(None)
     } else {
@@ -177,6 +194,17 @@ fn load_proto_51(
                 s_opt
                     .map(ConstantValue::ShortString)
                     .unwrap_or(ConstantValue::Nil)
+            }
+            // OpenWrt/eLua LNUM patch adds LUA_TINT = 9: a 4-byte little-endian integer
+            // constant. Widely present in OpenWrt-derived firmware (LuCI, vendor forks).
+            9 => {
+                let i_val = reader.read_i32_le()?;
+                ConstantValue::Float {
+                    val: f64::from(i_val),
+                    raw_hex: hex::encode(i_val.to_le_bytes()),
+                    is_nan: false,
+                    is_inf: false,
+                }
             }
             other => {
                 let diag = Diagnostic::error(
