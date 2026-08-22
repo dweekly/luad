@@ -1867,7 +1867,7 @@ pub fn compare_chunk_with_luac(chunk: &Chunk, luac_output: &str) -> Vec<OracleMi
                             });
                         }
                     }
-                } else if let Some(_) = exp_inst.jump_target {
+                } else if exp_inst.jump_target.is_some() {
                     ledger.mark_inst_field(i, pc, "jump_target");
                 }
             }
