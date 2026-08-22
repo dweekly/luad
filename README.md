@@ -1,59 +1,121 @@
-# `luad` — Safe, Production-Grade Lua Bytecode Disassembler, Decompiler Foundation & Analysis Toolchain
+# `luad`
 
-`luad` is a standalone, memory-safe, dialect-aware CLI and library for inspecting, disassembling, validating, analyzing, and diffing compiled Lua bytecode.
+`luad` is a memory-safe, dialect-aware Rust CLI and library for inspecting, disassembling, validating, and analyzing compiled Lua bytecode.
 
-## Features
+## Project status
 
-- **Multi-Dialect Support**:
-  - **Lua 5.4.0 – 5.4.8**: Complete 83-opcode table, lossless varint parsing, register use-def traces, VM validation.
-  - **Lua 5.5.0 – 5.5.1**: 85 opcodes, `ivABC` layout, string reuse tables, zig-zag signed varints, 4-byte code alignments.
-  - **Lua 5.1 – 5.3 & LuaJIT**: In progress.
-- **Analysis Capabilities**:
-  - **CFG & Dominator Trees**: Basic block partitioning with typed edges (`Fallthrough`, `ConditionalTrue`, `ConditionalFalse`, `UnconditionalJump`, `LoopBack`, `ConditionalSkip`) and immediate dominator ($idom$) calculation.
-  - **Cross-References (`xrefs`)**: Relational indexing of registers, upvalues, constants, and sub-prototypes.
-  - **Query Engine (`query`)**: Safe, non-evaluating filter queries with limit and cursor pagination.
-  - **Bytecode Diffing (`diff`)**: Structural and semantic comparisons.
-- **Machine Interface**:
-  - JSON and streaming JSONL outputs validated against Draft-07 schemas (`luad schema chunk`).
-  - Stable exit codes and structured diagnostics taxonomy.
-- **100% Byte Accounting & Memory Safety**:
-  - Zero unverified pointers or unsafe memory loads.
-  - Truncation-safe at every byte offset.
+`luad` is a pre-release research tool. It is not currently suitable as the sole basis for security conclusions or production reverse-engineering decisions.
 
-## Installation & Build
+An independent correctness review found critical defects in Lua 5.4 operand decoding, signed-immediate interpretation, opcode modes, immediate-dominator calculation, validation verdicts, and—most importantly—the differential test oracle intended to catch those defects. The current test suite can be green without proving the advertised instruction-level claims.
 
-```bash
-cargo build --release
+Read these before relying on results or changing correctness-sensitive code:
+
+- [Correctness review](docs/REVIEW-2026-08-22.md)
+- [Remediation roadmap](ROADMAP.md)
+- [Coding-agent implementation plan](docs/CODING-AGENT-PLAN.md)
+
+The architecture and product direction remain promising, but all stock-Lua dialects should be treated as **experimental** until their named proof gates pass. The output of `luad capabilities --evidence` is not yet authoritative; replacing hand-written evidence with verified gate results is part of the remediation plan.
+
+## Intended scope
+
+`luad` aims to provide deterministic facts derived from Lua bytecode:
+
+- lossless structural parsing with byte provenance;
+- dialect-specific instruction decoding and validation;
+- semantic instruction effects;
+- control-flow graphs, dominators, cross-references, queries, and diffs;
+- stable machine-readable output and schemas;
+- bounded behavior on malformed or adversarial input.
+
+Researcher judgment, persistent interpretations, project state, and agent planning belong outside `luad`. See the deferred [composable research workflows proposal](COMPOSABLE_RESEARCH_WORKFLOWS_PROPOSAL.md).
+
+## Implemented dialect surface
+
+This table describes code present in the repository, not verified support status.
+
+| Dialect | Opcode table | Parser/lifter present | Current evidence status |
+|---|---:|---|---|
+| Lua 5.1 | 38 | Yes | Experimental; proof gates incomplete |
+| Lua 5.2 | 40 | Yes | Experimental; proof gates incomplete |
+| Lua 5.3 | 47 | Yes | Experimental; proof gates incomplete |
+| Lua 5.4 | 83 | Yes | Experimental; confirmed decoding defects |
+| Lua 5.5 | 85 | Yes | Experimental; signed-immediate proof incomplete |
+| LuaJIT 2.x | — | No | Planned; not supported |
+
+## Build
+
+The repository currently pins its contributor toolchain in `rust-toolchain.toml`. The long-term MSRV has not yet been established independently of that development-toolchain pin.
+
+```console
+git clone https://github.com/dew/luad.git
+cd luad
+cargo build --workspace
 ```
 
-## CLI Usage
+For the complete contributor check:
 
-```bash
-# Inspect chunk metadata and prototype trees
+```console
+bash scripts/check.sh
+```
+
+The full differential suite requires exact official Lua compilers. The installer is being hardened with archive checksums as part of the remediation plan:
+
+```console
+bash scripts/install_ci_compilers.sh
+```
+
+Until the plan is complete, a green local run must not be interpreted as instruction-level proof. See [CONTRIBUTING.md](CONTRIBUTING.md) for the test taxonomy and required gates.
+
+## First use
+
+The repository includes precompiled fixtures, so no Lua compiler is needed for a basic smoke test:
+
+```console
+cargo run -q -p luad-cli -- \
+  inspect tests/fixtures/precompiled/lua54/hello.luac --summary
+
+cargo run -q -p luad-cli -- \
+  disasm tests/fixtures/precompiled/lua54/hello.luac --raw --effects
+```
+
+Common commands:
+
+```console
 luad inspect chunk.luac
-
-# Disassemble with raw hex words, debug symbols, and register use/def effects
-luad disasm chunk.luac --raw --effects --debug-info
-
-# Validate structural and VM invariants
-luad validate chunk.luac
-
-# Explain instructions in context with Lua VM citations (lvm.c)
+luad disasm chunk.luac --raw --debug-info --effects
+luad validate chunk.luac --strict
 luad explain chunk.luac 'proto:0:pc:3'
-
-# Control-flow graph in text or Graphviz DOT format
-luad cfg chunk.luac --format dot | dot -Tpng -o cfg.png
-
-# Query cross-references to/from an artifact
-luad xrefs chunk.luac --to 'proto:0/0:upvalue:0'
-
-# Structured search
-luad query chunk.luac --where 'opcode == "OP_CALL"'
-
-# Diff two bytecode chunks
-luad diff old.luac new.luac --semantic
+luad cfg chunk.luac --proto 'proto:0' --format dot
+luad xrefs chunk.luac --to 'proto:0:upvalue:0' --format json
+luad query chunk.luac --where 'opcode == "CALL"' --format json
+luad diff old.luac new.luac --semantic --format json
 ```
+
+The `compile` command is present in the CLI surface but intentionally returns an unsupported-format error; `luad` does not currently execute an external compiler through that command.
+
+## Machine interface
+
+Discover the live command and schema surface instead of scraping human-readable output:
+
+```console
+luad --help
+luad capabilities --format json
+luad schema capabilities
+luad schema chunk
+luad schema instruction
+```
+
+Machine consumers should read [docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md), including the current correctness warning, exit codes, stable-ID scope, truncation behavior, and stdout/stderr contract.
+
+## Contributing
+
+- Human contributors: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Coding agents: [AGENTS.md](AGENTS.md)
+- Architecture and invariants: [ARCHITECTURE.md](ARCHITECTURE.md)
+- Security policy: [SECURITY.md](SECURITY.md)
+- Release procedure: [docs/RELEASING.md](docs/RELEASING.md)
+- Product requirements: [PRD.md](PRD.md)
 
 ## License
 
-MIT License.
+Licensed under either the MIT License or the Apache License, Version 2.0, at your option.

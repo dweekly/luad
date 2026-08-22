@@ -82,7 +82,7 @@ pub fn parse_header_lua52(reader: &mut SafeReader) -> Result<Header, Diagnostic>
     let sizeof_int = reader.read_u8()?;
 
     // 6. sizeof(size_t)
-    let _sizeof_sizet = reader.read_u8()?;
+    let sizeof_sizet = reader.read_u8()?;
 
     // 7. sizeof(Instruction)
     let instruction_size = reader.read_u8()?;
@@ -117,6 +117,7 @@ pub fn parse_header_lua52(reader: &mut SafeReader) -> Result<Header, Diagnostic>
         luac_data: hex::encode(tail_bytes),
         instruction_size,
         lua_integer_size: sizeof_int,
+        sizeof_sizet,
         lua_number_size,
         luac_int: 0,
         luac_num: 0.0,

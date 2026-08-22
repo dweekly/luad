@@ -25,7 +25,7 @@ pub fn decode_chunk_lua53(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
     // Top-level closure sizeupvalues (usually 1 for _ENV)
     let _closure_upvals = reader.read_u8()?;
 
-    let main_proto = load_proto_53(reader, &ProtoPath::root(), None)?;
+    let main_proto = load_proto_53(reader, &ProtoPath::root(), None, header.sizeof_sizet)?;
 
     // Check for trailing unparsed bytes
     let trailing_bytes = if reader.has_remaining() {
@@ -85,10 +85,10 @@ fn load_string_53(
 ) -> Result<Option<LuaString>, Diagnostic> {
     let size_byte = reader.read_u8()?;
     let size = if size_byte == 0xFF {
-        if sizeof_sizet == 8 {
-            reader.read_u64_le()? as usize
-        } else {
+        if sizeof_sizet == 4 {
             reader.read_u32_le()? as usize
+        } else {
+            reader.read_u64_le()? as usize
         }
     } else {
         size_byte as usize
@@ -107,12 +107,13 @@ fn load_proto_53(
     reader: &mut SafeReader,
     path: &ProtoPath,
     parent_source: Option<&LuaString>,
+    sizeof_sizet: u8,
 ) -> Result<Prototype, Diagnostic> {
     let start_pos = reader.position();
     let start_cursor = reader.cursor_offset();
 
     // 1. Source name
-    let source_name_opt = load_string_53(reader, 8)?;
+    let source_name_opt = load_string_53(reader, sizeof_sizet)?;
     let source_name = source_name_opt.or_else(|| parent_source.cloned());
 
     // 2. Lines & parameters
@@ -138,14 +139,13 @@ fn load_proto_53(
     for pc in 0..sizecode {
         let inst_pos = reader.position();
         let inst_cursor = reader.cursor_offset();
-        let raw_word = reader.read_u32_le()?;
-        let raw_hex = hex::encode(raw_word.to_le_bytes());
+        let word = reader.read_u32_le()?;
         let raw_bytes = reader.slice_from_cursor(inst_cursor)?;
         instructions.push(InstructionWord {
             id: StableId::instruction(path.clone(), pc),
             pc,
-            raw_word,
-            raw_hex,
+            raw_word: word,
+            raw_hex: hex::encode(word.to_le_bytes()),
             source: SourceLocation::new(inst_pos, raw_bytes),
         });
     }
@@ -154,7 +154,7 @@ fn load_proto_53(
     let sizek = reader.read_i32_le()? as usize;
     if sizek > reader.limits().max_constants_per_proto {
         let diag = Diagnostic::error(
-            "L53-CONST-001",
+            "L53-CONST-002",
             DiagnosticCategory::Parse,
             StableId::proto(path.clone()),
             format!("Constant count {sizek} exceeds safety limit"),
@@ -162,7 +162,7 @@ fn load_proto_53(
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
-    let mut constants = Vec::with_capacity(reader.safe_capacity(sizek, 1));
+    let mut constants = Vec::with_capacity(reader.safe_capacity(sizek, 2));
     for idx in 0..sizek {
         let const_pos = reader.position();
         let const_cursor = reader.cursor_offset();
@@ -191,13 +191,13 @@ fn load_proto_53(
                 }
             }
             4 => {
-                let s_opt = load_string_53(reader, 8)?;
+                let s_opt = load_string_53(reader, sizeof_sizet)?;
                 s_opt
                     .map(ConstantValue::ShortString)
                     .unwrap_or(ConstantValue::Nil)
             }
             20 => {
-                let s_opt = load_string_53(reader, 8)?;
+                let s_opt = load_string_53(reader, sizeof_sizet)?;
                 s_opt
                     .map(ConstantValue::LongString)
                     .unwrap_or(ConstantValue::Nil)
@@ -270,7 +270,12 @@ fn load_proto_53(
     for child_idx in 0..sizep {
         let child_path = path.child(child_idx);
         let mut child_guard = reader.enter_proto(child_idx)?;
-        let child_proto = load_proto_53(&mut child_guard, &child_path, source_name.as_ref())?;
+        let child_proto = load_proto_53(
+            &mut child_guard,
+            &child_path,
+            source_name.as_ref(),
+            sizeof_sizet,
+        )?;
         protos.push(child_proto);
     }
 
@@ -297,7 +302,8 @@ fn load_proto_53(
     for idx in 0..sizelocvars {
         let loc_pos = reader.position();
         let loc_cursor = reader.cursor_offset();
-        let varname = load_string_53(reader, 8)?.unwrap_or_else(|| LuaString::from_bytes(b"?"));
+        let varname =
+            load_string_53(reader, sizeof_sizet)?.unwrap_or_else(|| LuaString::from_bytes(b"?"));
         let startpc = reader.read_i32_le()? as usize;
         let endpc = reader.read_i32_le()? as usize;
         let raw_bytes = reader.slice_from_cursor(loc_cursor)?;
@@ -316,7 +322,8 @@ fn load_proto_53(
     let sizeupvalnames = reader.read_i32_le()? as usize;
     let mut upvalue_names = Vec::with_capacity(sizeupvalnames);
     for idx in 0..sizeupvalnames {
-        let name = load_string_53(reader, 8)?;
+        let name = load_string_53(reader, sizeof_sizet)?;
+
         if let Some(upval) = upvalues.get_mut(idx) {
             upval.name = name.clone();
         }

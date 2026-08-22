@@ -2,6 +2,7 @@
 name = "luad-analysis"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 
@@ -14,4 +15,3 @@ luad-dialect-lua52 = { workspace = true }
 luad-dialect-lua51 = { workspace = true }
 serde = { workspace = true }
 schemars = { workspace = true }
-

@@ -23,20 +23,11 @@ jobs:
     - name: Set up Rust
       uses: dtolnay/rust-toolchain@stable
       with:
+        toolchain: 1.97.1
         components: clippy, rustfmt
 
     - name: Install Official Lua Compilers
-      run: ./scripts/install_ci_compilers.sh || true
+      run: ./scripts/install_ci_compilers.sh
 
-    - name: Check Formatting
-      run: cargo fmt --check
-
-    - name: Build Workspace
-      run: cargo build --workspace --verbose
-
-    - name: Run Tests
-      run: cargo test --workspace --verbose
-
-    - name: Run Strict Clippy
-      run: cargo clippy --all-targets -- -D warnings
-
+    - name: Run Contributor Checks
+      run: ./scripts/check.sh

@@ -22,7 +22,7 @@ pub fn decode_chunk_lua52(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
 
     let header = parse_header_lua52(reader)?;
 
-    let main_proto = load_proto_52(reader, &ProtoPath::root(), None)?;
+    let main_proto = load_proto_52(reader, &ProtoPath::root(), None, header.sizeof_sizet)?;
 
     // Check for trailing unparsed bytes
     let trailing_bytes = if reader.has_remaining() {
@@ -76,8 +76,15 @@ pub fn decode_chunk_lua52(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
     Ok(chunk)
 }
 
-fn load_string_52(reader: &mut SafeReader) -> Result<Option<LuaString>, Diagnostic> {
-    let size = reader.read_u64_le()? as usize;
+fn load_string_52(
+    reader: &mut SafeReader,
+    sizeof_sizet: u8,
+) -> Result<Option<LuaString>, Diagnostic> {
+    let size = if sizeof_sizet == 4 {
+        reader.read_u32_le()? as usize
+    } else {
+        reader.read_u64_le()? as usize
+    };
     if size == 0 {
         Ok(None)
     } else {
@@ -95,6 +102,7 @@ fn load_proto_52(
     reader: &mut SafeReader,
     path: &ProtoPath,
     parent_source: Option<&LuaString>,
+    sizeof_sizet: u8,
 ) -> Result<Prototype, Diagnostic> {
     let start_pos = reader.position();
     let start_cursor = reader.cursor_offset();
@@ -168,7 +176,7 @@ fn load_proto_52(
                 }
             }
             4 => {
-                let s_opt = load_string_52(reader)?;
+                let s_opt = load_string_52(reader, sizeof_sizet)?;
                 s_opt
                     .map(ConstantValue::ShortString)
                     .unwrap_or(ConstantValue::Nil)
@@ -210,7 +218,8 @@ fn load_proto_52(
     for child_idx in 0..sizep {
         let child_path = path.child(child_idx);
         let mut child_guard = reader.enter_proto(child_idx)?;
-        let child_proto = load_proto_52(&mut child_guard, &child_path, parent_source)?;
+        let child_proto =
+            load_proto_52(&mut child_guard, &child_path, parent_source, sizeof_sizet)?;
         protos.push(child_proto);
     }
 
@@ -246,7 +255,7 @@ fn load_proto_52(
     }
 
     // 6. Source Name
-    let source_name_opt = load_string_52(reader)?;
+    let source_name_opt = load_string_52(reader, sizeof_sizet)?;
     let source_name = source_name_opt.or_else(|| parent_source.cloned());
 
     // 7. Debug line info (each entry is an i32)
@@ -272,7 +281,8 @@ fn load_proto_52(
     for idx in 0..sizelocvars {
         let loc_pos = reader.position();
         let loc_cursor = reader.cursor_offset();
-        let varname = load_string_52(reader)?.unwrap_or_else(|| LuaString::from_bytes(b"?"));
+        let varname =
+            load_string_52(reader, sizeof_sizet)?.unwrap_or_else(|| LuaString::from_bytes(b"?"));
         let startpc = reader.read_i32_le()? as usize;
         let endpc = reader.read_i32_le()? as usize;
         let raw_bytes = reader.slice_from_cursor(loc_cursor)?;
@@ -291,7 +301,8 @@ fn load_proto_52(
     let sizeupvalnames = reader.read_i32_le()? as usize;
     let mut upvalue_names = Vec::with_capacity(sizeupvalnames);
     for idx in 0..sizeupvalnames {
-        let name = load_string_52(reader)?;
+        let name = load_string_52(reader, sizeof_sizet)?;
+
         if let Some(upval) = upvalues.get_mut(idx) {
             upval.name = name.clone();
         }

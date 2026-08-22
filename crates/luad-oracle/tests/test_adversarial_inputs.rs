@@ -124,4 +124,3 @@ fn test_adversarial_deep_nesting_recursion_limit() {
     let g4 = g3.enter_proto(0);
     assert!(g4.is_err(), "Depth 4 exceeding limit 3 must fail closed");
 }
-

@@ -3,6 +3,7 @@ name = "luad-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2021"
+rust-version = "1.97.1"
 
 [package.metadata]
 cargo-fuzz = true
@@ -51,3 +52,8 @@ name = "fuzz_detect"
 path = "fuzz_targets/fuzz_detect.rs"
 test = false
 doc = false
+
+# Keep cargo-fuzz targets isolated from the main workspace while still making
+# `cargo check --manifest-path fuzz/Cargo.toml` work for contributors and CI.
+[workspace]
+members = ["."]

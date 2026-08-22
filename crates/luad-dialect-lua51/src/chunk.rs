@@ -11,17 +11,6 @@ use luad_core::model::{
 use luad_core::provenance::SourceLocation;
 use luad_core::reader::SafeReader;
 
-thread_local! {
-    /// Width in bytes of size_t for the chunk currently being parsed, taken from the header.
-    static SIZET_WIDTH: std::cell::Cell<u8> = const { std::cell::Cell::new(8) };
-}
-
-/// Record the size_t width declared by the chunk header before parsing prototypes.
-pub fn set_sizet_width(width: u8) {
-    SIZET_WIDTH.with(|w| w.set(width));
-}
-
-
 use crate::header::parse_header_lua51;
 use crate::validator::validate_chunk_lua51;
 
@@ -33,7 +22,7 @@ pub fn decode_chunk_lua51(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
 
     let header = parse_header_lua51(reader)?;
 
-    let main_proto = load_proto_51(reader, &ProtoPath::root(), None)?;
+    let main_proto = load_proto_51(reader, &ProtoPath::root(), None, header.sizeof_sizet)?;
 
     // Check for trailing unparsed bytes
     let trailing_bytes = if reader.has_remaining() {
@@ -87,13 +76,17 @@ pub fn decode_chunk_lua51(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
     Ok(chunk)
 }
 
-fn load_string_51(reader: &mut SafeReader) -> Result<Option<LuaString>, Diagnostic> {
+fn load_string_51(
+    reader: &mut SafeReader,
+    sizeof_sizet: u8,
+) -> Result<Option<LuaString>, Diagnostic> {
     // Lua 5.1 encodes string lengths as size_t, whose width is declared in the chunk
     // header (byte 8). It is 4 on 32-bit targets, which covers virtually all embedded
     // and router firmware. Reading a fixed u64 here desynchronises every 32-bit chunk.
-    let size = match SIZET_WIDTH.with(|w| w.get()) {
-        4 => reader.read_u32_le()? as usize,
-        _ => reader.read_u64_le()? as usize,
+    let size = if sizeof_sizet == 4 {
+        reader.read_u32_le()? as usize
+    } else {
+        reader.read_u64_le()? as usize
     };
     if size == 0 {
         Ok(None)
@@ -112,12 +105,14 @@ fn load_proto_51(
     reader: &mut SafeReader,
     path: &ProtoPath,
     parent_source: Option<&LuaString>,
+    sizeof_sizet: u8,
 ) -> Result<Prototype, Diagnostic> {
     let start_pos = reader.position();
     let start_cursor = reader.cursor_offset();
 
     // 1. Source name
-    let source_name_opt = load_string_51(reader)?;
+    let source_name_opt = load_string_51(reader, sizeof_sizet)?;
+
     let source_name = source_name_opt.or_else(|| parent_source.cloned());
 
     // 2. Lines & stack
@@ -190,7 +185,7 @@ fn load_proto_51(
                 }
             }
             4 => {
-                let s_opt = load_string_51(reader)?;
+                let s_opt = load_string_51(reader, sizeof_sizet)?;
                 s_opt
                     .map(ConstantValue::ShortString)
                     .unwrap_or(ConstantValue::Nil)
@@ -243,7 +238,12 @@ fn load_proto_51(
     for child_idx in 0..sizep {
         let child_path = path.child(child_idx);
         let mut child_guard = reader.enter_proto(child_idx)?;
-        let child_proto = load_proto_51(&mut child_guard, &child_path, source_name.as_ref())?;
+        let child_proto = load_proto_51(
+            &mut child_guard,
+            &child_path,
+            source_name.as_ref(),
+            sizeof_sizet,
+        )?;
         protos.push(child_proto);
     }
 
@@ -270,7 +270,8 @@ fn load_proto_51(
     for idx in 0..sizelocvars {
         let loc_pos = reader.position();
         let loc_cursor = reader.cursor_offset();
-        let varname = load_string_51(reader)?.unwrap_or_else(|| LuaString::from_bytes(b"?"));
+        let varname =
+            load_string_51(reader, sizeof_sizet)?.unwrap_or_else(|| LuaString::from_bytes(b"?"));
         let startpc = reader.read_i32_le()? as usize;
         let endpc = reader.read_i32_le()? as usize;
         let raw_bytes = reader.slice_from_cursor(loc_cursor)?;
@@ -303,7 +304,8 @@ fn load_proto_51(
     }
 
     for idx in 0..sizeupvalnames {
-        let name = load_string_51(reader)?;
+        let name = load_string_51(reader, sizeof_sizet)?;
+
         if let Some(upval) = upvalues.get_mut(idx) {
             upval.name = name.clone();
         }

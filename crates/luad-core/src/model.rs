@@ -264,6 +264,10 @@ impl Prototype {
     }
 }
 
+fn default_sizeof_sizet() -> u8 {
+    8
+}
+
 /// Serialized chunk header.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Header {
@@ -277,12 +281,16 @@ pub struct Header {
     pub luac_data: String,
     /// Size of instruction in bytes (4).
     pub instruction_size: u8,
-    /// Size of lua_Integer in bytes (8).
+    /// Size of lua_Integer in bytes (8 on 64-bit, 4 on 32-bit).
     pub lua_integer_size: u8,
+    /// Size of size_t in bytes (8 on 64-bit, 4 on 32-bit).
+    #[serde(default = "default_sizeof_sizet")]
+    pub sizeof_sizet: u8,
     /// Size of lua_Number in bytes (8).
     pub lua_number_size: u8,
     /// LUAC_INT test integer (e.g. 0x5678).
     pub luac_int: i64,
+
     /// LUAC_NUM test float (e.g. 370.5).
     pub luac_num: f64,
     /// Source byte location.

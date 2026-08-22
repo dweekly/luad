@@ -105,6 +105,7 @@ pub fn get_fixture_bytes(
 #[must_use]
 pub fn find_luac54() -> Option<PathBuf> {
     let candidate_paths = [
+        "/tmp/lua-tools/bin/luac5.4",
         "/opt/homebrew/opt/lua@5.4/bin/luac",
         "/usr/local/opt/lua@5.4/bin/luac",
         "luac5.4",
@@ -173,6 +174,7 @@ pub fn compile_and_parse_lua54(source: &str, strip: bool) -> Result<Chunk, Strin
 #[must_use]
 pub fn find_luac55() -> Option<PathBuf> {
     let candidate_paths = [
+        "/tmp/lua-tools/bin/luac5.5",
         "/opt/homebrew/bin/luac",
         "/opt/homebrew/Cellar/lua/5.5.1/bin/luac",
         "/usr/local/bin/luac",

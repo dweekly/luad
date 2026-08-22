@@ -200,6 +200,7 @@ pub fn parse_header_lua54(reader: &mut SafeReader) -> Result<Header, Diagnostic>
         luac_data,
         instruction_size,
         lua_integer_size,
+        sizeof_sizet: 8,
         lua_number_size,
         luac_int,
         luac_num,
