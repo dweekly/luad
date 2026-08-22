@@ -433,6 +433,8 @@ pub fn execute_gate_spec(
     // Serialize result
     if let Some(parent) = output_path.parent() {
         let _ = fs::create_dir_all(parent);
+        let _ = fs::write(parent.join("stdout.log"), &stdout_bytes);
+        let _ = fs::write(parent.join("stderr.log"), &stderr_bytes);
     }
     let json_bytes = serde_json::to_vec_pretty(&result)
         .map_err(|e| GateRunnerError::Io(format!("Failed to serialize GateResult: {e}")))?;

@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-proof-harness",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_gate_harness",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_probe_1_zero_tests_executed_rejected",
+    "test_probe_2_nonexistent_test_filter_rejected",
+    "test_probe_3_ignored_test_rejected",
+    "test_probe_4_stale_git_commit_rejected",
+    "test_probe_5_dirty_result_rejected_for_promotion",
+    "test_probe_6_wrong_compiler_binary_sha256_rejected",
+    "test_probe_7_wrong_compiler_version_rejected",
+    "test_probe_8_missing_compiler_rejected_before_tests",
+    "test_probe_9_mutated_fixture_rejected_before_evaluation",
+    "test_probe_10_mutated_result_after_manifest_assembly_rejected",
+    "test_probe_11_success_boolean_flip_rejected",
+    "test_fixture_manifest_records_complete_provenance"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [],
+  "allowed_capability_mutations": []
+}

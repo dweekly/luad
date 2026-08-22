@@ -127,7 +127,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "disasm".to_string(),
                 "validate".to_string(),
             ],
-            status: SupportTier::Supported,
+            status: SupportTier::Experimental,
             required_gates: vec![
                 "gate-proof-harness".to_string(),
                 "gate-facts-lua54-8".to_string(),
@@ -135,19 +135,12 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "gate-lossless-lua54-8".to_string(),
                 "gate-release-lua54-8".to_string(),
             ],
-            completed_gates: vec![
-                "gate-proof-harness".to_string(),
-                "gate-facts-lua54-8".to_string(),
-                "gate-analysis-cfg".to_string(),
-                "gate-lossless-lua54-8".to_string(),
-                "gate-release-lua54-8".to_string(),
-            ],
+            completed_gates: vec![],
             evidence: vec![
-                "Formal proof vehicle: Gate R1-R5 verified with canonical luac 5.4.8 differential oracle and lossless byte ledger"
+                "Proof vehicle; remediation in progress under CODING-AGENT-PLAN.md (R0-R5)"
                     .to_string(),
             ],
         },
-
         DialectCapability {
             id: "lua5.5".to_string(),
             display_name: "Lua 5.5.1".to_string(),
@@ -246,10 +239,10 @@ mod tests {
                 + manifest.experimental_dialects.len()
                 + manifest.planned_dialects.len()
         );
-        assert_eq!(manifest.supported_dialects, vec!["lua5.4"]);
+        assert!(manifest.supported_dialects.is_empty());
         assert_eq!(
             manifest.experimental_dialects,
-            vec!["lua5.1", "lua5.2", "lua5.3", "lua5.5"]
+            vec!["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"]
         );
         assert_eq!(manifest.planned_dialects, vec!["luajit"]);
     }
@@ -257,23 +250,21 @@ mod tests {
     #[test]
     fn test_no_supported_dialect_without_verified_artifact() {
         let manifest = get_canonical_capabilities("0.1.0");
-        // Under Gate R5, strictly lua5.4 is supported with full completed gates
-        assert_eq!(
-            manifest.supported_dialects,
-            vec!["lua5.4"],
-            "Under Gate R5, strictly lua5.4 is supported"
+        assert!(
+            manifest.supported_dialects.is_empty(),
+            "Under Gate R0 baseline, supported_dialects must be empty"
         );
     }
 
     #[test]
-    fn test_unproven_dialects_remain_experimental() {
+    fn test_all_stock_dialects_experimental_at_baseline() {
         let manifest = get_canonical_capabilities("0.1.0");
         for dialect in &manifest.dialects {
-            if dialect.id != "lua5.4" && dialect.id != "luajit" {
+            if dialect.id != "luajit" {
                 assert_eq!(
                     dialect.status,
                     SupportTier::Experimental,
-                    "Dialect '{}' must be Experimental until its gates pass",
+                    "Dialect '{}' must be Experimental at baseline",
                     dialect.id
                 );
                 assert!(

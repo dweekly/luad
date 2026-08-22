@@ -8,25 +8,19 @@ use luad_oracle::gate_runner::{
 };
 
 #[test]
-fn test_r5_lua54_supported_strictly_with_complete_gates() {
+fn test_r0_baseline_supported_dialects_empty() {
     let manifest = get_canonical_capabilities("0.1.0");
-    assert_eq!(
-        manifest.supported_dialects,
-        vec!["lua5.4".to_string()],
-        "Under Gate R5, strictly lua5.4 is promoted to Supported tier"
+    assert!(
+        manifest.supported_dialects.is_empty(),
+        "Under Gate R0 baseline, supported_dialects must be empty"
     );
-
-    let lua54 = manifest.dialects.iter().find(|d| d.id == "lua5.4").unwrap();
-    assert_eq!(lua54.status, SupportTier::Supported);
-    assert_eq!(lua54.required_gates, lua54.completed_gates);
-    assert_eq!(lua54.completed_gates.len(), 5);
 }
 
 #[test]
 fn test_unproven_dialects_remain_experimental() {
     let manifest = get_canonical_capabilities("0.1.0");
     for dialect in &manifest.dialects {
-        if dialect.id != "lua5.4" && dialect.id != "luajit" {
+        if dialect.id != "luajit" {
             assert_eq!(
                 dialect.status,
                 SupportTier::Experimental,

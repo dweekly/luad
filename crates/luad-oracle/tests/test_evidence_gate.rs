@@ -19,7 +19,7 @@ fn test_lua54_evidence_file_integrity() {
     let json: serde_json::Value = serde_json::from_str(&content).expect("Valid JSON evidence");
 
     assert_eq!(json["dialect"].as_str(), Some("lua5.4"));
-    assert_eq!(json["status"].as_str(), Some("supported"));
+    assert_eq!(json["status"].as_str(), Some("experimental"));
 
     assert_eq!(
         json["verification_results"]["opcodes_verified"].as_u64(),
