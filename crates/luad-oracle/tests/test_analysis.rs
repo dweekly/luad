@@ -195,29 +195,78 @@ fn test_cfg_metamethod_companion_edges() {
 }
 
 #[test]
+fn test_killer_probe_linear_chain_idoms() {
+    // 0 -> 1 -> 2 -> 3
+    let cfg = ControlFlowGraph::from_adjacency_list(4, &[(0, 1), (1, 2), (2, 3)]);
+
+    assert_eq!(cfg.blocks[0].immediate_dominator, None);
+    assert_eq!(cfg.blocks[1].immediate_dominator, Some(0));
+    assert_eq!(cfg.blocks[2].immediate_dominator, Some(1));
+    assert_eq!(cfg.blocks[3].immediate_dominator, Some(2));
+}
+
+#[test]
+fn test_killer_probe_diamond_and_nested_diamond_idoms() {
+    // Simple diamond: 0 -> 1, 0 -> 2, 1 -> 3, 2 -> 3
+    let diamond = ControlFlowGraph::from_adjacency_list(4, &[(0, 1), (0, 2), (1, 3), (2, 3)]);
+    assert_eq!(diamond.blocks[0].immediate_dominator, None);
+    assert_eq!(diamond.blocks[1].immediate_dominator, Some(0));
+    assert_eq!(diamond.blocks[2].immediate_dominator, Some(0));
+    assert_eq!(diamond.blocks[3].immediate_dominator, Some(0));
+
+    // Nested diamond:
+    // 0 -> 1, 0 -> 2
+    // 1 -> 3, 1 -> 4
+    // 3 -> 5, 4 -> 5
+    // 5 -> 6, 2 -> 6
+    let nested = ControlFlowGraph::from_adjacency_list(
+        7,
+        &[
+            (0, 1),
+            (0, 2),
+            (1, 3),
+            (1, 4),
+            (3, 5),
+            (4, 5),
+            (5, 6),
+            (2, 6),
+        ],
+    );
+    assert_eq!(nested.blocks[0].immediate_dominator, None);
+    assert_eq!(nested.blocks[1].immediate_dominator, Some(0));
+    assert_eq!(nested.blocks[2].immediate_dominator, Some(0));
+    assert_eq!(nested.blocks[3].immediate_dominator, Some(1));
+    assert_eq!(nested.blocks[4].immediate_dominator, Some(1));
+    assert_eq!(nested.blocks[5].immediate_dominator, Some(1));
+    assert_eq!(nested.blocks[6].immediate_dominator, Some(0));
+}
+
+#[test]
+fn test_killer_probe_loop_and_unreachable_idoms() {
+    // Loop: 0 -> 1 -> 2 -> 1, 2 -> 3; Block 4 unreachable
+    let cfg = ControlFlowGraph::from_adjacency_list(5, &[(0, 1), (1, 2), (2, 1), (2, 3)]);
+
+    assert_eq!(cfg.blocks[0].immediate_dominator, None);
+    assert_eq!(cfg.blocks[1].immediate_dominator, Some(0));
+    assert_eq!(cfg.blocks[2].immediate_dominator, Some(1));
+    assert_eq!(cfg.blocks[3].immediate_dominator, Some(2));
+
+    // Block 4 is unreachable
+    assert!(!cfg.blocks[4].is_reachable);
+    assert_eq!(cfg.blocks[4].immediate_dominator, None);
+}
+
+#[test]
 fn test_cfg_irreducible_graph_dominators() {
-    // Construct a synthetic CFG with irreducible loop (two entry points into loop)
+    // Irreducible loop with two entry points:
     // 0 -> 1, 0 -> 2, 1 -> 2, 2 -> 1, 1 -> 3, 2 -> 3
-    let raw_bytes = get_fixture_bytes("lua5.4", "control_flow", false).expect("fixture failed");
-    let mut reader = SafeReader::new(&raw_bytes);
-    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("parse failed");
+    let cfg =
+        ControlFlowGraph::from_adjacency_list(4, &[(0, 1), (0, 2), (1, 2), (2, 1), (1, 3), (2, 3)]);
 
-    let lifted = lift_proto_lua54(&chunk.main_proto);
-    let cfg = ControlFlowGraph::build(&chunk.main_proto, &lifted);
-
-    // Check dominator consistency across all blocks
-    for block in &cfg.blocks {
-        if let Some(idom) = block.immediate_dominator {
-            assert!(
-                cfg.blocks[idom].is_reachable,
-                "Immediate dominator must be reachable"
-            );
-            assert_ne!(
-                idom, block.index,
-                "Block cannot be its own immediate dominator"
-            );
-        }
-    }
+    assert_eq!(cfg.blocks[0].immediate_dominator, None);
+    assert_eq!(cfg.blocks[1].immediate_dominator, Some(0));
+    assert_eq!(cfg.blocks[2].immediate_dominator, Some(0));
+    assert_eq!(cfg.blocks[3].immediate_dominator, Some(0));
 }
 
 #[test]

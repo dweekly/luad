@@ -262,6 +262,63 @@ impl ControlFlowGraph {
         }
     }
 
+    /// Construct a synthetic ControlFlowGraph from an adjacency list for pure graph-level testing.
+    #[must_use]
+    pub fn from_adjacency_list(num_blocks: usize, edges: &[(usize, usize)]) -> Self {
+        let mut blocks = Vec::with_capacity(num_blocks);
+        for i in 0..num_blocks {
+            blocks.push(BasicBlock {
+                id: StableId::block(luad_core::id::ProtoPath::root(), i),
+                index: i,
+                start_pc: i,
+                end_pc: i,
+                instruction_pcs: vec![i],
+                predecessors: Vec::new(),
+                successors: Vec::new(),
+                is_entry: i == 0,
+                is_exit: false,
+                is_reachable: false,
+                immediate_dominator: None,
+            });
+        }
+
+        for &(from, to) in edges {
+            if from < num_blocks && to < num_blocks {
+                blocks[from].successors.push(CfgEdge {
+                    from_block: from,
+                    to_block: to,
+                    kind: CfgEdgeKind::Fallthrough,
+                });
+                blocks[to].predecessors.push(from);
+            }
+        }
+
+        // BFS Reachability
+        let mut queue = VecDeque::new();
+        let mut visited = BTreeSet::new();
+        if num_blocks > 0 {
+            queue.push_back(0);
+            visited.insert(0);
+            while let Some(curr) = queue.pop_front() {
+                blocks[curr].is_reachable = true;
+                for edge in &blocks[curr].successors {
+                    if visited.insert(edge.to_block) {
+                        queue.push_back(edge.to_block);
+                    }
+                }
+            }
+        }
+
+        compute_immediate_dominators(&mut blocks);
+
+        Self {
+            proto_id: StableId::proto(luad_core::id::ProtoPath::root()),
+
+            blocks,
+            instruction_count: num_blocks,
+        }
+    }
+
     /// Render graph in Graphviz DOT format.
     #[must_use]
     pub fn to_dot(&self) -> String {
@@ -359,7 +416,7 @@ impl ControlFlowGraph {
     }
 }
 
-/// Compute immediate dominators (idom) using standard iterative dataflow algorithm.
+/// Compute immediate dominators for all reachable blocks in place using iterative dataflow analysis.
 fn compute_immediate_dominators(blocks: &mut [BasicBlock]) {
     let reachable_blocks: Vec<usize> = blocks
         .iter()
@@ -419,7 +476,9 @@ fn compute_immediate_dominators(blocks: &mut [BasicBlock]) {
         }
     }
 
-    // Compute immediate dominator (strict dominator with largest dom set)
+    // Compute immediate dominator:
+    // The immediate dominator idom(n) is the unique strict dominator d of n that is dominated by every other strict dominator of n.
+    // Equivalently, for all other strict dominators s of n, s dominates d (i.e. s in Dom(d)).
     for &b_idx in &reachable_blocks {
         if b_idx == 0 {
             continue;
@@ -429,14 +488,13 @@ fn compute_immediate_dominators(blocks: &mut [BasicBlock]) {
             let strict_doms: Vec<usize> =
                 block_doms.iter().copied().filter(|&d| d != b_idx).collect();
 
-            // The immediate dominator idom(n) is the unique strict dominator d of n that does not dominate any other strict dominator of n
             let mut idom = None;
             for &candidate in &strict_doms {
                 let candidate_doms = &doms[&candidate];
-                let is_closest = strict_doms
+                let is_idom = strict_doms
                     .iter()
-                    .all(|&other| other == candidate || !candidate_doms.contains(&other));
-                if is_closest {
+                    .all(|&other| other == candidate || candidate_doms.contains(&other));
+                if is_idom {
                     idom = Some(candidate);
                     break;
                 }
