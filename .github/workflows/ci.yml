@@ -25,6 +25,9 @@ jobs:
       with:
         components: clippy, rustfmt
 
+    - name: Install Official Lua Compilers
+      run: ./scripts/install_ci_compilers.sh || true
+
     - name: Check Formatting
       run: cargo fmt --check
 
@@ -34,5 +37,6 @@ jobs:
     - name: Run Tests
       run: cargo test --workspace --verbose
 
-    - name: Run Clippy
-      run: cargo clippy --workspace -- -D warnings
+    - name: Run Strict Clippy
+      run: cargo clippy --all-targets -- -D warnings
+

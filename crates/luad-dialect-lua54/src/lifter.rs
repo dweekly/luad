@@ -555,15 +555,18 @@ fn lift_instruction_54(
         Opcode54::Mmbin | Opcode54::Mmbini | Opcode54::Mmbink => {
             citations.push("lvm.c:1255".to_string());
             companion_pc = prev.map(|_| pc - 1);
+            let tm = tm_name(raw.c);
+            metamethod_fallbacks.push(tm.to_string());
             implicit_effects.push(ImplicitEffect::CompanionPair {
                 companion_pc: pc.saturating_sub(1),
-                companion_role: "Metamethod fallback companion".to_string(),
+                companion_role: format!("Metamethod fallback {tm}"),
             });
             explanation = format!(
-                "Companion instruction specifying metamethod fallback for PC {}",
+                "Companion instruction specifying metamethod fallback {tm} for PC {}",
                 pc.saturating_sub(1)
             );
         }
+
         Opcode54::Unm => {
             citations.push("lvm.c:1260".to_string());
             operands.push(TypedOperand::Register { index: raw.a });
@@ -798,7 +801,7 @@ fn lift_instruction_54(
         }
         Opcode54::Forloop => {
             citations.push("lvm.c:1405".to_string());
-            let loop_dest = pc + 1 - raw.bx as usize;
+            let loop_dest = (pc + 1).saturating_sub(raw.bx as usize);
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Jump {
                 offset: -(raw.bx as i32),
@@ -827,30 +830,30 @@ fn lift_instruction_54(
             );
         }
         Opcode54::Tforcall => {
-            citations.push("lvm.c:1422".to_string());
+            citations.push("lvm.c:1425".to_string());
             operands.push(TypedOperand::Register { index: raw.a });
-            operands.push(TypedOperand::Count {
-                value: raw.c as usize,
-                is_variable: false,
+            operands.push(TypedOperand::ImmediateInt {
+                value: raw.c as i64,
             });
             reads.push(EffectTarget::RegisterRange {
                 start: raw.a,
-                end: raw.a + 2,
+                end: raw.a.saturating_add(2),
             });
             writes.push(EffectTarget::RegisterRange {
-                start: raw.a + 3,
-                end: raw.a + 2 + raw.c,
+                start: raw.a.saturating_add(3),
+                end: raw.a.saturating_add(2).saturating_add(raw.c),
             });
             explanation = format!(
-                "Call iterator function R({}) with state R({}) and control R({})",
+                "Call iterator function R({}): return {} results into R({})..R({})",
                 raw.a,
-                raw.a + 1,
-                raw.a + 2
+                raw.c,
+                raw.a + 3,
+                raw.a + 2 + raw.c
             );
         }
         Opcode54::Tforloop => {
-            citations.push("lvm.c:1428".to_string());
-            let loop_dest = pc + 1 - raw.bx as usize;
+            citations.push("lvm.c:1435".to_string());
+            let loop_dest = (pc + 1).saturating_sub(raw.bx as usize);
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Jump {
                 offset: -(raw.bx as i32),
@@ -858,6 +861,7 @@ fn lift_instruction_54(
                 target_id: StableId::instruction(proto.path.clone(), loop_dest),
             });
             jump_target = Some(loop_dest);
+
             explanation = format!(
                 "Check generic for-loop condition at R({}); if active jump back to PC {loop_dest}",
                 raw.a
@@ -946,5 +950,30 @@ fn lift_instruction_54(
         source_citations: citations,
         explanation,
         source,
+    }
+}
+
+fn tm_name(event: u8) -> &'static str {
+    match event {
+        0 => "__add",
+        1 => "__sub",
+        2 => "__mul",
+        3 => "__mod",
+        4 => "__pow",
+        5 => "__div",
+        6 => "__idiv",
+        7 => "__band",
+        8 => "__bor",
+        9 => "__bxor",
+        10 => "__shl",
+        11 => "__shr",
+        12 => "__unm",
+        13 => "__bnot",
+        14 => "__lt",
+        15 => "__le",
+        16 => "__concat",
+        17 => "__len",
+        18 => "__eq",
+        _ => "__metamethod",
     }
 }

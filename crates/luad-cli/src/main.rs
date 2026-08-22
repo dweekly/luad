@@ -326,39 +326,17 @@ fn handle_validate(args: ValidateArgs) {
 }
 
 fn handle_capabilities(args: CapabilitiesArgs) {
+    let mut manifest = luad_core::get_canonical_capabilities(env!("CARGO_PKG_VERSION"));
+    if !args.evidence {
+        manifest.evidence.clear();
+        for d in &mut manifest.dialects {
+            d.evidence.clear();
+        }
+    }
+
     match args.format {
-        OutputFormat::Text => render::render_capabilities(args.evidence),
+        OutputFormat::Text => render::render_capabilities(&manifest, args.evidence),
         OutputFormat::Json => {
-            #[derive(serde::Serialize)]
-            struct CapabilityManifest {
-                tool_name: String,
-                tool_version: String,
-                schema_version: u32,
-                supported_dialects: Vec<String>,
-                evidence: Vec<String>,
-            }
-            let manifest = CapabilityManifest {
-                tool_name: "luad".to_string(),
-                tool_version: env!("CARGO_PKG_VERSION").to_string(),
-                schema_version: 1,
-                supported_dialects: vec![
-                    "lua5.1".to_string(),
-                    "lua5.2".to_string(),
-                    "lua5.3".to_string(),
-                    "lua5.4".to_string(),
-                    "lua5.5".to_string(),
-                ],
-                evidence: if args.evidence {
-                    vec![
-                        "100% opcode table coverage across Lua 5.1, 5.2, 5.3, 5.4, 5.5".to_string(),
-                        "Bounded SafeReader with configurable limits, varints, and recursion guards".to_string(),
-                        "Exact bit-level integer and IEEE-754 float preservation".to_string(),
-                        "Differential oracle testing against official Lua 5.1.5, 5.2.4, 5.3.6, 5.4.8, 5.5.1 binaries".to_string(),
-                    ]
-                } else {
-                    vec![]
-                },
-            };
             render::print_json(&manifest);
         }
         _ => {
@@ -427,9 +405,16 @@ fn handle_schema(args: SchemaArgs) {
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
             );
         }
+        "capabilities" => {
+            let schema = schema_for!(luad_core::CapabilityManifest);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            );
+        }
         other => {
             eprintln!(
-                "{}: Unknown schema '{other}'. Supported: chunk, diagnostic, instruction, cfg, xrefs, query, diff",
+                "{}: Unknown schema '{other}'. Supported: chunk, diagnostic, instruction, cfg, xrefs, query, diff, capabilities",
                 "error".red()
             );
             ExitCode::UsageError.exit();

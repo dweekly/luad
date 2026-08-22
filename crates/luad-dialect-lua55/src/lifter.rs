@@ -433,8 +433,15 @@ fn lift_instruction_55(
         }
         Opcode55::Mmbin | Opcode55::Mmbini | Opcode55::Mmbink => {
             companion_pc = prev.map(|_| pc - 1);
-            explanation = format!("Metamethod companion for PC {}", pc.saturating_sub(1));
+            let tm = tm_name(raw.c);
+            metamethod_fallbacks.push(tm.to_string());
+            implicit_effects.push(ImplicitEffect::CompanionPair {
+                companion_pc: pc.saturating_sub(1),
+                companion_role: format!("Metamethod fallback {tm}"),
+            });
+            explanation = format!("Metamethod companion {tm} for PC {}", pc.saturating_sub(1));
         }
+
         Opcode55::Unm | Opcode55::Bnot | Opcode55::Not | Opcode55::Len => {
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Register { index: raw.b });
@@ -514,7 +521,7 @@ fn lift_instruction_55(
             explanation = format!("Return 1 value in R({})", raw.a);
         }
         Opcode55::Forloop => {
-            let loop_dest = pc + 1 - raw.bx as usize;
+            let loop_dest = (pc + 1).saturating_sub(raw.bx as usize);
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Jump {
                 offset: -(raw.bx as i32),
@@ -560,7 +567,7 @@ fn lift_instruction_55(
             explanation = format!("Call iterator function at R({})", raw.a);
         }
         Opcode55::Tforloop => {
-            let loop_dest = pc + 1 - raw.bx as usize;
+            let loop_dest = (pc + 1).saturating_sub(raw.bx as usize);
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Jump {
                 offset: -(raw.bx as i32),
@@ -568,6 +575,7 @@ fn lift_instruction_55(
                 target_id: StableId::instruction(proto.path.clone(), loop_dest),
             });
             jump_target = Some(loop_dest);
+
             explanation = format!(
                 "Check generic for-loop condition at R({}); if active jump back to PC {loop_dest}",
                 raw.a
@@ -673,5 +681,30 @@ fn lift_instruction_55(
         source_citations: citations,
         explanation,
         source,
+    }
+}
+
+fn tm_name(event: u8) -> &'static str {
+    match event {
+        0 => "__add",
+        1 => "__sub",
+        2 => "__mul",
+        3 => "__mod",
+        4 => "__pow",
+        5 => "__div",
+        6 => "__idiv",
+        7 => "__band",
+        8 => "__bor",
+        9 => "__bxor",
+        10 => "__shl",
+        11 => "__shr",
+        12 => "__unm",
+        13 => "__bnot",
+        14 => "__lt",
+        15 => "__le",
+        16 => "__concat",
+        17 => "__len",
+        18 => "__eq",
+        _ => "__metamethod",
     }
 }

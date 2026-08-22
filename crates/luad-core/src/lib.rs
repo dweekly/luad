@@ -2,8 +2,8 @@
 
 #![allow(clippy::result_large_err)]
 
+pub mod capabilities;
 pub mod diagnostic;
-
 pub mod dialect;
 pub mod id;
 pub mod ir;
@@ -12,6 +12,7 @@ pub mod model;
 pub mod provenance;
 pub mod reader;
 
+pub use capabilities::{get_canonical_capabilities, CapabilityManifest, DialectCapability};
 pub use diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
 pub use dialect::{DetectionResult, Dialect};
 pub use id::{ProtoPath, StableId};

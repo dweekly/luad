@@ -1,0 +1,53 @@
+[package]
+name = "luad-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+luad-core = { path = "../crates/luad-core" }
+luad-dialect-lua51 = { path = "../crates/luad-dialect-lua51" }
+luad-dialect-lua52 = { path = "../crates/luad-dialect-lua52" }
+luad-dialect-lua53 = { path = "../crates/luad-dialect-lua53" }
+luad-dialect-lua54 = { path = "../crates/luad-dialect-lua54" }
+luad-dialect-lua55 = { path = "../crates/luad-dialect-lua55" }
+
+[[bin]]
+name = "fuzz_lua51"
+path = "fuzz_targets/fuzz_lua51.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_lua52"
+path = "fuzz_targets/fuzz_lua52.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_lua53"
+path = "fuzz_targets/fuzz_lua53.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_lua54"
+path = "fuzz_targets/fuzz_lua54.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_lua55"
+path = "fuzz_targets/fuzz_lua55.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_detect"
+path = "fuzz_targets/fuzz_detect.rs"
+test = false
+doc = false

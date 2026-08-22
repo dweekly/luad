@@ -5,6 +5,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::NamedTempFile;
 
+pub mod listing_parser;
+
+pub use listing_parser::{assert_chunk_matches_luac, parse_luac_dump, LuacDump, LuacProtoDump};
 use luad_core::limits::{ParseMode, ResourceLimits};
 use luad_core::model::Chunk;
 use luad_core::reader::SafeReader;
@@ -219,13 +222,23 @@ pub fn compile_source_lua55(source: &str, strip: bool) -> Result<Vec<u8>, String
     fs::read(out_file.path()).map_err(|e| e.to_string())
 }
 
-/// Compile Lua source and parse with `luad_dialect_lua55`.
-pub fn compile_and_parse_lua55(source: &str, strip: bool) -> Result<Chunk, String> {
-    let bytes = compile_source_lua55(source, strip)?;
-    let dialect = luad_dialect_lua55::Lua55Dialect;
-    let mut reader =
-        SafeReader::with_options(&bytes, 0, ResourceLimits::default(), ParseMode::Strict);
-    dialect.decode_chunk(&mut reader).map_err(|d| d.message)
+/// Disassemble Lua source using `luac -l -l`.
+pub fn dump_source_luac(compiler_path: &Path, source: &str) -> Result<String, String> {
+    let src_file = NamedTempFile::new().map_err(|e| e.to_string())?;
+    fs::write(src_file.path(), source).map_err(|e| e.to_string())?;
+
+    let output = Command::new(compiler_path)
+        .args(["-l", "-l", "-p"])
+        .arg(src_file.path())
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("luac dump failed: {err}"));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 /// Locate Lua 5.3 compiler binary on host system.

@@ -421,49 +421,42 @@ pub fn render_validate(verdict: Verdict, diagnostics: &[Diagnostic]) {
 }
 
 /// Render tool capabilities.
-pub fn render_capabilities(evidence: bool) {
+pub fn render_capabilities(manifest: &luad_core::CapabilityManifest, evidence: bool) {
     println!("{}", "=== luad Capabilities ===".bold());
-    println!("{:<20} luad", "Tool Name:".dimmed());
+    println!("{:<20} {}", "Tool Name:".dimmed(), manifest.tool_name);
+    println!("{:<20} {}", "Tool Version:".dimmed(), manifest.tool_version);
     println!(
         "{:<20} {}",
-        "Tool Version:".dimmed(),
-        env!("CARGO_PKG_VERSION")
+        "Schema Version:".dimmed(),
+        manifest.schema_version
     );
-    println!("{:<20} 1", "Schema Version:".dimmed());
     println!();
     println!("{}", "Supported Dialects:".bold());
-    println!(
-        "  - {:<12} Lua 5.5.0 - 5.5.1 (lossless parse, string reuse, ivABC, disasm, validate)",
-        "lua5.5".green().bold()
-    );
-    println!(
-        "  - {:<12} Lua 5.4.0 - 5.4.8 (lossless parse, disasm, validate, CFG, xrefs, diff)",
-        "lua5.4".green().bold()
-    );
-    println!(
-        "  - {:<12} Lua 5.3.0 - 5.3.6 (lossless parse, disasm, validate, CFG, xrefs, diff)",
-        "lua5.3".green().bold()
-    );
-    println!(
-        "  - {:<12} Lua 5.2.0 - 5.2.4 (lossless parse, disasm, validate, CFG, xrefs, diff)",
-        "lua5.2".green().bold()
-    );
-    println!(
-        "  - {:<12} Lua 5.1.0 - 5.1.5 (lossless parse, disasm, validate, CFG, xrefs, diff)",
-        "lua5.1".green().bold()
-    );
-    println!(
-        "  - {:<12} LuaJIT 2.0/2.1 (Phase 8 planned)",
-        "luajit".dimmed()
-    );
+    for d in &manifest.dialects {
+        let features_str = d.features.join(", ");
+        if d.status == "supported" {
+            println!(
+                "  - {:<12} {} ({})",
+                d.id.green().bold(),
+                d.display_name,
+                features_str
+            );
+        } else {
+            println!(
+                "  - {:<12} {} ({})",
+                d.id.dimmed(),
+                d.display_name,
+                features_str
+            );
+        }
+    }
 
     if evidence {
         println!();
         println!("{}", "=== Proof & Evidence Manifest ===".bold());
-        println!("  - 100% opcode table coverage across Lua 5.1, 5.2, 5.3, 5.4, 5.5");
-        println!("  - Bounded SafeReader with configurable limits, varints, and recursion guards");
-        println!("  - Exact bit-level integer and IEEE-754 float preservation");
-        println!("  - Differential oracle testing against official Lua 5.1.5, 5.2.4, 5.3.6, 5.4.8, 5.5.1 binaries");
+        for ev in &manifest.evidence {
+            println!("  - {ev}");
+        }
     }
 }
 

@@ -47,6 +47,22 @@ impl LuaString {
         }
         out
     }
+
+    /// Return the string representation.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        if self.is_utf8 {
+            std::str::from_utf8(&self.raw_bytes).unwrap_or(&self.display)
+        } else {
+            &self.display
+        }
+    }
+}
+
+impl AsRef<str> for LuaString {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
 }
 
 /// Constant value preserved without loss of floating-point or integer bit patterns.
@@ -199,6 +215,53 @@ pub struct Prototype {
     pub upvalue_names: Vec<Option<LuaString>>,
     /// Source byte location of the prototype.
     pub source: SourceLocation,
+}
+
+impl Prototype {
+    /// Reconstruct the source line number for a specific instruction PC.
+    #[must_use]
+    pub fn get_line_for_pc(&self, pc: usize) -> usize {
+        if self.line_info.is_empty() && self.abs_line_info.is_empty() {
+            return self.line_defined;
+        }
+
+        // If abs_line_info directly maps every PC (Lua 5.1..5.3):
+        if self.abs_line_info.len() == self.instructions.len() {
+            if let Some(entry) = self.abs_line_info.get(pc) {
+                return entry.line;
+            }
+        }
+
+        // For Lua 5.4 / 5.5: delta-line calculation from abslineinfo or linedefined
+        if !self.line_info.is_empty() {
+            let mut base_pc = 0;
+            let mut base_line = self.line_defined;
+
+            for abs in &self.abs_line_info {
+                if abs.pc <= pc {
+                    base_pc = abs.pc;
+                    base_line = abs.line;
+                } else {
+                    break;
+                }
+            }
+
+            let mut current_line = base_line as isize;
+            for i in base_pc..=pc.min(self.line_info.len().saturating_sub(1)) {
+                let delta = self.line_info[i] as i8;
+                if delta == -128 {
+                    if let Some(abs) = self.abs_line_info.iter().find(|a| a.pc == i) {
+                        current_line = abs.line as isize;
+                    }
+                } else {
+                    current_line += delta as isize;
+                }
+            }
+            return current_line.max(0) as usize;
+        }
+
+        self.line_defined
+    }
 }
 
 /// Serialized chunk header.

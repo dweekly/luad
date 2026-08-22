@@ -69,6 +69,7 @@ fn test_cli_schema_export() {
         "xrefs",
         "query",
         "diff",
+        "capabilities",
     ] {
         let output = Command::new(&luad)
             .args(["schema", schema_name, "--schema-version", "1"])
