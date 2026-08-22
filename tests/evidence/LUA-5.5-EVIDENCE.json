@@ -16,7 +16,6 @@
     "byte_accounting_fixtures_passed": 10,
     "string_reuse_table_passed": true,
     "cfg_dominators_passed": true,
-    "runtime_semantics_passed": true,
     "unsafe_code_forbid": true
   }
 }

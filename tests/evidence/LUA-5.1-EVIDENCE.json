@@ -17,7 +17,7 @@
     "embedded_32bit_sizet_passed": true,
     "lnum_constants_passed": true,
     "cfg_dominators_passed": true,
-    "runtime_semantics_passed": true,
     "unsafe_code_forbid": true
   }
 }
+

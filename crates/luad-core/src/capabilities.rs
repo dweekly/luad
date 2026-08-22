@@ -123,35 +123,21 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
             display_name: "Lua 5.4.8".to_string(),
             opcode_count: 83,
             features: vec![
-                "lossless parse".to_string(),
+                "lossless parse (experimental)".to_string(),
                 "disasm".to_string(),
                 "validate".to_string(),
-                "CFG".to_string(),
-                "dominators".to_string(),
-                "xrefs".to_string(),
-                "diff".to_string(),
             ],
-            status: SupportTier::Supported,
+            status: SupportTier::Experimental,
             required_gates: vec![
                 "gate-facts-lua54-8".to_string(),
                 "gate-analysis-cfg".to_string(),
                 "gate-lossless-lua54-8".to_string(),
                 "gate-release-lua54-8".to_string(),
             ],
-            completed_gates: vec![
-                "gate-facts-lua54-8".to_string(),
-                "gate-analysis-cfg".to_string(),
-                "gate-lossless-lua54-8".to_string(),
-                "gate-release-lua54-8".to_string(),
-            ],
+            completed_gates: vec![],
             evidence: vec![
-                "83/83 opcode table, bitfields, and operands verified against official Lua 5.4.8"
+                "Proof vehicle; remediation in progress under CODING-AGENT-PLAN.md (R0-R5)"
                     .to_string(),
-                "Canonical differential oracle passes across all Lua 5.4 fixtures".to_string(),
-                "100% byte-for-byte binary round-trip and zero-gap byte ledger verified"
-                    .to_string(),
-                "CFG basic blocks, dominators, and dominance frontiers verified".to_string(),
-                "Full evidence record: tests/evidence/LUA-5.4.8-PROOF.json".to_string(),
             ],
         },
         DialectCapability {
@@ -199,7 +185,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
         .collect();
 
     let evidence = vec![
-        "Official stock Lua 5.4.8 is fully verified across proof gates P1-P5 under CODING-AGENT-PLAN.md".to_string(),
+        "Stock Lua dialects (5.1..5.5) are experimental; formal proof gates are in progress under CODING-AGENT-PLAN.md (v3)".to_string(),
         "Bounded SafeReader with safe capacity allocation, varints, and recursion limits"
             .to_string(),
         "Exact bit-level integer and IEEE-754 float preservation".to_string(),
@@ -252,54 +238,38 @@ mod tests {
                 + manifest.experimental_dialects.len()
                 + manifest.planned_dialects.len()
         );
-        assert_eq!(manifest.supported_dialects, vec!["lua5.4"]);
+        assert!(manifest.supported_dialects.is_empty());
         assert_eq!(
             manifest.experimental_dialects,
-            vec!["lua5.1", "lua5.2", "lua5.3", "lua5.5"]
+            vec!["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"]
         );
         assert_eq!(manifest.planned_dialects, vec!["luajit"]);
     }
 
     #[test]
-    fn test_release_gate_promotes_only_lua54_8() {
+    fn test_no_supported_dialect_without_verified_artifact() {
         let manifest = get_canonical_capabilities("0.1.0");
-        assert_eq!(
-            manifest.supported_dialects,
-            vec!["lua5.4"],
-            "Under Gate P5, only lua5.4 is promoted to supported"
-        );
-        let lua54 = manifest
-            .dialects
-            .iter()
-            .find(|d| d.id == "lua5.4")
-            .expect("lua5.4 present");
-        assert_eq!(lua54.display_name, "Lua 5.4.8");
-        assert_eq!(lua54.status, SupportTier::Supported);
-        assert_eq!(
-            lua54.completed_gates,
-            vec![
-                "gate-facts-lua54-8",
-                "gate-analysis-cfg",
-                "gate-lossless-lua54-8",
-                "gate-release-lua54-8"
-            ]
+        // Under Gate R0, no stock dialect is supported until its full proof path passes
+        assert!(
+            manifest.supported_dialects.is_empty(),
+            "Under Gate R0, supported_dialects must be empty at the audit baseline"
         );
     }
 
     #[test]
-    fn test_unproven_dialects_remain_experimental() {
+    fn test_all_stock_dialects_experimental_at_baseline() {
         let manifest = get_canonical_capabilities("0.1.0");
         for dialect in &manifest.dialects {
-            if dialect.id != "lua5.4" && dialect.id != "luajit" {
+            if dialect.id != "luajit" {
                 assert_eq!(
                     dialect.status,
                     SupportTier::Experimental,
-                    "Dialect '{}' must remain Experimental until its gates pass",
+                    "Dialect '{}' must be Experimental at baseline",
                     dialect.id
                 );
                 assert!(
                     dialect.completed_gates.is_empty(),
-                    "Unproven dialect '{}' must have empty completed_gates",
+                    "Dialect '{}' must have empty completed_gates at baseline",
                     dialect.id
                 );
             }

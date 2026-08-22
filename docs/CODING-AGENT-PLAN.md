@@ -1,248 +1,230 @@
-# Coding-agent plan v2: prove the facts, then ship the workflow
+# Coding-agent plan v3: make the proof boundary real
 
-Status: canonical remediation plan.
+Status: canonical implementation plan after the audit of clean commit `c5201a8` on 2026-08-22.
 
-Audit baseline: clean worktree at commit `0622b7b` on 2026-08-22.
+This plan supersedes earlier gate-completion claims. It preserves useful implementation work, but treats every proof and product gate below as red until the stated adversarial probes pass through the real public boundary.
 
-This plan supersedes the earlier gate ordering and all completion claims made by commit messages through the audit baseline. Git history preserves the prior plan. Do not infer completion from a commit subject, a test function name, a copied gate ID, or a green aggregate test run.
-
-Primary references:
+Read with:
 
 - [Correctness review](REVIEW-2026-08-22.md)
-- [Tactical coding-agent feedback](CODING-AGENT-FEEDBACK-2026-08-22.md)
 - [Plan review](PLAN-REVIEW-2026-08-22.md)
 - [TP-Link Lua 5.1 field report](FIELD-REPORT-TP-LINK-LUA51.md)
-- [Architecture and invariants](../ARCHITECTURE.md)
-- [Product requirements](../PRD.md)
-- [Roadmap](../ROADMAP.md)
+- [Machine interface](MACHINE-INTERFACE.md)
 
-## 1. Objective
+## 1. Outcome
 
-Produce one trustworthy stock-Lua proof vehicle and one useful embedded-Lua product slice before expanding scope:
+Deliver a reliable, composable CLI for Lua reverse engineering. The first defensible release slice is:
 
-```text
-proof vehicle: Lua 5.4.8
-product slice: embedded Lua 5.1 plus explicit LNUM/vendor profiles
-```
+- exact, evidence-backed parsing and disassembly for official Lua 5.4.8;
+- explicit, evidence-backed Lua 5.1 layout and vendor profiles needed by embedded firmware;
+- correct Lua 5.1 closure-capture facts and constant-bearing operands;
+- deterministic text and structured output suitable for humans and AI agents;
+- no project database, session manager, hypothesis engine, or autonomous analysis inside `luad`.
 
-`luad` owns deterministic, bounded facts. It does not own researcher hypotheses, naming, persistence, planning, or agent intelligence.
+Lua 5.2, 5.3, and 5.5 remain implemented but experimental. Runtime semantic-effect verification remains a separate project.
 
-The immediate goal is not to add commands. It is to make the existing factual surface honest and independently falsifiable, then implement the three facts the firmware workflow needs most:
+## 2. Audit verdict at `c5201a8`
 
-1. header-driven Lua 5.1 layout and explicit profile selection;
-2. correct closure/upvalue capture relations;
-3. resolved constant-bearing operands in text and machine output.
+### Useful work to retain
 
-Lua 5.2, Lua 5.3, Lua 5.5, LuaJIT, composable overlays, `get`, `export`, and other feature work remain outside the critical path until the unlock conditions in this plan pass.
+- safer Lua 5.4 opcode conversion and corrected bitfield definitions;
+- existing official compiler fixtures and differential-test scaffolding;
+- Lua 5.1 `size_t` threading;
+- explicit stock-versus-LNUM parser entry points;
+- stock rejection of constant tag 9;
+- preliminary closure-descriptor recognition;
+- typed constant operands in the Lua 5.1 semantic lifter;
+- constant-index diagnostics;
+- all current safety, malformed-input, determinism, formatting, and lint checks.
 
-## 2. Audited state at `0622b7b`
+### Claims that are not established
 
-### Keep
+- the gate runner does not reject dirty or stale promotion artifacts;
+- gate scripts do not use the gate runner or emit result artifacts;
+- evidence JSON is not derived from validated gate results;
+- the Lua 5.4 oracle still compares operand strings and tolerant floats;
+- the immediate-dominator algorithm remains incorrect;
+- Lua 5.4 binary round-trip copies captured prototype bytes instead of serializing the model;
+- the byte ledger is only a length sum;
+- Lua 5.4.8 promotion is hardcoded;
+- Lua 5.1 layout support is incomplete and LNUM integers are represented as floats;
+- closure descriptors remain semantic instruction rows and lack capture xrefs;
+- resolved constants do not reach public disassembly or structured output;
+- the private 252-file corpus and public minimized field reproducers have not run through a reproducible gate.
 
-- Memory-safe bounded readers and hostile-input tests.
-- Exact official compiler installation with archive checksum verification on a fresh CI runner.
-- Fatal compiler requirements in differential-oracle tests.
-- Structured `OracleMismatch` values.
-- Operand comparison and its mutation controls.
-- Lua 5.4 bitfield, signed-immediate, mode, safe-opcode-conversion, and golden-word fixes.
-- Raw instruction words, stable IDs, typed operands, provenance types, and deterministic rendering foundations.
-- The Lua 5.1 `size_t == 4` compatibility fix as an urgent field fix.
-- Honest warnings in README and `docs/MACHINE-INTERFACE.md`.
+Consequently, C0 and P1-P5 are red. L1-L4 are red, although each contains reusable partial work.
 
-### Do not treat as complete
+## 3. Rules the coding agent must follow
 
-- Capability promotion for Lua 5.1 through Lua 5.5.
-- Gate IDs copied into both `required_gates` and `completed_gates`.
-- Evidence JSON whose success fields are assigned unconditionally.
-- A test that searches source text for function names.
-- Immediate-dominator correctness.
-- Lossless chunk serialization or complete byte accounting.
-- Runtime verification of semantic effects.
-- General Lua 5.1 layout support.
-- An explicit LNUM profile or LNUM oracle.
-- Lua 5.1 closure-binding semantics or capture xrefs.
-- Inline resolved constants in disassembly.
-- Patch-range support beyond the exact compiler releases executed by a gate.
+1. Do not mark a gate complete because a script exits zero. Completion means its acceptance probes distinguish the intended implementation from the shortcuts identified in this plan.
+2. Write each adversarial probe first and record its failing output before changing implementation.
+3. Tests must call the production verifier, parser, serializer, analyzer, or CLI boundary. Constructing an expected error value in a test is not rejection.
+4. A test that searches source text for a function name is never gate evidence.
+5. A test that asserts a committed JSON value is `true` is never gate evidence.
+6. A proof command must execute at least one explicitly enumerated test. Zero tests, missing fixture sources, missing compilers, and skipped required cases are fatal.
+7. Gate results are generated into a caller-supplied temporary directory. Tests must not overwrite committed evidence.
+8. Promotion evidence requires a clean worktree, exact source commit, exact compiler binary hash, exact fixture hashes, and validated prerequisite artifacts.
+9. A release manifest is assembled from gate results. Capability code must not copy required gate IDs into a completed list.
+10. Do not broaden a result from an exact release or profile to a major/minor family.
+11. Do not call model agreement independent evidence when both sides use the same decoder, lifter, raw byte cache, or opcode table.
+12. Do not label static effects `Fact` until the separate instrumented-runtime project passes. Omit or label them reviewed/unverified.
+13. Keep physical bytecode records distinct from executable semantic instructions.
+14. Preserve exact encoded values and raw representations. Do not substitute `nil`, coerce vendor integers to floats, or compare floats approximately at a proof boundary.
+15. Make the smallest commit that closes one gate. Stop for review after every checkpoint named below.
 
-## 3. Operating rules
+## 4. Gate artifact contract
 
-1. Preserve unrelated worktree changes and inspect `git status --short` before every task.
-2. One gate or one narrowly related negative-control batch per change.
-3. Add the falsifying test before changing the implementation. The PR or branch history must show the test failing for the intended reason and passing after the fix.
-4. Keep acceptance criteria as prose and map every criterion to an exact executable command and assertion. A test name is not evidence by itself.
-5. A gate script or CI job must fail if its compiler, fixture, profile, instrumented runtime, or evidence input is absent. No proof path may skip or silently use a bundled fallback.
-6. Evidence is derived from command results. Do not write unconditional `true`, counts, versions, gate IDs, or `supported` status into an evidence generator.
-7. A negative control must prove the comparator or gate rejects a meaningful corruption. Testing that a function exists, a JSON field says `true`, or an implementation agrees with itself is insufficient.
-8. Preserve raw representation separately from interpreted meaning: encoded operands, integer values, float bits, physical instruction words, and hostile string bytes.
-9. Never derive artifact layout from the analyzer host. Validate the chunk header and use one immutable layout value for every width- and endian-dependent read.
-10. Vendor behavior is selected through an explicit profile with provenance. Stock mode must reject vendor-only constructs.
-11. Physical instruction words are not necessarily executable semantic instructions. Companion and closure-binding words retain identity without acquiring false standalone effects.
-12. Do not advertise a patch range unless every advertised patch has evidence. Prefer one exact supported release to an unproved range.
-13. Do not promote semantic-effect claims until an independent runtime oracle exists. Source citations and self-tests are reviewed evidence, not runtime evidence.
-14. `bash scripts/check.sh` is an aggregate development check, not a proof gate.
-15. Do not begin another dialect or composability milestone while a critical-path gate is red.
+Implement a versioned `GateSpec`, `GateResult`, and `ReleaseManifest`.
 
-## 4. Gate protocol
-
-Every gate added or repaired under this plan must define all of the following in the same change set:
-
-- **Scope:** exact dialect, profile, version, platform/layout, and fact types.
-- **Prerequisites:** compilers, runtimes, fixtures, patches, and their hashes.
-- **Positive tests:** exact expected facts.
-- **Negative controls:** deliberate corruption that must fail.
-- **Command:** one non-interactive command suitable for CI.
-- **Artifact:** structured result with source revision and inputs.
-- **Claim effect:** exactly which capability field can change after the gate passes.
-
-The gate artifact records at minimum:
+`GateSpec` must declare:
 
 - gate ID and schema version;
-- source commit and dirty-state flag;
-- exact command and exit status;
-- test count and skipped-test count;
-- compiler/runtime path, exact version, and binary SHA-256;
-- upstream archive/patch SHA-256 where applicable;
-- fixture source and output SHA-256 values;
-- target OS, architecture, endianness, and relevant serialized layout;
-- comparator/instrumentation revision;
-- start/end timestamps and deterministic result summary.
+- argv arrays for commands, never a whitespace-split shell string;
+- exact test names expected to execute;
+- required compiler identities: path policy, exact version, and SHA-256;
+- required fixture paths and SHA-256 values;
+- required profile/layout identifiers;
+- prerequisite gate IDs;
+- exact capability fields the gate is allowed to change.
 
-A committed evidence file is not trusted because it is committed. Its integrity test must recompute or independently validate every claim it uses for promotion. Evidence produced from a dirty worktree cannot promote a release capability.
+`GateResult` must record:
 
-## 5. Critical paths
+- canonicalized spec hash;
+- source commit and dirty state;
+- complete command argv and exit status;
+- enumerated tests, passed/failed/ignored counts, and missing expected tests;
+- compiler paths, exact version output, and binary hashes;
+- fixture and profile hashes;
+- platform and architecture;
+- start/end timestamps;
+- stdout/stderr artifact hashes;
+- success derived by the runner, never accepted from input JSON.
 
-### 5.1 Proof spine
+`ReleaseManifest` must contain the SHA-256 of every prerequisite result. Its verifier must validate schema, spec hash, source revision, clean state, compiler identity, fixture identity, test enumeration, and prerequisite closure.
+
+Tamper resistance here means that changing a result after assembly invalidates the manifest, and regenerating a manifest requires rerunning the release assembler against valid results. It is not a claim of protection against an attacker who can rewrite the repository and verifier.
+
+Every gate script must:
+
+1. accept or create a temporary result directory;
+2. invoke the production gate runner with a committed spec;
+3. execute the declared commands;
+4. emit a `GateResult`;
+5. verify that result before returning success.
+
+## 5. Required order and checkpoints
 
 ```text
-C0 contain claims
-  → P1 executable gate/evidence harness
-  → P2 sound Lua 5.4.8 differential facts
-  → P3 correct CFG and validation preconditions
-  → P4 real byte losslessness
-  → P5 evidence-backed Lua 5.4.8 promotion
+R0 containment
+  -> R1 proof harness
+       -> R2 Lua 5.4.8 oracle
+       -> R3 CFG and dominators
+       -> R4 Lua 5.4.8 model serializer and byte ledger
+            -> R5 Lua 5.4.8 promotion
+
+R1 proof harness
+  -> F1 Lua 5.1 layouts and profiles
+       -> F2 closure bindings
+       -> F3 resolved public operands
+            -> F4 field evidence
 ```
 
-### 5.2 Embedded Lua 5.1 product spine
+Stop for human review after R1, R4, R5, F1, and F3. Do not proceed past a checkpoint merely because tests are green.
 
-```text
-C0 contain claims
-  → L1 ChunkLayout and explicit stock/LNUM profiles
-  → L2 closure-binding and capture facts
-  → L3 resolved constants in text and JSON
-  → L4 field-corpus regression evidence
-```
-
-P1 is shared by both paths. P2 can proceed in parallel with L1 only after C0 and P1 are green. L2 and L3 may proceed in parallel after the L1 data model is stable. No support promotion occurs until the relevant full path is green.
-
-### 5.3 Separate project
-
-Runtime semantic-effect verification is project E1. It is not on the initial promotion path because effect claims can be downgraded or omitted. Do not call lifter self-tests runtime evidence.
-
-## 6. C0 — contain unsupported claims
+## 6. R0 — restore truthful containment
 
 ### Work
 
-- Mark Lua 5.1 through Lua 5.5 `experimental`.
-- Clear `completed_gates` that are not backed by this plan's executable artifacts.
-- Remove `lossless`, verified-CFG, runtime-effects, layout-profile, and patch-range claims that have not passed their new gates.
-- Report exact tested releases separately from support tier.
-- Keep README, machine-interface documentation, and capability output consistent.
-- Retain evidence files only as historical run reports clearly marked non-promoting, or remove them from the runtime capability source.
+- Return Lua 5.4.8 to `experimental` until R1-R5 are valid.
+- Clear all unvalidated `completed_gates`.
+- Mark `tests/evidence/LUA-5.4.8-PROOF.json` non-promoting or remove it.
+- Remove claims of verified binary losslessness, dominators, and full P1-P5 proof.
+- Make README, machine-interface documentation, and `luad capabilities` agree.
+- Keep historical evidence only when clearly labeled self-reported/non-promoting.
+- Remove `runtime_semantics_passed: true` from generated evidence unless E1 exists.
+- Delete the source-text named-test presence gate.
 
-### Required tests
+### Red-first probes
 
-- `capabilities::tests::no_supported_dialect_without_verified_artifact`
-- `capabilities::tests::completed_gate_requires_validated_result`
-- `test_capabilities_readme_status_consistency`
-- `test_capabilities_do_not_claim_version_ranges_from_one_patch`
+- A temporary supported dialect with no validated release manifest must be rejected.
+- A README status differing from the canonical manifest must fail the consistency test.
+- No committed evidence file may promote a dialect by its own `status` or boolean fields.
 
-### Negative controls
-
-- Copy a required gate ID into `completed_gates` without an artifact: the test fails.
-- Mark a dialect supported with a stale, dirty, or mismatched artifact: the test fails.
-- Change README status independently of the manifest: the test fails.
-
-### Gate command
+### Acceptance
 
 ```console
 cargo test -p luad-core capabilities::tests
 cargo test -p luad-oracle --test test_cli_e2e capabilities
 ```
 
-### Acceptance
+`luad capabilities --evidence --format json` reports no supported stock dialect. Commit R0 separately.
 
-`luad capabilities --evidence --format json` reports no supported stock dialect at the audit baseline, and its claims agree with README and `docs/MACHINE-INTERFACE.md`.
-
-## 7. P1 — executable gate and evidence harness
+## 7. R1 — build an executable proof harness
 
 ### Work
 
-- Replace the source-text function-name scan with explicit gate commands executed by CI.
-- Define a small versioned gate-result schema.
-- Make each gate command write results to a temporary output path supplied by the caller.
-- Have the evidence assembler consume those results; it must not infer success from a test name or set success independently.
+- Replace the current whitespace-split command runner with the artifact contract in section 4.
+- Add validation APIs that accept explicit expected revision, cleanliness, compiler hash, fixture hashes, and prerequisite results.
+- Add `LUAD_ORACLE_BIN_DIR`; proof specs must not fall back to a generic `luac` on `PATH`.
 - Verify exact compiler versions and hashes even when binaries already exist.
-- Add `LUAD_ORACLE_BIN_DIR` and remove ambiguous generic `luac` fallback from proof commands.
-- Complete fixture provenance with compiler archive hash, compiler binary hash, target layout, generator revision, and generation command.
-- Make required fixture-source absence fatal rather than skipping an optional loop body.
+- Complete fixture provenance with source archive URL/hash, compiler binary hash, target layout, generator revision, and generation command.
+- Make absent fixture sources fatal.
+- Make every proof script emit and verify a result artifact.
+- Make evidence assembly consume only verified results.
 
-### Required tests
+### Required adversarial probes
 
-- `test_gate_runner_rejects_missing_command`
-- `test_gate_runner_rejects_nonzero_command`
-- `test_gate_runner_rejects_skipped_test`
-- `test_gate_runner_rejects_stale_source_revision`
-- `test_gate_runner_rejects_dirty_promotion_evidence`
-- `test_gate_runner_rejects_wrong_compiler_binary`
-- `test_evidence_tamper_is_detected`
-- `test_fixture_manifest_records_complete_provenance`
+- `echo success` exits zero but executes zero tests: reject.
+- A nonexistent or non-matching test filter: reject.
+- One ignored required test: reject.
+- A result from another Git commit: production verifier rejects it.
+- A dirty result: production promotion verifier rejects it.
+- Correct compiler version text but wrong binary SHA-256: reject.
+- Correct compiler but wrong patch version: reject.
+- Missing compiler: reject before tests run.
+- Mutated fixture byte: reject before the gate claim is evaluated.
+- Mutated result after manifest assembly: manifest verification fails.
+- Changed `success: false` to `true`: verification still fails.
 
-### Negative controls
-
-- Remove one compiler.
-- Substitute the right major/minor but wrong patch release.
-- Modify one fixture byte.
-- Change one evidence result from false to true.
-- Point a gate at a nonexistent or zero-test filter.
-
-### Gate command
+### Gate
 
 ```console
 bash scripts/gates/gate-proof-harness.sh
 ```
 
-The script does not exist at the audit baseline. Create it with the tests, commit the red tests first, then implement the harness.
-
 ### Acceptance
 
-Each negative control fails at the named prerequisite or claim boundary. A clean run emits a result derived from executed commands and records zero skipped tests.
+The script produces a fresh result in a temporary directory, records a nonzero enumerated test set and zero ignored required tests, and every probe above fails through production code at the intended boundary.
 
-## 8. P2 — sound Lua 5.4.8 instruction and constant oracle
+### Checkpoint R1
+
+Hand off the spec, result, manifest, one clean result, and outputs from every adversarial probe. Do not start R2-R5 until reviewed.
+
+## 8. R2 — make the Lua 5.4.8 oracle exact
 
 ### Work
 
-- Retain the corrected Lua 5.4 raw decoder and golden words.
-- Parse expected operands into typed fields rather than treating the complete operand list as a whitespace string.
-- Compare every operand required by the opcode mode, including `k`, signed immediates, RK/constant indices, Ax/extra words, and jump destinations.
-- Treat an unknown actual opcode or missing expected field as a mismatch.
-- Parse `luac` constants into index, tag, and value fields.
+- Replace `operands_raw: String` comparison with typed expected operand fields.
+- Define the required operand fields from independently transcribed official Lua 5.4.8 opcode modes.
+- Compare all fields, including `k`, signed immediates, Ax/extra words, constant indices, and resolved jump destinations.
+- Parse constants into exact index, tag, canonical listing token, and decoded value.
 - Compare integer/float/string tags exactly.
-- Compare the canonical `luac` float token exactly; separately prove raw IEEE-754 preservation with binary round-trip fixtures. Do not use a broad numeric tolerance.
-- Add field-consumption accounting so a parsed oracle field cannot remain silently unused.
-- Limit the claim to Lua 5.4.8 until other patches run the same gate.
+- Compare the canonical `luac` float token exactly. Prove raw IEEE-754 bits separately through R4.
+- Track consumption of every parsed oracle field and reject unused fields.
+- Treat unknown actual opcodes, unknown expected mnemonics, missing operands, and extra operands as structured mismatches.
 
-### Required tests
+### Required probes
 
-- existing mnemonic, operand, constant, metadata, count, and old-bitfield negative controls;
-- `test_negative_control_unknown_opcode`
-- `test_negative_control_operand_count`
-- `test_negative_control_constant_tag`
-- `test_negative_control_float_listing_token`
-- `test_negative_control_signed_zero`
-- `test_negative_control_unused_oracle_field`
-- `test_lua54_8_all_fixture_operands_and_constants`
+- unknown actual opcode;
+- missing and extra operand;
+- each relevant operand field mutated independently;
+- constant value unchanged but tag changed;
+- float listing token changed by one character;
+- positive zero changed to negative zero;
+- an added oracle field left unconsumed;
+- the old bit-15 decoder against every maintained fixture.
 
-### Gate command
+### Gate
 
 ```console
 bash scripts/gates/gate-facts-lua54-8.sh
@@ -250,31 +232,26 @@ bash scripts/gates/gate-facts-lua54-8.sh
 
 ### Acceptance
 
-The exact Lua 5.4.8 compiler and all maintained positive fixtures match with zero ignored fields. Every negative control emits the expected structured mismatch.
+All maintained Lua 5.4.8 fixtures match the exact compiler with no ignored fields. The result artifact identifies the exact compiler and fixture hashes. The claim remains limited to Lua 5.4.8.
 
-## 9. P3 — correct CFG, dominators, and analysis preconditions
+## 9. R3 — correct CFG, dominators, and preconditions
 
 ### Work
 
-- Correct immediate-dominator selection. For node `n`, choose the strict dominator dominated by every other strict dominator.
-- Test the graph algorithm on hand-authored graphs independent of Lua decoding.
-- Assert complete dominator sets and exact immediate dominators, not merely presence or reachability.
-- Cover linear, diamond, loop, nested branch, multiple-exit, irreducible where supported, and unreachable topologies.
-- Audit CFG construction for companion words and non-executable physical records.
-- Reject or mark unavailable analysis when registers, constants, upvalues, stack ranges, jump targets, or companion invariants are invalid.
+- Fix immediate-dominator selection: the selected strict dominator must itself be dominated by every other strict dominator.
+- Expose a graph-level test boundary independent of Lua decoding.
+- Assert complete dominator sets and exact immediate dominators.
+- Cover linear, diamond, loop, nested branch, multiple exit, unreachable, and a documented irreducible case.
+- Validate registers, constant indices, upvalue indices, register ranges, jump targets, and companion/physical-role invariants before analysis.
+- Ensure non-executable physical records cannot become CFG nodes or jump targets.
 
-### Required tests
+### Killer probes
 
-- `test_idom_linear_exact`
-- `test_idom_diamond_exact`
-- `test_idom_loop_exact`
-- `test_idom_nested_exact`
-- `test_idom_multiple_exits_exact`
-- `test_idom_unreachable_exact`
-- `test_cfg_negative_control_old_entry_for_all_algorithm`
-- validator-precondition mutation tests for registers, constants, upvalues, ranges, and jumps.
+- Linear `0 -> 1 -> 2 -> 3` must have idoms `[none, 0, 1, 2]`; the algorithm present at `c5201a8` must fail this test.
+- A nested diamond must assert the entire expected dominator tree.
+- Mutate one register, constant, upvalue, range, jump, and companion target beyond bounds; each must refuse analysis with a stable diagnostic.
 
-### Gate command
+### Gate
 
 ```console
 bash scripts/gates/gate-analysis-cfg.sh
@@ -282,29 +259,29 @@ bash scripts/gates/gate-analysis-cfg.sh
 
 ### Acceptance
 
-The old algorithm fails the linear and nested negative controls. Exact expected dominator trees and analysis refusal behavior pass.
+Exact graph assertions pass independently of bytecode fixtures. Presence of an idom, reachability, or “idom is a valid block” is insufficient.
 
-## 10. P4 — real losslessness and byte accounting
+## 10. R4 — serialize the Lua 5.4.8 model and account for bytes
 
 ### Work
 
-- Rename the existing JSON round-trip test to describe model-serialization behavior; it is not a chunk-losslessness gate.
-- Implement a Lua 5.4.8 binary writer beginning with the lossless parsed model.
-- Preserve raw numeric bits, string bytes, debug data, companion words, unknown preserved data, and layout fields.
-- Implement a non-overlapping byte ledger classifying recognized fields, padding, preserved uninterpreted bytes, and diagnosed trailing bytes.
-- Prove `parse → binary serialize` byte identity and `parse → serialize → parse` structural identity.
+- Implement a field-by-field binary writer for the lossless model.
+- Remove the prototype-level shortcut that copies `proto.source.raw_hex`.
+- Preserve numeric raw bits, exact strings, debug data, instruction/companion words, layout data, diagnosed trailing bytes, and explicitly preserved unknown bytes.
+- Implement a byte ledger as non-overlapping classified intervals: recognized field, padding, preserved uninterpreted data, or diagnosed trailing data.
+- Validate complete coverage from byte zero to EOF.
 
-### Required tests
+### Killer probes
 
-- `test_lua54_8_binary_roundtrip_debug`
-- `test_lua54_8_binary_roundtrip_stripped`
-- `test_lua54_8_binary_roundtrip_numeric_extremes`
-- `test_lua54_8_binary_roundtrip_embedded_nul`
-- `test_byte_ledger_complete_no_gaps`
-- `test_byte_ledger_negative_gap`
-- `test_byte_ledger_negative_overlap`
+- Clear every aggregate prototype/header raw span after parsing; serialization must remain byte-identical.
+- Mutate one modeled instruction or constant; serialized bytes must change at the expected field and reparse to the mutation.
+- A writer that returns any aggregate captured raw span must fail a dedicated test.
+- Inject an internal one-byte ledger gap: reject.
+- Inject an overlap: reject.
+- Duplicate coverage with the same total summed length: reject.
+- Exercise debug, stripped, nested prototype, embedded NUL, NaN payload, infinity, and signed-zero fixtures.
 
-### Gate command
+### Gate
 
 ```console
 bash scripts/gates/gate-lossless-lua54-8.sh
@@ -312,26 +289,31 @@ bash scripts/gates/gate-lossless-lua54-8.sh
 
 ### Acceptance
 
-Every maintained Lua 5.4.8 fixture is byte-identical after serialization, and the ledger accounts for every byte exactly once. Cursor end position and JSON serde do not count as this proof.
+`parse -> model serialize` is byte-identical without aggregate raw-span shortcuts, `parse -> serialize -> parse` is structurally identical, and every input byte belongs to exactly one ledger interval.
 
-## 11. P5 — promote only the proven Lua 5.4.8 scope
+### Checkpoint R4
+
+Hand off a test demonstrating that clearing aggregate raw spans still passes and another demonstrating that mutating a modeled field changes output.
+
+## 11. R5 — promote only validated Lua 5.4.8 scope
 
 ### Work
 
-- Assemble promotion evidence only from passing P1–P4 artifacts.
-- Do not require or claim runtime semantic-effect evidence unless E1 has passed.
-- Generate capability status and README support status from the same validated result.
-- Report unsupported or reviewed-only features separately from dialect parse/disassembly support.
-- Bind release evidence to source commit, clean tree, exact Lua 5.4.8 compiler, fixtures, schemas, and platform.
+- Run R1-R4 into one temporary result directory on a clean source commit.
+- Assemble a release manifest from their validated result hashes.
+- Derive capability support and README status from that validated manifest.
+- Keep runtime effects explicitly unverified.
+- Do not promote any other Lua 5.4 patch or dialect.
 
-### Required tests
+### Probes
 
-- `test_lua54_8_promotion_requires_p1_through_p4`
-- `test_lua54_8_promotion_rejects_stale_artifact`
-- `test_lua54_8_promotion_does_not_imply_effect_evidence`
-- `test_runtime_capabilities_match_validated_manifest`
+- Remove any prerequisite result: promotion fails.
+- Substitute a passing result from another commit: promotion fails.
+- Change one result after assembly: promotion fails.
+- Set supported status in a standalone JSON file: runtime capabilities remain experimental.
+- Include an effect claim without E1: reject that feature claim without blocking parse/disassembly promotion.
 
-### Gate command
+### Gate
 
 ```console
 bash scripts/gates/gate-release-lua54-8.sh
@@ -339,79 +321,79 @@ bash scripts/gates/gate-release-lua54-8.sh
 
 ### Acceptance
 
-At most Lua 5.4.8 changes to `supported`. No other patch or dialect is promoted transitively, and effect facts remain explicitly unverified unless E1 passes.
+Only exact Lua 5.4.8 parsing/disassembly claims become supported, and only because the release verifier accepts fresh R1-R4 artifacts.
 
-## 12. L1 — Lua 5.1 ChunkLayout and explicit profiles
+### Checkpoint R5
+
+Provide the clean commit, compiler identity, fixture hashes, all result hashes, release-manifest hash, exact promoted fields, and remaining unverified features.
+
+## 12. F1 — complete Lua 5.1 layouts and exact profiles
 
 ### Work
 
-- Create one validated immutable `ChunkLayout` containing endianness, `sizeof(int)`, `sizeof(size_t)`, instruction width, Lua-number width, integrality, and resolved profile.
-- Use a layout-aware reader layer for every layout-dependent field. Keep primitive `SafeReader` methods available internally for genuinely fixed fields; dialect code should not choose widths ad hoc.
-- Reject unsupported widths and combinations at the exact header field.
-- Implement separate `stock` and `lnum:<profile-id>` interpretations.
-- Stock Lua 5.1 must reject tag 9. LNUM support requires an exact patch definition and a built patched compiler/runtime oracle.
-- Preserve an LNUM integer as an integer or explicit vendor numeric variant, never as a fabricated float.
-- Include profile/layout in diagnostics, machine output, capability scope, and interpretation identity.
-- Preserve the deepest parse-error byte offset separately from structural context.
+- Use one immutable `ChunkLayout` for byte order, `sizeof(int)`, `sizeof(size_t)`, instruction width, Lua-number width, integrality, and resolved profile.
+- Route every layout-dependent read through layout-aware primitives. No dialect field may choose `read_i32_le`, `read_u64_le`, or equivalent ad hoc.
+- Either implement each advertised layout combination or reject it at the exact header byte with a precise diagnostic.
+- Replace `Stock32` with layout discovery; 32-bit `size_t` is a layout property, not a semantic profile.
+- Define LNUM by a pinned patch source/archive hash and profile ID. Record integer width, signedness, tag semantics, compiler hash, and runtime hash.
+- Store tag-9 integers as exact integers or an explicit vendor-integer variant with raw bytes.
+- Add CLI profile selection and include resolved profile/layout in text diagnostics and structured output.
+- Preserve deepest error byte offset and enclosing prototype/field context separately.
 
-### Fixtures
+### Required independent fixtures
 
-- independently generated stock Lua 5.1.5 with 32-bit and 64-bit `size_t`;
+- official Lua 5.1.5 with 32-bit and 64-bit `size_t`;
 - debug and stripped forms;
-- supported endian and Lua-number layouts;
-- explicit LNUM fixture generated by the pinned patched toolchain;
-- strings and counts near representation and resource boundaries;
-- stock/LNUM cross-profile negative controls.
+- each supported byte order and Lua-number representation;
+- integer-VM form if advertised;
+- a fixture built by the pinned LNUM toolchain;
+- stock/LNUM cross-profile negatives;
+- representation and resource-boundary strings/counts.
 
-### Required tests
+Header-byte mutation alone does not count as a 32-bit fixture. Hand-assembled bytes do not count as the LNUM oracle.
 
-- `test_lua51_stock_32_layout`
-- `test_lua51_stock_64_layout`
-- `test_lua51_layout_rejects_unsupported_width`
-- `test_lua51_layout_honors_endianness`
-- `test_lua51_layout_honors_number_representation`
-- `test_lua51_stock_rejects_lnum_tag`
-- `test_lua51_lnum_profile_integer_exact`
-- `test_lua51_lnum_oracle`
-- `test_lua51_error_preserves_exact_offset_and_context`
+### Killer probes
 
-### Gate commands
+- Run a real 32-bit fixture through the full parser, not only header parsing.
+- Feed the same field bytes under opposite byte order and prove the decoded value changes correctly.
+- Parse tag 9 under stock: fail at the tag offset.
+- Parse the pinned LNUM fixture under its exact profile: preserve the integer and raw bytes.
+- Parse the LNUM fixture with a different vendor profile: fail.
+- Change `integral_flag` without changing number bytes: the parser must follow or reject the declared representation, never silently read a float.
+
+### Gates
 
 ```console
 bash scripts/gates/gate-layout-lua51-stock.sh
 bash scripts/gates/gate-profile-lua51-lnum.sh
 ```
 
-### Acceptance
+### Checkpoint F1
 
-Equivalent supported layouts normalize to the same facts, wrong-profile parsing fails at the vendor tag, and no result depends on the analyzer host representation.
+Provide compiler/runtime hashes, profile specification, fixture provenance, layout matrix, and cross-profile failure output.
 
-## 13. L2 — Lua 5.1 closure-binding and capture facts
+## 13. F2 — model closure bindings as facts, not instructions
 
 ### Work
 
-- Preserve every physical word and PC.
-- Add an explicit physical-word role such as executable, closure-binding, companion, or preserved unknown.
-- For each Lua 5.1 `CLOSURE`, consume the following `nups` descriptor words as ordered bindings.
-- Represent parent register capture and parent-upvalue capture distinctly.
-- Attach child prototype and child upvalue slot.
-- Exclude descriptor words from standalone effects, explanations, CFG nodes, and control-flow entry.
-- Validate descriptor count, opcode form, operand range, truncation, and illegal jumps into a group.
-- Add forward and inverse capture relations to the generalized xref model.
-- Keep a future `upvalues` command as a renderer over these facts, not a second analysis.
+- Preserve every physical word and PC with an explicit role: executable, closure binding, companion, or preserved unknown.
+- Parse each `CLOSURE` group into ordered `CaptureBinding` facts containing closure PC, descriptor PC, child prototype, child upvalue slot, and source kind.
+- Distinguish parent-register capture from parent-upvalue capture.
+- Produce semantic instructions only for executable words. Consumers needing physical PCs must use a PC map rather than vector indexing.
+- Exclude descriptors from standalone reads/writes, explanations, CFG nodes, query instruction results, and executable disassembly rows.
+- Render descriptors only as annotations such as `upvalue[0] <- parent R1`.
+- Add capture-specific forward and inverse xref relations.
+- Validate child prototype index, descriptor count/opcode, source register/upvalue range, truncation, overlapping groups, and jumps into descriptors.
 
-### Required tests
+### Killer probes
 
-- `test_lua51_closure_register_capture`
-- `test_lua51_closure_parent_upvalue_capture`
-- `test_lua51_closure_multiple_bindings_ordered`
-- `test_lua51_closure_descriptor_has_no_standalone_effects`
-- `test_lua51_closure_descriptor_not_cfg_node`
-- `test_lua51_closure_capture_xrefs_both_directions`
-- `test_lua51_closure_multihop_capture_chain`
-- malformed count, opcode, range, truncation, and jump negative controls.
+- The existing closures fixture must no longer print descriptor rows as `MOVE` or `GETUPVAL`.
+- A descriptor contributes zero standalone effects and no CFG node.
+- Querying a child upvalue returns its parent capture source; querying the source returns the child target.
+- Traverse a register -> child upvalue -> grandchild upvalue chain mechanically.
+- Every malformed group class returns a stable diagnostic at the descriptor or closure PC.
 
-### Gate command
+### Gate
 
 ```console
 bash scripts/gates/gate-closures-lua51.sh
@@ -419,130 +401,96 @@ bash scripts/gates/gate-closures-lua51.sh
 
 ### Acceptance
 
-The firmware-style register-to-child-upvalue chain is mechanically traversable, and no descriptor is rendered as an executable copy or false register write.
+The TP-Link-style constant-to-nested-function capture chain is traversable without reconstructing descriptor words by hand.
 
-## 14. L3 — resolved constant-bearing operands
+## 14. F3 — expose resolved constants through public output
 
 ### Work
 
-- Resolve constants through typed dialect operand metadata, not renderer-specific mnemonic lists.
-- Preserve encoded index, stable constant ID, typed value, and raw representation.
-- Cover `LOADK`, globals, RK operands, table operations, comparisons, arithmetic, and profile-specific numeric constants.
-- Text disassembly prints a bounded, safely escaped inline preview.
-- JSON/JSONL emits a structured exact value; it never requires parsing the text preview.
-- Disassembly, explanation, xrefs, and future export use the same semantic record.
-- Missing or invalid constant indices produce explicit diagnostics rather than `nil` substitution.
+- Use typed semantic operands as the shared source for disassembly, explanation, xrefs, JSON, and JSONL.
+- Preserve encoded index, stable constant ID, typed exact value, tag/profile, and raw representation.
+- Cover `LOADK`, globals, every RK-capable opcode, tables, comparisons, arithmetic, and profile-specific numeric constants.
+- Render a bounded, escaped text preview while keeping the encoded index.
+- Emit structured exact values in JSON/JSONL.
+- Replace the lifter's missing-constant-to-`nil` fallback with an explicit invalid operand/diagnostic.
 
-### Required tests
+### Killer probes
 
-- `test_lua51_disasm_loadk_resolves_string_inline`
-- `test_lua51_disasm_globals_resolve_inline`
-- `test_lua51_disasm_rk_resolves_inline`
-- `test_lua51_json_constant_operand_is_typed`
-- `test_constant_preview_is_bounded_and_escaped`
-- `test_invalid_constant_index_is_diagnostic`
-- `test_constant_resolution_consistent_across_views`
+- `LOADK 1 1` for the hello fixture must include the resolved string preview on the same row.
+- A global operand must show both its encoded constant index and name.
+- Control characters, invalid UTF-8, quotes, backslashes, and long keys must be safely escaped and bounded.
+- JSON must expose a typed constant object; parsing human text must never be required.
+- The same semantic operand must agree across disassembly, explanation, and xrefs.
+- An invalid constant index must never appear as `nil`.
 
-### Gate command
+### Gate
 
 ```console
 bash scripts/gates/gate-resolved-constants-lua51.sh
 ```
 
-### Acceptance
+Rename/remove `gate-operands-lua51.sh`; the canonical command above must match capabilities and documentation.
 
-A hardcoded key can be identified from the instruction record without manually joining the constant table, in both text and JSON.
+### Checkpoint F3
 
-## 15. L4 — field-corpus regression evidence
+Provide exact text and JSON output for the key, global, RK, hostile-string, and invalid-index cases.
+
+## 15. F4 — make field evidence reproducible
 
 ### Work
 
-- Re-run the private 252-file corpus under an explicit recorded profile.
-- Record aggregate artifact hashes, exact tool commit, profile hash, layout distribution, parse/validation counts, diagnostics, and resource usage.
-- Minimize and publish a redistributable fixture for every distinct defect class.
-- Do not translate `252/252 parse and validate` into semantic correctness.
-- Keep batch processing external unless measurement demonstrates that process startup is a material bottleneck.
+- Add redistributable minimized fixtures for the 32-bit `size_t`, LNUM tag, closure-binding, error-offset, and resolved-constant defect classes.
+- Run the private 252-file corpus externally under the exact profile from F1.
+- Record aggregate corpus hashes, source commit, binary/profile hashes, layout distribution, parse/validation counts, diagnostics, and resource use.
+- Keep the private corpus supplemental; public minimized fixtures are the regression gate.
+- Do not describe parse/validation counts as semantic correctness.
 
-### Gate command
-
-Project-specific private command plus:
+### Gate
 
 ```console
 bash scripts/gates/gate-field-reproducers-lua51.sh
 ```
 
-### Acceptance
-
-All disclosed aggregate results are reproducible by the corpus owner, and every support-relevant defect has a public minimized regression fixture.
-
-## 16. E1 — independent semantic-effect evidence
-
-This is a separate project. Until it passes, effects are labeled reviewed or unverified rather than `Fact`.
-
-### Work
-
-- Pin an exact official Lua source archive and maintain a test-only `lvm.c` instrumentation patch.
-- Log prototype, PC, raw instruction, register/stack reads and writes, upvalue accesses, top transitions, calls, metamethod paths, and closure behavior.
-- Define comparison rules for exact, conditional, top-dependent, range, and metamethod-capable effects.
-- Force both fast and fallback paths.
-- Compare observed accesses with static declarations; deleting one declared read/write must fail.
-
-### Gate command
-
-```console
-bash scripts/gates/gate-effects-lua54-8.sh
-```
+Remove or rename `gate-corpus-lua51.sh`; ten ordinary stock fixtures parsed under an LNUM mode are not field-corpus evidence.
 
 ### Acceptance
 
-Every effect claim reports executable coverage and observed comparison results. Merely finding an opcode, lifting an instruction, or citing `lvm.c` does not pass.
+Every disclosed field defect has a redistributable reproducer, and the corpus owner can independently reproduce the aggregate report.
 
-## 17. Deferred dialects and features
+## 16. Deferred E1 — runtime semantic effects
 
-Lua 5.2, Lua 5.3, and Lua 5.5 remain implemented but experimental. Do not delete their code. Do not promote them by copying the Lua 5.4 gate list. Each needs its own exact-version oracle, independent golden vectors, validator audit, CFG preconditions, binary losslessness gate, and evidence result.
+Do not place E1 on the first parser/disassembler promotion path.
 
-Before choosing the next ecosystem, gather broader usage evidence. The TP-Link report justifies prioritizing embedded Lua 5.1; it does not by itself prove that Lua 5.2 should be abandoned or that LuaJIT must be next.
+When undertaken, pin an official Lua runtime, instrument its VM execution loop, force fast and metamethod paths, log actual register/stack/upvalue accesses, and compare those observations with static declarations. Deleting one declared access must make the gate fail. Until then, effects are reviewed/unverified rather than facts.
 
-Composable research work remains deferred until P1–P5 and L1–L3 pass for their exact scopes. When it resumes:
-
-1. specify the shared object/export record union;
-2. implement exact `get` retrieval using that union;
-3. implement deterministic streaming `export`;
-4. add read-only overlays with hostile-string handling;
-5. add traversal only after a measured workflow demonstrates the need.
-
-No project database, session manager, hypothesis engine, or autonomous agent logic belongs in `luad`.
-
-## 18. Required handoff after every gate
+## 17. Required handoff at every checkpoint
 
 Report:
 
-- exact source commit and whether the tree was clean;
-- gate ID and command;
-- positive tests and negative controls executed;
-- exact compiler/runtime paths, versions, and hashes;
-- fixture/profile/layout scope;
-- test count and skipped count;
-- failing output before the fix and passing output after it;
-- generated artifact path and hash;
-- exact capability claim changed, or `none`;
-- remaining red gates and known limitations.
+- exact clean source commit;
+- gate ID and committed spec hash;
+- exact command argv;
+- enumerated positive tests and adversarial probes;
+- failing output before implementation and passing output after it;
+- compiler/runtime paths, versions, and hashes;
+- fixture/profile/layout paths and hashes;
+- passed, failed, ignored, and missing-test counts;
+- result artifact path and SHA-256;
+- exact capability fields changed, or `none`;
+- remaining red gates and limitations.
 
-Do not write “all tests pass” as the handoff. Do not close multiple unrelated gates in one summary. Do not proceed automatically to a deferred milestone.
+“All tests pass” is not a handoff. Do not close multiple checkpoints in one summary.
 
-## 19. Definition of production-grade for the first release candidate
+## 18. Definition of the first release candidate
 
 The first release candidate is eligible only when:
 
-- C0 and P1 are green;
-- Lua 5.4.8 has passing P2–P5 artifacts;
-- Lua 5.1 stock/LNUM advertised scopes have passing L1–L3 artifacts;
-- the TP-Link defect classes have redistributable regression fixtures;
-- every advertised capability derives from validated evidence;
-- unsupported effects are downgraded or E1 passes;
-- no required proof test skips;
-- `bash scripts/check.sh` passes;
-- README, machine interface, capabilities, changelog, and release notes agree;
-- fuzzing and resource-limit evidence meet the release policy.
+- R0-R5 have separately reviewed artifacts;
+- exact Lua 5.4.8 parsing/disassembly support is derived from its release manifest;
+- F1-F3 have separately reviewed artifacts for every advertised Lua 5.1 layout/profile;
+- F4 contains public minimized field reproducers and a reproducible private-corpus report;
+- public text and machine output expose exact scope, profile, layout, confidence, and limitations;
+- unsupported dialects and features remain explicitly experimental;
+- the full repository health suite, fuzz targets, and all gate scripts pass on the release commit.
 
-Until then, `luad` remains a promising experimental research tool with useful implemented surface, not a production-grade source of security conclusions.
+Passing `scripts/check.sh` is necessary repository health evidence. It is not, by itself, proof that any gate above is complete.
