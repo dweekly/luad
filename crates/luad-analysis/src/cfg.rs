@@ -315,7 +315,50 @@ impl ControlFlowGraph {
         dot.push_str("}\n");
         dot
     }
+
+    /// Compute dominance frontiers for all reachable basic blocks.
+    #[must_use]
+    pub fn dominance_frontiers(&self) -> BTreeMap<usize, BTreeSet<usize>> {
+        let mut df: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
+        for b in &self.blocks {
+            if b.is_reachable {
+                df.insert(b.index, BTreeSet::new());
+            }
+        }
+
+        for b in &self.blocks {
+            if !b.is_reachable {
+                continue;
+            }
+            if b.predecessors.len() >= 2 {
+                for &p in &b.predecessors {
+                    let mut runner = p;
+                    while let Some(runner_block) = self.blocks.get(runner) {
+                        if !runner_block.is_reachable {
+                            break;
+                        }
+                        if Some(runner) == b.immediate_dominator {
+                            break;
+                        }
+                        if let Some(entry) = df.get_mut(&runner) {
+                            entry.insert(b.index);
+                        }
+                        if let Some(idom) = runner_block.immediate_dominator {
+                            if idom == runner {
+                                break;
+                            }
+                            runner = idom;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        df
+    }
 }
+
 
 /// Compute immediate dominators (idom) using standard iterative dataflow algorithm.
 fn compute_immediate_dominators(blocks: &mut [BasicBlock]) {

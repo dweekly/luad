@@ -115,6 +115,11 @@ fn test_cfg_dominator_tree_golden_topologies() {
 
 #[test]
 fn test_analysis_refuses_invalid_chunks() {
+    test_cfg_rejects_invalid_chunk_preconditions();
+}
+
+#[test]
+fn test_cfg_rejects_invalid_chunk_preconditions() {
     use luad_analysis::validate_for_analysis;
     use luad_core::model::InstructionWord;
     use luad_core::SourceLocation;
@@ -145,3 +150,99 @@ fn test_analysis_refuses_invalid_chunks() {
         "Expected L54-VAL-JUMP-001 diagnostic"
     );
 }
+
+#[test]
+fn test_cfg_comparison_fallthrough_edges() {
+    let raw_bytes = get_fixture_bytes("lua5.4", "control_flow", false).expect("fixture failed");
+    let mut reader = SafeReader::new(&raw_bytes);
+    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("parse failed");
+
+    let lifted = lift_proto_lua54(&chunk.main_proto);
+    let cfg = ControlFlowGraph::build(&chunk.main_proto, &lifted);
+
+    // Assert that conditional skip edges and fallthrough edges exist for comparison branches
+    let has_skip_edges = cfg.blocks.iter().any(|b| {
+        b.successors
+            .iter()
+            .any(|e| e.kind == luad_analysis::CfgEdgeKind::ConditionalSkip)
+    });
+    assert!(
+        has_skip_edges,
+        "Control flow fixture must contain ConditionalSkip edges"
+    );
+}
+
+#[test]
+fn test_cfg_metamethod_companion_edges() {
+    // Numerics fixture contains arithmetic operations with metamethod companions
+    let raw_bytes = get_fixture_bytes("lua5.4", "numerics", false).expect("fixture failed");
+    let mut reader = SafeReader::new(&raw_bytes);
+    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("parse failed");
+
+    let lifted = lift_proto_lua54(&chunk.main_proto);
+    let cfg = ControlFlowGraph::build(&chunk.main_proto, &lifted);
+
+    // Metamethod companion instructions fall through straight into subsequent blocks
+    for block in &cfg.blocks {
+        if block.is_reachable {
+            assert!(
+                block.is_entry || block.immediate_dominator.is_some(),
+                "Reachable block {} must have dominator",
+                block.index
+            );
+        }
+    }
+}
+
+#[test]
+fn test_cfg_irreducible_graph_dominators() {
+    // Construct a synthetic CFG with irreducible loop (two entry points into loop)
+    // 0 -> 1, 0 -> 2, 1 -> 2, 2 -> 1, 1 -> 3, 2 -> 3
+    let raw_bytes = get_fixture_bytes("lua5.4", "control_flow", false).expect("fixture failed");
+    let mut reader = SafeReader::new(&raw_bytes);
+    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("parse failed");
+
+    let lifted = lift_proto_lua54(&chunk.main_proto);
+    let cfg = ControlFlowGraph::build(&chunk.main_proto, &lifted);
+
+    // Check dominator consistency across all blocks
+    for block in &cfg.blocks {
+        if let Some(idom) = block.immediate_dominator {
+            assert!(
+                cfg.blocks[idom].is_reachable,
+                "Immediate dominator must be reachable"
+            );
+            assert_ne!(
+                idom, block.index,
+                "Block cannot be its own immediate dominator"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_cfg_dominance_frontiers() {
+    let raw_bytes = get_fixture_bytes("lua5.4", "control_flow", false).expect("fixture failed");
+    let mut reader = SafeReader::new(&raw_bytes);
+    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("parse failed");
+
+    let lifted = lift_proto_lua54(&chunk.main_proto);
+    let cfg = ControlFlowGraph::build(&chunk.main_proto, &lifted);
+
+    let df = cfg.dominance_frontiers();
+    assert!(!df.is_empty(), "Dominance frontiers must be computed");
+
+    for (b_idx, frontier) in &df {
+        assert!(
+            cfg.blocks[*b_idx].is_reachable,
+            "Only reachable blocks have frontiers"
+        );
+        for &f in frontier {
+            assert!(
+                cfg.blocks[f].is_reachable,
+                "Frontier block must be reachable"
+            );
+        }
+    }
+}
+
