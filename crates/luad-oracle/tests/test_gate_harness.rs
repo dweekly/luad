@@ -1,6 +1,6 @@
 //! Gate R1: Proof harness and gate execution verification tests.
 //!
-//! Conforms to Coding-Agent Plan v3 Section 7: all required adversarial probes.
+//! Conforms to CODING-AGENT-PLAN.md Section 7: all required adversarial probes.
 
 use luad_oracle::find_workspace_root;
 use luad_oracle::gate_runner::{

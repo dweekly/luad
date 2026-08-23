@@ -1,6 +1,6 @@
 //! Release verification tests for Lua 5.4.8.
 //!
-//! Conforms to Coding-Agent Plan v3 Section 11 (Gate R5).
+//! Conforms to CODING-AGENT-PLAN.md Section 14 (Gate R5).
 
 use luad_core::capabilities::{get_canonical_capabilities, SupportTier};
 use luad_oracle::gate_runner::{

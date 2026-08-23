@@ -1,6 +1,6 @@
 //! Executable gate harness and verification runner.
 //!
-//! Enforces Coding-Agent Plan v3 Section 4 & Section 7 (Gate R1).
+//! Enforces CODING-AGENT-PLAN.md Section 4 & Section 7 (Gate R1).
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
