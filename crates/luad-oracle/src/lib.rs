@@ -402,7 +402,7 @@ pub fn compile_source_lua51(source: &str, strip: bool) -> Result<Vec<u8>, String
 /// Compile Lua source and parse with `luad_dialect_lua51`.
 pub fn compile_and_parse_lua51(source: &str, strip: bool) -> Result<Chunk, String> {
     let bytes = compile_source_lua51(source, strip)?;
-    let dialect = luad_dialect_lua51::Lua51Dialect;
+    let dialect = luad_dialect_lua51::Lua51Dialect::default();
     let mut reader =
         SafeReader::with_options(&bytes, 0, ResourceLimits::default(), ParseMode::Strict);
     dialect.decode_chunk(&mut reader).map_err(|d| d.message)

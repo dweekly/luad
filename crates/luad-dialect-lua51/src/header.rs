@@ -80,10 +80,30 @@ impl ChunkLayout {
         if endianness != 1 {
             return Err(format!("Unsupported endianness {endianness}: only Little-Endian (1) is currently supported"));
         }
-        if integral_flag > 1 {
-            return Err(format!(
-                "Invalid integral flag {integral_flag}: expected 0 or 1"
-            ));
+        // Byte 11 means different things per profile. Stock Lua 5.1 writes the
+        // integral flag (0 = float VM, 1 = integer VM). The LNUM patch reuses the
+        // slot for sizeof(lua_Integer), which is 4 on the 32-bit targets that carry
+        // it. Validating it as a stock flag rejects every LNUM chunk.
+        match profile {
+            Lua51Profile::Lnum => {
+                if integral_flag != 4 && integral_flag > 1 {
+                    return Err(format!(
+                        "Invalid lua_Integer size {integral_flag} for LNUM profile: expected 4 (or a stock 0/1 flag)"
+                    ));
+                }
+            }
+            _ => {
+                if integral_flag > 1 {
+                    return Err(format!(
+                        "Invalid integral flag {integral_flag}: expected 0 or 1{}",
+                        if integral_flag == 4 {
+                            " (value 4 indicates the OpenWrt/eLua LNUM patch; re-run with --dialect lua5.1-lnum)"
+                        } else {
+                            ""
+                        }
+                    ));
+                }
+            }
         }
 
         Ok(Self {
@@ -106,6 +126,18 @@ pub fn detect_lua51(bytes: &[u8]) -> Option<DetectionResult> {
     }
 
     if bytes.len() >= 5 && bytes[4] == LUAC_VERSION_51 {
+        // Byte 11 == 4 is not representable in stock Lua 5.1 (the integral flag is
+        // 0 or 1), so it is an unambiguous LNUM marker worth reporting to the user.
+        if bytes.len() >= 12 && bytes[11] == 4 {
+            return Some(DetectionResult {
+                dialect: "lua5.1-lnum".to_string(),
+                confidence: Confidence::Fact,
+                evidence:
+                    "Lua 5.1 signature matched; byte 11 = 4 indicates the OpenWrt/eLua LNUM patch \
+                     (sizeof(lua_Integer)), which stock Lua 5.1 cannot emit"
+                        .to_string(),
+            });
+        }
         let format_desc = if bytes.len() >= 6 && bytes[5] == LUAC_FORMAT_STOCK {
             "official stock format"
         } else {

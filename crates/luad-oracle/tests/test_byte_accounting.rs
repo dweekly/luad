@@ -13,7 +13,7 @@ fn test_all_50_fixtures_byte_accounting_and_lossless_serde() {
         (
             "lua5.1",
             "lua51",
-            Box::new(luad_dialect_lua51::Lua51Dialect),
+            Box::new(luad_dialect_lua51::Lua51Dialect::default()),
         ),
         (
             "lua5.2",

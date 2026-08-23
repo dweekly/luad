@@ -17,7 +17,7 @@ proptest! {
     #[test]
     fn test_arbitrary_bytes_no_panic(bytes in proptest::collection::vec(any::<u8>(), 0..1024)) {
         let dialects: [&dyn Dialect; 5] = [
-            &Lua51Dialect,
+            &Lua51Dialect::default(),
             &Lua52Dialect,
             &Lua53Dialect,
             &Lua54Dialect,

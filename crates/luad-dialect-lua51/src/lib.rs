@@ -24,11 +24,17 @@ pub use validator::validate_chunk_lua51;
 
 /// Concrete dialect handler for official Lua 5.1.0 - 5.1.5 bytecode.
 #[derive(Debug, Default, Clone, Copy)]
-pub struct Lua51Dialect;
+pub struct Lua51Dialect {
+    /// Which Lua 5.1 variant to decode. Defaults to stock.
+    pub profile: Lua51Profile,
+}
 
 impl Dialect for Lua51Dialect {
     fn name(&self) -> &'static str {
-        "lua5.1"
+        match self.profile {
+            Lua51Profile::Lnum => "lua5.1-lnum",
+            _ => "lua5.1",
+        }
     }
 
     fn description(&self) -> &'static str {
@@ -40,6 +46,6 @@ impl Dialect for Lua51Dialect {
     }
 
     fn decode_chunk(&self, reader: &mut SafeReader) -> Result<Chunk, Diagnostic> {
-        decode_chunk_lua51(reader)
+        decode_chunk_lua51_with_profile(reader, self.profile)
     }
 }

@@ -103,7 +103,10 @@ fn parse_chunk(
     let lua54 = Lua54Dialect;
     let lua53 = luad_dialect_lua53::Lua53Dialect;
     let lua52 = luad_dialect_lua52::Lua52Dialect;
-    let lua51 = luad_dialect_lua51::Lua51Dialect;
+    let lua51 = luad_dialect_lua51::Lua51Dialect::default();
+    let lua51_lnum = luad_dialect_lua51::Lua51Dialect {
+        profile: luad_dialect_lua51::Lua51Profile::Lnum,
+    };
 
     let selected_dialect: &dyn Dialect = if let Some(d) = dialect_override {
         match d {
@@ -112,6 +115,7 @@ fn parse_chunk(
             "lua5.3" => &lua53,
             "lua5.2" => &lua52,
             "lua5.1" => &lua51,
+            "lua5.1-lnum" => &lua51_lnum,
             other => {
                 eprintln!(
                     "{}: Dialect '{other}' is not yet supported in this build",
@@ -128,6 +132,8 @@ fn parse_chunk(
         &lua53
     } else if lua52.detect(bytes).is_some() {
         &lua52
+    } else if bytes.len() >= 12 && bytes[4] == 0x51 && bytes[11] == 4 {
+        &lua51_lnum
     } else if lua51.detect(bytes).is_some() {
         &lua51
     } else {

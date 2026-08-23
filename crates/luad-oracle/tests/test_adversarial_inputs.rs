@@ -13,7 +13,7 @@ use luad_oracle::{load_precompiled_fixture, verify_truncation_safety_for_dialect
 #[test]
 fn test_all_50_fixtures_truncation_safety() {
     let dialects: &[(&str, &dyn Dialect)] = &[
-        ("lua51", &Lua51Dialect),
+        ("lua51", &Lua51Dialect::default()),
         ("lua52", &Lua52Dialect),
         ("lua53", &Lua53Dialect),
         ("lua54", &Lua54Dialect),

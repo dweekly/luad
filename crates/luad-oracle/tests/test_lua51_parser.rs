@@ -6,7 +6,7 @@ use luad_oracle::{get_fixture_bytes, verify_truncation_safety_for_dialect};
 fn test_all_fixtures_lua51_parsing_and_truncation() {
     let fixture_names = ["hello", "control_flow", "closures", "tables", "numerics"];
 
-    let dialect = Lua51Dialect;
+    let dialect = Lua51Dialect::default();
 
     for fixture_name in fixture_names {
         // 1. Test normal debug chunk
@@ -124,5 +124,5 @@ fn test_lua51_32bit_sizet_and_lnum_constants() {
     }
 
     // Truncation safety
-    verify_truncation_safety_for_dialect(&bytes, &Lua51Dialect);
+    verify_truncation_safety_for_dialect(&bytes, &Lua51Dialect::default());
 }

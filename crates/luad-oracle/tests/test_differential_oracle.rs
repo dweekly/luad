@@ -171,7 +171,7 @@ fn test_canonical_differential_oracle_lua52() {
 #[test]
 fn test_canonical_differential_oracle_lua51() {
     let luac_path = require_luac51();
-    let dialect = luad_dialect_lua51::Lua51Dialect;
+    let dialect = luad_dialect_lua51::Lua51Dialect::default();
 
     for (name, source) in TEST_SOURCES {
         let raw_bytes = luad_oracle::compile_source_lua51(source, false)
