@@ -278,7 +278,6 @@ fn handle_disasm(args: DisasmArgs) {
         }
     }
 
-
     ExitCode::Success.exit();
 }
 
@@ -450,7 +449,6 @@ fn handle_schema(args: SchemaArgs) {
             );
             ExitCode::UsageError.exit();
         }
-
     }
 
     ExitCode::Success.exit();

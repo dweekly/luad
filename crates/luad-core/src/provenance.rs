@@ -24,7 +24,6 @@ pub enum Confidence {
     Heuristic,
 }
 
-
 /// Source byte location and raw byte representation of a field or instruction.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct SourceLocation {

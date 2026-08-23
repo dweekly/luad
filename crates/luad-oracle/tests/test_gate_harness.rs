@@ -744,4 +744,3 @@ fn test_all_canonical_gate_scripts_and_specs_consistency() {
         }
     }
 }
-

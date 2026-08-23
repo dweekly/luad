@@ -38,28 +38,15 @@ pub enum ResolvedFact {
         formatted_preview: String,
     },
     /// Resolved upvalue descriptor.
-    Upvalue {
-        index: u8,
-        name: Option<String>,
-    },
+    Upvalue { index: u8, name: Option<String> },
     /// Resolved local variable debug info.
-    Local {
-        index: usize,
-        name: String,
-    },
+    Local { index: usize, name: String },
     /// Resolved child prototype.
-    Prototype {
-        index: usize,
-        id: StableId,
-    },
+    Prototype { index: usize, id: StableId },
     /// Resolved jump destination PC.
-    JumpTarget {
-        target_pc: usize,
-    },
+    JumpTarget { target_pc: usize },
     /// Resolved metamethod name for metamethod-bearing dispatch instructions.
-    Metamethod {
-        name: String,
-    },
+    Metamethod { name: String },
 }
 
 /// A single typed operand within a disassembled instruction.

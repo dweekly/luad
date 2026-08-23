@@ -60,7 +60,6 @@ fn test_all_opcode_lifting_and_effects() {
         assert!(!inst.explanation.is_empty());
     }
 
-
     // Verify luac listing aligns
     let listing = run_luac_listing(source);
     assert!(listing.contains("ADD"));

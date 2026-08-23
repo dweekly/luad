@@ -644,5 +644,4 @@ fn lift_instruction_51(
         confidence: Confidence::Reviewed,
         source,
     }
-
 }

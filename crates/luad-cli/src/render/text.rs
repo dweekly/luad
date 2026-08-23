@@ -4,7 +4,6 @@ use colored::Colorize;
 use luad_core::diagnostic::{Diagnostic, Severity, Verdict};
 use luad_core::model::{Chunk, ConstantValue, Prototype};
 
-
 /// Render human-readable inspection summary or detailed chunk overview.
 pub fn render_inspect(chunk: &Chunk, summary: bool) {
     println!("{}", "=== Chunk Overview ===".bold());
@@ -334,8 +333,6 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
                 (name, format!("{ops_str}{comment_suffix}"))
             }
         };
-
-
 
         let raw_col = if raw {
             format!("[0x{:08x}]  ", inst.raw_word)

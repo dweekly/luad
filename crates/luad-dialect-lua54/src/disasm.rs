@@ -224,7 +224,6 @@ pub fn disassemble_instruction_lua54(
             }
         }
 
-
         Opcode54::Newtable => {
             operands.push(op_reg("A", raw.a));
             operands.push(op_unsigned("B", raw.b as u64));
@@ -453,7 +452,6 @@ pub fn disassemble_instruction_lua54(
         Opcode54::Extraarg => {
             operands.push(op_unsigned("Ax", raw.ax as u64));
         }
-
     }
 
     DisassembledInstruction {
@@ -481,7 +479,6 @@ fn op_reg(name: &str, reg: u8) -> DisassembledOperand {
 }
 
 fn op_unsigned(name: &str, val: u64) -> DisassembledOperand {
-
     DisassembledOperand {
         name: name.to_string(),
         kind: OperandKind::ImmediateUnsigned { value: val },
@@ -503,7 +500,6 @@ fn op_unsigned_tagged(name: &str, val: u64, is_k: bool) -> DisassembledOperand {
         resolved: None,
     }
 }
-
 
 fn op_signed(name: &str, val: i64) -> DisassembledOperand {
     DisassembledOperand {
@@ -637,4 +633,3 @@ fn tm_name(event: u8) -> &'static str {
         _ => "__unknown",
     }
 }
-

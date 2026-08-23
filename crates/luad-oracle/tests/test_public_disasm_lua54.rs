@@ -15,7 +15,6 @@ use luad_oracle::require_luac54;
 use std::fs;
 use std::path::Path;
 
-
 const LUA54_FIXTURES: [&str; 10] = [
     "tests/fixtures/precompiled/lua54/hello.luac",
     "tests/fixtures/precompiled/lua54/hello_stripped.luac",
@@ -39,8 +38,8 @@ fn load_fixture(rel_path: &str) -> (Vec<u8>, Chunk, String) {
         .unwrap()
         .join(rel_path);
 
-    let raw_bytes = fs::read(&full_path)
-        .unwrap_or_else(|e| panic!("Failed to read fixture {rel_path}: {e}"));
+    let raw_bytes =
+        fs::read(&full_path).unwrap_or_else(|e| panic!("Failed to read fixture {rel_path}: {e}"));
     let mut reader = luad_core::reader::SafeReader::new(&raw_bytes);
     let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader)
         .unwrap_or_else(|e| panic!("Failed to decode fixture {rel_path}: {e:?}"));
@@ -152,8 +151,6 @@ fn test_three_way_agreement_on_all_10_fixtures() {
                     "Operands display mismatch at {fixture_path} proto {proto_idx} pc {pc}: got '{prod_ops_str}', expected '{}'",
                     exp_inst.operands_raw
                 );
-
-
             }
         }
     }
@@ -340,7 +337,8 @@ fn test_killer_probe_missing_jump_target_rejected() {
 
 #[test]
 fn test_killer_probe_missing_source_line_rejected() {
-    let (_raw_bytes, chunk, _dump_str) = load_fixture("tests/fixtures/precompiled/lua54/hello.luac");
+    let (_raw_bytes, chunk, _dump_str) =
+        load_fixture("tests/fixtures/precompiled/lua54/hello.luac");
     let mut disasm = disassemble_proto_lua54(&chunk.main_proto);
 
     // Non-stripped hello.luac has source line for PC 0
@@ -370,7 +368,8 @@ fn test_killer_probe_missing_k_flag_rejected() {
 
 #[test]
 fn test_killer_probe_unknown_opcode_produces_structured_diagnostic() {
-    let (_raw_bytes, chunk, _dump_str) = load_fixture("tests/fixtures/precompiled/lua54/hello.luac");
+    let (_raw_bytes, chunk, _dump_str) =
+        load_fixture("tests/fixtures/precompiled/lua54/hello.luac");
     let invalid_word: u32 = 83; // Opcode 83 is out of range for Lua 5.4 (0..=82)
     let d_inst =
         luad_dialect_lua54::disassemble_instruction_lua54(&chunk.main_proto, 0, invalid_word);
@@ -407,12 +406,7 @@ fn test_cli_disasm_json_and_text_goldens() {
 
     // 1. Test CLI JSON format matches DisassembledPrototype schema
     let json_output = std::process::Command::new(&luad)
-        .args([
-            "disasm",
-            fixture_path.to_str().unwrap(),
-            "--format",
-            "json",
-        ])
+        .args(["disasm", fixture_path.to_str().unwrap(), "--format", "json"])
         .output()
         .expect("luad disasm --format json execution");
     assert!(
@@ -436,12 +430,7 @@ fn test_cli_disasm_json_and_text_goldens() {
 
     // 2. Test CLI text format produces normalized goldens
     let text_output = std::process::Command::new(&luad)
-        .args([
-            "disasm",
-            fixture_path.to_str().unwrap(),
-            "--format",
-            "text",
-        ])
+        .args(["disasm", fixture_path.to_str().unwrap(), "--format", "text"])
         .output()
         .expect("luad disasm --format text execution");
     assert!(
@@ -461,5 +450,3 @@ fn test_cli_disasm_json_and_text_goldens() {
     assert!(text_str.contains("JMP"));
     assert!(text_str.contains("; to 8"));
 }
-
-
