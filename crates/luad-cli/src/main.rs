@@ -495,6 +495,13 @@ fn handle_explain(args: ExplainArgs) {
                 ExitCode::UsageError.exit();
             };
 
+            let disasm_proto = if chunk.dialect == "lua5.4" {
+                Some(luad_dialect_lua54::disassemble_proto_lua54(target_proto))
+            } else {
+                None
+            };
+            let disasm_inst = disasm_proto.as_ref().and_then(|p| p.instructions.get(pc));
+
             let lifted = luad_analysis::lift_proto_for_dialect(&chunk.dialect, target_proto);
             let Some(sem_inst) = lifted.get(pc) else {
                 eprintln!(
@@ -508,7 +515,7 @@ fn handle_explain(args: ExplainArgs) {
             };
 
             match args.format {
-                OutputFormat::Text => render::render_explain_instruction(sem_inst),
+                OutputFormat::Text => render::render_explain_instruction(sem_inst, disasm_inst),
                 OutputFormat::Json => render::print_json(sem_inst),
                 OutputFormat::Jsonl => render::print_jsonl(&[sem_inst]),
                 OutputFormat::Dot => {

@@ -25,9 +25,11 @@
     "test_killer_probe_signed_operand_mutation_rejected_by_comparator",
     "test_killer_probe_text_renderer_mutation_rejected_by_golden",
     "test_killer_probe_unknown_opcode_produces_structured_diagnostic",
+    "test_loadkx_extraarg_companion_and_constant_resolution",
     "test_public_disasm_schema_major_and_hash_pinned",
     "test_three_way_agreement_on_all_10_fixtures"
   ],
+
 
   "required_compiler_version": "Lua 5.4.8",
   "required_compiler_sha256": "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",

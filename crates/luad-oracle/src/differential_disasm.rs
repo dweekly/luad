@@ -1,11 +1,13 @@
 //! Unified three-way differential disassembly comparator for Lua 5.4.8.
 //!
 //! Compares official `luac -l -l` oracle listings, independent reference decoder facts,
-//! and production `DisassembledPrototype` / CLI JSON records for every instruction across all fixtures.
+//! and production `DisassembledPrototype` / live CLI JSON records across complete recursive prototype hierarchies.
 
 #![forbid(unsafe_code)]
 
 use luad_core::disasm::{DisassembledPrototype, OperandKind, ResolvedFact};
+use luad_core::id::StableId;
+use luad_core::model::Prototype;
 
 use crate::independent_lua54_oracle::{IndependentInstruction54, IndependentOpcode54};
 use crate::listing_parser::{DumpLineInfo, LuacProtoDump};
@@ -58,12 +60,6 @@ pub enum DisasmComparisonError {
         pc: usize,
         actual_line: usize,
     },
-    FlagMismatch {
-        pc: usize,
-        field_name: String,
-        expected_k: u8,
-        actual_k: u8,
-    },
     RoleMismatch {
         pc: usize,
         expected: String,
@@ -72,6 +68,11 @@ pub enum DisasmComparisonError {
     CompanionMismatch {
         pc: usize,
         detail: String,
+    },
+    MissingResolvedFact {
+        pc: usize,
+        operand_name: String,
+        fact_type: String,
     },
     ConstantResolutionMismatch {
         pc: usize,
@@ -85,15 +86,103 @@ pub enum DisasmComparisonError {
         pc: usize,
         detail: String,
     },
+    MissingPrototype {
+        proto_id: String,
+        detail: String,
+    },
     JsonMismatch {
         pc: usize,
         detail: String,
     },
 }
 
-/// Compare disassembly three-way across official luac dump, independent decoder, and production record.
+/// Recursively verify differential agreement for a complete prototype tree against official dump and CLI JSON.
+pub fn compare_chunk_tree_three_way(
+    root_proto: &Prototype,
+    luac_dump: &LuacProtoDumpList,
+    cli_json: &DisassembledPrototype,
+) -> Result<(), DisasmComparisonError> {
+    let mut func_idx = 0;
+    compare_proto_node_recursive(root_proto, luac_dump.functions, &mut func_idx, cli_json)?;
+
+    if func_idx != luac_dump.functions.len() {
+        return Err(DisasmComparisonError::MissingPrototype {
+            proto_id: root_proto.id.to_string(),
+            detail: format!(
+                "Official dump contains {} prototypes but chunk hierarchy only traversed {}",
+                luac_dump.functions.len(),
+                func_idx
+            ),
+        });
+    }
+
+    Ok(())
+}
+
+/// Wrapper for the vector of dumped functions from `LuacDump`.
+pub struct LuacProtoDumpList<'a> {
+    pub functions: &'a [LuacProtoDump],
+}
+
+fn compare_proto_node_recursive(
+    proto: &Prototype,
+    luac_funcs: &[LuacProtoDump],
+    func_idx: &mut usize,
+    cli_json_proto: &DisassembledPrototype,
+) -> Result<(), DisasmComparisonError> {
+    if *func_idx >= luac_funcs.len() {
+        return Err(DisasmComparisonError::MissingPrototype {
+            proto_id: proto.id.to_string(),
+            detail: format!(
+                "Missing counterpart in official dump at index {func_idx} for prototype {}",
+                proto.id
+            ),
+        });
+    }
+
+    let luac_proto = &luac_funcs[*func_idx];
+    *func_idx += 1;
+
+    let indep_insts: Vec<IndependentInstruction54> = proto
+        .instructions
+        .iter()
+        .map(|i| IndependentInstruction54::decode(i.raw_word))
+        .collect();
+
+    let prod_proto = luad_dialect_lua54::disassemble_proto_lua54(proto);
+
+    compare_proto_three_way(
+        proto,
+        luac_proto,
+        &indep_insts,
+        &prod_proto,
+        Some(cli_json_proto),
+    )?;
+
+    if proto.protos.len() != cli_json_proto.child_protos.len() {
+        return Err(DisasmComparisonError::MissingPrototype {
+            proto_id: proto.id.to_string(),
+            detail: format!(
+                "Prototype {} has {} child prototypes in chunk, but CLI JSON reports {}",
+                proto.id,
+                proto.protos.len(),
+                cli_json_proto.child_protos.len()
+            ),
+        });
+    }
+
+    for (i, child_proto) in proto.protos.iter().enumerate() {
+        let child_cli_json = &cli_json_proto.child_protos[i];
+        compare_proto_node_recursive(child_proto, luac_funcs, func_idx, child_cli_json)?;
+    }
+
+    Ok(())
+}
+
+/// Compare disassembly three-way across official luac dump, independent decoder, and production record for one prototype.
 #[allow(clippy::needless_range_loop)]
 pub fn compare_proto_three_way(
+    owning_proto: &Prototype,
     luac_proto: &LuacProtoDump,
     indep_insts: &[IndependentInstruction54],
     prod_proto: &DisassembledPrototype,
@@ -419,40 +508,128 @@ pub fn compare_proto_three_way(
             }
         }
 
-        // 8. Resolved Constants and Upvalues
-        for op in &prod_inst.operands {
-            if let Some(resolved) = &op.resolved {
-                match resolved {
-                    ResolvedFact::Constant {
-                        index,
-                        formatted_preview,
-                        ..
-                    } => {
-                        if formatted_preview.is_empty() {
+        // 8. Mandatory Resolution Verification for Applicable Operands
+        if let Some(op) = indep_inst.opcode {
+            match op {
+                IndependentOpcode54::Loadk => {
+                    let bx = indep_inst.bx as usize;
+                    let exp_id = match &owning_proto.id {
+                        StableId::Proto(p) => StableId::Constant {
+                            proto: p.clone(),
+                            index: bx,
+                        },
+                        other => other.clone(),
+                    };
+                    let exp_val = owning_proto.constants.get(bx).map(|c| &c.value);
+                    let op_bx = prod_inst.operands.iter().find(|o| o.name == "Bx");
+                    match op_bx.and_then(|o| o.resolved.as_ref()) {
+                        Some(ResolvedFact::Constant {
+                            index,
+                            id,
+                            value,
+                            formatted_preview,
+                        }) if (*index != bx
+                            || *id != exp_id
+                            || Some(value) != exp_val
+                            || formatted_preview.is_empty()) =>
+                        {
                             return Err(DisasmComparisonError::ConstantResolutionMismatch {
                                 pc,
-                                detail: format!("Resolved constant {index} has empty preview"),
+                                detail: format!("LOADK Bx resolution mismatch: index={index}, id={id}, preview={formatted_preview}"),
                             });
                         }
+                        None => {
+                            return Err(DisasmComparisonError::MissingResolvedFact {
+                                pc,
+                                operand_name: "Bx".to_string(),
+                                fact_type: "Constant".to_string(),
+                            });
+                        }
+                        _ => {}
                     }
-                    ResolvedFact::Upvalue { index, .. }
-                        if *index != indep_inst.b && *index != indep_inst.a =>
-                    {
-                        return Err(DisasmComparisonError::UpvalueResolutionMismatch {
-                            pc,
-                            detail: format!(
-                                "Resolved upvalue index {index} does not match operand"
-                            ),
-                        });
-                    }
-                    ResolvedFact::Prototype { index, .. } if *index != indep_inst.bx as usize => {
-                        return Err(DisasmComparisonError::PrototypeResolutionMismatch {
-                            pc,
-                            detail: format!("Resolved prototype index {index} does not match Bx"),
-                        });
-                    }
-                    _ => {}
                 }
+                IndependentOpcode54::Gettabup => {
+                    // Upvalue B
+                    let b = indep_inst.b as usize;
+                    let op_b = prod_inst.operands.iter().find(|o| o.name == "B");
+                    match op_b.and_then(|o| o.resolved.as_ref()) {
+                        Some(ResolvedFact::Upvalue { index, .. }) if *index as usize == b => {}
+                        None => {
+                            return Err(DisasmComparisonError::MissingResolvedFact {
+                                pc,
+                                operand_name: "B".to_string(),
+                                fact_type: "Upvalue".to_string(),
+                            });
+                        }
+                        _ => {}
+                    }
+                    // Constant C
+                    let c = indep_inst.c as usize;
+                    let exp_id = match &owning_proto.id {
+                        StableId::Proto(p) => StableId::Constant {
+                            proto: p.clone(),
+                            index: c,
+                        },
+                        other => other.clone(),
+                    };
+                    let exp_val = owning_proto
+                        .constants
+                        .get(c)
+                        .map(|const_item| &const_item.value);
+                    let op_c = prod_inst.operands.iter().find(|o| o.name == "C");
+                    match op_c.and_then(|o| o.resolved.as_ref()) {
+                        Some(ResolvedFact::Constant {
+                            index,
+                            id,
+                            value,
+                            formatted_preview,
+                        }) if (*index != c
+                            || *id != exp_id
+                            || Some(value) != exp_val
+                            || formatted_preview.is_empty()) =>
+                        {
+                            return Err(DisasmComparisonError::ConstantResolutionMismatch {
+                                pc,
+                                detail: format!("GETTABUP C resolution mismatch: index={index}, id={id}, preview={formatted_preview}"),
+                            });
+                        }
+                        None => {
+                            return Err(DisasmComparisonError::MissingResolvedFact {
+                                pc,
+                                operand_name: "C".to_string(),
+                                fact_type: "Constant".to_string(),
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+                IndependentOpcode54::Closure => {
+                    let bx = indep_inst.bx as usize;
+                    let exp_child = owning_proto.protos.get(bx);
+                    let op_bx = prod_inst.operands.iter().find(|o| o.name == "Bx");
+                    match op_bx.and_then(|o| o.resolved.as_ref()) {
+                        Some(ResolvedFact::Prototype { index, id })
+                            if (*index != bx || exp_child.map(|c| &c.id) != Some(id)) =>
+                        {
+                            return Err(DisasmComparisonError::PrototypeResolutionMismatch {
+                                pc,
+                                detail: format!(
+                                    "CLOSURE Bx resolution mismatch: index={index}, id={id}"
+                                ),
+                            });
+                        }
+                        None => {
+                            return Err(DisasmComparisonError::MissingResolvedFact {
+                                pc,
+                                operand_name: "Bx".to_string(),
+                                fact_type: "Prototype".to_string(),
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+
+                _ => {}
             }
         }
 
@@ -467,18 +644,6 @@ pub fn compare_proto_three_way(
                     ),
                 });
             }
-        }
-    }
-
-    // Recursively compare all child prototypes if present
-    if let Some(json_proto) = cli_json_proto {
-        if json_proto.child_protos.len() != prod_proto.child_protos.len() {
-            return Err(DisasmComparisonError::InstructionCountMismatch {
-                proto_id: prod_proto.id.to_string(),
-                luac_count: 0,
-                independent_count: 0,
-                production_count: prod_proto.child_protos.len(),
-            });
         }
     }
 

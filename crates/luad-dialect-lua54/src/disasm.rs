@@ -185,6 +185,7 @@ pub fn disassemble_instruction_lua54(
                     let ax = next_raw.ax as usize;
                     let res = resolve_const(proto, ax, &inst_id, &source, &mut diagnostics);
                     let prev = res.as_ref().map(|c| c.preview.clone());
+                    operands.push(op_const("Ax", next_raw.ax as u64, res));
                     comment = prev;
                 }
             }

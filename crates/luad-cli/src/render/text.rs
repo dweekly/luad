@@ -451,8 +451,11 @@ pub fn render_capabilities(manifest: &luad_core::CapabilityManifest, evidence: b
     }
 }
 
-/// Render instruction explanation with provenance and source citations.
-pub fn render_explain_instruction(inst: &luad_core::SemanticInstruction) {
+/// Render instruction explanation with provenance, disassembly facts, and source citations.
+pub fn render_explain_instruction(
+    inst: &luad_core::SemanticInstruction,
+    disasm_inst: Option<&luad_core::DisassembledInstruction>,
+) {
     println!("{}", "=== Instruction Explanation ===".bold());
     println!(
         "{:<20} {}",
@@ -472,6 +475,37 @@ pub fn render_explain_instruction(inst: &luad_core::SemanticInstruction) {
         inst.mnemonic.green().bold()
     );
     println!("{:<20} {:?}", "Confidence:".dimmed(), inst.confidence);
+
+    if let Some(d_inst) = disasm_inst {
+        println!("{:<20} {}", "Role:".dimmed(), d_inst.role);
+        if !d_inst.operands.is_empty() {
+            let ops_desc: Vec<String> = d_inst
+                .operands
+                .iter()
+                .map(|op| {
+                    if let Some(res) = &op.resolved {
+                        match res {
+                            luad_core::ResolvedFact::Constant {
+                                formatted_preview, ..
+                            } => {
+                                format!("{}={formatted_preview}", op.name)
+                            }
+                            luad_core::ResolvedFact::Upvalue { name, .. } => {
+                                format!("{}={}", op.name, name.as_deref().unwrap_or("_ENV"))
+                            }
+                            luad_core::ResolvedFact::Prototype { id, .. } => {
+                                format!("{}={id}", op.name)
+                            }
+                            _ => format!("{}={}", op.name, op.display),
+                        }
+                    } else {
+                        format!("{}={}", op.name, op.display)
+                    }
+                })
+                .collect();
+            println!("{:<20} {}", "Operands:".dimmed(), ops_desc.join(", "));
+        }
+    }
 
     println!();
     println!("{}", "Semantic Meaning:".bold());

@@ -1,0 +1,41 @@
+; ==========================================================================
+; proto:0 (source: @tests/fixtures/control_flow.lua, lines 0-0, stack: 6)
+; params: 0, is_vararg: 1, instructions: 32, constants: 1
+; ==========================================================================
+; Constants:
+;   k[0] = 2
+; Upvalues:
+;   upvalue[0] = _ENV (instack=1, idx=0, kind=0)
+
+   0  VARARGPREP   0
+   1  LOADI        0 10
+   2  GTI          0 5 0
+   3  JMP          3 ; to 8
+   4  ADDI         0 0 1
+   5  MMBINI       0 1 6 0 ; __add
+   6  JMP          2 ; to 10
+   7  ADDI         0 0 -1
+   8  MMBINI       0 1 7 0 ; __sub
+   9  LOADI        1 0
+  10  LOADI        2 1
+  11  LOADI        3 10
+  12  LOADI        4 1
+  13  FORPREP      2 2 ; exit to 18
+  14  ADD          1 1 5
+  15  MMBIN        1 5 6 ; __add
+  16  FORLOOP      2 3 ; to 15
+  17  GTI          1 0 0
+  18  JMP          5 ; to 25
+  19  ADDI         1 1 -5
+  20  MMBINI       1 5 7 0 ; __sub
+  21  EQI          1 15 1
+  22  JMP          1 ; to 25
+  23  JMP          -7 ; to 18
+  24  MULK         0 0 0 ; 2
+  25  MMBINK       0 0 8 0 ; __mul 2
+  26  GTI          0 100 0
+  27  JMP          -4 ; to 25
+  28  MOVE         2 0
+  29  MOVE         3 1
+  30  RETURN       2 3 1 ; 2 out
+  31  RETURN       2 1 1 ; 0 out

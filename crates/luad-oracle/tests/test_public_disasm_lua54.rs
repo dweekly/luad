@@ -3,13 +3,16 @@
 //! Asserts 3-way differential agreement across all 10 maintained Lua 5.4.8 fixtures between:
 //! 1. Official PUC-Rio `luac -l -l` oracle dump (`LuacInstDump`).
 //! 2. Independent reference decoder (`IndependentInstruction54`).
-//! 3. Production public disassembly record (`DisassembledPrototype` and `luad disasm` CLI JSON/text).
+//! 3. Production public disassembly record (`DisassembledPrototype` and live `luad disasm` CLI JSON/text).
 
 use luad_core::disasm::{DisassembledPrototype, OperandKind, ResolvedFact};
-use luad_core::model::{Chunk, Prototype};
+use luad_core::model::{Chunk, Constant, ConstantValue, InstructionWord, Prototype};
+use luad_core::provenance::SourceLocation;
 use luad_core::SafeReader;
 use luad_dialect_lua54::disassemble_proto_lua54;
-use luad_oracle::differential_disasm::{compare_proto_three_way, DisasmComparisonError};
+use luad_oracle::differential_disasm::{
+    compare_chunk_tree_three_way, compare_proto_three_way, DisasmComparisonError, LuacProtoDumpList,
+};
 use luad_oracle::independent_lua54_oracle::IndependentInstruction54;
 use luad_oracle::listing_parser::{parse_luac_dump, LuacDump};
 use luad_oracle::{find_workspace_root, require_luac54};
@@ -90,12 +93,50 @@ fn decode_indep_proto(proto: &Prototype) -> Vec<IndependentInstruction54> {
         .collect()
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum GoldenMismatchError {
+    LineCountMismatch {
+        expected: usize,
+        actual: usize,
+    },
+    LineMismatch {
+        line_num: usize,
+        expected: String,
+        actual: String,
+    },
+}
+
+pub fn compare_disasm_text_to_golden(
+    actual: &str,
+    golden: &str,
+) -> Result<(), GoldenMismatchError> {
+    let act_lines: Vec<&str> = actual.lines().collect();
+    let exp_lines: Vec<&str> = golden.lines().collect();
+
+    if act_lines.len() != exp_lines.len() {
+        return Err(GoldenMismatchError::LineCountMismatch {
+            expected: exp_lines.len(),
+            actual: act_lines.len(),
+        });
+    }
+
+    for (idx, (a, e)) in act_lines.iter().zip(exp_lines.iter()).enumerate() {
+        if a != e {
+            return Err(GoldenMismatchError::LineMismatch {
+                line_num: idx + 1,
+                expected: (*e).to_string(),
+                actual: (*a).to_string(),
+            });
+        }
+    }
+
+    Ok(())
+}
+
 #[test]
 fn test_three_way_agreement_on_all_10_fixtures() {
     for fixture in LUA54_FIXTURES {
         let (_raw_bytes, chunk, luac_dump) = load_fixture(fixture);
-        let prod_proto = disassemble_proto_lua54(&chunk.main_proto);
-        let indep_insts = decode_indep_proto(&chunk.main_proto);
         let cli_json_proto = get_cli_json_disasm(fixture);
 
         assert!(
@@ -103,35 +144,20 @@ fn test_three_way_agreement_on_all_10_fixtures() {
             "Fixture {fixture} must have at least main proto in luac dump"
         );
 
-        compare_proto_three_way(
-            &luac_dump.functions[0],
-            &indep_insts,
-            &prod_proto,
-            Some(&cli_json_proto),
+        // Recursively walk and verify every prototype in the entire hierarchy
+        compare_chunk_tree_three_way(
+            &chunk.main_proto,
+            &LuacProtoDumpList {
+                functions: &luac_dump.functions,
+            },
+            &cli_json_proto,
         )
         .unwrap_or_else(|e| {
             panic!(
-                "Fixture {fixture} failed 3-way differential agreement with CLI JSON: {:?}",
+                "Fixture {fixture} failed recursive 3-way differential agreement with CLI JSON: {:?}",
                 e
             )
         });
-
-        // Also recursively compare child prototypes
-        for (i, child_proto) in chunk.main_proto.protos.iter().enumerate() {
-            if let Some(child_luac) = luac_dump.functions.get(i + 1) {
-                let child_prod = disassemble_proto_lua54(child_proto);
-                let child_indep = decode_indep_proto(child_proto);
-                let child_cli_json = cli_json_proto.child_protos.get(i);
-
-                compare_proto_three_way(child_luac, &child_indep, &child_prod, child_cli_json)
-                    .unwrap_or_else(|e| {
-                        panic!(
-                            "Fixture {fixture} child proto {i} failed 3-way agreement: {:?}",
-                            e
-                        )
-                    });
-            }
-        }
     }
 }
 
@@ -143,8 +169,14 @@ fn test_exact_signed_immediate_and_control_flow_goldens() {
     let indep = decode_indep_proto(&chunk.main_proto);
     let cli_json = get_cli_json_disasm("tests/fixtures/precompiled/lua54/control_flow.luac");
 
-    compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, Some(&cli_json))
-        .expect("control_flow.luac must satisfy three-way agreement");
+    compare_proto_three_way(
+        &chunk.main_proto,
+        &luac_dump.functions[0],
+        &indep,
+        &prod,
+        Some(&cli_json),
+    )
+    .expect("control_flow.luac must satisfy three-way agreement");
 
     // Directly assert exact instructions at PCs 17-21 in control_flow.luac:
     // PC 17: GTI 1 0 0
@@ -210,7 +242,13 @@ fn test_killer_probe_signed_operand_mutation_rejected_by_comparator() {
     // Mutate signed immediate sC at PC 19 (ADDI 1 1 -5 -> ADDI 1 1 5)
     prod.instructions[19].encoded_operands.sc = 5;
 
-    let res = compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, None);
+    let res = compare_proto_three_way(
+        &chunk.main_proto,
+        &luac_dump.functions[0],
+        &indep,
+        &prod,
+        None,
+    );
     match res {
         Err(DisasmComparisonError::PhysicalFieldMismatch {
             pc,
@@ -237,7 +275,13 @@ fn test_killer_probe_independent_decoder_mutation_rejected_by_comparator() {
     // Mutate independent decoder sB field at PC 17 (GTI)
     indep[17].sb = 99;
 
-    let res = compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, None);
+    let res = compare_proto_three_way(
+        &chunk.main_proto,
+        &luac_dump.functions[0],
+        &indep,
+        &prod,
+        None,
+    );
     match res {
         Err(DisasmComparisonError::PhysicalFieldMismatch {
             pc,
@@ -266,7 +310,13 @@ fn test_killer_probe_missing_jump_target_rejected_by_comparator() {
     // Strip resolved jump target from PC 18 (JMP)
     prod.instructions[18].jump_target = None;
 
-    let res = compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, None);
+    let res = compare_proto_three_way(
+        &chunk.main_proto,
+        &luac_dump.functions[0],
+        &indep,
+        &prod,
+        None,
+    );
     match res {
         Err(DisasmComparisonError::MissingJumpTarget {
             pc,
@@ -289,7 +339,13 @@ fn test_killer_probe_missing_source_line_rejected_by_comparator() {
     // Strip line information from PC 0 in unstripped binary
     prod.instructions[0].line = None;
 
-    let res = compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, None);
+    let res = compare_proto_three_way(
+        &chunk.main_proto,
+        &luac_dump.functions[0],
+        &indep,
+        &prod,
+        None,
+    );
     match res {
         Err(DisasmComparisonError::MissingSourceLine { pc, expected_line }) => {
             assert_eq!(pc, 0);
@@ -309,7 +365,13 @@ fn test_killer_probe_missing_k_flag_rejected_by_comparator() {
     // Clear k flag at PC 21 (EQI 1 15 1 -> k=0)
     prod.instructions[21].encoded_operands.k = 0;
 
-    let res = compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, None);
+    let res = compare_proto_three_way(
+        &chunk.main_proto,
+        &luac_dump.functions[0],
+        &indep,
+        &prod,
+        None,
+    );
     match res {
         Err(DisasmComparisonError::PhysicalFieldMismatch {
             pc,
@@ -334,20 +396,28 @@ fn test_killer_probe_missing_resolved_constant_rejected_by_comparator() {
     let indep = decode_indep_proto(&chunk.main_proto);
 
     // Strip resolved constant fact from PC 1 (GETTABUP 0 0 0 ; _ENV "print")
-    prod.instructions[1].operands[2].resolved = Some(ResolvedFact::Constant {
-        index: 0,
-        id: prod.instructions[1].id.clone(),
-        value: luad_core::model::ConstantValue::Nil,
-        formatted_preview: String::new(), // empty preview must be rejected
-    });
+    prod.instructions[1].operands[2].resolved = None;
 
-    let res = compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, None);
+    let res = compare_proto_three_way(
+        &chunk.main_proto,
+        &luac_dump.functions[0],
+        &indep,
+        &prod,
+        None,
+    );
     match res {
-        Err(DisasmComparisonError::ConstantResolutionMismatch { pc, detail }) => {
+        Err(DisasmComparisonError::MissingResolvedFact {
+            pc,
+            operand_name,
+            fact_type,
+        }) => {
             assert_eq!(pc, 1);
-            assert!(detail.contains("empty preview"));
+            assert_eq!(operand_name, "C");
+            assert_eq!(fact_type, "Constant");
         }
-        other => panic!("Expected ConstantResolutionMismatch, got: {other:?}"),
+        other => {
+            panic!("Expected MissingResolvedFact on stripped constant resolution, got: {other:?}")
+        }
     }
 }
 
@@ -362,7 +432,13 @@ fn test_killer_probe_json_mutation_rejected_by_comparator() {
     // Mutate CLI JSON mnemonic
     cli_json.instructions[0].mnemonic = "MUTATED_GETTABUP".to_string();
 
-    let res = compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, Some(&cli_json));
+    let res = compare_proto_three_way(
+        &chunk.main_proto,
+        &luac_dump.functions[0],
+        &indep,
+        &prod,
+        Some(&cli_json),
+    );
     match res {
         Err(DisasmComparisonError::JsonMismatch { pc, detail }) => {
             assert_eq!(pc, 0);
@@ -375,32 +451,31 @@ fn test_killer_probe_json_mutation_rejected_by_comparator() {
 #[test]
 fn test_killer_probe_text_renderer_mutation_rejected_by_golden() {
     let root = find_workspace_root();
-    let luad = root.join("target").join("debug").join("luad");
-    let fixture_path = root
+    let golden_path = root
         .join("tests")
-        .join("fixtures")
-        .join("precompiled")
+        .join("goldens")
         .join("lua54")
-        .join("control_flow.luac");
+        .join("control_flow.disasm.golden");
 
-    let text_output = Command::new(&luad)
-        .args(["disasm", fixture_path.to_str().unwrap(), "--format", "text"])
-        .output()
-        .expect("luad disasm --format text execution");
-    assert!(text_output.status.success());
+    let golden_text = fs::read_to_string(&golden_path)
+        .unwrap_or_else(|e| panic!("Failed to read golden {:?}: {e}", golden_path));
 
-    let rendered_text = String::from_utf8_lossy(&text_output.stdout).to_string();
+    // Mutate golden text
+    let mutated_text = golden_text.replace("ADDI         1 1 -5", "ADDI         1 1 5");
 
-    // Verify correct text contains ADDI 1 1 -5
-    assert!(rendered_text.contains("ADDI         1 1 -5"));
-
-    // Mutate text line
-    let mutated_text = rendered_text.replace("ADDI         1 1 -5", "ADDI         1 1 5");
-
-    assert_ne!(
-        rendered_text, mutated_text,
-        "Mutated text lines must diverge from exact golden"
-    );
+    let res = compare_disasm_text_to_golden(&mutated_text, &golden_text);
+    match res {
+        Err(GoldenMismatchError::LineMismatch {
+            line_num,
+            expected,
+            actual,
+        }) => {
+            assert!(expected.contains("ADDI         1 1 -5"));
+            assert!(actual.contains("ADDI         1 1 5"));
+            assert_eq!(line_num, 29);
+        }
+        other => panic!("Expected LineMismatch on mutated text golden, got: {other:?}"),
+    }
 }
 
 #[test]
@@ -451,6 +526,95 @@ fn test_killer_probe_oob_constant_reference_emits_diagnostic() {
 }
 
 #[test]
+fn test_loadkx_extraarg_companion_and_constant_resolution() {
+    let path = luad_core::id::ProtoPath::root();
+    // Formulate synthetic prototype with LOADKX 0 and EXTRAARG 1
+    let dummy_proto = Prototype {
+        id: luad_core::id::StableId::proto(path.clone()),
+        path: path.clone(),
+        source_name: None,
+        line_defined: 0,
+        last_line_defined: 0,
+        numparams: 0,
+        is_vararg: 0,
+        maxstacksize: 2,
+        instructions: vec![
+            // PC 0: LOADKX A=0 (opcode 4)
+            InstructionWord {
+                id: luad_core::id::StableId::instruction(path.clone(), 0),
+                pc: 0,
+                raw_word: 4,
+                raw_hex: "0x00000004".to_string(),
+                source: SourceLocation::new(0, &[4, 0, 0, 0]),
+            },
+            // PC 1: EXTRAARG Ax=1 (opcode 82 = 0x52, Ax=1 << 7)
+            InstructionWord {
+                id: luad_core::id::StableId::instruction(path.clone(), 1),
+                pc: 1,
+                raw_word: 0x52 | (1 << 7),
+                raw_hex: "0x000000d2".to_string(),
+                source: SourceLocation::new(4, &[0xd2, 0, 0, 0]),
+            },
+        ],
+        constants: vec![
+            Constant {
+                index: 0,
+                id: luad_core::id::StableId::constant(path.clone(), 0),
+                value: ConstantValue::Integer {
+                    val: 100,
+                    raw_hex: "0x64".to_string(),
+                },
+                source: SourceLocation::new(8, &[0]),
+            },
+            Constant {
+                index: 1,
+                id: luad_core::id::StableId::constant(path, 1),
+                value: ConstantValue::ShortString(luad_core::model::LuaString {
+                    display: "extraarg_resolved".to_string(),
+                    raw_bytes: b"extraarg_resolved".to_vec(),
+                    is_utf8: true,
+                }),
+                source: SourceLocation::new(12, &[0]),
+            },
+        ],
+        upvalues: vec![],
+        protos: vec![],
+        line_info: vec![],
+        abs_line_info: vec![],
+        loc_vars: vec![],
+        upvalue_names: vec![],
+        source: SourceLocation::new(0, &[]),
+    };
+
+    let disasm = disassemble_proto_lua54(&dummy_proto);
+    assert_eq!(disasm.instructions.len(), 2);
+
+    // PC 0: LOADKX
+    let loadkx = &disasm.instructions[0];
+    assert_eq!(loadkx.mnemonic, "LOADKX");
+    assert_eq!(loadkx.companion_pc, Some(1));
+    assert_eq!(loadkx.operands.len(), 2);
+    assert_eq!(loadkx.operands[1].name, "Ax");
+    match &loadkx.operands[1].resolved {
+        Some(ResolvedFact::Constant {
+            index,
+            formatted_preview,
+            ..
+        }) => {
+            assert_eq!(*index, 1);
+            assert_eq!(formatted_preview, "\"extraarg_resolved\"");
+        }
+        other => panic!("Expected resolved constant for LOADKX Ax, got: {other:?}"),
+    }
+
+    // PC 1: EXTRAARG
+    let extraarg = &disasm.instructions[1];
+    assert_eq!(extraarg.mnemonic, "EXTRAARG");
+    assert_eq!(extraarg.role, "extra_argument");
+    assert_eq!(extraarg.companion_pc, Some(0));
+}
+
+#[test]
 fn test_public_disasm_schema_major_and_hash_pinned() {
     let root = find_workspace_root();
     let luad = root.join("target").join("debug").join("luad");
@@ -492,45 +656,56 @@ fn test_public_disasm_schema_major_and_hash_pinned() {
 fn test_cli_disasm_json_and_text_goldens() {
     let root = find_workspace_root();
     let luad = root.join("target").join("debug").join("luad");
-    let fixture_path = root
+
+    // 1. Full normalized golden check for hello.luac
+    let hello_path = root
+        .join("tests")
+        .join("fixtures")
+        .join("precompiled")
+        .join("lua54")
+        .join("hello.luac");
+    let hello_golden_path = root
+        .join("tests")
+        .join("goldens")
+        .join("lua54")
+        .join("hello.disasm.golden");
+    let expected_hello_golden = fs::read_to_string(&hello_golden_path)
+        .unwrap_or_else(|e| panic!("Failed to read golden {:?}: {e}", hello_golden_path));
+
+    let hello_text_output = Command::new(&luad)
+        .args(["disasm", hello_path.to_str().unwrap(), "--format", "text"])
+        .output()
+        .expect("luad disasm --format text execution");
+    assert!(hello_text_output.status.success());
+    let hello_text = String::from_utf8_lossy(&hello_text_output.stdout);
+
+    compare_disasm_text_to_golden(&hello_text, &expected_hello_golden)
+        .expect("hello.luac CLI text disasm must match complete exact golden");
+
+    // 2. Full normalized golden check for control_flow.luac
+    let cf_path = root
         .join("tests")
         .join("fixtures")
         .join("precompiled")
         .join("lua54")
         .join("control_flow.luac");
+    let cf_golden_path = root
+        .join("tests")
+        .join("goldens")
+        .join("lua54")
+        .join("control_flow.disasm.golden");
+    let expected_cf_golden = fs::read_to_string(&cf_golden_path)
+        .unwrap_or_else(|e| panic!("Failed to read golden {:?}: {e}", cf_golden_path));
 
-    // 1. Test CLI JSON format matches DisassembledPrototype schema
-    let json_output = Command::new(&luad)
-        .args(["disasm", fixture_path.to_str().unwrap(), "--format", "json"])
-        .output()
-        .expect("luad disasm --format json execution");
-    assert!(
-        json_output.status.success(),
-        "luad disasm --format json must exit 0: stderr: {}",
-        String::from_utf8_lossy(&json_output.stderr)
-    );
-
-    let parsed_proto: DisassembledPrototype = serde_json::from_slice(&json_output.stdout)
-        .expect("CLI disasm JSON output must deserialize to DisassembledPrototype");
-    assert_eq!(parsed_proto.instructions.len(), 32);
-
-    // 2. Test CLI text format produces exact normalized goldens
-    let text_output = Command::new(&luad)
-        .args(["disasm", fixture_path.to_str().unwrap(), "--format", "text"])
+    let cf_text_output = Command::new(&luad)
+        .args(["disasm", cf_path.to_str().unwrap(), "--format", "text"])
         .output()
         .expect("luad disasm --format text execution");
-    assert!(
-        text_output.status.success(),
-        "luad disasm --format text must exit 0: stderr: {}",
-        String::from_utf8_lossy(&text_output.stderr)
-    );
+    assert!(cf_text_output.status.success());
+    let cf_text = String::from_utf8_lossy(&cf_text_output.stdout);
 
-    let text_str = String::from_utf8_lossy(&text_output.stdout);
-    assert!(text_str.contains("GTI          1 0 0"));
-    assert!(text_str.contains("JMP          5 ; to 25"));
-    assert!(text_str.contains("ADDI         1 1 -5"));
-    assert!(text_str.contains("MMBINI       1 5 7 0 ; __sub"));
-    assert!(text_str.contains("EQI          1 15 1"));
+    compare_disasm_text_to_golden(&cf_text, &expected_cf_golden)
+        .expect("control_flow.luac CLI text disasm must match complete exact golden");
 }
 
 #[test]

@@ -801,11 +801,15 @@ fn test_all_canonical_gate_scripts_and_specs_consistency() {
                     "test_killer_probe_missing_jump_target_rejected_by_comparator",
                     "test_killer_probe_missing_source_line_rejected_by_comparator",
                     "test_killer_probe_missing_k_flag_rejected_by_comparator",
+                    "test_killer_probe_missing_resolved_constant_rejected_by_comparator",
                     "test_killer_probe_json_mutation_rejected_by_comparator",
                     "test_killer_probe_text_renderer_mutation_rejected_by_golden",
                     "test_killer_probe_unknown_opcode_produces_structured_diagnostic",
                     "test_killer_probe_oob_constant_reference_emits_diagnostic",
+                    "test_loadkx_extraarg_companion_and_constant_resolution",
+                    "test_public_disasm_schema_major_and_hash_pinned",
                     "test_cli_disasm_json_and_text_goldens",
+                    "test_cli_explain_never_reports_static_effects_as_fact",
                 ];
                 for probe in required_probes {
                     assert!(
@@ -814,6 +818,7 @@ fn test_all_canonical_gate_scripts_and_specs_consistency() {
                     );
                 }
             }
+
             "gate-release-lua54-8" => {
                 let required_probes = [
                     "test_killer_probe_dirty_result_rejects_promotion",
