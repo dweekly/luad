@@ -6,12 +6,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 RESULT_DIR="${1:-$(mktemp -d)}"
-SPEC_FILE="${ROOT_DIR}/tests/gates/gate-evidence-field.json"
+SPEC_FILE="${ROOT_DIR}/tests/gates/gate-field-reproducers-lua51.json"
 
 cd "${ROOT_DIR}"
 
 echo "==> Running Gate F4: Machine-checked field evidence and dialect manifest verification"
-echo "==> Spec file: tests/gates/gate-evidence-field.json"
+echo "==> Spec file: tests/gates/gate-field-reproducers-lua51.json"
+
 echo "==> Output result directory: ${RESULT_DIR}"
 
 mkdir -p "${RESULT_DIR}"

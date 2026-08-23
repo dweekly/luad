@@ -2,7 +2,7 @@
 
 Date received: 2026-08-22
 
-Status: external experimental-use report. The firmware corpus is not included in this repository; redistribution and provenance details remain to be established.
+Status: retained external evidence and product requirements, not an execution plan. The firmware corpus is not included in this repository; release evidence uses redistributable reproducers plus an aggregate private-corpus report.
 
 ## Summary
 
@@ -27,7 +27,7 @@ The peer fix is on branch `fix/lua51-32bit-sizet-and-lnum`, commit `54e4b8d`. It
 20 existing test suites pass unchanged
 ```
 
-This is strong real-world compatibility evidence. It is not by itself proof of complete Lua 5.1 correctness: the current validator and semantic oracle have known gaps, and closure capture semantics in the same corpus exposed another confirmed defect.
+This is strong real-world compatibility evidence. It is not proof of complete Lua 5.1 correctness. Promotion requires the F1–F4 public gates in [the coding-agent execution plan](CODING-AGENT-PLAN.md), including explicit profile identity, closure captures, resolved operands, diagnostics, and redistributable fixtures.
 
 ## Profile classification
 
@@ -43,7 +43,7 @@ profile: LNUM/vendor extension
 size_t: 32-bit
 corpus size: 252 compiled chunks
 parse result after peer fix: 252/252
-semantic closure gate: not passed
+public closure gate: pending F2
 redistributable fixture status: unknown
 ```
 
@@ -72,7 +72,7 @@ Required model:
 Ranked by time cost reported by the peer:
 
 1. **Resolve constants inline.** `LOADK 20 24` should retain `K24` and display a safely escaped preview of its value. This was the largest obstacle to identifying a hardcoded AES key. Resolution should cover all dialect-defined constant-bearing operands, not only selected mnemonic renderers.
-2. **Correct CLOSURE descriptors.** The current confident explanation is factually wrong and corrupts downstream dataflow.
+2. **Correct CLOSURE descriptors.** Public output must never explain a binding descriptor as an executable operation or assign it standalone effects.
 3. **Expose upvalue capture relations.** The researcher needed the inverse mapping from child upvalue slot to the parent register/upvalue captured at a specific closure site. The AES-key path crossed three binding hops.
 4. **Preserve the actual error offset.** The top-level failure reported offset 0 even though desynchronization surfaced near `0x119`.
 5. **Add a 32-bit Lua 5.1 fixture.** The compatibility bug must become a permanent, independently generated regression case.
@@ -92,7 +92,3 @@ Before this field result contributes to a support claim:
 - add exact error-offset assertions;
 - run the corrected instruction/constant oracle and closure-effect gates;
 - retain only aggregate hashes/results for private firmware unless redistribution is authorized.
-
-## Git hygiene note
-
-The peer's first commit accidentally included pre-existing uncommitted Cargo/oracle work. It was subsequently unpicked, which cleared staging state while leaving working-tree contents intact. Integrators must inspect the commit and current worktree diff rather than infer ownership from the index.

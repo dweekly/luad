@@ -6,13 +6,13 @@ Thank you for helping make Lua bytecode analysis more trustworthy. Correctness a
 
 Before changing parser, decoder, validator, analysis, evidence, or capability code, read:
 
-1. [The current correctness review](docs/REVIEW-2026-08-22.md)
-2. [The embedded Lua 5.1 field report](docs/FIELD-REPORT-TP-LINK-LUA51.md)
-3. [Architecture and invariants](ARCHITECTURE.md)
-4. [Remediation roadmap](ROADMAP.md)
-5. [The coding plan](docs/CODING-AGENT-PLAN.md)
+1. [The coding-agent execution plan](docs/CODING-AGENT-PLAN.md)
+2. [The evidence-gated roadmap](ROADMAP.md)
+3. [The embedded Lua 5.1 field requirements](docs/FIELD-REPORT-TP-LINK-LUA51.md)
+4. [Architecture and invariants](ARCHITECTURE.md)
+5. [The machine interface](docs/MACHINE-INTERFACE.md)
 
-The repository is under a correctness stop line. Do not add new dialects or composability features until the fact-layer gates in the coding plan pass.
+Do not add new dialects or composability features while the release critical path in the coding plan is open.
 
 ## Development setup
 
@@ -23,7 +23,7 @@ cargo build --workspace
 bash scripts/check.sh
 ```
 
-`scripts/check.sh` is intended to run formatting, strict Clippy, workspace tests, rustdoc, and fuzz-target compilation. The coding plan includes making it executable and splitting correctness proof into named CI gates; the script alone is not proof that oracle-backed claims are correct.
+`scripts/check.sh` runs the aggregate repository checks. It is necessary before handoff, but it is not proof that oracle-backed claims are correct; each work package must also pass its canonical gate.
 
 ### Official Lua compilers
 
@@ -33,7 +33,7 @@ Parser fixtures can run from bundled bytecode, but differential proof requires e
 bash scripts/install_ci_compilers.sh
 ```
 
-The compilers are installed beneath `/tmp/lua-tools/bin`. Do not treat this installer as supply-chain hardened until pinned archive checksums have been added and verified. A required oracle compiler missing from CI must fail the gate; it must never cause a silent skip.
+The compilers are installed beneath `/tmp/lua-tools/bin`. Canonical gates must verify the exact compiler version and binary/archive hashes they claim. A required compiler missing from CI must fail the gate; it must never cause a silent skip.
 
 ## Repository map
 
@@ -72,7 +72,7 @@ These establish safety properties, not semantic correctness.
 
 ### Differential gates
 
-The official `luac -l -l` comparator must verify, at minimum:
+The accepted Lua 5.4.8 raw-fact oracle compares the exact official `luac -l -l` listing with an independent reference decoder. Any extended or new comparator must verify, at minimum:
 
 - prototype structure and metadata;
 - opcode identity at every PC;
@@ -81,6 +81,8 @@ The official `luac -l -l` comparator must verify, at minimum:
 - line information, locals, and upvalues.
 
 Each comparator needs negative controls proving that a one-field corruption is detected. An oracle with no failing control is not a proof gate.
+
+Public behavior needs an additional boundary test. For disassembly, compare the typed public JSON record with both independent fact paths and maintain normalized text goldens. An internal decoder or lifter test cannot establish a CLI or schema claim.
 
 ### Semantic-effect gates
 

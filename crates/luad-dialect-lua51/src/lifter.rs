@@ -86,8 +86,9 @@ fn lift_instruction_51(
             metamethod_fallbacks: vec![],
             jump_target: None,
             companion_pc: None,
-            confidence: Confidence::Heuristic,
+            confidence: Confidence::Unverified,
             source_citations: vec![],
+
             explanation: format!("Unrecognized opcode index {}", raw.opcode_num),
             source,
         };
@@ -619,7 +620,7 @@ fn lift_instruction_51(
             }],
             jump_target: None,
             companion_pc: Some(closure_pc),
-            confidence: Confidence::Fact,
+            confidence: Confidence::Reviewed,
             source_citations: vec!["lvm.c:1402".to_string()],
             source,
         };
@@ -640,7 +641,8 @@ fn lift_instruction_51(
         jump_target,
         companion_pc: None,
         source_citations: citations,
-        confidence: Confidence::Fact,
+        confidence: Confidence::Reviewed,
         source,
     }
+
 }

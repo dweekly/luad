@@ -4,7 +4,7 @@
 
 `luad` is pre-release software. Only the current `main` branch is considered for security fixes. No released version is currently designated production-supported.
 
-The project is intended to process untrusted Lua bytecode, but a correctness review has identified critical decoding and validation defects. Until the remediation gates in [ROADMAP.md](ROADMAP.md) pass, do not rely on `luad` as the sole control for accepting, rejecting, or characterizing hostile code.
+The project is intended to process untrusted Lua bytecode, but all dialects remain experimental until their exact public and release gates pass. Do not rely on `luad` as the sole control for accepting, rejecting, or characterizing hostile code. See the evidence boundaries in [ROADMAP.md](ROADMAP.md).
 
 ## Reporting a vulnerability
 

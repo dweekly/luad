@@ -60,8 +60,9 @@ fn lift_instruction_54(
             metamethod_fallbacks: vec![],
             jump_target: None,
             companion_pc: None,
-            confidence: Confidence::Fact,
+            confidence: Confidence::Unverified,
             source_citations: vec![],
+
             explanation: format!("Unrecognized opcode index {}", raw.opcode_num),
             source,
         };
@@ -980,8 +981,9 @@ fn lift_instruction_54(
         metamethod_fallbacks,
         jump_target,
         companion_pc,
-        confidence: Confidence::Fact,
+        confidence: Confidence::Reviewed,
         source_citations: citations,
+
         explanation,
         source,
     }

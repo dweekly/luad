@@ -1,7 +1,8 @@
 # `luad`: Product Requirements Document
 
-**Status:** Draft 1  
-**Date:** 2026-08-21  
+**Status:** Living product requirements
+
+**Execution plan:** [docs/CODING-AGENT-PLAN.md](docs/CODING-AGENT-PLAN.md)
 **Primary deliverable:** Self-documenting command-line interface with a versioned machine-readable output contract  
 **Primary users:** Lua security researchers and AI coding/reverse-engineering agents
 
@@ -114,19 +115,9 @@ Common deficiencies include:
 
 The primary product should be a self-documenting CLI rather than a GUI or TUI. The CLI is the common denominator for both human researchers and AI agents; it is composable, automatable, testable, remotely usable, and capable of producing durable artifacts. A stable JSON interface is as important as the human text interface.
 
-The product should be built as a series of complete vertical slices rather than by implementing parsers for every version before delivering useful analysis:
+Development proceeds through complete, public-boundary vertical slices rather than broad parser presence. The first release candidate proves official Lua 5.4.8 public disassembly and the embedded Lua 5.1 layouts and workflows that motivated field use. Analysis, losslessness, closure captures, constant resolution, and release claims each retain independent gates.
 
-1. Establish specifications, oracle harnesses, fixture generation, and a lossless internal model.
-2. Deliver one exact stock-Lua version end to end, including safe parsing, semantic disassembly, JSON, validation, and differential tests.
-3. Add CFG, cross-references, register effects, and explainability while there is still only one format to debug.
-4. Add the current Lua 5.5 format and prove that the architecture handles meaningful format evolution.
-5. Add Lua 5.1-5.3 one at a time with per-version compatibility evidence.
-6. Harden the AI-facing query, pagination, schema, and determinism contracts.
-7. Add controlled extensibility for vendor profiles.
-8. Add LuaJIT as a separate decoder and semantics module.
-9. Consider dynamic tracing, assembly, SSA, and decompilation only after the disassembly foundation is proven.
-
-Each phase has explicit exit criteria and produces evidence artifacts described later in this document.
+Additional dialects follow only after that release boundary is met and the product chooses between stock-Lua breadth and prevalent reverse-engineering ecosystems such as LuaJIT and Luau. Dynamic tracing, assembly, SSA, and decompilation remain separate, evidence-gated layers over the disassembly foundation. Section 12 gives the product-level sequence; the coding-agent plan defines executable checkpoints.
 
 ## 2. Product definition
 
@@ -806,252 +797,126 @@ The CLI exposes this through `luad capabilities --evidence`.
 - **PERF-006:** Cancellation or process interruption does not leave partial output files presented as complete.
 - **PERF-007:** Benchmarks include small startup-sensitive chunks, large instruction vectors, deep prototypes, many constants, and long strings.
 
-Exact thresholds should be revisited after the first vertical slice. Correctness and bounded behavior take priority over optimizing headline throughput.
+Exact thresholds must be calibrated on the release-candidate fixture matrix and a documented reference machine. Correctness and bounded behavior take priority over optimizing headline throughput.
 
 ## 12. Stepwise implementation plan
 
-Every phase produces a useful product increment and has a proof gate. A phase is not complete because code paths exist; it is complete when its evidence artifacts pass.
+The [coding-agent execution plan](docs/CODING-AGENT-PLAN.md) is the
+authoritative work-package sequence. This PRD defines the product-level strategy
+and release outcomes; gate commands, killer probes, and checkpoint handoffs live
+in that plan.
 
-### Phase 0: Specification capture and test infrastructure
+Every work package follows the same proof pattern:
 
-**Purpose:** Prevent implementation from outrunning the ability to prove it.
+1. define the public fact or behavior being claimed;
+2. write a public-boundary adversarial probe and record its failure;
+3. implement the smallest reusable production representation;
+4. compare it with an independent authority;
+5. prove that intentional mutations fail;
+6. emit a verified, tamper-checked gate result;
+7. review the checkpoint before advancing dependent work.
 
-Deliverables:
+### 12.1 Truth and gate hygiene
 
-- Repository structure, build, lint, unit-test, integration-test, and release skeleton.
-- Machine-readable dialect specification format or code tables for one selected version.
-- Exact official Lua source snapshots/hashes referenced by tests, respecting upstream licensing.
-- Reproducible build instructions for official oracle binaries.
-- Fixture generator capable of producing debug and stripped chunks.
-- Canonical test-only representation of official `luac -l -l` output.
-- Initial malformed-input corpus and parser safety limits.
-- Draft JSON Schema version 1.
-- CLI command skeleton containing only implemented capability reporting and help.
+First make the public claims and proof machinery incapable of overstating
+confidence. Evidence generation consumes verified gate results only; canonical
+gate names map one-to-one to specifications; static semantic effects remain
+reviewed or unverified; official-source citations identify exact releases.
 
-Recommended first target: stock Lua 5.4.8. Lua 5.4 is modern, widely deployed, and has enough complexity to prevent an architecture tailored only to Lua 5.1, while providing a larger existing corpus than the newly released 5.5 line.
+Exit outcome: C0 in the coding plan passes.
 
-Exit gate:
+### 12.2 Lua 5.4.8 public vertical slice
 
-- CI reproduces oracle compilation and listings on supported development hosts.
-- At least 25 source fixtures cover major language/VM constructs.
-- Documentation examples execute successfully.
-- `luad capabilities` reports no unimplemented version support.
-- Threat model and resource-limit defaults are reviewed before arbitrary-input parsing lands.
+Build one typed production disassembly record below the renderer. It preserves
+encoded fields, interpreted signed values, resolved references, exact typed
+constants, source lines, jump targets, semantic role, confidence, and provenance.
 
-### Phase 1: Lua 5.4 lossless parser and basic CLI
+Prove the public JSON form through three independent paths:
 
-**Purpose:** Deliver the first complete safe inspection path.
+- the exact official Lua 5.4.8 listing;
+- an independently transcribed reference decoder;
+- the production decoder, lifter, and disassembly record.
 
-Deliverables:
+Normalized text goldens separately prove presentation. Analysis preconditions,
+CFG/dominators, model serialization, and byte accounting receive their own
+review gates; none is implied by the instruction oracle.
 
-- Lua 5.4 header and chunk decoder.
-- Lossless source-location records for every field.
-- Constants, strings, prototypes, upvalues, code, and debug metadata.
-- `inspect`, basic `disasm`, `validate`, `schema`, `capabilities`, and help commands.
-- Text, JSON, and JSONL output.
-- Strict and permissive parsing.
-- Stable identifiers and diagnostic codes.
+Exit outcomes: R6, R3, and R4 in the coding plan pass.
 
-Exit gate:
+### 12.3 Embedded Lua 5.1 vertical slice
 
-- 100% of bytes in every valid fixture are accounted for.
-- All official compiler-produced fixtures parse in strict mode.
-- Truncated input at every byte boundary produces a structured result or error without panic.
-- Random-input and mutation smoke fuzzing show no crashes, out-of-bounds reads, or unbounded allocations.
-- JSON validates against the published schema.
-- Repeated output is byte-for-byte deterministic.
+Prioritize the layouts and workflows found in deployed firmware:
 
-### Phase 2: Lua 5.4 semantic disassembly and validation
+- header-driven stock layouts with both 32-bit and 64-bit `size_t`;
+- an explicit, pinned LNUM vendor profile;
+- deepest-offset diagnostics and public layout/profile records;
+- lossless non-executable closure-binding descriptors;
+- ordered forward and inverse capture relations;
+- inline, typed resolution for constant-bearing operands;
+- redistributable minimized reproducers plus supplemental private-corpus evidence.
 
-**Purpose:** Move from format dumping to trustworthy instruction understanding.
+Each requirement must be demonstrated at the CLI/schema boundary as well as in
+the owning library layer.
 
-Deliverables:
+Exit outcomes: F1, F2, F3, and F4 in the coding plan pass.
 
-- Complete Lua 5.4 opcode and operand semantics.
-- Resolved constants, upvalues, prototypes, jumps, register ranges, and companion instructions.
-- Instruction reads/writes and possible metamethod fallbacks.
-- Version-specific instruction validation.
-- Contextual `explain` output.
-- Official-source provenance links in generated semantics documentation.
+### 12.4 Evidence-derived release candidate
 
-Exit gate:
+Assemble one release manifest from verified prerequisite results produced at one
+clean revision. Derive capability and README status from that manifest. Promote
+only exact releases, layouts, and profiles represented by the evidence; leave
+other dialects and runtime semantic effects experimental.
 
-- Every Lua 5.4 opcode has focused semantic coverage.
-- Differential comparison matches the official listing on all comparable fields.
-- All register and constant references are bounds-checked.
-- Hand-reviewed semantic fixtures cover calls, multireturn, varargs, loops, closures, `TBC`/`CLOSE`, table constructors, tests/skips, and metamethod companion instructions.
-- No instruction explanation contains an unlabeled heuristic claim.
+Exit outcome: R5 in the coding plan passes.
 
-### Phase 3: CFG, cross-references, queries, and diff
+### 12.5 Post-release development
 
-**Purpose:** Deliver the first investigation-grade analyzer.
+After the first release candidate, choose work by demonstrated researcher value
+and independent proof availability:
 
-Deliverables:
+1. instrument a pinned official runtime for semantic-effect evidence;
+2. implement exact object retrieval and interpretation-scoped references;
+3. add presentation-only overlays owned by external callers;
+4. add deterministic full-fidelity export;
+5. add bounded neighborhood traversal only if real workflows show export is
+   insufficient;
+6. decide whether the next dialect strategy favors stock-Lua completeness or
+   prevalent ecosystems such as LuaJIT and Luau;
+7. consider SSA, slicing, assembly, tracing, and decompilation only as separately
+   gated layers over proven facts.
 
-- Basic blocks and typed CFG edges.
-- Reachability, predecessors, successors, and immediate dominators.
-- Constant, string, upvalue, prototype, global, and branch cross-references.
-- Bounded query language and pagination.
-- Structural and semantic chunk comparison.
-- DOT output.
-
-Exit gate:
-
-- CFG edge sets match hand-authored expected graphs for every branching opcode pattern.
-- All generated compiler fixtures have full instruction-to-block coverage.
-- Invalid branch targets never cause analyzers to proceed as though the CFG were valid.
-- Query grammar is fuzzed independently and cannot execute arbitrary code.
-- Diff output is symmetric where expected and deterministic.
-- A security researcher can complete the triage workflow using only documented commands.
-
-### Phase 4: Lua 5.5 support
-
-**Purpose:** Prove the architecture accommodates current format evolution.
-
-Deliverables:
-
-- Lua 5.5.1 chunk format, including its alignment rules, variable-length integers, reusable string references, constants, debug data, and prototype layout.
-- Lua 5.5 instruction formats, including `ivABC`, and complete opcode semantics.
-- Lua 5.5 oracle and focused fixtures.
-- Cross-version compile-and-compare examples for Lua 5.4 versus 5.5.
-
-Exit gate:
-
-- All Phase 1-3 proof gates pass independently for Lua 5.5.
-- No Lua 5.4 parser behavior is conditionally reused where the 5.5 specification differs.
-- Coverage manifest reports 100% opcode identity and operand-layout coverage.
-- At least one regression test demonstrates each material 5.5 format difference.
-
-### Phase 5: Legacy stock Lua support
-
-**Purpose:** Cover the versions most likely to appear in existing products and historical samples.
-
-Order:
-
-1. Lua 5.1, because of its prevalence and materially different architecture-dependent header.
-2. Lua 5.3, because it introduced integer/float distinctions relevant to modern chunks.
-3. Lua 5.2.
-
-Each version is a separate subphase with the same parser, semantic, CFG, oracle, fuzz, and coverage gates. No version is advertised before its subphase passes.
-
-Additional exit requirements:
-
-- Platform matrix includes relevant endian, word-size, `size_t`, instruction-size, integer, and `lua_Number` representations where the version permits variation.
-- Lua 5.1 includes independently generated 32-bit and 64-bit `size_t` fixtures in debug and stripped forms.
-- LNUM or vendor fixtures run only under explicit profiles whose hashes appear in output provenance and capability evidence.
-- Lua 5.1 `CLOSURE` binding words are preserved as physical descriptors, excluded from executable CFG/effects, and exposed through forward/inverse capture relations.
-- Constant-bearing operands resolve to exact constant IDs/values in text and machine output.
-- Known-byte corruptions report the exact primary error offset and structural field context.
-- Constants preserve exact numeric representation across configurations.
-- Version-specific global/upvalue environment models are reflected in explanations rather than normalized misleadingly.
-- Cross-version diff distinguishes equivalent semantics from different physical opcodes only when the normalization is proven.
-
-### Phase 6: AI-agent contract hardening and version 1 release
-
-**Purpose:** Make automation a first-class supported use case rather than an accidental benefit.
-
-Deliverables:
-
-- Final version-1 JSON and JSONL schemas.
-- Cursor pagination and output byte limits for all large commands.
-- Field selection and summary modes.
-- Machine-readable capability and evidence manifests.
-- Stable exit codes and diagnostic taxonomy.
-- End-to-end agent workflow examples.
-- Cross-platform packaged binaries and generated shell completions.
-- Reproducible release metadata and software bill of materials.
-
-Exit gate:
-
-- An automated conformance client discovers capabilities and completes inspect, validate, scoped disassembly, xref, CFG, explain, and diff workflows without parsing human text.
-- Compatibility tests verify all supported schema versions.
-- No command prompts in non-interactive mode.
-- Output-limit behavior is explicit and resumable.
-- Public version-support claims exactly match the generated coverage manifest.
-- Security review finds no path from a static analysis command to input execution.
-
-### Phase 7: Vendor profiles
-
-**Purpose:** Support real-world modified chunks without compromising base-format rigor.
-
-Deliverables:
-
-- Versioned, constrained profile schema.
-- Header, constant-tag, opcode-map, and limited layout overrides.
-- Profile validation and content hashing.
-- Example profiles for legally redistributable known variants.
-- Clear diagnostics when a modification requires a compiled dialect module instead.
-
-Exit gate:
-
-- Profiles cannot execute code or request network/file access.
-- Base dialect results remain unchanged without an explicit profile.
-- Every profile change is represented in output provenance.
-- Invalid or internally contradictory profiles fail before input parsing.
-
-### Phase 8: LuaJIT family
-
-**Purpose:** Add the other major Lua bytecode ecosystem without weakening the stock-Lua design.
-
-Deliverables:
-
-- Separate LuaJIT dump decoder for supported dump versions.
-- ULEB128, flags, GC constants, numeric constants, debug data, child-prototype ordering, endian, FFI, FR2, and other relevant compatibility handling.
-- LuaJIT opcode semantics and CFG.
-- Differential testing against official `jit.bc` and applicable OpenResty listing behavior.
-- Explicit compatibility matrix for upstream LuaJIT and selected maintained forks.
-
-Exit gate:
-
-- LuaJIT is never identified or modeled as stock Lua 5.1.
-- All supported LuaJIT opcodes have semantic fixtures and oracle comparison.
-- Big-endian and stripped fixtures are included where supported.
-- Fork-specific differences are reported in the capability matrix.
-
-### Phase 9: Advanced understanding features
-
-**Purpose:** Build higher-level capabilities on a proven foundation.
-
-Candidate deliverables, each independently gated:
-
-- Liveness and reaching-definition analysis.
-- Backward slicing and `why` queries.
-- SSA with phi provenance.
-- Structured-region identification.
-- Canonical assembly and byte-exact serializer.
-- Trusted-source compiler laboratory.
-- Instrumented interpreter, conditional semantic breakpoints, trace capture, and two-input trace comparison.
-- Periodic state snapshots and constrained reverse stepping.
-- Decompilation with explicit confidence and source-evidence links.
-
-These features are not one monolithic phase. Each analysis pass declares preconditions, exposes before/after representations, and is verified independently, following the model of compiler pass instrumentation.
+`luad` remains stateless. Research history, hypotheses, naming decisions,
+collaboration, and agent planning remain caller responsibilities.
 
 ## 13. Release criteria
 
-### 13.1 Alpha
+### 13.1 First release candidate
 
-- One stock Lua version passes parser and basic disassembly gates.
-- CLI and schemas may change without compatibility promises.
-- Fuzzing is active.
-- Known limitations are prominent.
+The first release candidate requires:
 
-### 13.2 Beta
+- exact Lua 5.4.8 public disassembly evidence;
+- the advertised Lua 5.1 layout/profile, closure, operand, and field-evidence gates;
+- reviewed CFG/precondition and lossless-model checkpoints;
+- deterministic public text and machine output;
+- capability status derived from one verified release manifest;
+- no required skipped probe;
+- bounded malformed-input behavior and maintained fuzz coverage;
+- all unproved dialects and runtime semantic effects labeled experimental.
 
-- Lua 5.4 and 5.5 pass semantic and CFG gates.
-- JSON schema candidate is frozen.
-- Cross-platform packages exist.
-- No known parser crashes on the maintained corpus.
-- External researchers can reproduce oracle and fuzz evidence.
+### 13.2 Version 1.0
 
-### 13.3 Version 1.0
+Version 1.0 additionally requires:
 
-- Stock Lua 5.1-5.5 pass their advertised proof gates.
-- CLI exit codes and JSON schema version 1 are stable.
-- All commands meet deterministic and bounded-output requirements.
-- Security review and extended fuzz campaign are complete.
-- Coverage/evidence manifest is published.
-- Documentation covers researcher, learner, and AI-agent workflows.
-- No P0 correctness or security defect is open.
+- a stable CLI exit-code contract and JSON schema major;
+- reproducible packages for every advertised platform;
+- a published evidence bundle and software bill of materials;
+- a completed security review and extended fuzz campaign;
+- documentation for researcher, learner, and AI-agent workflows;
+- no open P0 correctness or security defect;
+- an explicit compatibility policy for exact dialect releases and profiles.
+
+Version 1.0 does not require every stock Lua release. Breadth must not delay or
+dilute exact evidence for the support scope actually advertised.
 
 ## 14. Success metrics
 
@@ -1112,24 +977,22 @@ Adoption is secondary to correctness, but useful signals include:
 - The primary deliverable is a CLI, not a GUI or TUI.
 - Versioned JSON/JSONL is the initial stable programmatic interface.
 - Static analysis never executes an input chunk.
-- Stock Lua 5.1-5.5 is the version-1 compatibility target.
-- LuaJIT is a separate post-v1 dialect family unless implementation capacity permits bringing Phase 8 forward without delaying v1 proof gates.
-- Luau is not part of version 1.
+- The first release candidate targets exact Lua 5.4.8 public disassembly and explicitly advertised embedded Lua 5.1 layouts/profiles.
+- Lua 5.2, 5.3, and 5.5 remain experimental until independently gated; version 1.0 does not require artificial stock-version breadth.
+- LuaJIT and Luau require separate dialect families and an explicit post-release prioritization decision.
 - Decompilation is not part of version 1.
 - Losslessness, provenance, validation, and determinism are release requirements rather than optional polish.
+- Persistent researcher state, interpretations, hypotheses, and agent planning remain outside `luad`.
 
-### 16.2 Questions to resolve during Phase 0
+### 16.2 Decisions required before expanding the release scope
 
-1. Which memory-safe implementation language best satisfies parsing, packaging, fuzzing, startup-time, and contributor requirements?
-2. Should JSON use one shared schema with dialect-specific tagged unions or separate schema documents per dialect?
-3. What exact safety limits should be defaults, and which commands may raise them?
-4. What platforms must official oracle generation cover in CI versus a scheduled compatibility farm?
-5. How should 32-bit and big-endian fixtures be produced reproducibly when native runners are unavailable?
-6. Should strict mode reject unknown trailing bytes or report them while returning an invalid verdict?
-7. What minimal normalized semantic vocabulary is sufficient for cross-version queries without erasing meaningful differences?
-8. Which official-source excerpts or generated semantics tables can be redistributed under compatible licensing?
-9. Is a content-addressed on-disk analysis cache valuable for version 1, or should caching remain the caller's responsibility?
-10. Should SARIF diagnostics be included in version 1 if security-tool integrations request it during beta?
+1. Does the next dialect investment optimize for a stock-Lua correctness reference or prevalent reverse-engineering ecosystems?
+2. Which additional target platforms need release binaries and scheduled compatibility runners?
+3. Which safety-limit values should become stable version-1 defaults?
+4. Which public schemas can freeze at version 1, and which dialect-specific records still require tagged extension points?
+5. Which cross-version semantic vocabulary is proven useful without erasing dialect differences?
+6. Does user evidence justify SARIF, an in-process library contract, or additional export formats?
+7. Which facts have independent evidence strong enough to support exact retrieval and full-fidelity export after R5?
 
 ### 16.3 Criteria for reconsidering a GUI or TUI
 

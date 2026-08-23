@@ -131,10 +131,12 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
             required_gates: vec![
                 "gate-proof-harness".to_string(),
                 "gate-facts-lua54-8".to_string(),
-                "gate-analysis-cfg".to_string(),
+                "gate-public-disasm-lua54-8".to_string(),
+                "gate-analysis-r3".to_string(),
                 "gate-lossless-lua54-8".to_string(),
                 "gate-release-lua54-8".to_string(),
             ],
+
             completed_gates: vec![],
             evidence: vec![
                 "Proof vehicle; remediation in progress under CODING-AGENT-PLAN.md (R0-R5)"

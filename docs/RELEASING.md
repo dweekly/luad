@@ -2,7 +2,7 @@
 
 ## Current release stop
 
-Do not make a production release while Milestones 0–3 in [ROADMAP.md](../ROADMAP.md) are incomplete. Pre-release tags must prominently identify the known correctness defects and experimental dialect status.
+Do not make a production release until R5 in the [coding-agent execution plan](CODING-AGENT-PLAN.md) passes with its complete prerequisite closure from one clean revision. Pre-release tags must identify every dialect as experimental and enumerate the public boundaries that remain ungated.
 
 ## Preconditions
 

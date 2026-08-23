@@ -11,14 +11,19 @@ use crate::id::StableId;
 )]
 #[serde(rename_all = "kebab-case")]
 pub enum Confidence {
-    /// Directly parsed fact from raw input bytes (ground truth).
+    /// Directly parsed physical fact from raw input bytes (ground truth).
     #[default]
     Fact,
+    /// Analytically reviewed static property or effect definition.
+    Reviewed,
+    /// Unverified semantic effect or model property lacking an instrumented runtime proof.
+    Unverified,
     /// Derived mathematically or structurally through deterministic rule/analysis (e.g. CFG edge, use-def set).
     Derived,
     /// Inferred using heuristics or pattern matching (e.g. loop structure, high-level expression reconstruction).
     Heuristic,
 }
+
 
 /// Source byte location and raw byte representation of a field or instruction.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

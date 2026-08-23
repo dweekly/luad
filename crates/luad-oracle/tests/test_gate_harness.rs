@@ -680,3 +680,68 @@ fn test_fixture_manifest_records_complete_provenance() {
         );
     }
 }
+
+#[test]
+fn test_all_canonical_gate_scripts_and_specs_consistency() {
+    let root = find_workspace_root();
+    let scripts_dir = root.join("scripts").join("gates");
+    let specs_dir = root.join("tests").join("gates");
+
+    assert!(scripts_dir.exists(), "scripts/gates directory must exist");
+    assert!(specs_dir.exists(), "tests/gates directory must exist");
+
+    let mut script_gates = std::collections::BTreeSet::new();
+    for entry in fs::read_dir(&scripts_dir).expect("Read scripts/gates") {
+        let entry = entry.expect("Valid entry");
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) == Some("sh") {
+            let stem = path.file_stem().unwrap().to_str().unwrap().to_string();
+            script_gates.insert(stem);
+        }
+    }
+
+    let mut spec_gates = std::collections::BTreeSet::new();
+    let mut all_specs = Vec::new();
+    for entry in fs::read_dir(&specs_dir).expect("Read tests/gates") {
+        let entry = entry.expect("Valid entry");
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+            let stem = path.file_stem().unwrap().to_str().unwrap().to_string();
+            let content = fs::read_to_string(&path).expect("Read spec file");
+            let spec: GateSpec = serde_json::from_str(&content)
+                .unwrap_or_else(|e| panic!("Failed to parse {stem}.json: {e}"));
+            assert_eq!(
+                spec.gate_id, stem,
+                "gate_id inside {stem}.json must match filename stem"
+            );
+            assert_eq!(
+                spec.schema_version, 1,
+                "schema_version in {stem}.json must be 1"
+            );
+            assert!(
+                !spec.expected_tests.is_empty(),
+                "expected_tests in {stem}.json must not be empty"
+            );
+            spec_gates.insert(stem);
+            all_specs.push(spec);
+        }
+    }
+
+    // Exact 1-to-1 matching
+    assert_eq!(
+        script_gates, spec_gates,
+        "scripts/gates and tests/gates must have exact 1-to-1 matching gate sets"
+    );
+
+    // Verify prerequisite gate integrity
+    for spec in &all_specs {
+        for prereq in &spec.prerequisite_gates {
+            assert!(
+                spec_gates.contains(prereq),
+                "Prerequisite gate '{prereq}' referenced in '{}' does not exist in canonical gate set",
+                spec.gate_id
+            );
+        }
+    }
+}
+

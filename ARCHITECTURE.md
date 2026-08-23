@@ -101,7 +101,9 @@ Opcode conversion should use exhaustive generated or explicit matches. The targe
 
 Passing a lower layer does not imply a higher one. Capability status must name the gates supporting it.
 
-The current implementation does not yet satisfy this model. See [the review](docs/REVIEW-2026-08-22.md) and [coding plan](docs/CODING-AGENT-PLAN.md).
+The release path applies these layers independently. The accepted Lua 5.4.8 raw-fact oracle does not establish public rendering, analysis, losslessness, or runtime-effect claims. See the [coding plan](docs/CODING-AGENT-PLAN.md) for the gates that close each boundary.
+
+Public disassembly should be constructed as a typed reusable record before presentation. Text, JSON/JSONL, explanation, query, and xref views consume that record rather than re-decoding operands in their renderers. Test-only independent decoders remain isolated from this production path.
 
 ## Extension rules
 

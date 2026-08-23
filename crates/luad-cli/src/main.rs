@@ -233,27 +233,51 @@ fn handle_disasm(args: DisasmArgs) {
         &chunk.main_proto
     };
 
-    match args.format {
-        OutputFormat::Text => {
-            render::render_disasm(
-                &chunk.dialect,
-                target_proto,
-                args.raw,
-                args.debug_info,
-                args.effects,
-            );
+    if chunk.dialect == "lua5.4" {
+        let disasm_proto = luad_dialect_lua54::disassemble_proto_lua54(target_proto);
+        match args.format {
+            OutputFormat::Text => {
+                render::render_disasm(
+                    &chunk.dialect,
+                    target_proto,
+                    args.raw,
+                    args.debug_info,
+                    args.effects,
+                );
+            }
+            OutputFormat::Json => render::print_json(&disasm_proto),
+            OutputFormat::Jsonl => render::print_jsonl(&disasm_proto.instructions),
+            OutputFormat::Dot => {
+                eprintln!(
+                    "{}: Use 'luad cfg --format dot' for graphviz output",
+                    "error".red()
+                );
+                ExitCode::UsageError.exit();
+            }
         }
-
-        OutputFormat::Json => render::print_json(target_proto),
-        OutputFormat::Jsonl => render::print_jsonl(&target_proto.instructions),
-        OutputFormat::Dot => {
-            eprintln!(
-                "{}: Use 'luad cfg --format dot' for graphviz output",
-                "error".red()
-            );
-            ExitCode::UsageError.exit();
+    } else {
+        match args.format {
+            OutputFormat::Text => {
+                render::render_disasm(
+                    &chunk.dialect,
+                    target_proto,
+                    args.raw,
+                    args.debug_info,
+                    args.effects,
+                );
+            }
+            OutputFormat::Json => render::print_json(target_proto),
+            OutputFormat::Jsonl => render::print_jsonl(&target_proto.instructions),
+            OutputFormat::Dot => {
+                eprintln!(
+                    "{}: Use 'luad cfg --format dot' for graphviz output",
+                    "error".red()
+                );
+                ExitCode::UsageError.exit();
+            }
         }
     }
+
 
     ExitCode::Success.exit();
 }
@@ -412,13 +436,21 @@ fn handle_schema(args: SchemaArgs) {
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
             );
         }
+        "disasm" => {
+            let schema = schema_for!(luad_core::DisassembledPrototype);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            );
+        }
         other => {
             eprintln!(
-                "{}: Unknown schema '{other}'. Supported: chunk, diagnostic, instruction, cfg, xrefs, query, diff, capabilities",
+                "{}: Unknown schema '{other}'. Supported: chunk, diagnostic, instruction, disasm, cfg, xrefs, query, diff, capabilities",
                 "error".red()
             );
             ExitCode::UsageError.exit();
         }
+
     }
 
     ExitCode::Success.exit();

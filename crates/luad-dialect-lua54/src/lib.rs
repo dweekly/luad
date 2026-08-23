@@ -4,6 +4,7 @@
 #![allow(clippy::result_large_err)]
 
 pub mod chunk;
+pub mod disasm;
 pub mod header;
 pub mod lifter;
 pub mod opcodes;
@@ -15,10 +16,12 @@ use luad_core::model::Chunk;
 use luad_core::reader::SafeReader;
 
 pub use chunk::{decode_chunk_lua54, encode_chunk_lua54};
+pub use disasm::{disassemble_instruction_lua54, disassemble_proto_lua54};
 pub use header::{detect_lua54, parse_header_lua54};
 pub use lifter::lift_proto_lua54;
 pub use opcodes::{OpMode54, Opcode54, RawInstruction54};
 pub use validator::validate_chunk_lua54;
+
 
 /// Lua 5.4 dialect handler.
 #[derive(Debug, Default, Clone, Copy)]

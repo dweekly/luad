@@ -2,11 +2,11 @@
 
 ## Stability warning
 
-`luad` is pre-1.0 and currently has confirmed correctness defects. JSON shapes are schema-governed, but semantic correctness and compatibility are not yet production guarantees. In particular, do not rely on current Lua 5.4 decoded operands, Lua 5.1 embedded-layout handling and closure effects, immediate-dominator results, or `capabilities --evidence` claims until the remediation gates pass.
+`luad` is pre-1.0. JSON shapes are schema-governed, but semantic correctness and compatibility are not production guarantees. Every stock dialect remains experimental.
 
-See [REVIEW-2026-08-22.md](REVIEW-2026-08-22.md), [FIELD-REPORT-TP-LINK-LUA51.md](FIELD-REPORT-TP-LINK-LUA51.md), and [CODING-AGENT-PLAN.md](CODING-AGENT-PLAN.md).
+The exact Lua 5.4.8 raw-fact oracle is accepted, but the public disassembly boundary still requires R6: some signed operands are rendered through generic opcode modes, and public lines, targets, constants, and metadata do not yet have complete three-way proof. Lua 5.1 layout/profile, closure-binding, and resolved-operand claims require F1–F3. Analysis and losslessness remain unpromoted until R3 and R4.
 
-The field report found that 252 of 252 Lua 5.1 files from a TP-Link firmware corpus initially failed because string lengths were read as 64-bit values even when the chunk header declared a 32-bit `size_t`. A peer fix parsed and validated the corpus, but production support remains experimental until the layout, profile, semantic, and regression gates pass in this repository.
+See the [coding-agent execution plan](CODING-AGENT-PLAN.md) and [TP-Link Lua 5.1 field requirements](FIELD-REPORT-TP-LINK-LUA51.md).
 
 ## Discovery
 
@@ -95,13 +95,13 @@ Returns chunk identity, dialect detection, header, prototype tree, diagnostics, 
 
 Selects a prototype and renders physical instruction words. `--raw`, `--debug-info`, and `--effects` affect text presentation. Check command help and schema before assuming the JSON representation contains semantic effects.
 
-The intended contract distinguishes a physical word from its semantic role. In Lua 5.1, the words following `CLOSURE` that bind child upvalues must be exposed as ordered closure-binding records, not as independently executed `MOVE` or `GETUPVAL` instructions. Until the closure gate passes, current text and effect output can state false register writes for these words.
+The required contract distinguishes a physical word from its semantic role. In Lua 5.1, the words following `CLOSURE` that bind child upvalues must be exposed as ordered closure-binding records, not as independently executed `MOVE` or `GETUPVAL` instructions. Until F2 passes, callers must not treat closure-adjacent text, effects, CFG nodes, or xrefs as authoritative capture facts.
 
-Constant-bearing operands should ultimately include both their encoded index and a typed, structured resolved value. Text output may add an escaped, bounded preview; machine consumers must not parse that preview in place of the typed value. This contract is planned and is not guaranteed by the current schema.
+Constant-bearing operands must include both their encoded index and a typed, structured resolved value. Text may add an escaped, bounded preview; machine consumers must not parse that preview in place of the typed value. This contract becomes available only when the applicable R6/F3 gate passes and the schema advertises it.
 
 ### `validate`
 
-Runs structural and dialect validation. Current validator correctness remains under remediation. A security-sensitive caller must not treat the existing valid-for-analysis verdict as authoritative.
+Runs structural and dialect validation. A security-sensitive caller must not treat a valid-for-analysis verdict as authoritative until the exact dialect/profile and relevant analysis-precondition gate are represented in release evidence.
 
 ### `explain`
 
@@ -109,15 +109,15 @@ Currently supports instruction targets. Other target kinds are not a stable cont
 
 ### `cfg`, `xrefs`, `query`, and `diff`
 
-Expose analysis results with schemas and bounded query pagination. CFG immediate dominators are currently known incorrect. The current query expression syntax is intentionally narrow; unsupported expressions must not be treated as a general programming language.
+Expose analysis results with schemas and bounded query pagination. Treat CFG and dominator output as unpromoted until the R3 graph-level and public-boundary gate passes. The current query expression syntax is intentionally narrow; unsupported expressions must not be treated as a general programming language.
 
 Capture xrefs are a required extension of the existing fact interface: callers must be able to traverse both parent register/upvalue to child upvalue and child upvalue back to its source binding. A convenience `upvalues` rendering can be added, but it must be a view of the same capture facts rather than a second analysis implementation.
 
-## Planned layout and diagnostic records
+## Required layout and diagnostic records
 
-Evidence-backed machine output should expose the selected dialect/profile and validated layout, including byte order, declared widths, number-integrality, and how the profile was selected. Vendor constant tags such as LNUM tag 9 must not be reported as stock Lua 5.1 support.
+Evidence-backed machine output must expose the selected dialect/profile and validated layout, including byte order, declared widths, number-integrality, and how the profile was selected. Vendor constant tags such as LNUM tag 9 must not be reported as stock Lua 5.1 support.
 
-Parse failures should report the deepest known byte offset as the primary location. Prototype paths and enclosing fields are context, not replacements for that offset. The current top-level Lua 5.1 error path has been observed reporting offset 0 for a failure near offset `0x119`; callers should treat current offsets as unreliable until the diagnostic regression gate passes.
+Parse failures must report the deepest known byte offset as the primary location. Prototype paths and enclosing fields are context, not replacements for that offset. Treat Lua 5.1 top-level offsets as unpromoted until F1 includes the diagnostic regression probe.
 
 ### `compile`
 
@@ -131,6 +131,6 @@ Any future bounded export or neighborhood command must expose truncation explici
 
 ## Capability evidence
 
-The current capability document is useful for discovering implemented surface, but its `supported` statuses and evidence strings are hand-authored and currently overstate verification. Until `gate-release-evidence` is implemented, callers should interpret stock dialects as `experimental` regardless of current output.
+The capability document is useful for discovering implemented surface, but evidence is not authoritative until R5 derives it from verified results. Callers must interpret every stock dialect as `experimental` unless a release manifest for the exact tool revision and profile says otherwise.
 
 No machine consumer should need to infer support from README prose once the evidence-backed manifest is complete.

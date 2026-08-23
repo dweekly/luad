@@ -2,7 +2,7 @@
 
 ## Status
 
-Deferred until the factual correctness gates in [docs/CODING-AGENT-PLAN.md](docs/CODING-AGENT-PLAN.md) pass. The proposal's product boundary remains valid, but exposing stable schemas over currently misdecoded facts would make later correction harder.
+Deferred until R5 in [docs/CODING-AGENT-PLAN.md](docs/CODING-AGENT-PLAN.md) passes. New workflow primitives may expose only fact types represented in verified release evidence.
 
 ## Summary
 
@@ -45,7 +45,7 @@ What external researchers need from `luad` is narrower:
 
 The TP-Link Lua 5.1 field report makes this boundary concrete. A caller should not have to reconstruct constant-table indices or closure capture chains from presentation text, because both are deterministic bytecode facts. `luad` should resolve typed constants and expose ordered parent-to-child capture relations. Deciding that a captured string is an AES key, naming the closure `dec_file`, and persisting that interpretation remain caller responsibilities.
 
-The current implementation has much of the required substrate: chunks include a SHA-256 digest, objects have `StableId` values, and the CLI exposes disassembly, CFG, xrefs, queries, diffs, and JSON schemas. This work must wait until those facts are trustworthy. Once they are, the main gaps are interpretation-scoped identity, uniform object retrieval, deterministic full-fidelity export, and presentation of externally owned interpretations.
+The available substrate includes chunk SHA-256 digests, `StableId` values, disassembly, CFG, xrefs, queries, diffs, and JSON schemas. After R5, the next product gaps are interpretation-scoped identity, uniform object retrieval, deterministic full-fidelity export, and presentation of externally owned interpretations.
 
 ## Product boundary
 
@@ -416,7 +416,7 @@ Across sessions, the external system retains `research.json`, its own index, and
 
 ### Prerequisite: trustworthy facts
 
-Do not implement these milestones until the factual gates in [docs/CODING-AGENT-PLAN.md](docs/CODING-AGENT-PLAN.md) pass, including the embedded-layout, Lua 5.1 closure-binding, and resolved-constant gates. No new command may expose a fact type that lacks a passing oracle or analysis gate.
+Do not implement these milestones until R5 in [docs/CODING-AGENT-PLAN.md](docs/CODING-AGENT-PLAN.md) passes. No new command may expose a fact type absent from the verified release manifest.
 
 ### Milestone 1: Identity and exact retrieval
 
@@ -488,7 +488,7 @@ The expected implementation is a few reusable data types, a resolver, a streamin
 
 ## Recommended decision
 
-After the factual gates pass, proceed with Milestone 1. Exact object retrieval and interpretation-scoped references clarify the meaning of existing stable IDs and create the cleanest substrate for both humans and agents.
+After R5, proceed with Milestone 1. Exact object retrieval and interpretation-scoped references clarify the meaning of existing stable IDs and create the cleanest substrate for both humans and agents.
 
 Add overlays next because they provide session-to-session continuity without introducing state into `luad`. Add full-fidelity export after that so callers can own indexing and traversal. Defer neighborhood traversal until a concrete workflow demonstrates that export is insufficient.
 

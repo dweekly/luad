@@ -5,6 +5,7 @@
 pub mod capabilities;
 pub mod diagnostic;
 pub mod dialect;
+pub mod disasm;
 pub mod id;
 pub mod ir;
 pub mod limits;
@@ -18,7 +19,11 @@ pub use capabilities::{
 
 pub use diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
 pub use dialect::{DetectionResult, Dialect};
+pub use disasm::{
+    DisassembledInstruction, DisassembledOperand, DisassembledPrototype, OperandKind, ResolvedFact,
+};
 pub use id::{ProtoPath, StableId};
+
 pub use ir::{EffectTarget, ImplicitEffect, SemanticInstruction, TypedOperand};
 pub use limits::{ParseMode, ResourceLimits};
 pub use model::{

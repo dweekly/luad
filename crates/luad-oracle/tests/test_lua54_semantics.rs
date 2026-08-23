@@ -55,10 +55,11 @@ fn test_all_opcode_lifting_and_effects() {
 
     assert!(!lifted.is_empty());
     for inst in &lifted {
-        assert_eq!(inst.confidence, luad_core::Confidence::Fact);
+        assert_eq!(inst.confidence, luad_core::Confidence::Reviewed);
         assert!(!inst.mnemonic.is_empty());
         assert!(!inst.explanation.is_empty());
     }
+
 
     // Verify luac listing aligns
     let listing = run_luac_listing(source);

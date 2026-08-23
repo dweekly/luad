@@ -6,16 +6,15 @@
 
 `luad` is a pre-release research tool. It is not currently suitable as the sole basis for security conclusions or production reverse-engineering decisions.
 
-An independent correctness review found critical defects in Lua 5.4 operand decoding, signed-immediate interpretation, opcode modes, immediate-dominator calculation, validation verdicts, and—most importantly—the differential test oracle intended to catch those defects. The current test suite can be green without proving the advertised instruction-level claims.
+The exact Lua 5.4.8 typed-listing oracle and independent reference decoder establish a raw-fact proof boundary. The next release blocker is conformance at the public `disasm` boundary: typed JSON and text must agree with those independent facts for signed operands, constants, lines, targets, and opcode-specific metadata. Embedded Lua 5.1 layouts, profiles, closure bindings, and resolved operands require their own public gates.
 
 Read these before relying on results or changing correctness-sensitive code:
 
-- [Correctness review](docs/REVIEW-2026-08-22.md)
-- [Embedded Lua 5.1 field report](docs/FIELD-REPORT-TP-LINK-LUA51.md)
-- [Remediation roadmap](ROADMAP.md)
 - [Coding-agent implementation plan](docs/CODING-AGENT-PLAN.md)
+- [Evidence-gated roadmap](ROADMAP.md)
+- [Embedded Lua 5.1 field requirements](docs/FIELD-REPORT-TP-LINK-LUA51.md)
 
-The architecture and product direction remain promising, but all stock-Lua dialects should be treated as **experimental** until their named proof gates pass. The output of `luad capabilities --evidence` is not yet authoritative; replacing hand-written evidence with verified gate results is part of the remediation plan.
+All stock-Lua dialects remain **experimental** until their named proof gates pass. The output of `luad capabilities --evidence` is not authoritative until R5 derives it from verified gate artifacts.
 
 ## Intended scope
 
@@ -36,17 +35,14 @@ This table describes code present in the repository, not verified support status
 
 | Dialect | Opcode table | Parser/lifter present | Current evidence status |
 |---|---:|---|---|
-| Lua 5.1 | 38 | Yes | Experimental; embedded layouts, vendor profiles, and closure semantics need gates |
+| Lua 5.1 | 38 | Yes | Experimental; layout/profile and public closure/operand gates pending |
 | Lua 5.2 | 40 | Yes | Experimental; proof gates incomplete |
 | Lua 5.3 | 47 | Yes | Experimental; proof gates incomplete |
-| Lua 5.4 | 83 | Yes | Experimental; proof boundary remediation in progress under CODING-AGENT-PLAN.md (v3) |
-
-
-| Lua 5.5 | 85 | Yes | Experimental; signed-immediate proof incomplete |
+| Lua 5.4 | 83 | Yes | Experimental; raw facts gated, public disassembly gate pending |
+| Lua 5.5 | 85 | Yes | Experimental; independent proof gates incomplete |
 | LuaJIT 2.x | — | No | Planned; not supported |
 
-
-Real-world testing against 252 Lua 5.1 chunks from TP-Link firmware exposed a host-layout assumption: string lengths were read as 64-bit values even though the chunk header declared a 32-bit `size_t`. A peer patch parsed the entire corpus and also added its LNUM tag, but that vendor extension must be modeled as an explicit profile and the result must pass independent fixtures and semantic gates before Lua 5.1 support is promoted. The same exercise found that Lua 5.1 closure-binding words are currently explained as executable instructions, which can produce false effects and xrefs.
+The embedded Lua 5.1 release scope is driven by a 252-file TP-Link corpus: header-declared 32-bit `size_t`, an explicit LNUM profile, correct closure-binding records, precise offsets, and inline resolved constants. Private-corpus results supplement—but never replace—redistributable fixtures and public-boundary proof. See the [field requirements](docs/FIELD-REPORT-TP-LINK-LUA51.md).
 
 ## Build
 
@@ -64,13 +60,13 @@ For the complete contributor check:
 bash scripts/check.sh
 ```
 
-The full differential suite requires exact official Lua compilers. The installer is being hardened with archive checksums as part of the remediation plan:
+The full differential suite requires the exact official Lua compilers pinned by each gate:
 
 ```console
 bash scripts/install_ci_compilers.sh
 ```
 
-Until the plan is complete, a green local run must not be interpreted as instruction-level proof. See [CONTRIBUTING.md](CONTRIBUTING.md) for the test taxonomy and required gates.
+The aggregate check is necessary repository evidence, not instruction-level proof. See [CONTRIBUTING.md](CONTRIBUTING.md) for the test taxonomy and required gates.
 
 ## First use
 

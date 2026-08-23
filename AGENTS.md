@@ -6,15 +6,16 @@ This repository analyzes potentially hostile Lua bytecode. Correctness, evidence
 
 Before modifying correctness-sensitive code, read:
 
-1. `docs/REVIEW-2026-08-22.md`
-2. `docs/CODING-AGENT-PLAN.md`
+1. `docs/CODING-AGENT-PLAN.md`
+2. `ROADMAP.md`
 3. `docs/FIELD-REPORT-TP-LINK-LUA51.md`
 4. `ARCHITECTURE.md`
-5. `CONTRIBUTING.md`
+5. `docs/MACHINE-INTERFACE.md`
+6. `CONTRIBUTING.md`
 
 ## Current priority
 
-The project is under a correctness stop line. Work the gates in `docs/CODING-AGENT-PLAN.md` in order. Do not add dialects, decompiler features, overlays, persistent state, or new capability claims until the fact-layer gates pass.
+Work the gates in `docs/CODING-AGENT-PLAN.md` in order, beginning with C0 and R6. Do not add dialects, decompiler features, overlays, persistent state, or new capability claims while the release critical path is open.
 
 ## Repository rules
 

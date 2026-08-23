@@ -3,7 +3,7 @@
 use colored::Colorize;
 use luad_core::diagnostic::{Diagnostic, Severity, Verdict};
 use luad_core::model::{Chunk, ConstantValue, Prototype};
-use luad_dialect_lua54::{OpMode54, RawInstruction54};
+
 
 /// Render human-readable inspection summary or detailed chunk overview.
 pub fn render_inspect(chunk: &Chunk, summary: bool) {
@@ -219,7 +219,7 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
                 } else {
                     format!("(raw=0x{:08x})", inst.raw_word)
                 };
-                (name, ops)
+                (name.to_string(), ops)
             }
             "lua5.3" => {
                 let raw_info = luad_dialect_lua53::RawInstruction53::decode(inst.raw_word);
@@ -250,7 +250,7 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
                 } else {
                     format!("(raw=0x{:08x})", inst.raw_word)
                 };
-                (name, ops)
+                (name.to_string(), ops)
             }
             "lua5.2" => {
                 let raw_info = luad_dialect_lua52::RawInstruction52::decode(inst.raw_word);
@@ -281,7 +281,7 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
                 } else {
                     format!("(raw=0x{:08x})", inst.raw_word)
                 };
-                (name, ops)
+                (name.to_string(), ops)
             }
             "lua5.1" => {
                 let raw_info = luad_dialect_lua51::RawInstruction51::decode(inst.raw_word);
@@ -311,34 +311,31 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
                 } else {
                     format!("(raw=0x{:08x})", inst.raw_word)
                 };
-                (name, ops)
+                (name.to_string(), ops)
             }
             _ => {
-                let raw_info = RawInstruction54::decode(inst.raw_word);
-                let name = raw_info.opcode.map(|op| op.name()).unwrap_or("UNKNOWN_OP");
-                let ops = if let Some(op) = raw_info.opcode {
-                    match op.mode() {
-                        OpMode54::IABC => {
-                            if raw_info.k != 0 {
-                                format!(
-                                    "{} {} {} (k={})",
-                                    raw_info.a, raw_info.b, raw_info.c, raw_info.k
-                                )
-                            } else {
-                                format!("{} {} {}", raw_info.a, raw_info.b, raw_info.c)
-                            }
-                        }
-                        OpMode54::IABx => format!("{} {}", raw_info.a, raw_info.bx),
-                        OpMode54::IAsBx => format!("{} {}", raw_info.a, raw_info.sbx),
-                        OpMode54::IAx => format!("{}", raw_info.ax),
-                        OpMode54::IsJ => format!("{}", raw_info.sj),
-                    }
+                let d_inst = luad_dialect_lua54::disassemble_instruction_lua54(
+                    proto,
+                    inst.pc,
+                    inst.raw_word,
+                );
+                let name = d_inst.mnemonic;
+                let ops_str = d_inst
+                    .operands
+                    .iter()
+                    .map(|o| o.display.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let comment_suffix = if let Some(c) = d_inst.comment {
+                    format!(" ; {c}")
                 } else {
-                    format!("(raw=0x{:08x})", inst.raw_word)
+                    String::new()
                 };
-                (name, ops)
+                (name, format!("{ops_str}{comment_suffix}"))
             }
         };
+
+
 
         let raw_col = if raw {
             format!("[0x{:08x}]  ", inst.raw_word)
