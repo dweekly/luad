@@ -406,7 +406,7 @@ fn test_killer_probe_oob_constant_reference_emits_diagnostic() {
         load_fixture("tests/fixtures/precompiled/lua54/hello.luac");
     // Formulate a GETTABUP instruction referencing constant index 250 (out of bounds)
     // Opcode Gettabup = 11 (0x0B), A = 0, B = 0, C = 250 (0xFA), k = 0
-    let oob_word: u32 = 0x0B | (0 << 7) | (0 << 15) | (0 << 16) | (250 << 24);
+    let oob_word: u32 = 0x0B | (250 << 24);
     let d_inst = luad_dialect_lua54::disassemble_instruction_lua54(&chunk.main_proto, 0, oob_word);
 
     assert_eq!(d_inst.mnemonic, "GETTABUP");

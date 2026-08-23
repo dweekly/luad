@@ -71,6 +71,7 @@ pub enum DisasmComparisonError {
 }
 
 /// Compare disassembly three-way across official luac dump, independent decoder, and production record.
+#[allow(clippy::needless_range_loop)]
 pub fn compare_proto_three_way(
     luac_proto: &LuacProtoDump,
     indep_insts: &[IndependentInstruction54],
@@ -202,10 +203,7 @@ pub fn compare_proto_three_way(
                     let sc_op = prod_inst.operands.iter().find(|o| o.name == "sC");
                     match sc_op.map(|o| &o.kind) {
                         Some(OperandKind::ImmediateSigned { value })
-                            if *value == indep_inst.sc as i64 =>
-                        {
-                            ()
-                        }
+                            if *value == indep_inst.sc as i64 => {}
                         _ => {
                             return Err(DisasmComparisonError::PhysicalFieldMismatch {
                                 pc,
@@ -225,10 +223,7 @@ pub fn compare_proto_three_way(
                     let sbx_op = prod_inst.operands.iter().find(|o| o.name == "sBx");
                     match sbx_op.map(|o| &o.kind) {
                         Some(OperandKind::ImmediateSigned { value })
-                            if *value == indep_inst.sbx as i64 =>
-                        {
-                            ()
-                        }
+                            if *value == indep_inst.sbx as i64 => {}
                         _ => {
                             return Err(DisasmComparisonError::PhysicalFieldMismatch {
                                 pc,
@@ -253,10 +248,7 @@ pub fn compare_proto_three_way(
                     let sb_op = prod_inst.operands.iter().find(|o| o.name == "sB");
                     match sb_op.map(|o| &o.kind) {
                         Some(OperandKind::ImmediateSigned { value })
-                            if *value == indep_inst.sb as i64 =>
-                        {
-                            ()
-                        }
+                            if *value == indep_inst.sb as i64 => {}
                         _ => {
                             return Err(DisasmComparisonError::PhysicalFieldMismatch {
                                 pc,
