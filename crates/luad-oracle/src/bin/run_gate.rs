@@ -264,15 +264,25 @@ fn main() {
     let manifest_path = out_dir.join("release-manifest.json");
     let target_dialect = if spec.gate_id.contains("lua54") {
         "lua5.4"
+    } else if spec.gate_id.contains("lua51") {
+        "lua5.1"
     } else {
         "proof-harness-checkpoint-r1"
     };
-    let profile = spec.required_profile.as_deref().unwrap_or("R1-Harness-v1");
+    let target_patch_version = if let Some(req_ver) = &spec.required_compiler_version {
+        req_ver.as_str()
+    } else if spec.gate_id.contains("lua54") {
+        "Lua 5.4.8"
+    } else if spec.gate_id.contains("lua51") {
+        "Lua 5.1.5"
+    } else {
+        spec.required_profile.as_deref().unwrap_or("R1-Harness-v1")
+    };
 
     match assemble_release_manifest(
         &format!("checkpoint-{}", spec.gate_id),
         target_dialect,
-        profile,
+        target_patch_version,
         &current_commit,
         !result.dirty,
         &all_results_and_specs,
