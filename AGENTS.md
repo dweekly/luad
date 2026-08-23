@@ -7,20 +7,19 @@ This repository analyzes potentially hostile Lua bytecode. Correctness, evidence
 Before modifying correctness-sensitive code, read:
 
 1. `docs/DEVELOPMENT-WORKFLOW.md`
-2. `docs/CODING-AGENT-PLAN.md`
-3. `docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`
-4. `ARCHITECTURE.md`
-5. `docs/MACHINE-INTERFACE.md`
-6. `CONTRIBUTING.md`
+2. `ROADMAP.md`
+3. `docs/NEXT-SPRINT.md`
+4. `docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`
+5. `ARCHITECTURE.md`
+6. `docs/MACHINE-INTERFACE.md`
+7. `CONTRIBUTING.md`
 
 ## Current priority
 
-Work the current packages in `docs/CODING-AGENT-PLAN.md` in dependency order and
-stop at every checkpoint. Do not add dialects, decompiler features, persistent
-state, or inference-heavy analysis while the embedded Lua 5.1 and machine-contract
-path is open. This broad plan is the transition described in
-`docs/DEVELOPMENT-WORKFLOW.md`; after it closes, work proceeds through one active
-`docs/NEXT-SPRINT.md` contract at a time.
+Implement only the claim in `docs/NEXT-SPRINT.md` against its frozen acceptance
+boundary. `ROADMAP.md` supplies direction but does not authorize adjacent work. Stop
+at the sprint checkpoint and do not add dialects, decompiler features, persistent
+state, or inference-heavy analysis unless the active sprint explicitly owns them.
 
 ## Repository rules
 
@@ -42,7 +41,7 @@ path is open. This broad plan is the transition described in
 
 ## Verification
 
-Run the narrowest relevant test while iterating, then the named gate from the coding plan. Before declaring a task complete, run:
+Run the narrowest relevant test while iterating, then the named gate from the active sprint. Before declaring a task complete, run:
 
 ```console
 bash scripts/check.sh

@@ -7,9 +7,9 @@
 `luad` is a pre-release research tool. It is not currently suitable as the sole basis for security conclusions or production reverse-engineering decisions.
 
 Lua 5.4.8 public disassembly has normalized typed agreement with the official
-listing and an independent decoder. The current release work makes embedded Lua
-5.1 profile selection, disassembly, closure captures, queries, and machine output
-equally trustworthy at the public CLI boundary.
+listing and an independent decoder. Embedded Lua 5.1 profile selection,
+disassembly, closure captures, queries, and machine output have named experimental
+public-boundary gates. Exact Lua 5.1 target promotion remains roadmap work.
 
 All stock-Lua dialects remain **experimental** unless an exact release artifact
 for the current revision and profile says otherwise. Internal library gates do not
@@ -32,7 +32,8 @@ delete the document in the same change and update this index.
 | [`PRD.md`](PRD.md) | Product users, needs, requirements, non-goals, quality bar, and release outcomes. | 2026-08-23 | Product scope, target users, supported workflows, or product-level requirements change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-23 | Support policy, reporting channel, trust boundary, or threat model changes. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Evidence-gated planning, role separation, sprint lifecycle, and agent orchestration. | 2026-08-23 | Planning artifacts, agent roles, gate policy, or supported orchestration interfaces change. |
-| [`docs/CODING-AGENT-PLAN.md`](docs/CODING-AGENT-PLAN.md) | The sole active transition sprint for embedded Lua 5.1 and machine contracts. | 2026-08-23 | Its claim, dependencies, or gates change; delete and replace it when the transition sprint is accepted. |
+| [`ROADMAP.md`](ROADMAP.md) | High-level product capabilities, dependency order, exit outcomes, and persistent exclusions. | 2026-08-23 | Product priorities, dependencies, qualification order, or exclusions change. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | The sole active sprint contract for one measurable, independently gated unit of work. | 2026-08-23 | The sprint is accepted, respecified, or replaced; delete obsolete sprint content rather than retaining history. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-23 | New corpus evidence changes the target profile or workflows, or all unique requirements move into the PRD. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-23 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
 | [`docs/RELEASING.md`](docs/RELEASING.md) | Release prerequisites, evidence bundle, versioning, and publication policy. | 2026-08-23 | Release gates, artifact channels, version policy, signing, or publication procedure changes. |

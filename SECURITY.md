@@ -7,7 +7,7 @@
 The project is intended to process untrusted Lua bytecode, but all dialects remain
 experimental until their exact public and release gates pass. Do not rely on `luad`
 as the sole control for accepting, rejecting, or characterizing hostile code. See
-the evidence boundaries in the [coding-agent plan](docs/CODING-AGENT-PLAN.md) and
+the evidence boundaries in the [product roadmap](ROADMAP.md), [active sprint](docs/NEXT-SPRINT.md), and
 [machine-interface contract](docs/MACHINE-INTERFACE.md).
 
 ## Reporting a vulnerability

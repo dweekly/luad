@@ -11,7 +11,7 @@ diagnostics. Lua 5.1 stock and LNUM32 parsing, disassembly, constants, and closu
 captures have public-boundary experimental evidence; no Lua dialect is promoted to
 the supported tier.
 
-See the [coding-agent execution plan](CODING-AGENT-PLAN.md) and
+See the [product roadmap](../ROADMAP.md), [active sprint](NEXT-SPRINT.md), and
 [embedded-firmware requirements](EMBEDDED-FIRMWARE-REQUIREMENTS.md).
 
 ## Discovery

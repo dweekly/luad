@@ -1,7 +1,6 @@
 # Evidence-gated development workflow
 
-Status: authoritative development process. The transition in section 10 applies
-until the current broad coding plan is closed.
+Status: authoritative development process.
 
 This workflow separates product direction, acceptance design, implementation, and
 release decisions. Its purpose is to make each claim small enough to verify and to
@@ -9,7 +8,7 @@ prevent a green test name or persuasive walkthrough from substituting for eviden
 
 ## 1. Operating model
 
-Development uses two forward-looking planning documents after the current transition:
+Development uses two forward-looking planning documents:
 
 1. `ROADMAP.md` describes important product capabilities, their order, dependencies,
    and broad exit outcomes. It does not prescribe production structs, filenames, or
@@ -319,28 +318,20 @@ The reviewer may reject a handoff without examining code when the candidate is d
 the frozen paths changed without approval, required evidence is absent, or the
 canonical gate was not actually executed.
 
-## 10. Transition from the current broad sprint
+## 10. Active planning state
 
-`docs/CODING-AGENT-PLAN.md` remains the sole active implementation plan while its
-existing broad sprint is brought to an honest clean conclusion. The new roadmap/sprint
-pair does not become active midstream.
+`ROADMAP.md` is the only product-direction plan and `docs/NEXT-SPRINT.md` is the only
+implementation sprint. A roadmap item does not authorize implementation until the
+steward gives it a bounded sprint contract.
 
-For this one transition:
+If the active sprint is accepted, blocked, or respecified, replace its contents with
+the next forward-looking contract and update the README documentation index in the
+same change. If no reviewed sprint contract exists, implementation work stops while
+read-only research and acceptance design may continue.
 
-1. Preserve the current implementation work; do not discard useful prototypes.
-2. Correct the outstanding public-boundary and proof defects against the existing
-   plan without adding new scope.
-3. Produce one clean candidate revision and run the actual canonical gates.
-4. Independently review the evidence and either accept the current sprint or explicitly
-   downgrade unfinished surfaces to roadmap work.
-5. Once the repository is clean and its claims are honest, replace
-   `docs/CODING-AGENT-PLAN.md` with a high-level `ROADMAP.md` and one
-   `docs/NEXT-SPRINT.md`.
-6. Update all documentation links so there is no competing active implementation plan.
-
-During this transition, the current coding agent may finish the current sprint. Claude
-and Antigravity assume their separated test-author and implementer roles beginning with
-the first `NEXT-SPRINT` cycle.
+Claude and Antigravity use the separated acceptance-author and implementation-agent
+roles defined above. The steward records the exact tool versions, model identities,
+worktrees, and commits for every cycle.
 
 ## 11. Documentation lifecycle
 

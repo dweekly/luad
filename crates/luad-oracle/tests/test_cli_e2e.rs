@@ -57,7 +57,7 @@ fn test_cli_capabilities() {
     let supp_strings: Vec<&str> = supported.iter().filter_map(|v| v.as_str()).collect();
     assert!(
         supp_strings.is_empty(),
-        "Under Gate R0 baseline, supported_dialects must be empty"
+        "supported_dialects must remain empty without promoted release evidence"
     );
 
     let experimental = json_val["experimental_dialects"]

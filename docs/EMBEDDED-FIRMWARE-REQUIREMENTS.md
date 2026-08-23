@@ -1,8 +1,8 @@
 # Embedded Lua 5.1 firmware requirements
 
 Status: current product requirements for the embedded-firmware use case. This document
-does not define implementation order; [the active coding plan](CODING-AGENT-PLAN.md)
-owns gates and sequencing.
+does not define implementation order; the [product roadmap](../ROADMAP.md) owns
+direction and the [active sprint](NEXT-SPRINT.md) owns exact gates and sequencing.
 
 ## Reference use case
 

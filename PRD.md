@@ -2,7 +2,9 @@
 
 **Status:** Living product requirements
 
-**Execution plan:** [docs/CODING-AGENT-PLAN.md](docs/CODING-AGENT-PLAN.md)
+**Product roadmap:** [ROADMAP.md](ROADMAP.md)
+
+**Active sprint:** [docs/NEXT-SPRINT.md](docs/NEXT-SPRINT.md)
 **Primary deliverable:** Self-documenting command-line interface with a versioned machine-readable output contract  
 **Primary users:** Lua security researchers and AI coding/reverse-engineering agents
 
@@ -799,12 +801,11 @@ The CLI exposes this through `luad capabilities --evidence`.
 
 Exact thresholds must be calibrated on the release-candidate fixture matrix and a documented reference machine. Correctness and bounded behavior take priority over optimizing headline throughput.
 
-## 12. Stepwise implementation plan
+## 12. Delivery strategy
 
-The [coding-agent execution plan](docs/CODING-AGENT-PLAN.md) is the
-authoritative work-package sequence. This PRD defines the product-level strategy
-and release outcomes; gate commands, killer probes, and checkpoint handoffs live
-in that plan.
+The [product roadmap](ROADMAP.md) defines capability order and broad exit outcomes.
+The [active sprint](docs/NEXT-SPRINT.md) defines the one eligible implementation
+claim, including gate commands, killer probes, and checkpoint handoff.
 
 Every work package follows the same proof pattern:
 
@@ -815,84 +816,6 @@ Every work package follows the same proof pattern:
 5. prove that intentional mutations fail;
 6. emit a verified, tamper-checked gate result;
 7. review the checkpoint before advancing dependent work.
-
-### 12.1 Truth and gate hygiene
-
-First make the public claims and proof machinery incapable of overstating
-confidence. Evidence generation consumes verified gate results only; canonical
-gate names map one-to-one to specifications; static semantic effects remain
-reviewed or unverified; official-source citations identify exact releases.
-
-Exit outcome: T0 in the coding plan passes.
-
-### 12.2 Lua 5.4.8 public vertical slice
-
-Build one typed production disassembly record below the renderer. It preserves
-encoded fields, interpreted signed values, resolved references, exact typed
-constants, source lines, jump targets, semantic role, confidence, and provenance.
-
-Prove the public JSON form through three independent paths:
-
-- the exact official Lua 5.4.8 listing;
-- an independently transcribed reference decoder;
-- the production decoder, lifter, and disassembly record.
-
-Normalized text goldens separately prove presentation. Analysis preconditions,
-CFG/dominators, model serialization, and byte accounting receive their own
-review gates; none is implied by the instruction oracle.
-
-The accepted Lua 5.4.8 gates remain prerequisites for the target-specific release
-manifest. New work must preserve those public-disassembly, analysis, and lossless
-serialization guarantees while V1 and M1 close the remaining shared contracts.
-
-### 12.3 Embedded Lua 5.1 vertical slice
-
-Prioritize the layouts and workflows found in deployed firmware:
-
-- header-driven stock layouts with both 32-bit and 64-bit `size_t`;
-- an explicit, pinned LNUM vendor profile;
-- deepest-offset diagnostics and public layout/profile records;
-- lossless non-executable closure-binding descriptors;
-- ordered forward and inverse capture relations;
-- inline, typed resolution for constant-bearing operands;
-- redistributable minimized reproducers plus supplemental private-corpus evidence.
-
-Each requirement must be demonstrated at the CLI/schema boundary as well as in
-the owning library layer.
-
-Exit outcomes: L1 proves exact profile selection and identity, and L2 proves the
-public Lua 5.1 disassembly and capture facts. Q1 and V1 close the shared
-fail-closed query and validator contracts before machine promotion.
-
-### 12.4 Evidence-derived release candidate
-
-Assemble one release manifest from verified prerequisite results produced at one
-clean revision. Derive capability and README status from that manifest. Promote
-only exact releases, layouts, and profiles represented by the evidence; leave
-other dialects and runtime semantic effects experimental.
-
-Exit outcomes: M1 establishes the versioned machine contract, W1 establishes
-deterministic firmware-scale export, and the applicable REL54 or REL51 gate
-promotes only the exact target and command surfaces supported by its evidence.
-
-### 12.5 Post-release development
-
-After the first release candidate, choose work by demonstrated researcher value
-and independent proof availability:
-
-1. instrument a pinned official runtime for semantic-effect evidence;
-2. implement exact object retrieval and interpretation-scoped references;
-3. add presentation-only overlays owned by external callers;
-4. add deterministic full-fidelity export;
-5. add bounded neighborhood traversal only if real workflows show export is
-   insufficient;
-6. decide whether the next dialect strategy favors stock-Lua completeness or
-   prevalent ecosystems such as LuaJIT and Luau;
-7. consider SSA, slicing, assembly, tracing, and decompilation only as separately
-   gated layers over proven facts.
-
-`luad` remains stateless. Research history, hypotheses, naming decisions,
-collaboration, and agent planning remain caller responsibilities.
 
 ## 13. Release criteria
 
