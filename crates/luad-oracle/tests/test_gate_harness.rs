@@ -819,6 +819,31 @@ fn test_all_canonical_gate_scripts_and_specs_consistency() {
                 }
             }
 
+            "gate-analysis-r3" => {
+                let required_probes = [
+                    "test_analysis_refuses_invalid_chunks",
+                    "test_cfg_block_partitioning_and_reachability",
+                    "test_cfg_comparison_fallthrough_edges",
+                    "test_cfg_dominance_frontiers",
+                    "test_cfg_dominator_tree_golden_topologies",
+                    "test_cfg_irreducible_graph_dominators",
+                    "test_cfg_metamethod_companion_edges",
+                    "test_cfg_rejects_invalid_chunk_preconditions",
+                    "test_chunk_diffing",
+                    "test_cli_cfg_dot_golden",
+                    "test_killer_probe_diamond_and_nested_diamond_idoms",
+                    "test_killer_probe_linear_chain_idoms",
+                    "test_killer_probe_loop_and_unreachable_idoms",
+                    "test_structured_query_engine",
+                    "test_xrefs_indexing_and_query",
+                ];
+                for probe in required_probes {
+                    assert!(
+                        spec.expected_tests.contains(&probe.to_string()),
+                        "gate-analysis-r3 spec missing required probe '{probe}'"
+                    );
+                }
+            }
             "gate-release-lua54-8" => {
                 let required_probes = [
                     "test_killer_probe_dirty_result_rejects_promotion",

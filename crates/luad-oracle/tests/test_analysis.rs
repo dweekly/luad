@@ -294,3 +294,32 @@ fn test_cfg_dominance_frontiers() {
         }
     }
 }
+
+#[test]
+fn test_cli_cfg_dot_golden() {
+    let root = luad_oracle::find_workspace_root();
+    let luad = root.join("target").join("debug").join("luad");
+    let cf_path = root
+        .join("tests")
+        .join("fixtures")
+        .join("precompiled")
+        .join("lua54")
+        .join("control_flow.luac");
+    let golden_path = root
+        .join("tests")
+        .join("goldens")
+        .join("lua54")
+        .join("control_flow.cfg.dot.golden");
+
+    let expected_golden = std::fs::read_to_string(&golden_path)
+        .unwrap_or_else(|e| panic!("Failed to read golden {:?}: {e}", golden_path));
+
+    let output = std::process::Command::new(&luad)
+        .args(["cfg", cf_path.to_str().unwrap(), "--format", "dot"])
+        .output()
+        .expect("luad cfg --format dot execution");
+
+    assert!(output.status.success());
+    let actual_dot = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(actual_dot.trim(), expected_golden.trim());
+}

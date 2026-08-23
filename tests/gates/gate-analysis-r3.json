@@ -21,12 +21,14 @@
     "test_cfg_metamethod_companion_edges",
     "test_cfg_rejects_invalid_chunk_preconditions",
     "test_chunk_diffing",
+    "test_cli_cfg_dot_golden",
     "test_killer_probe_diamond_and_nested_diamond_idoms",
     "test_killer_probe_linear_chain_idoms",
     "test_killer_probe_loop_and_unreachable_idoms",
     "test_structured_query_engine",
     "test_xrefs_indexing_and_query"
   ],
+
   "required_compiler_version": null,
   "required_compiler_sha256": null,
   "required_fixtures": [],

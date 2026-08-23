@@ -1,0 +1,41 @@
+digraph "proto:0" {
+  node [shape=box, fontname="Courier", style="rounded,filled", fillcolor="#f8f9fa"];
+  edge [fontname="Helvetica", fontsize=10];
+
+  b0 [label="Block 0 (PC 0..2)\n3 instructions", fillcolor="#e8f5e9"];
+  b0 -> b2 [label="ConditionalSkip", color="#6a1b9a", style="dotted"];
+  b0 -> b1 [label="Fallthrough", color="#9e9e9e", style="solid"];
+  b1 [label="Block 1 (PC 3..3)\n1 instructions", fillcolor="#f8f9fa"];
+  b1 -> b3 [label="UnconditionalJump", color="#1565c0", style="solid"];
+  b2 [label="Block 2 (PC 4..6)\n3 instructions", fillcolor="#f8f9fa"];
+  b2 -> b4 [label="UnconditionalJump", color="#1565c0", style="solid"];
+  b3 [label="Block 3 (PC 7..8)\n2 instructions", fillcolor="#f8f9fa"];
+  b3 -> b4 [label="Fallthrough", color="#9e9e9e", style="solid"];
+  b4 [label="Block 4 (PC 9..13)\n5 instructions", fillcolor="#f8f9fa"];
+  b4 -> b6 [label="ConditionalTrue", color="#2e7d32", style="bold"];
+  b4 -> b5 [label="Fallthrough", color="#9e9e9e", style="solid"];
+  b5 [label="Block 5 (PC 14..15)\n2 instructions", fillcolor="#f8f9fa"];
+  b5 -> b6 [label="Fallthrough", color="#9e9e9e", style="solid"];
+  b6 [label="Block 6 (PC 16..16)\n1 instructions", fillcolor="#f8f9fa"];
+  b6 -> b5 [label="LoopBack", color="#e65100", style="dashed"];
+  b6 -> b7 [label="Fallthrough", color="#9e9e9e", style="solid"];
+  b7 [label="Block 7 (PC 17..17)\n1 instructions", fillcolor="#f8f9fa"];
+  b7 -> b9 [label="ConditionalSkip", color="#6a1b9a", style="dotted"];
+  b7 -> b8 [label="Fallthrough", color="#9e9e9e", style="solid"];
+  b8 [label="Block 8 (PC 18..18)\n1 instructions", fillcolor="#f8f9fa"];
+  b8 -> b12 [label="UnconditionalJump", color="#1565c0", style="solid"];
+  b9 [label="Block 9 (PC 19..21)\n3 instructions", fillcolor="#f8f9fa"];
+  b9 -> b11 [label="ConditionalSkip", color="#6a1b9a", style="dotted"];
+  b9 -> b10 [label="Fallthrough", color="#9e9e9e", style="solid"];
+  b10 [label="Block 10 (PC 22..22)\n1 instructions", fillcolor="#f8f9fa"];
+  b10 -> b12 [label="UnconditionalJump", color="#1565c0", style="solid"];
+  b11 [label="Block 11 (PC 23..23)\n1 instructions", fillcolor="#f8f9fa"];
+  b11 -> b7 [label="LoopBack", color="#e65100", style="dashed"];
+  b12 [label="Block 12 (PC 24..26)\n3 instructions", fillcolor="#f8f9fa"];
+  b12 -> b14 [label="ConditionalSkip", color="#6a1b9a", style="dotted"];
+  b12 -> b13 [label="Fallthrough", color="#9e9e9e", style="solid"];
+  b13 [label="Block 13 (PC 27..27)\n1 instructions", fillcolor="#f8f9fa"];
+  b13 -> b12 [label="LoopBack", color="#e65100", style="dashed"];
+  b14 [label="Block 14 (PC 28..30)\n3 instructions", fillcolor="#ede7f6"];
+  b15 [label="Block 15 (PC 31..31)\n1 instructions", fillcolor="#ffebee"];
+}
