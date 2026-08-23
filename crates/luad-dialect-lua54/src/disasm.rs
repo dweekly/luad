@@ -32,8 +32,9 @@ pub fn disassemble_proto_lua54(proto: &Prototype) -> DisassembledPrototype {
         last_line_defined: proto.last_line_defined,
         numparams: proto.numparams,
         is_vararg: proto.is_vararg != 0,
-        maxstacksize: proto.maxstacksize as u8,
+        maxstacksize: proto.maxstacksize,
         instructions,
+
         child_protos,
     }
 }
