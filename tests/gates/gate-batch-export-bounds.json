@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-batch-export-bounds",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_batch_export_bounds",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_bounds_matrix_matches_independent_prefix_and_counts_for_pinned_fixtures",
+    "test_contract_example_closures_bound_three_stream_shape",
+    "test_invalid_bound_values_are_usage_errors_without_machine_stdout",
+    "test_killer_mutation_available_fact_count_off_by_one_rejected",
+    "test_killer_mutation_diagnostic_suppressed_at_zero_bound_rejected",
+    "test_killer_mutation_emitted_fact_count_off_by_one_rejected",
+    "test_killer_mutation_export_schema_without_truncation_field_accepts_defect",
+    "test_killer_mutation_extra_fact_beyond_bound_rejected",
+    "test_killer_mutation_is_truncated_flipped_false_rejected",
+    "test_killer_mutation_missing_file_end_after_truncation_rejected",
+    "test_killer_mutation_next_input_dropped_after_bound_rejected",
+    "test_killer_mutation_record_reordering_between_runs_rejected",
+    "test_later_inputs_receive_complete_framing_after_truncation_and_failure",
+    "test_live_export_schema_validates_bounded_records_and_truncation_fields",
+    "test_omitted_bound_preserves_unbounded_fact_stream",
+    "test_repeated_bounded_invocations_are_byte_identical",
+    "test_stderr_diagnostics_never_contaminate_jsonl_stdout",
+    "test_truncation_alone_does_not_make_aggregate_exit_nonzero",
+    "test_vendor_profile_identity_preserved_under_bound",
+    "test_zero_bound_preserves_framing_and_failure_diagnostics"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [
+    {
+      "path": "tests/fixtures/precompiled/lua51/closures.luac",
+      "sha256": "62c4438b660880fa546cbe377d1f40113d2efc25aefc40df227979276efa756e"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua51_lnum32/hello.luac",
+      "sha256": "8376be37ec3042d3b0a87aa39db7d7396fb54ae390abe346d885e1527d23e353"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua54/hello.luac",
+      "sha256": "a171c4c88ec40b1c871a57a888f66d7a93144e1d742f4071af286c9dc7b93575"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua54/hello_stripped.luac",
+      "sha256": "9806c9692fd2e55f737c0af5b9cfb96fd543383a2f4decc715c8c30a861ede0f"
+    }
+  ],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-machine-contract",
+    "gate-batch-export"
+  ],
+  "allowed_capability_mutations": []
+}
