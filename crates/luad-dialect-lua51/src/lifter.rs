@@ -132,7 +132,7 @@ fn lift_instruction_51(
             reads.push(EffectTarget::Register { index: raw.b as u8 });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Copy R({}) := R({})", raw.a, raw.b);
-            citations.push("lvm.c:1130".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1130".to_string());
         }
         Opcode51::LoadK => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -145,7 +145,7 @@ fn lift_instruction_51(
             });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Load constant K[{}] into R({})", raw.bx, raw.a);
-            citations.push("lvm.c:1135".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1135".to_string());
         }
         Opcode51::LoadBool => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -161,7 +161,7 @@ fn lift_instruction_51(
             } else {
                 format!("Load boolean {} into R({})", val, raw.a)
             };
-            citations.push("lvm.c:1145".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1145".to_string());
         }
         Opcode51::LoadNil => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -174,7 +174,7 @@ fn lift_instruction_51(
                 end: raw.b as u8,
             });
             explanation = format!("Set nil into R({}..{})", raw.a, raw.b as u8);
-            citations.push("lvm.c:1150".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1150".to_string());
         }
         Opcode51::GetUpval => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -194,7 +194,7 @@ fn lift_instruction_51(
             });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Load Upvalue[{}] into R({})", raw.b, raw.a);
-            citations.push("lvm.c:1155".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1155".to_string());
         }
         Opcode51::GetGlobal => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -208,7 +208,7 @@ fn lift_instruction_51(
             writes.push(EffectTarget::Register { index: raw.a });
             metamethods.push("__index".to_string());
             explanation = format!("Get global K[{}] into R({})", raw.bx, raw.a);
-            citations.push("lvm.c:1160".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1160".to_string());
         }
         Opcode51::GetTable => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -218,7 +218,7 @@ fn lift_instruction_51(
             writes.push(EffectTarget::Register { index: raw.a });
             metamethods.push("__index".to_string());
             explanation = format!("Load table field R({})[C] into R({})", raw.b, raw.a);
-            citations.push("lvm.c:1170".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1170".to_string());
         }
         Opcode51::SetGlobal => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -232,7 +232,7 @@ fn lift_instruction_51(
             });
             metamethods.push("__newindex".to_string());
             explanation = format!("Set global K[{}] := R({})", raw.bx, raw.a);
-            citations.push("lvm.c:1180".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1180".to_string());
         }
         Opcode51::SetUpval => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -252,7 +252,7 @@ fn lift_instruction_51(
                     .and_then(|u| u.name.as_ref().map(|s| s.display.clone())),
             });
             explanation = format!("Store R({}) into Upvalue[{}]", raw.a, raw.b);
-            citations.push("lvm.c:1190".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1190".to_string());
         }
         Opcode51::SetTable => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -261,7 +261,7 @@ fn lift_instruction_51(
             parse_rk(raw.is_c_k(), raw.c_index_k(), &mut reads, &mut operands);
             metamethods.push("__newindex".to_string());
             explanation = format!("Store into table R({})[B] := C", raw.a);
-            citations.push("lvm.c:1200".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1200".to_string());
         }
         Opcode51::NewTable => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -275,7 +275,7 @@ fn lift_instruction_51(
             });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Create new table in R({})", raw.a);
-            citations.push("lvm.c:1210".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1210".to_string());
         }
         Opcode51::SelfOp => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -289,7 +289,7 @@ fn lift_instruction_51(
                 "Method lookup: R({}+1) := R({}), R({}) := R({})[C]",
                 raw.a, raw.b, raw.a, raw.b
             );
-            citations.push("lvm.c:1220".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1220".to_string());
         }
         Opcode51::Add
         | Opcode51::Sub
@@ -312,7 +312,7 @@ fn lift_instruction_51(
             };
             metamethods.push(mm.to_string());
             explanation = format!("Binary op {}: R({}) := B op C", op.name(), raw.a);
-            citations.push("lvm.c:1230".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1230".to_string());
         }
         Opcode51::Unm | Opcode51::Not | Opcode51::Len => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -320,7 +320,7 @@ fn lift_instruction_51(
             reads.push(EffectTarget::Register { index: raw.b as u8 });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Unary op {}: R({}) := op R({})", op.name(), raw.a, raw.b);
-            citations.push("lvm.c:1260".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1260".to_string());
         }
         Opcode51::Concat => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -333,7 +333,7 @@ fn lift_instruction_51(
             writes.push(EffectTarget::Register { index: raw.a });
             metamethods.push("__concat".to_string());
             explanation = format!("Concatenate R({}..{}) into R({})", raw.b, raw.c, raw.a);
-            citations.push("lvm.c:1270".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1270".to_string());
         }
         Opcode51::Jmp => {
             let target = (pc as i32 + 1 + raw.sbx) as usize;
@@ -344,7 +344,7 @@ fn lift_instruction_51(
             });
             jump_target = Some(target);
             explanation = format!("Jump to PC {target}");
-            citations.push("lvm.c:1280".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1280".to_string());
         }
         Opcode51::Eq | Opcode51::Lt | Opcode51::Le => {
             operands.push(TypedOperand::Flag { value: raw.a != 0 });
@@ -359,7 +359,7 @@ fn lift_instruction_51(
                 op.name(),
                 raw.a
             );
-            citations.push("lvm.c:1290".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1290".to_string());
         }
         Opcode51::Test => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -370,7 +370,7 @@ fn lift_instruction_51(
                 skip_target_pc: skip_pc,
             });
             explanation = format!("Test boolean R({}) <=> {}", raw.a, raw.c);
-            citations.push("lvm.c:1300".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1300".to_string());
         }
         Opcode51::TestSet => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -383,7 +383,7 @@ fn lift_instruction_51(
                 skip_target_pc: skip_pc,
             });
             explanation = format!("Test R({}) <=> {} and copy to R({})", raw.b, raw.c, raw.a);
-            citations.push("lvm.c:1310".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1310".to_string());
         }
         Opcode51::Call => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -410,7 +410,7 @@ fn lift_instruction_51(
             }
             metamethods.push("__call".to_string());
             explanation = format!("Call function in R({})", raw.a);
-            citations.push("lvm.c:1320".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1320".to_string());
         }
         Opcode51::TailCall => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -427,7 +427,7 @@ fn lift_instruction_51(
             }
             metamethods.push("__call".to_string());
             explanation = format!("Tail call function in R({})", raw.a);
-            citations.push("lvm.c:1330".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1330".to_string());
         }
         Opcode51::Return => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -442,7 +442,7 @@ fn lift_instruction_51(
                 });
             }
             explanation = format!("Return values starting from R({})", raw.a);
-            citations.push("lvm.c:1340".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1340".to_string());
         }
         Opcode51::ForLoop => {
             let target = (pc as i32 + 1 + raw.sbx) as usize;
@@ -460,7 +460,7 @@ fn lift_instruction_51(
             writes.push(EffectTarget::Register { index: raw.a });
             writes.push(EffectTarget::Register { index: raw.a + 3 });
             explanation = format!("Numeric for-loop step; if not limit, jump to PC {target}");
-            citations.push("lvm.c:1350".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1350".to_string());
         }
         Opcode51::ForPrep => {
             let target = (pc as i32 + 1 + raw.sbx) as usize;
@@ -477,7 +477,7 @@ fn lift_instruction_51(
             });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Prepare numeric for-loop and jump to PC {target}");
-            citations.push("lvm.c:1360".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1360".to_string());
         }
         Opcode51::TForLoop => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -494,7 +494,7 @@ fn lift_instruction_51(
                 end: raw.a + 2 + raw.c as u8,
             });
             explanation = format!("Generic for-loop call iterator in R({})", raw.a);
-            citations.push("lvm.c:1370".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1370".to_string());
         }
         Opcode51::SetList => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -512,7 +512,7 @@ fn lift_instruction_51(
             });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Set list elements into table R({})", raw.a);
-            citations.push("lvm.c:1390".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1390".to_string());
         }
         Opcode51::Close => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -520,7 +520,7 @@ fn lift_instruction_51(
                 min_register: raw.a,
             });
             explanation = format!("Close upvalues up to R({})", raw.a);
-            citations.push("lvm.c:1395".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1395".to_string());
         }
         Opcode51::Closure => {
             let child_bx = raw.bx as usize;
@@ -561,7 +561,7 @@ fn lift_instruction_51(
                 "Instantiate closure proto:{child_bx} into R({}) with {nups} upvalue capture(s)",
                 raw.a
             );
-            citations.push("lvm.c:1400".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1400".to_string());
         }
         Opcode51::VarArg => {
             operands.push(TypedOperand::Register { index: raw.a });
@@ -576,7 +576,7 @@ fn lift_instruction_51(
                 });
             }
             explanation = format!("Load vararg into R({})", raw.a);
-            citations.push("lvm.c:1410".to_string());
+            citations.push("lua-5.1.5:src/lvm.c:1410".to_string());
         }
     }
 
@@ -621,7 +621,7 @@ fn lift_instruction_51(
             jump_target: None,
             companion_pc: Some(closure_pc),
             confidence: Confidence::Reviewed,
-            source_citations: vec!["lvm.c:1402".to_string()],
+            source_citations: vec!["lua-5.1.5:src/lvm.c:1402".to_string()],
             source,
         };
     }

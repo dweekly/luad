@@ -743,4 +743,94 @@ fn test_all_canonical_gate_scripts_and_specs_consistency() {
             );
         }
     }
+
+    // Verify required plan probes appear in each specification
+    for spec in &all_specs {
+        match spec.gate_id.as_str() {
+            "gate-proof-harness" => {
+                let required_probes = [
+                    "test_probe_1_zero_tests_executed_rejected",
+                    "test_probe_2_nonexistent_test_filter_rejected",
+                    "test_probe_3_ignored_test_rejected",
+                    "test_probe_4_stale_git_commit_rejected",
+                    "test_probe_5_dirty_result_rejected_for_promotion",
+                    "test_probe_6_wrong_compiler_binary_sha256_rejected",
+                    "test_probe_7_wrong_compiler_version_rejected",
+                    "test_probe_8_missing_compiler_rejected_before_tests",
+                    "test_probe_9_mutated_fixture_rejected_before_evaluation",
+                    "test_probe_10_mutated_result_after_manifest_assembly_rejected",
+                    "test_probe_11_success_boolean_flip_rejected",
+                    "test_probe_12_printf_spoofed_libtest_output_rejected",
+                    "test_fixture_manifest_records_complete_provenance",
+                    "test_all_canonical_gate_scripts_and_specs_consistency",
+                ];
+                for probe in required_probes {
+                    assert!(
+                        spec.expected_tests.contains(&probe.to_string()),
+                        "gate-proof-harness spec missing required probe '{probe}'"
+                    );
+                }
+            }
+            "gate-facts-lua54-8" => {
+                let required_probes = [
+                    "test_all_10_fixtures_lua54_against_differential_oracle",
+                    "test_negative_control_signed_immediate_offset_sb",
+                    "test_negative_control_bit15_b_decoder_bug",
+                    "test_negative_control_jmp_comment_changed_to_arbitrary_text_rejected",
+                    "test_negative_control_jmp_comment_changed_to_wrong_target_rejected",
+                    "test_negative_control_malformed_zero_valued_field_rejected",
+                    "test_negative_control_recognized_unconsumed_field_sweep",
+                    "test_negative_control_string_constant_exact_formatting_required",
+                    "test_negative_control_signed_zero_float_exact",
+                    "test_negative_control_missing_constant_tag_rejected",
+                    "test_negative_control_missing_upvalue_columns_rejected",
+                ];
+                for probe in required_probes {
+                    assert!(
+                        spec.expected_tests.contains(&probe.to_string()),
+                        "gate-facts-lua54-8 spec missing required probe '{probe}'"
+                    );
+                }
+            }
+            "gate-public-disasm-lua54-8" => {
+                let required_probes = [
+                    "test_three_way_agreement_on_all_10_fixtures",
+                    "test_exact_signed_immediate_and_control_flow_goldens",
+                    "test_killer_probe_signed_operand_mutation_rejected_by_comparator",
+                    "test_killer_probe_independent_decoder_mutation_rejected_by_comparator",
+                    "test_killer_probe_missing_jump_target_rejected_by_comparator",
+                    "test_killer_probe_missing_source_line_rejected_by_comparator",
+                    "test_killer_probe_missing_k_flag_rejected_by_comparator",
+                    "test_killer_probe_json_mutation_rejected_by_comparator",
+                    "test_killer_probe_text_renderer_mutation_rejected_by_golden",
+                    "test_killer_probe_unknown_opcode_produces_structured_diagnostic",
+                    "test_killer_probe_oob_constant_reference_emits_diagnostic",
+                    "test_cli_disasm_json_and_text_goldens",
+                ];
+                for probe in required_probes {
+                    assert!(
+                        spec.expected_tests.contains(&probe.to_string()),
+                        "gate-public-disasm-lua54-8 spec missing required probe '{probe}'"
+                    );
+                }
+            }
+            "gate-release-lua54-8" => {
+                let required_probes = [
+                    "test_killer_probe_dirty_result_rejects_promotion",
+                    "test_killer_probe_unqualified_dialect_string_rejected",
+                    "test_killer_probe_tampered_success_flag_rejects_verification",
+                    "test_killer_probe_missing_prerequisite_result_rejects_verification",
+                    "test_r0_baseline_supported_dialects_empty",
+                    "test_unproven_dialects_remain_experimental",
+                ];
+                for probe in required_probes {
+                    assert!(
+                        spec.expected_tests.contains(&probe.to_string()),
+                        "gate-release-lua54-8 spec missing required probe '{probe}'"
+                    );
+                }
+            }
+            _ => (),
+        }
+    }
 }

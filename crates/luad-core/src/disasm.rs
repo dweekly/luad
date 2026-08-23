@@ -1,15 +1,33 @@
 //! Typed production disassembly representation.
 //!
 //! Exposes a structured, dialect-neutral disassembly record containing physical
-//! and semantic instruction metadata, typed operands (including decoded signed immediates),
-//! resolved constant/upvalue/prototype references, source lines, and jump targets.
+//! and semantic instruction metadata, physical role, raw encoded fields,
+//! typed operands (including decoded signed immediates), companion information,
+//! resolved constant/upvalue/prototype references with StableIds, source lines,
+//! jump targets, provenance, and structured diagnostics.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::diagnostic::Diagnostic;
 use crate::id::StableId;
 use crate::model::ConstantValue;
-use crate::provenance::Confidence;
+use crate::provenance::{Confidence, SourceLocation};
+
+/// Raw decoded bitfield operands preserved from physical instruction word.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
+pub struct EncodedOperands {
+    pub a: u8,
+    pub b: u8,
+    pub c: u8,
+    pub k: u8,
+    pub bx: u32,
+    pub sbx: i32,
+    pub ax: u32,
+    pub sb: i32,
+    pub sc: i32,
+    pub sj: i32,
+}
 
 /// Category of an operand in a disassembled instruction.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -34,17 +52,26 @@ pub enum ResolvedFact {
     /// Resolved constant from prototype's constant table.
     Constant {
         index: usize,
+        id: StableId,
         value: ConstantValue,
         formatted_preview: String,
     },
     /// Resolved upvalue descriptor.
-    Upvalue { index: u8, name: Option<String> },
+    Upvalue {
+        index: u8,
+        id: StableId,
+        name: Option<String>,
+    },
     /// Resolved local variable debug info.
-    Local { index: usize, name: String },
+    Local {
+        index: usize,
+        id: StableId,
+        name: String,
+    },
     /// Resolved child prototype.
     Prototype { index: usize, id: StableId },
     /// Resolved jump destination PC.
-    JumpTarget { target_pc: usize },
+    JumpTarget { target_pc: usize, id: StableId },
     /// Resolved metamethod name for metamethod-bearing dispatch instructions.
     Metamethod { name: String },
 }
@@ -66,6 +93,8 @@ pub struct DisassembledOperand {
 /// A disassembled instruction with physical and semantic details.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct DisassembledInstruction {
+    /// Deterministic stable ID (e.g. `proto:0:pc:14`).
+    pub id: StableId,
     /// 0-indexed physical program counter.
     pub pc: usize,
     /// Raw 32-bit physical instruction word.
@@ -76,6 +105,10 @@ pub struct DisassembledInstruction {
     pub mnemonic: String,
     /// Raw numeric opcode byte.
     pub opcode_num: u8,
+    /// Physical semantic role ("instruction", "companion", "closure_binding", "extra_argument").
+    pub role: String,
+    /// Decoded raw bitfield parameters.
+    pub encoded_operands: EncodedOperands,
     /// 1-based source line number if debug info is present.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub line: Option<usize>,
@@ -84,6 +117,9 @@ pub struct DisassembledInstruction {
     /// Resolved jump target PC (0-indexed) if this is a branch instruction.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub jump_target: Option<usize>,
+    /// Companion instruction PC if paired with another physical instruction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub companion_pc: Option<usize>,
     /// Metamethod name (e.g. "__add") if applicable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metamethod: Option<String>,
@@ -92,6 +128,11 @@ pub struct DisassembledInstruction {
     pub comment: Option<String>,
     /// Analysis confidence level.
     pub confidence: Confidence,
+    /// Source byte location in chunk.
+    pub source: SourceLocation,
+    /// Structured diagnostics emitted during disassembly (e.g. invalid opcode, invalid constant reference).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 /// Disassembled prototype containing metadata and structured disassembly rows.
@@ -114,6 +155,9 @@ pub struct DisassembledPrototype {
     pub maxstacksize: u8,
     /// Ordered list of disassembled instructions.
     pub instructions: Vec<DisassembledInstruction>,
+    /// Structured diagnostics across prototype disassembly.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<Diagnostic>,
     /// Child prototypes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub child_protos: Vec<DisassembledPrototype>,

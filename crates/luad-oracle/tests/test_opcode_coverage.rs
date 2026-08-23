@@ -40,6 +40,13 @@ fn test_lua51_comprehensive_opcodes_operands_and_effects() {
             "Opcode {} missing citation",
             op.name()
         );
+        for cite in &sem.source_citations {
+            assert!(
+                cite.starts_with("lua-5.1.5:src/"),
+                "Citation for {} must be pinned to lua-5.1.5:src/: got '{cite}'",
+                op.name()
+            );
+        }
 
         // Verify operand decoding
         assert!(
@@ -153,6 +160,13 @@ fn test_lua52_comprehensive_opcodes_operands_and_effects() {
             "Opcode {} missing citation",
             op.name()
         );
+        for cite in &sem.source_citations {
+            assert!(
+                cite.starts_with("lua-5.2.4:src/"),
+                "Citation for {} must be pinned to lua-5.2.4:src/: got '{cite}'",
+                op.name()
+            );
+        }
 
         match op.name() {
             "MOVE" => {
@@ -216,6 +230,13 @@ fn test_lua53_comprehensive_opcodes_operands_and_effects() {
             "Opcode {} missing citation",
             op.name()
         );
+        for cite in &sem.source_citations {
+            assert!(
+                cite.starts_with("lua-5.3.6:src/"),
+                "Citation for {} must be pinned to lua-5.3.6:src/: got '{cite}'",
+                op.name()
+            );
+        }
 
         match op.name() {
             "MOVE" => {
@@ -272,6 +293,13 @@ fn test_lua54_comprehensive_opcodes_operands_and_effects() {
             "Opcode {} missing citation",
             op.name()
         );
+        for cite in &sem.source_citations {
+            assert!(
+                cite.starts_with("lua-5.4.8:src/"),
+                "Citation for {} must be pinned to lua-5.4.8:src/: got '{cite}'",
+                op.name()
+            );
+        }
 
         match op.name() {
             "MOVE" => {
@@ -348,6 +376,13 @@ fn test_lua55_comprehensive_opcodes_operands_and_effects() {
             "Opcode {} missing citation",
             op.name()
         );
+        for cite in &sem.source_citations {
+            assert!(
+                cite.starts_with("lua-5.5.1:src/"),
+                "Citation for {} must be pinned to lua-5.5.1:src/: got '{cite}'",
+                op.name()
+            );
+        }
 
         match op.name() {
             "MOVE" => {

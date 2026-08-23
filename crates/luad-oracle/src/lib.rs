@@ -5,9 +5,12 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::NamedTempFile;
 
+pub mod differential_disasm;
 pub mod gate_runner;
 pub mod independent_lua54_oracle;
 pub mod listing_parser;
+
+pub use differential_disasm::{compare_proto_three_way, DisasmComparisonError};
 
 pub use gate_runner::{
     assemble_release_manifest, execute_gate_spec, verify_gate_result, verify_release_manifest,

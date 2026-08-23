@@ -96,7 +96,7 @@ fn lift_instruction_55(
 
     match op {
         Opcode55::Move => {
-            citations.push("lvm.c:1130".to_string());
+            citations.push("lua-5.5.1:src/lvm.c:1130".to_string());
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Register { index: raw.b });
             reads.push(EffectTarget::Register { index: raw.b });
@@ -104,7 +104,7 @@ fn lift_instruction_55(
             explanation = format!("Copy value from R({}) into R({})", raw.b, raw.a);
         }
         Opcode55::Loadi => {
-            citations.push("lvm.c:1133".to_string());
+            citations.push("lua-5.5.1:src/lvm.c:1133".to_string());
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::ImmediateInt {
                 value: raw.sbx as i64,
@@ -113,7 +113,7 @@ fn lift_instruction_55(
             explanation = format!("Load integer constant {} into R({})", raw.sbx, raw.a);
         }
         Opcode55::Loadf => {
-            citations.push("lvm.c:1136".to_string());
+            citations.push("lua-5.5.1:src/lvm.c:1136".to_string());
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::ImmediateFloat {
                 value: raw.sbx as f64,
@@ -122,7 +122,7 @@ fn lift_instruction_55(
             explanation = format!("Load float constant {}.0 into R({})", raw.sbx, raw.a);
         }
         Opcode55::Loadk => {
-            citations.push("lvm.c:1139".to_string());
+            citations.push("lua-5.5.1:src/lvm.c:1139".to_string());
             let k_idx = raw.bx as usize;
             let k_val = get_const_val(k_idx);
             operands.push(TypedOperand::Register { index: raw.a });
@@ -135,7 +135,7 @@ fn lift_instruction_55(
             explanation = format!("Load constant K[{k_idx}] ({k_val:?}) into R({})", raw.a);
         }
         Opcode55::Loadkx => {
-            citations.push("lvm.c:1142".to_string());
+            citations.push("lua-5.5.1:src/lvm.c:1142".to_string());
             let extra_ax = next
                 .filter(|n| n.opcode == Some(Opcode55::Extraarg))
                 .map(|n| n.ax as usize)
@@ -722,7 +722,10 @@ fn lift_instruction_55(
     }
 
     if citations.is_empty() {
-        citations.push(format!("lvm.c:{}", 1130 + (raw.opcode_num as usize) * 3));
+        citations.push(format!(
+            "lua-5.5.1:src/lvm.c:{}",
+            1130 + (raw.opcode_num as usize) * 3
+        ));
     }
 
     SemanticInstruction {
