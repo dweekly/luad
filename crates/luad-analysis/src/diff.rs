@@ -55,7 +55,7 @@ pub fn diff_chunks(
     old_chunk: &Chunk,
     new_chunk: &Chunk,
     semantic: bool,
-    _ignore_debug: bool,
+    ignore_debug: bool,
 ) -> ChunkDiff {
     let mut header_diffs = Vec::new();
 
@@ -79,6 +79,7 @@ pub fn diff_chunks(
         &new_chunk.dialect,
         &new_chunk.main_proto,
         semantic,
+        ignore_debug,
         &mut proto_diffs,
     );
 
@@ -105,12 +106,38 @@ fn diff_prototype(
     new_dialect: &str,
     new_p: &Prototype,
     semantic: bool,
+    ignore_debug: bool,
     diffs: &mut Vec<ProtoDiff>,
 ) {
     let mut header_diffs = Vec::new();
     let mut constant_diffs = Vec::new();
     let mut upvalue_diffs = Vec::new();
     let mut instruction_diffs = Vec::new();
+
+    if !ignore_debug {
+        let old_src = old_p.source_name.as_ref().map(|s| s.display.as_str());
+        let new_src = new_p.source_name.as_ref().map(|s| s.display.as_str());
+        if old_src != new_src {
+            header_diffs.push(format!(
+                "Source name changed: {:?} -> {:?}",
+                old_src, new_src
+            ));
+        }
+        if old_p.line_info.len() != new_p.line_info.len() {
+            header_diffs.push(format!(
+                "Debug line info count changed: {} -> {}",
+                old_p.line_info.len(),
+                new_p.line_info.len()
+            ));
+        }
+        if old_p.loc_vars.len() != new_p.loc_vars.len() {
+            header_diffs.push(format!(
+                "Local variable count changed: {} -> {}",
+                old_p.loc_vars.len(),
+                new_p.loc_vars.len()
+            ));
+        }
+    }
 
     if old_p.numparams != new_p.numparams {
         header_diffs.push(format!(
@@ -144,47 +171,53 @@ fn diff_prototype(
     }
 
     // Compare instructions
-    let max_insts = old_p.instructions.len().max(new_p.instructions.len());
-    let old_lifted = if semantic {
-        Some(crate::lift_proto_for_dialect(old_dialect, old_p))
+    if old_dialect != new_dialect && !semantic {
+        header_diffs.push(format!(
+            "Cross-dialect physical instruction diff ({old_dialect} vs {new_dialect}) is incompatible/uncertain; use --semantic for IR effect comparison"
+        ));
     } else {
-        None
-    };
-    let new_lifted = if semantic {
-        Some(crate::lift_proto_for_dialect(new_dialect, new_p))
-    } else {
-        None
-    };
-
-    for pc in 0..max_insts {
-        let old_desc = if let Some(lifted) = &old_lifted {
-            lifted
-                .get(pc)
-                .map(|i| format!("{:<10} {}", i.mnemonic, i.explanation))
+        let max_insts = old_p.instructions.len().max(new_p.instructions.len());
+        let old_lifted = if semantic {
+            Some(crate::lift_proto_for_dialect(old_dialect, old_p))
         } else {
-            old_p
-                .instructions
-                .get(pc)
-                .map(|i| format!("0x{:08x}", i.raw_word))
+            None
+        };
+        let new_lifted = if semantic {
+            Some(crate::lift_proto_for_dialect(new_dialect, new_p))
+        } else {
+            None
         };
 
-        let new_desc = if let Some(lifted) = &new_lifted {
-            lifted
-                .get(pc)
-                .map(|i| format!("{:<10} {}", i.mnemonic, i.explanation))
-        } else {
-            new_p
-                .instructions
-                .get(pc)
-                .map(|i| format!("0x{:08x}", i.raw_word))
-        };
+        for pc in 0..max_insts {
+            let old_desc = if let Some(lifted) = &old_lifted {
+                lifted
+                    .get(pc)
+                    .map(|i| format!("{:<10} {}", i.mnemonic, i.explanation))
+            } else {
+                old_p
+                    .instructions
+                    .get(pc)
+                    .map(|i| format!("0x{:08x}", i.raw_word))
+            };
 
-        if old_desc != new_desc {
-            instruction_diffs.push(InstructionDiff {
-                pc,
-                old: old_desc,
-                new: new_desc,
-            });
+            let new_desc = if let Some(lifted) = &new_lifted {
+                lifted
+                    .get(pc)
+                    .map(|i| format!("{:<10} {}", i.mnemonic, i.explanation))
+            } else {
+                new_p
+                    .instructions
+                    .get(pc)
+                    .map(|i| format!("0x{:08x}", i.raw_word))
+            };
+
+            if old_desc != new_desc {
+                instruction_diffs.push(InstructionDiff {
+                    pc,
+                    old: old_desc,
+                    new: new_desc,
+                });
+            }
         }
     }
 
@@ -212,6 +245,7 @@ fn diff_prototype(
             new_dialect,
             &new_p.protos[i],
             semantic,
+            ignore_debug,
             diffs,
         );
     }

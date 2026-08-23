@@ -23,6 +23,8 @@ pub enum XrefRelation {
     Instantiates,
     /// Source branches or jumps to target instruction PC.
     JumpsTo,
+    /// Parent closure instruction or binding descriptor binds to child upvalue.
+    Binds,
 }
 
 /// A cross-reference relationship between two stable artifacts.
@@ -34,6 +36,21 @@ pub struct XrefEntry {
     pub target: StableId,
     /// Reference type.
     pub relation: XrefRelation,
+}
+
+/// Structured response for cross-reference queries over a chunk.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct XrefResponse {
+    /// Target filter queried, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<StableId>,
+    /// Source filter queried, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<StableId>,
+    /// Matching cross-reference entries.
+    pub entries: Vec<XrefEntry>,
+    /// Total count of matching entries.
+    pub total_count: usize,
 }
 
 /// Queryable cross-reference index over an entire chunk.
@@ -89,15 +106,64 @@ impl XrefIndex {
                 });
             }
 
-            // 4. Closures
-            if sem.mnemonic == "CLOSURE" {
+            // 4. Closures & Binds
+            if sem.mnemonic.starts_with("CLOSURE") {
                 for op in &sem.operands {
-                    if let luad_core::TypedOperand::Prototype { path, .. } = op {
+                    if let luad_core::TypedOperand::Prototype {
+                        index: child_idx,
+                        path,
+                    } = op
+                    {
                         self.entries.push(XrefEntry {
                             source: src_id.clone(),
                             target: StableId::proto(path.clone()),
                             relation: XrefRelation::Instantiates,
                         });
+
+                        if let Some(child_proto) = proto.protos.get(*child_idx) {
+                            for (upval_idx, u) in child_proto.upvalues.iter().enumerate() {
+                                let child_upval_id =
+                                    StableId::upvalue(child_proto.path.clone(), upval_idx);
+                                if u.instack == 1 {
+                                    // Capture from parent local register
+                                    let parent_loc_id =
+                                        StableId::local(proto.path.clone(), u.idx as usize);
+                                    self.entries.push(XrefEntry {
+                                        source: parent_loc_id,
+                                        target: child_upval_id.clone(),
+                                        relation: XrefRelation::Binds,
+                                    });
+                                } else {
+                                    // Capture from parent upvalue
+                                    let parent_upval_id =
+                                        StableId::upvalue(proto.path.clone(), u.idx as usize);
+                                    self.entries.push(XrefEntry {
+                                        source: parent_upval_id,
+                                        target: child_upval_id.clone(),
+                                        relation: XrefRelation::Binds,
+                                    });
+                                }
+                                if dialect.starts_with("lua5.1") {
+                                    let desc_pc = sem.pc + 1 + upval_idx;
+                                    if desc_pc < proto.instructions.len() {
+                                        self.entries.push(XrefEntry {
+                                            source: StableId::instruction(
+                                                proto.path.clone(),
+                                                desc_pc,
+                                            ),
+                                            target: child_upval_id.clone(),
+                                            relation: XrefRelation::Binds,
+                                        });
+                                    }
+                                }
+                                // Closure instantiation link
+                                self.entries.push(XrefEntry {
+                                    source: src_id.clone(),
+                                    target: child_upval_id,
+                                    relation: XrefRelation::Binds,
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -139,5 +205,61 @@ impl XrefIndex {
             .iter()
             .filter(|e| &e.source == source)
             .collect()
+    }
+}
+
+/// Recursively find a prototype with the given `ProtoPath` within a root prototype hierarchy.
+#[must_use]
+pub fn find_proto<'a>(
+    root: &'a Prototype,
+    path: &luad_core::id::ProtoPath,
+) -> Option<&'a Prototype> {
+    if &root.path == path {
+        return Some(root);
+    }
+    for child in &root.protos {
+        if let Some(p) = find_proto(child, path) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// Validate whether a given `StableId` target exists within the parsed `Chunk`.
+#[must_use]
+pub fn validate_target(chunk: &Chunk, target: &StableId) -> bool {
+    match target {
+        StableId::Chunk => true,
+        StableId::Proto(path) => find_proto(&chunk.main_proto, path).is_some(),
+        StableId::Instruction { proto, pc } => {
+            if let Some(p) = find_proto(&chunk.main_proto, proto) {
+                *pc < p.instructions.len()
+            } else {
+                false
+            }
+        }
+        StableId::Constant { proto, index } => {
+            if let Some(p) = find_proto(&chunk.main_proto, proto) {
+                *index < p.constants.len()
+            } else {
+                false
+            }
+        }
+        StableId::Upvalue { proto, index } => {
+            if let Some(p) = find_proto(&chunk.main_proto, proto) {
+                *index < p.upvalues.len()
+            } else {
+                false
+            }
+        }
+        StableId::Local { proto, index } => {
+            if let Some(p) = find_proto(&chunk.main_proto, proto) {
+                *index < p.loc_vars.len()
+            } else {
+                false
+            }
+        }
+        StableId::Block { proto, .. } => find_proto(&chunk.main_proto, proto).is_some(),
+        StableId::Diagnostic { target, .. } => validate_target(chunk, target),
     }
 }

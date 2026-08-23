@@ -24,7 +24,7 @@ pub enum Lua51Profile {
     /// Explicit 32-bit size_t stock profile.
     Stock32,
     /// OpenWrt / eLua LNUM profile with 32-bit integer constant extension (tag 9).
-    Lnum,
+    Lnum32,
 }
 
 /// Immutable validated chunk layout descriptor.
@@ -40,7 +40,7 @@ pub struct ChunkLayout {
     pub lua_number_size: u8,
     /// Declared endianness (1 = Little-Endian, 0 = Big-Endian).
     pub endianness: u8,
-    /// Declared integral flag (0 = floating-point VM, 1 = integer VM).
+    /// Declared integral flag (0 = floating-point VM, 1 = integer VM, 4 = LNUM32 sizeof(lua_Integer)).
     pub integral_flag: u8,
     /// Selected dialect profile.
     pub profile: Lua51Profile,
@@ -85,10 +85,10 @@ impl ChunkLayout {
         // slot for sizeof(lua_Integer), which is 4 on the 32-bit targets that carry
         // it. Validating it as a stock flag rejects every LNUM chunk.
         match profile {
-            Lua51Profile::Lnum => {
-                if integral_flag != 4 && integral_flag > 1 {
+            Lua51Profile::Lnum32 => {
+                if integral_flag != 4 {
                     return Err(format!(
-                        "Invalid lua_Integer size {integral_flag} for LNUM profile: expected 4 (or a stock 0/1 flag)"
+                        "Invalid lua_Integer size {integral_flag} for LNUM32 profile: expected 4 (stock integral flag 0 or 1 not accepted in explicit LNUM mode; use --dialect lua5.1)"
                     ));
                 }
             }
@@ -97,7 +97,7 @@ impl ChunkLayout {
                     return Err(format!(
                         "Invalid integral flag {integral_flag}: expected 0 or 1{}",
                         if integral_flag == 4 {
-                            " (value 4 indicates the OpenWrt/eLua LNUM patch; re-run with --dialect lua5.1-lnum)"
+                            " (value 4 indicates the OpenWrt/eLua LNUM32 patch; re-run with --dialect lua5.1-lnum32)"
                         } else {
                             ""
                         }
@@ -130,10 +130,10 @@ pub fn detect_lua51(bytes: &[u8]) -> Option<DetectionResult> {
         // 0 or 1), so it is an unambiguous LNUM marker worth reporting to the user.
         if bytes.len() >= 12 && bytes[11] == 4 {
             return Some(DetectionResult {
-                dialect: "lua5.1-lnum".to_string(),
+                dialect: "lua5.1-lnum32".to_string(),
                 confidence: Confidence::Fact,
                 evidence:
-                    "Lua 5.1 signature matched; byte 11 = 4 indicates the OpenWrt/eLua LNUM patch \
+                    "Lua 5.1 signature matched; byte 11 = 4 indicates the OpenWrt/eLua LNUM32 patch \
                      (sizeof(lua_Integer)), which stock Lua 5.1 cannot emit"
                         .to_string(),
             });
@@ -224,27 +224,50 @@ pub fn parse_header_lua51(
         profile,
     )
     .map_err(|msg| {
+        let (err_offset, err_bytes) =
+            if msg.contains("integral flag") || msg.contains("lua_Integer size") {
+                (start_pos + 11, vec![integral_flag])
+            } else if msg.contains("sizeof(int)") {
+                (start_pos + 7, vec![sizeof_int])
+            } else if msg.contains("sizeof(size_t)") {
+                (start_pos + 8, vec![sizeof_sizet])
+            } else if msg.contains("sizeof(Instruction)") {
+                (start_pos + 9, vec![instruction_size])
+            } else if msg.contains("sizeof(lua_Number)") {
+                (start_pos + 10, vec![lua_number_size])
+            } else if msg.contains("endianness") {
+                (start_pos + 6, vec![endianness])
+            } else {
+                (
+                    start_pos,
+                    vec![
+                        endianness,
+                        sizeof_int,
+                        sizeof_sizet,
+                        instruction_size,
+                        lua_number_size,
+                        integral_flag,
+                    ],
+                )
+            };
+
         Diagnostic::error(
             "L51-HEADER-003",
             DiagnosticCategory::Parse,
             StableId::Chunk,
             format!("Chunk layout validation failed: {msg}"),
         )
-        .with_source(SourceLocation::new(
-            start_pos,
-            &[
-                endianness,
-                sizeof_int,
-                sizeof_sizet,
-                instruction_size,
-                lua_number_size,
-                integral_flag,
-            ],
-        ))
+        .with_source(SourceLocation::new(err_offset, &err_bytes))
     })?;
 
     let header_bytes = reader.slice_from_cursor(start_cursor)?;
     let loc = SourceLocation::new(start_pos, header_bytes);
+
+    let lua_integer_size = if layout.profile == Lua51Profile::Lnum32 {
+        4
+    } else {
+        sizeof_int
+    };
 
     let header = Header {
         signature,
@@ -252,7 +275,7 @@ pub fn parse_header_lua51(
         format,
         luac_data: String::new(),
         instruction_size,
-        lua_integer_size: sizeof_int,
+        lua_integer_size,
         sizeof_sizet,
         lua_number_size,
         luac_int: 0,

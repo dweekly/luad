@@ -7,10 +7,17 @@ use tempfile::NamedTempFile;
 
 pub mod differential_disasm;
 pub mod gate_runner;
+pub mod independent_lua51_oracle;
 pub mod independent_lua54_oracle;
 pub mod listing_parser;
 
-pub use differential_disasm::{compare_proto_three_way, DisasmComparisonError};
+pub use differential_disasm::{
+    compare_chunk_tree_three_way, compare_chunk_tree_three_way_lua51, compare_proto_three_way,
+    compare_proto_three_way_lua51, DisasmComparisonError, LuacProtoDumpList,
+};
+pub use independent_lua51_oracle::{
+    IndependentInstruction51, IndependentOpMode51, IndependentOpcode51,
+};
 
 pub use gate_runner::{
     assemble_release_manifest, execute_gate_spec, verify_gate_result, verify_release_manifest,
@@ -141,8 +148,23 @@ pub fn find_compiler_binary(
 
     for candidate in candidates {
         let path = Path::new(candidate);
-        if path.is_absolute() && path.exists() {
-            if let Ok(output) = Command::new(path).arg("-v").output() {
+        let target_path = if path.is_absolute() {
+            if path.exists() {
+                Some(path.to_path_buf())
+            } else {
+                None
+            }
+        } else {
+            // Search in PATH directories
+            std::env::var_os("PATH").and_then(|paths| {
+                std::env::split_paths(&paths)
+                    .map(|p| p.join(candidate))
+                    .find(|p| p.is_file())
+            })
+        };
+
+        if let Some(p) = target_path {
+            if let Ok(output) = Command::new(&p).arg("-v").output() {
                 let v = format!(
                     "{}{}",
                     String::from_utf8_lossy(&output.stdout),
@@ -150,7 +172,7 @@ pub fn find_compiler_binary(
                 );
                 let actual = v.trim();
                 if actual.starts_with(expected_version) || actual.contains(expected_version) {
-                    return Some(path.to_path_buf());
+                    return Some(p);
                 }
             }
         }
@@ -369,7 +391,9 @@ pub fn find_luac51() -> Option<PathBuf> {
         "luac5.1",
         &[
             "/tmp/lua-tools/bin/luac5.1",
+            "/opt/homebrew/opt/lua@5.1/bin/luac",
             "/opt/homebrew/bin/luac5.1",
+            "/usr/local/bin/luac5.1",
             "luac5.1",
             "luac-5.1",
         ],

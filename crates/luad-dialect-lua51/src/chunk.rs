@@ -66,10 +66,45 @@ pub fn decode_chunk_lua51_with_profile(
         Verdict::ValidForParser
     };
 
+    let dialect_name = match profile {
+        Lua51Profile::Lnum32 => "lua5.1-lnum32",
+        Lua51Profile::Stock32 => "lua5.1-stock32",
+        Lua51Profile::Stock => "lua5.1",
+    };
+
+    let interpretation = luad_core::dialect::ResolvedInterpretation {
+        base_dialect: "lua5.1".to_string(),
+        patch_or_oracle_version: match profile {
+            Lua51Profile::Lnum32 => Some("lnum32".to_string()),
+            _ => None,
+        },
+        profile: dialect_name.to_string(),
+        profile_version_or_hash: None,
+        validated_layout: Some(format!(
+            "int={},sizet={},inst={},num={},endian={},integral_flag={}",
+            layout.sizeof_int,
+            layout.sizeof_sizet,
+            layout.instruction_size,
+            layout.lua_number_size,
+            layout.endianness,
+            layout.integral_flag,
+        )),
+        parse_mode: match reader.mode() {
+            luad_core::limits::ParseMode::Strict => "strict".to_string(),
+            luad_core::limits::ParseMode::Permissive => "permissive".to_string(),
+        },
+        selection_mode: luad_core::dialect::SelectionMode::Detected,
+        detection_evidence: format!(
+            "Lua 5.1 signature matched (version 0x51, format {}, profile {})",
+            header.format, dialect_name
+        ),
+    };
+
     let mut chunk = Chunk {
         sha256,
         byte_length,
-        dialect: "lua5.1".to_string(),
+        dialect: dialect_name.to_string(),
+        interpretation: Some(interpretation),
         verdict,
         header,
         main_proto,
@@ -210,23 +245,21 @@ fn load_proto_51(
                     .map(ConstantValue::ShortString)
                     .unwrap_or(ConstantValue::Nil)
             }
-            // OpenWrt/eLua LNUM patch adds LUA_TINT = 9: a 4-byte little-endian integer
-            // constant. Explicitly gated behind Lua51Profile::Lnum.
+            // OpenWrt/eLua LNUM patch adds LUA_TINT = 9: a 4-byte little-endian signed integer
+            // constant. Explicitly gated behind Lua51Profile::Lnum32.
             9 => {
-                if layout.profile == Lua51Profile::Lnum {
+                if layout.profile == Lua51Profile::Lnum32 {
                     let i_val = reader.read_i32_le()?;
-                    ConstantValue::Float {
-                        val: f64::from(i_val),
+                    ConstantValue::Integer {
+                        val: i_val as i64,
                         raw_hex: hex::encode(i_val.to_le_bytes()),
-                        is_nan: false,
-                        is_inf: false,
                     }
                 } else {
                     let diag = Diagnostic::error(
                         "L51-CONST-002",
                         DiagnosticCategory::Parse,
                         StableId::constant(path.clone(), idx),
-                        "Invalid constant tag 9: tag 9 is an LNUM extension; use profile 'lnum' to decode",
+                        "Invalid constant tag 9: tag 9 is an LNUM extension; use profile 'lua5.1-lnum32' to decode",
                     );
                     reader.record_diagnostic(diag.clone())?;
                     return Err(diag);
@@ -337,6 +370,36 @@ fn load_proto_51(
             upval.name = name.clone();
         }
         upvalue_names.push(name);
+    }
+
+    // Resolve upvalue capture bindings for child prototypes from parent instructions
+    for (pc, inst) in instructions.iter().enumerate() {
+        let raw = crate::opcodes::RawInstruction51::decode(inst.raw_word);
+        if raw.opcode == Some(crate::opcodes::Opcode51::Closure) {
+            let child_idx = raw.bx as usize;
+            if let Some(child) = protos.get_mut(child_idx) {
+                let nups_child = child.upvalues.len();
+                for j in 0..nups_child {
+                    let desc_pc = pc + 1 + j;
+                    if desc_pc < instructions.len() {
+                        let desc_raw = crate::opcodes::RawInstruction51::decode(
+                            instructions[desc_pc].raw_word,
+                        );
+                        if let Some(u) = child.upvalues.get_mut(j) {
+                            if desc_raw.opcode == Some(crate::opcodes::Opcode51::Move) {
+                                u.instack = 1;
+                                u.idx = desc_raw.b as u8;
+                                u.source = instructions[desc_pc].source.clone();
+                            } else if desc_raw.opcode == Some(crate::opcodes::Opcode51::GetUpval) {
+                                u.instack = 0;
+                                u.idx = desc_raw.b as u8;
+                                u.source = instructions[desc_pc].source.clone();
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     let proto_bytes = reader.slice_from_cursor(start_cursor)?;

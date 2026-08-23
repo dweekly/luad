@@ -12,15 +12,25 @@
     "--nocapture"
   ],
   "expected_tests": [
-    "test_lua51_lnum_corpus_regression",
+    "test_lua51_lnum32_fixture_regression",
     "test_lua51_stock_corpus_regression",
     "test_negative_control_corrupted_sizet_chunk_fails",
-    "test_negative_control_stock_lnum_identity_on_standard_chunks"
+    "test_negative_control_lnum32_fixture_rejected_by_stock",
+    "test_negative_control_stock_fixtures_rejected_by_lnum32"
   ],
   "required_compiler_version": null,
   "required_compiler_sha256": null,
-  "required_fixtures": [],
-  "required_profile": "lua51-lnum",
+  "required_fixtures": [
+    {
+      "path": "tests/fixtures/precompiled/lua51_lnum32/hello.luac",
+      "sha256": "8376be37ec3042d3b0a87aa39db7d7396fb54ae390abe346d885e1527d23e353"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua51_32bit/hello.luac",
+      "sha256": "e3b4aecb3e5669ff3636603d38583acead47336d870377685716ed6dd32e4fb4"
+    }
+  ],
+  "required_profile": "lua5.1-lnum32",
   "prerequisite_gates": [
     "gate-proof-harness",
     "gate-layout-lua51-stock"

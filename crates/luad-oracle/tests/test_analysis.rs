@@ -35,10 +35,11 @@ fn test_xrefs_indexing_and_query() {
     let index = XrefIndex::build(&chunk);
     assert!(!index.entries.is_empty());
 
-    // Query references to upvalue
+    // Query references to upvalue (reads, writes, and binds)
     let upval_id: StableId = "proto:0/0/0:upvalue:0".parse().unwrap();
     let to_refs = index.query_to(&upval_id);
-    assert_eq!(to_refs.len(), 3);
+    assert_eq!(to_refs.len(), 5);
+    assert!(to_refs.iter().any(|r| r.relation == XrefRelation::Binds));
     assert!(to_refs.iter().any(|r| r.relation == XrefRelation::Writes));
     assert!(to_refs.iter().any(|r| r.relation == XrefRelation::Reads));
 }
@@ -49,15 +50,17 @@ fn test_structured_query_engine() {
     let mut reader = SafeReader::new(&raw_bytes);
     let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("parse failed");
 
-    let resp = execute_query(&chunk, Some("opcode == \"OP_CALL\""), 10, None);
+    let resp =
+        execute_query(&chunk, Some("opcode == \"OP_CALL\""), 10, None).expect("Query failed");
     assert_eq!(resp.count, 3);
     assert!(!resp.is_truncated);
 
     // Test pagination limit
-    let paginated = execute_query(&chunk, Some("opcode == \"OP_CALL\""), 2, None);
+    let paginated =
+        execute_query(&chunk, Some("opcode == \"OP_CALL\""), 2, None).expect("Query failed");
     assert_eq!(paginated.count, 2);
     assert!(paginated.is_truncated);
-    assert_eq!(paginated.next_cursor.as_deref(), Some("2"));
+    assert!(paginated.next_cursor.as_ref().unwrap().ends_with("_2"));
 
     // Follow cursor
     let page2 = execute_query(
@@ -65,9 +68,146 @@ fn test_structured_query_engine() {
         Some("opcode == \"OP_CALL\""),
         2,
         paginated.next_cursor.as_deref(),
-    );
+    )
+    .expect("Query page 2 failed");
     assert_eq!(page2.count, 1);
     assert!(!page2.is_truncated);
+}
+
+#[test]
+fn test_query_exact_needle_and_absent_needle() {
+    let raw_bytes = get_fixture_bytes("lua5.4", "hello", false).expect("fixture failed");
+    let mut reader = SafeReader::new(&raw_bytes);
+    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("parse failed");
+
+    // Known needle matches
+    let res_present =
+        execute_query(&chunk, Some("string contains \"Hello\""), 10, None).expect("Present query");
+    assert_eq!(res_present.count, 1);
+
+    // Guaranteed absent needle returns 0 matches
+    let res_absent = execute_query(
+        &chunk,
+        Some("string contains \"GUARANTEED_ABSENT_NEEDLE_XYZ\""),
+        10,
+        None,
+    )
+    .expect("Absent query");
+    assert_eq!(res_absent.count, 0);
+
+    // Mutating needle changes results
+    let res_mutated =
+        execute_query(&chunk, Some("string contains \"print\""), 10, None).expect("Mutated query");
+    assert_eq!(res_mutated.count, 1);
+    assert_ne!(res_present.matches[0].id, res_mutated.matches[0].id);
+}
+
+#[test]
+fn test_query_fail_closed_syntax_and_operators() {
+    let raw_bytes = get_fixture_bytes("lua5.4", "hello", false).expect("fixture failed");
+    let mut reader = SafeReader::new(&raw_bytes);
+    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("parse failed");
+
+    // Missing value
+    assert!(execute_query(&chunk, Some("constant contains"), 10, None).is_err());
+    assert!(execute_query(&chunk, Some("opcode =="), 10, None).is_err());
+
+    // Unknown field
+    assert!(execute_query(&chunk, Some("nonexistent_field == \"val\""), 10, None).is_err());
+
+    // Invalid operator for field
+    assert!(execute_query(&chunk, Some("opcode contains \"CALL\""), 10, None).is_err());
+
+    // Unbalanced parentheses
+    assert!(execute_query(&chunk, Some("(mnemonic == \"CALL\""), 10, None).is_err());
+
+    // Trailing tokens
+    assert!(execute_query(&chunk, Some("mnemonic == \"CALL\" extra_garbage"), 10, None).is_err());
+}
+
+#[test]
+fn test_query_cursor_bounds_and_exact_end_cursor() {
+    let raw_bytes = get_fixture_bytes("lua5.4", "closures", false).expect("fixture failed");
+    let mut reader = SafeReader::new(&raw_bytes);
+    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("parse failed");
+
+    // 3 total matches for CALL, page size 2 returns signed next_cursor
+    let page1 = execute_query(&chunk, Some("opcode == \"OP_CALL\""), 2, None).unwrap();
+    assert_eq!(page1.count, 2);
+    assert!(page1.is_truncated);
+    assert!(page1.next_cursor.is_some());
+
+    let emitted_cursor = page1.next_cursor.as_deref().unwrap();
+    let foreign_query = execute_query(
+        &chunk,
+        Some("opcode == \"OP_RETURN\""),
+        2,
+        Some(emitted_cursor),
+    );
+    assert!(
+        foreign_query.is_err(),
+        "An emitted cursor is bound to its query expression"
+    );
+
+    let other_bytes = get_fixture_bytes("lua5.4", "hello", false).expect("fixture failed");
+    let mut other_reader = SafeReader::new(&other_bytes);
+    let other_chunk =
+        luad_dialect_lua54::decode_chunk_lua54(&mut other_reader).expect("parse failed");
+    let foreign_chunk = execute_query(
+        &other_chunk,
+        Some("opcode == \"OP_CALL\""),
+        2,
+        Some(emitted_cursor),
+    );
+    assert!(
+        foreign_chunk.is_err(),
+        "An emitted cursor is bound to its input artifact"
+    );
+
+    let page2 = execute_query(
+        &chunk,
+        Some("opcode == \"OP_CALL\""),
+        2,
+        Some(emitted_cursor),
+    )
+    .unwrap();
+    assert_eq!(page2.count, 1);
+    assert!(!page2.is_truncated);
+    assert!(page2.next_cursor.is_none());
+
+    // Exact end integer cursor succeeds with empty page (0..=total contract)
+    let end_int_cursor =
+        execute_query(&chunk, Some("opcode == \"OP_CALL\""), 10, Some("3")).unwrap();
+    assert_eq!(end_int_cursor.count, 0);
+    assert!(!end_int_cursor.is_truncated);
+    assert!(end_int_cursor.next_cursor.is_none());
+
+    // Out of bounds integer cursor fails
+    let oob_cursor = execute_query(&chunk, Some("opcode == \"OP_CALL\""), 10, Some("999"));
+    assert!(oob_cursor.is_err());
+
+    // Non-signed/non-integer cursor fails
+    let bad_cursor = execute_query(&chunk, Some("opcode == \"OP_CALL\""), 10, Some("abc"));
+    assert!(bad_cursor.is_err());
+}
+
+#[test]
+fn test_xref_target_validation_and_nonexistent_targets() {
+    let raw_bytes = get_fixture_bytes("lua5.4", "hello", false).expect("fixture failed");
+    let mut reader = SafeReader::new(&raw_bytes);
+    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("parse failed");
+
+    let valid_id: StableId = "proto:0:k:0".parse().unwrap();
+    assert!(luad_analysis::validate_target(&chunk, &valid_id));
+
+    let invalid_k: StableId = "proto:0:k:99".parse().unwrap();
+    assert!(!luad_analysis::validate_target(&chunk, &invalid_k));
+
+    let invalid_proto: StableId = "proto:0/99".parse().unwrap();
+    assert!(!luad_analysis::validate_target(&chunk, &invalid_proto));
+
+    let invalid_pc: StableId = "proto:0:pc:999".parse().unwrap();
+    assert!(!luad_analysis::validate_target(&chunk, &invalid_pc));
 }
 
 #[test]

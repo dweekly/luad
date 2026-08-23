@@ -51,6 +51,9 @@ pub enum Commands {
     /// Compare two chunks structurally and semantically.
     Diff(DiffArgs),
 
+    /// Deterministic batch export of firmware artifacts in streaming JSONL format.
+    Export(ExportArgs),
+
     /// Compile trusted Lua source with an explicit external compiler.
     Compile(CompileArgs),
 
@@ -77,7 +80,7 @@ pub struct InspectArgs {
     #[arg(short, long)]
     pub summary: bool,
 
-    /// Explicit dialect override (e.g. 'lua5.4', 'lua5.5').
+    /// Explicit dialect override (e.g. 'lua5.1', 'lua5.1-lnum32', 'lua5.4', 'lua5.5').
     #[arg(short, long)]
     pub dialect: Option<String>,
 
@@ -98,6 +101,10 @@ pub struct DisasmArgs {
     /// Filter output to a specific prototype path (e.g. 'proto:0/2').
     #[arg(short, long)]
     pub proto: Option<String>,
+
+    /// Explicit dialect override (e.g. 'lua5.1', 'lua5.1-lnum32', 'lua5.4').
+    #[arg(short, long)]
+    pub dialect: Option<String>,
 
     /// Include raw instruction words in hex.
     #[arg(long)]
@@ -125,6 +132,10 @@ pub struct ValidateArgs {
     #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
 
+    /// Explicit dialect override (e.g. 'lua5.1', 'lua5.1-lnum32', 'lua5.4').
+    #[arg(short, long)]
+    pub dialect: Option<String>,
+
     /// Strict mode: exit with code 1 on any warning or structural flaw.
     #[arg(long)]
     pub strict: bool,
@@ -142,6 +153,10 @@ pub struct CfgArgs {
     /// Target prototype path (e.g. 'proto:0').
     #[arg(short, long, default_value = "proto:0")]
     pub proto: String,
+
+    /// Explicit dialect override.
+    #[arg(short, long)]
+    pub dialect: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -160,6 +175,10 @@ pub struct XrefsArgs {
     /// Output format.
     #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
+
+    /// Explicit dialect override.
+    #[arg(short, long)]
+    pub dialect: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -173,6 +192,10 @@ pub struct ExplainArgs {
     /// Output format.
     #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
+
+    /// Explicit dialect override.
+    #[arg(short, long)]
+    pub dialect: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -195,6 +218,10 @@ pub struct QueryArgs {
     /// Output format.
     #[arg(short, long, value_enum, default_value_t = OutputFormat::Json)]
     pub format: OutputFormat,
+
+    /// Explicit dialect override.
+    #[arg(short, long)]
+    pub dialect: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -216,6 +243,28 @@ pub struct DiffArgs {
     /// Output format.
     #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
+}
+
+#[derive(Args, Debug)]
+pub struct ExportArgs {
+    /// Input bytecode files to batch export.
+    pub files: Vec<String>,
+
+    /// Path to file containing list of input files (or '-' for standard input).
+    #[arg(long)]
+    pub input_list: Option<String>,
+
+    /// Output format (jsonl is canonical).
+    #[arg(short, long, value_enum, default_value_t = OutputFormat::Jsonl)]
+    pub format: OutputFormat,
+
+    /// Explicit dialect override.
+    #[arg(short, long)]
+    pub dialect: Option<String>,
+
+    /// Strict fail-fast parsing mode.
+    #[arg(long)]
+    pub strict: bool,
 }
 
 #[derive(Args, Debug)]
@@ -246,7 +295,7 @@ pub struct CapabilitiesArgs {
 #[derive(Args, Debug)]
 #[command(disable_version_flag = true)]
 pub struct SchemaArgs {
-    /// Schema name (e.g. 'chunk', 'diagnostic').
+    /// Schema name (e.g. 'chunk', 'disasm', 'validate', 'xrefs', 'query', 'cfg', 'diff', 'capabilities', 'export').
     #[arg(default_value = "chunk")]
     pub name: String,
 

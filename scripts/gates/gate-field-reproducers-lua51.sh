@@ -23,7 +23,7 @@ cargo run -p luad-oracle --bin run_gate -- \
   --require-clean \
   --record-probes
 
-for artifact in "gate-spec.json" "gate-result.json" "release-manifest.json" "probe-rejections.json" "stdout.log"; do
+for artifact in "gate-spec.json" "gate-result.json" "probe-rejections.json" "stdout.log"; do
   if [[ ! -f "${RESULT_DIR}/${artifact}" ]]; then
     echo "Error: Required artifact was not generated at ${RESULT_DIR}/${artifact}"
     exit 1

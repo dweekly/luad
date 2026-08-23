@@ -1,0 +1,1239 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MachineDocument_for_Chunk",
+  "description": "Generic machine document envelope wrapping all top-level machine outputs.",
+  "type": "object",
+  "required": [
+    "analysis_configuration",
+    "data",
+    "input_identity",
+    "interpretation",
+    "schema_version",
+    "tool_version"
+  ],
+  "properties": {
+    "analysis_configuration": {
+      "description": "Analysis configuration applied.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/AnalysisConfiguration"
+        }
+      ]
+    },
+    "data": {
+      "description": "Command-specific payload data.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Chunk"
+        }
+      ]
+    },
+    "diagnostics": {
+      "description": "Structured diagnostics emitted during processing.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Diagnostic"
+      }
+    },
+    "input_identity": {
+      "description": "Provenance identity of the analyzed input.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/InputIdentity"
+        }
+      ]
+    },
+    "interpretation": {
+      "description": "Resolved dialect, profile, layout, and selection evidence.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/ResolvedInterpretation"
+        }
+      ]
+    },
+    "schema_version": {
+      "description": "Schema major version (pinned to 1).",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "tool_version": {
+      "description": "Tool semver version (e.g. \"0.1.0\").",
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "AbsLineInfo": {
+      "description": "Absolute line information entry (Lua 5.4+).",
+      "type": "object",
+      "required": [
+        "line",
+        "pc",
+        "source"
+      ],
+      "properties": {
+        "line": {
+          "description": "Absolute source line number.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "pc": {
+          "description": "Program counter.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "source": {
+          "description": "Source byte location.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            }
+          ]
+        }
+      }
+    },
+    "AnalysisConfiguration": {
+      "description": "Analysis and execution configuration used to produce the document.",
+      "type": "object",
+      "required": [
+        "limits",
+        "mode"
+      ],
+      "properties": {
+        "dialect_override": {
+          "description": "Explicit dialect or profile override requested by caller, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limits": {
+          "description": "Resource limit thresholds applied during parsing and analysis.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ResourceLimits"
+            }
+          ]
+        },
+        "mode": {
+          "description": "Parser mode (e.g. \"strict\" or \"permissive\").",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ParseMode"
+            }
+          ]
+        }
+      }
+    },
+    "Chunk": {
+      "description": "A parsed Lua bytecode chunk.",
+      "type": "object",
+      "required": [
+        "byte_length",
+        "diagnostics",
+        "dialect",
+        "header",
+        "main_proto",
+        "sha256",
+        "verdict"
+      ],
+      "properties": {
+        "byte_length": {
+          "description": "Total input byte length.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "diagnostics": {
+          "description": "Diagnostics emitted during parsing and validation.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Diagnostic"
+          }
+        },
+        "dialect": {
+          "description": "Identified dialect (e.g. \"lua5.4\").",
+          "type": "string"
+        },
+        "header": {
+          "description": "Chunk header.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Header"
+            }
+          ]
+        },
+        "interpretation": {
+          "description": "Resolved dialect/profile interpretation if recorded.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ResolvedInterpretation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "main_proto": {
+          "description": "Main root prototype (`proto:0`).",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Prototype"
+            }
+          ]
+        },
+        "sha256": {
+          "description": "SHA-256 hash of the input bytes.",
+          "type": "string"
+        },
+        "trailing_bytes": {
+          "description": "Trailing unparsed bytes if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "description": "Overall validation verdict.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Verdict"
+            }
+          ]
+        }
+      }
+    },
+    "Constant": {
+      "description": "A parsed constant in a prototype's constant vector.",
+      "type": "object",
+      "required": [
+        "id",
+        "index",
+        "source",
+        "value"
+      ],
+      "properties": {
+        "id": {
+          "description": "Deterministic stable ID (e.g. `proto:0:k:3`).",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        },
+        "index": {
+          "description": "0-indexed position in constant table.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "source": {
+          "description": "Source byte location.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            }
+          ]
+        },
+        "value": {
+          "description": "Preserved constant value.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ConstantValue"
+            }
+          ]
+        }
+      }
+    },
+    "ConstantValue": {
+      "description": "Constant value preserved without loss of floating-point or integer bit patterns.",
+      "oneOf": [
+        {
+          "description": "`nil` constant.",
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "nil"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Boolean `false` or `true`.",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "boolean"
+              ]
+            },
+            "value": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "description": "64-bit signed integer with raw hex representation.",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "integer"
+              ]
+            },
+            "value": {
+              "type": "object",
+              "required": [
+                "raw_hex",
+                "val"
+              ],
+              "properties": {
+                "raw_hex": {
+                  "description": "Exact hex bytes.",
+                  "type": "string"
+                },
+                "val": {
+                  "description": "Parsed 64-bit integer value.",
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "IEEE-754 64-bit float with raw hex representation (preserves NaN payloads and signed zero).",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "float"
+              ]
+            },
+            "value": {
+              "type": "object",
+              "required": [
+                "is_inf",
+                "is_nan",
+                "raw_hex",
+                "val"
+              ],
+              "properties": {
+                "is_inf": {
+                  "description": "Positive or negative infinity.",
+                  "type": "boolean"
+                },
+                "is_nan": {
+                  "description": "Special float classifications.",
+                  "type": "boolean"
+                },
+                "raw_hex": {
+                  "description": "Exact 8-byte hex representation.",
+                  "type": "string"
+                },
+                "val": {
+                  "description": "Parsed float value.",
+                  "type": "number",
+                  "format": "double"
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "Short string constant.",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "short-string"
+              ]
+            },
+            "value": {
+              "$ref": "#/definitions/LuaString"
+            }
+          }
+        },
+        {
+          "description": "Long string constant.",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "long-string"
+              ]
+            },
+            "value": {
+              "$ref": "#/definitions/LuaString"
+            }
+          }
+        }
+      ]
+    },
+    "Diagnostic": {
+      "description": "Structured diagnostic item.",
+      "type": "object",
+      "required": [
+        "category",
+        "code",
+        "message",
+        "severity",
+        "target"
+      ],
+      "properties": {
+        "category": {
+          "description": "Category of the diagnostic.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/DiagnosticCategory"
+            }
+          ]
+        },
+        "code": {
+          "description": "Stable diagnostic error code (e.g. \"L54-HEADER-001\", \"L54-JUMP-003\").",
+          "type": "string"
+        },
+        "evidence": {
+          "description": "Supporting evidence or context.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "help_topic": {
+          "description": "Topic resolvable via `luad help <topic>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "description": "Human-readable explanation.",
+          "type": "string"
+        },
+        "severity": {
+          "description": "Severity level.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Severity"
+            }
+          ]
+        },
+        "source": {
+          "description": "Raw byte location if applicable.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "suggested_action": {
+          "description": "Suggested next action for researcher or agent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "description": "Target artifact stable ID.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        }
+      }
+    },
+    "DiagnosticCategory": {
+      "description": "Category of diagnostic check.",
+      "oneOf": [
+        {
+          "description": "Raw binary parsing, truncation, or format-envelope error.",
+          "type": "string",
+          "enum": [
+            "parse"
+          ]
+        },
+        {
+          "description": "Structural integrity or header consistency error.",
+          "type": "string",
+          "enum": [
+            "structure"
+          ]
+        },
+        {
+          "description": "Opcode, operand, or companion-instruction invariant violation.",
+          "type": "string",
+          "enum": [
+            "instruction"
+          ]
+        },
+        {
+          "description": "Control-flow anomaly, out-of-bounds jump, or unreachable entry.",
+          "type": "string",
+          "enum": [
+            "control-flow"
+          ]
+        },
+        {
+          "description": "Corrupt, inconsistent, or missing debug metadata.",
+          "type": "string",
+          "enum": [
+            "debug-metadata"
+          ]
+        },
+        {
+          "description": "Higher-level analysis precondition failure.",
+          "type": "string",
+          "enum": [
+            "analysis"
+          ]
+        }
+      ]
+    },
+    "Header": {
+      "description": "Serialized chunk header.",
+      "type": "object",
+      "required": [
+        "format",
+        "instruction_size",
+        "lua_integer_size",
+        "lua_number_size",
+        "luac_data",
+        "luac_int",
+        "luac_num",
+        "signature",
+        "source",
+        "version"
+      ],
+      "properties": {
+        "format": {
+          "description": "Format byte (0 for official stock Lua).",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "instruction_size": {
+          "description": "Size of instruction in bytes (4).",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "lua_integer_size": {
+          "description": "Size of lua_Integer in bytes (8 on 64-bit, 4 on 32-bit).",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "lua_number_size": {
+          "description": "Size of lua_Number in bytes (8).",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "luac_data": {
+          "description": "LUAC_DATA validation sequence.",
+          "type": "string"
+        },
+        "luac_int": {
+          "description": "LUAC_INT test integer (e.g. 0x5678).",
+          "type": "integer",
+          "format": "int64"
+        },
+        "luac_num": {
+          "description": "LUAC_NUM test float (e.g. 370.5).",
+          "type": "number",
+          "format": "double"
+        },
+        "signature": {
+          "description": "Format signature (`\\x1bLua`).",
+          "type": "string"
+        },
+        "sizeof_sizet": {
+          "description": "Size of size_t in bytes (8 on 64-bit, 4 on 32-bit).",
+          "default": 8,
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "source": {
+          "description": "Source byte location.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            }
+          ]
+        },
+        "version": {
+          "description": "Version byte (e.g. 0x54 for Lua 5.4).",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        }
+      }
+    },
+    "InputIdentity": {
+      "description": "Identity and provenance metadata for an analyzed input artifact.",
+      "type": "object",
+      "required": [
+        "byte_length",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "byte_length": {
+          "description": "Total byte length of the input.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "path": {
+          "description": "File path or source identifier (e.g. \"hello.luac\" or \"`<stdin>`\").",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 hash of the complete input byte stream.",
+          "type": "string"
+        }
+      }
+    },
+    "InstructionWord": {
+      "description": "Raw 32-bit instruction word.",
+      "type": "object",
+      "required": [
+        "id",
+        "pc",
+        "raw_hex",
+        "raw_word",
+        "source"
+      ],
+      "properties": {
+        "id": {
+          "description": "Deterministic stable ID (e.g. `proto:0:pc:12`).",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        },
+        "pc": {
+          "description": "0-indexed program counter within prototype.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "raw_hex": {
+          "description": "Hex representation.",
+          "type": "string"
+        },
+        "raw_word": {
+          "description": "Raw 32-bit instruction integer.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "source": {
+          "description": "Source byte location.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            }
+          ]
+        }
+      }
+    },
+    "LocalVar": {
+      "description": "Local variable debug metadata.",
+      "type": "object",
+      "required": [
+        "endpc",
+        "id",
+        "index",
+        "name",
+        "source",
+        "startpc"
+      ],
+      "properties": {
+        "endpc": {
+          "description": "Ending PC of active scope (exclusive/inclusive depending on version).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "id": {
+          "description": "Deterministic stable ID (e.g. `proto:0:local:2`).",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        },
+        "index": {
+          "description": "0-indexed local variable index.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "name": {
+          "description": "Variable name.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/LuaString"
+            }
+          ]
+        },
+        "source": {
+          "description": "Source byte location.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            }
+          ]
+        },
+        "startpc": {
+          "description": "Starting PC of active scope (inclusive).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    },
+    "LuaString": {
+      "description": "A lossless Lua string retaining exact byte contents along with escaped display representation.",
+      "type": "object",
+      "required": [
+        "display",
+        "is_utf8",
+        "raw_bytes"
+      ],
+      "properties": {
+        "display": {
+          "description": "Escaped ASCII/UTF-8 representation suitable for human inspection.",
+          "type": "string"
+        },
+        "is_utf8": {
+          "description": "Whether the string is valid UTF-8.",
+          "type": "boolean"
+        },
+        "raw_bytes": {
+          "description": "Raw byte sequence of the string.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        }
+      }
+    },
+    "ParseMode": {
+      "description": "Parsing mode behavior.",
+      "oneOf": [
+        {
+          "description": "Stop and fail immediately at the first invalid condition.",
+          "type": "string",
+          "enum": [
+            "strict"
+          ]
+        },
+        {
+          "description": "Safely record diagnostics and attempt recovery where bounds allow.",
+          "type": "string",
+          "enum": [
+            "permissive"
+          ]
+        }
+      ]
+    },
+    "ProtoPath": {
+      "type": "string"
+    },
+    "Prototype": {
+      "description": "Lossless prototype representing a compiled Lua function body.",
+      "type": "object",
+      "required": [
+        "constants",
+        "id",
+        "instructions",
+        "is_vararg",
+        "last_line_defined",
+        "line_defined",
+        "maxstacksize",
+        "numparams",
+        "path",
+        "protos",
+        "source",
+        "upvalues"
+      ],
+      "properties": {
+        "abs_line_info": {
+          "description": "Absolute line info records.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AbsLineInfo"
+          }
+        },
+        "constants": {
+          "description": "Constant table.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Constant"
+          }
+        },
+        "id": {
+          "description": "Deterministic stable ID (e.g. `proto:0/2`).",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        },
+        "instructions": {
+          "description": "Code vector of physical instruction words.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/InstructionWord"
+          }
+        },
+        "is_vararg": {
+          "description": "Vararg flags / boolean.",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "last_line_defined": {
+          "description": "Last line of source where function was defined.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "line_defined": {
+          "description": "First line of source where function was defined.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "line_info": {
+          "description": "Debug line offset vector.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        },
+        "loc_vars": {
+          "description": "Local variable debug records.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/LocalVar"
+          }
+        },
+        "maxstacksize": {
+          "description": "Maximum stack size (registers needed).",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "numparams": {
+          "description": "Number of fixed parameters.",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "path": {
+          "description": "Structural path.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ProtoPath"
+            }
+          ]
+        },
+        "protos": {
+          "description": "Nested child prototypes.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Prototype"
+          }
+        },
+        "source": {
+          "description": "Source byte location of the prototype.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            }
+          ]
+        },
+        "source_name": {
+          "description": "Source file name if debug information is present.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LuaString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "upvalue_names": {
+          "description": "Upvalue debug names.",
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/LuaString"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "upvalues": {
+          "description": "Upvalue table.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/UpvalueDesc"
+          }
+        }
+      }
+    },
+    "ResolvedInterpretation": {
+      "description": "Resolved interpretation record capturing base dialect, vendor profile, layout, and selection evidence.",
+      "type": "object",
+      "required": [
+        "base_dialect",
+        "detection_evidence",
+        "parse_mode",
+        "profile",
+        "selection_mode"
+      ],
+      "properties": {
+        "base_dialect": {
+          "description": "Base Lua language dialect (e.g. \"lua5.1\", \"lua5.4\").",
+          "type": "string"
+        },
+        "detection_evidence": {
+          "description": "Human-readable evidence explaining why this dialect/profile was resolved.",
+          "type": "string"
+        },
+        "parse_mode": {
+          "description": "Parse mode (\"strict\" or \"permissive\").",
+          "type": "string"
+        },
+        "patch_or_oracle_version": {
+          "description": "Patch or vendor variant if applicable (e.g. \"lnum32\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "description": "Exact resolved profile identifier (e.g. \"lua5.1\", \"lua5.1-lnum32\").",
+          "type": "string"
+        },
+        "profile_version_or_hash": {
+          "description": "Specific profile version or cryptographic specification hash if known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selection_mode": {
+          "description": "How the profile was selected.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SelectionMode"
+            }
+          ]
+        },
+        "validated_layout": {
+          "description": "Summary of validated architectural layout widths and byte order.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ResourceLimits": {
+      "description": "Resource and safety limits for parsing unknown chunks safely.",
+      "type": "object",
+      "required": [
+        "max_constants_per_proto",
+        "max_diagnostics",
+        "max_input_bytes",
+        "max_instructions_per_proto",
+        "max_nesting_depth",
+        "max_string_bytes",
+        "max_total_prototypes",
+        "max_upvalues_per_proto"
+      ],
+      "properties": {
+        "max_constants_per_proto": {
+          "description": "Maximum constant count per prototype (default 262,144).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_diagnostics": {
+          "description": "Maximum number of diagnostics to collect before terminating early (default 50,000).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_input_bytes": {
+          "description": "Maximum allowed input file size in bytes (default 64 MiB).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_instructions_per_proto": {
+          "description": "Maximum instruction count per prototype (default 1,000,000).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_nesting_depth": {
+          "description": "Maximum recursive prototype nesting depth (default 128).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_string_bytes": {
+          "description": "Maximum single string byte length (default 16 MiB).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_total_prototypes": {
+          "description": "Maximum total number of prototypes across the entire chunk (default 10,000).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_upvalues_per_proto": {
+          "description": "Maximum upvalue count per prototype (default 1,024).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    },
+    "SelectionMode": {
+      "description": "Selection mode for dialect and profile resolution.",
+      "oneOf": [
+        {
+          "description": "Dialect / profile was automatically detected from bytecode header.",
+          "type": "string",
+          "enum": [
+            "detected"
+          ]
+        },
+        {
+          "description": "Dialect / profile was explicitly selected via CLI option or API.",
+          "type": "string",
+          "enum": [
+            "explicit"
+          ]
+        }
+      ]
+    },
+    "Severity": {
+      "description": "Diagnostic severity level.",
+      "oneOf": [
+        {
+          "description": "Informational note or hint.",
+          "type": "string",
+          "enum": [
+            "info"
+          ]
+        },
+        {
+          "description": "Warning about suspicious, unconventional, or non-fatal condition.",
+          "type": "string",
+          "enum": [
+            "warning"
+          ]
+        },
+        {
+          "description": "Error indicating structural invalidity or parsing failure.",
+          "type": "string",
+          "enum": [
+            "error"
+          ]
+        }
+      ]
+    },
+    "SourceLocation": {
+      "description": "Source byte location and raw byte representation of a field or instruction.",
+      "type": "object",
+      "required": [
+        "byte_length",
+        "byte_offset",
+        "raw_hex"
+      ],
+      "properties": {
+        "byte_length": {
+          "description": "Encoded length in bytes.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "byte_offset": {
+          "description": "Absolute byte offset in the input chunk.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "raw_hex": {
+          "description": "Lowercase hex encoding of the raw bytes.",
+          "type": "string"
+        }
+      }
+    },
+    "StableId": {
+      "type": "string"
+    },
+    "UpvalueDesc": {
+      "description": "Upvalue descriptor within a prototype.",
+      "type": "object",
+      "required": [
+        "id",
+        "idx",
+        "index",
+        "instack",
+        "kind",
+        "source"
+      ],
+      "properties": {
+        "id": {
+          "description": "Deterministic stable ID (e.g. `proto:0:upvalue:1`).",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        },
+        "idx": {
+          "description": "Register or upvalue index in outer scope.",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "index": {
+          "description": "0-indexed position in upvalue vector.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "instack": {
+          "description": "Whether upvalue is in enclosing stack (1) or outer upvalue (0).",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "kind": {
+          "description": "Upvalue kind/tag (e.g. in Lua 5.4: 0 = regular, 1 = read-only/const, 2 = to-be-closed).",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "name": {
+          "description": "Debug variable name if present.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LuaString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "description": "Source byte location.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            }
+          ]
+        }
+      }
+    },
+    "Verdict": {
+      "description": "Overall summarized validation verdict (PRD section 5.4).",
+      "oneOf": [
+        {
+          "description": "Conforms to format checks without structural errors.",
+          "type": "string",
+          "enum": [
+            "valid-for-parser"
+          ]
+        },
+        {
+          "description": "All invariants required by enabled analyses hold.",
+          "type": "string",
+          "enum": [
+            "valid-for-analysis"
+          ]
+        },
+        {
+          "description": "Violates a known format or VM requirement.",
+          "type": "string",
+          "enum": [
+            "invalid"
+          ]
+        },
+        {
+          "description": "Parsing or analysis could not finish due to truncation or safety limits.",
+          "type": "string",
+          "enum": [
+            "incomplete"
+          ]
+        },
+        {
+          "description": "More than one format interpretation remains plausible.",
+          "type": "string",
+          "enum": [
+            "ambiguous"
+          ]
+        }
+      ]
+    }
+  }
+}

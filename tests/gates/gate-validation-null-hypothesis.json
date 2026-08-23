@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-validation-null-hypothesis",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_validation_null_hypothesis",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_all_lua51_maintained_fixtures_produce_zero_validation_diagnostics",
+    "test_all_lua54_maintained_fixtures_produce_zero_validation_diagnostics",
+    "test_killer_probe_out_of_bounds_jump_detected",
+    "test_killer_probe_out_of_bounds_register_detected",
+    "test_killer_probe_corrupted_header_detected",
+    "test_killer_probe_missing_closure_descriptor_detected"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness"
+  ],
+  "allowed_capability_mutations": []
+}

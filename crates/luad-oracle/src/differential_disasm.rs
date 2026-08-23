@@ -9,6 +9,7 @@ use luad_core::disasm::{DisassembledPrototype, OperandKind, ResolvedFact};
 use luad_core::id::StableId;
 use luad_core::model::Prototype;
 
+use crate::independent_lua51_oracle::{IndependentInstruction51, IndependentOpcode51};
 use crate::independent_lua54_oracle::{IndependentInstruction54, IndependentOpcode54};
 use crate::listing_parser::{DumpLineInfo, LuacProtoDump};
 
@@ -231,7 +232,7 @@ pub fn compare_proto_three_way(
                 production_val: enc.a as i64,
             });
         }
-        if indep_inst.b != enc.b {
+        if indep_inst.b as u32 != enc.b {
             return Err(DisasmComparisonError::PhysicalFieldMismatch {
                 pc,
                 field_name: "B".to_string(),
@@ -239,7 +240,7 @@ pub fn compare_proto_three_way(
                 production_val: enc.b as i64,
             });
         }
-        if indep_inst.c != enc.c {
+        if indep_inst.c as u32 != enc.c {
             return Err(DisasmComparisonError::PhysicalFieldMismatch {
                 pc,
                 field_name: "C".to_string(),
@@ -641,6 +642,419 @@ pub fn compare_proto_three_way(
                     pc,
                     detail: format!(
                         "JSON instruction at PC {pc} did not match production instruction: JSON={json_inst:?}, PROD={prod_inst:?}"
+                    ),
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Recursively verify differential agreement for a complete Lua 5.1 prototype tree against official dump and CLI JSON.
+pub fn compare_chunk_tree_three_way_lua51(
+    root_proto: &Prototype,
+    luac_dump: &LuacProtoDumpList,
+    cli_json: &DisassembledPrototype,
+) -> Result<(), DisasmComparisonError> {
+    let mut func_idx = 0;
+    compare_proto_node_recursive_lua51(root_proto, luac_dump.functions, &mut func_idx, cli_json)?;
+
+    if func_idx != luac_dump.functions.len() {
+        return Err(DisasmComparisonError::MissingPrototype {
+            proto_id: root_proto.id.to_string(),
+            detail: format!(
+                "Official dump contains {} prototypes but chunk hierarchy only traversed {}",
+                luac_dump.functions.len(),
+                func_idx
+            ),
+        });
+    }
+
+    Ok(())
+}
+
+fn compare_proto_node_recursive_lua51(
+    proto: &Prototype,
+    luac_funcs: &[LuacProtoDump],
+    func_idx: &mut usize,
+    cli_json_proto: &DisassembledPrototype,
+) -> Result<(), DisasmComparisonError> {
+    if *func_idx >= luac_funcs.len() {
+        return Err(DisasmComparisonError::MissingPrototype {
+            proto_id: proto.id.to_string(),
+            detail: format!(
+                "Missing counterpart in official dump at index {func_idx} for prototype {}",
+                proto.id
+            ),
+        });
+    }
+
+    let luac_proto = &luac_funcs[*func_idx];
+    *func_idx += 1;
+
+    let indep_insts: Vec<IndependentInstruction51> = proto
+        .instructions
+        .iter()
+        .enumerate()
+        .map(|(pc, i)| IndependentInstruction51::decode(pc, i.raw_word))
+        .collect();
+
+    let prod_proto = luad_dialect_lua51::disassemble_proto_lua51(proto);
+
+    compare_proto_three_way_lua51(
+        proto,
+        luac_proto,
+        &indep_insts,
+        &prod_proto,
+        Some(cli_json_proto),
+    )?;
+
+    if proto.protos.len() != cli_json_proto.child_protos.len() {
+        return Err(DisasmComparisonError::MissingPrototype {
+            proto_id: proto.id.to_string(),
+            detail: format!(
+                "Prototype {} has {} child prototypes in chunk, but CLI JSON reports {}",
+                proto.id,
+                proto.protos.len(),
+                cli_json_proto.child_protos.len()
+            ),
+        });
+    }
+
+    for (i, child_proto) in proto.protos.iter().enumerate() {
+        let child_cli_json = &cli_json_proto.child_protos[i];
+        compare_proto_node_recursive_lua51(child_proto, luac_funcs, func_idx, child_cli_json)?;
+    }
+
+    Ok(())
+}
+
+/// Compare disassembly three-way across official luac 5.1 dump, independent decoder, and production record for one prototype.
+#[allow(clippy::needless_range_loop)]
+pub fn compare_proto_three_way_lua51(
+    owning_proto: &Prototype,
+    luac_proto: &LuacProtoDump,
+    indep_insts: &[IndependentInstruction51],
+    prod_proto: &DisassembledPrototype,
+    cli_json_proto: Option<&DisassembledPrototype>,
+) -> Result<(), DisasmComparisonError> {
+    let luac_count = luac_proto.instructions.len();
+    let indep_count = indep_insts.len();
+    let prod_count = prod_proto.instructions.len();
+
+    if luac_count != indep_count || luac_count != prod_count {
+        return Err(DisasmComparisonError::InstructionCountMismatch {
+            proto_id: prod_proto.id.to_string(),
+            luac_count,
+            independent_count: indep_count,
+            production_count: prod_count,
+        });
+    }
+
+    for pc in 0..luac_count {
+        let luac_inst = &luac_proto.instructions[pc];
+        let indep_inst = &indep_insts[pc];
+        let prod_inst = &prod_proto.instructions[pc];
+
+        let indep_mnemonic = indep_inst
+            .opcode
+            .map(|op| op.mnemonic().to_string())
+            .unwrap_or_else(|| format!("UNKNOWN_0x{:02x}", indep_inst.opcode_num));
+
+        // 1. Mnemonic & role agreement
+        if prod_inst.role == "closure_binding" {
+            // For closure bindings in Lua 5.1, luac and indep report MOVE/GETUPVAL, production reports role closure_binding
+            if indep_mnemonic != "MOVE" && indep_mnemonic != "GETUPVAL" {
+                return Err(DisasmComparisonError::MnemonicMismatch {
+                    pc,
+                    luac_mnemonic: luac_inst.mnemonic.clone(),
+                    independent_mnemonic: indep_mnemonic,
+                    production_mnemonic: prod_inst.mnemonic.clone(),
+                });
+            }
+            if prod_inst.companion_pc.is_none() {
+                return Err(DisasmComparisonError::CompanionMismatch {
+                    pc,
+                    detail: format!("Closure binding at PC {pc} missing companion_pc link"),
+                });
+            }
+        } else if luac_inst.mnemonic != indep_mnemonic || luac_inst.mnemonic != prod_inst.mnemonic {
+            return Err(DisasmComparisonError::MnemonicMismatch {
+                pc,
+                luac_mnemonic: luac_inst.mnemonic.clone(),
+                independent_mnemonic: indep_mnemonic,
+                production_mnemonic: prod_inst.mnemonic.clone(),
+            });
+        }
+
+        // 2. Physical field agreement with independent decoder
+        let enc = &prod_inst.encoded_operands;
+        if indep_inst.a != enc.a {
+            return Err(DisasmComparisonError::PhysicalFieldMismatch {
+                pc,
+                field_name: "A".to_string(),
+                independent_val: indep_inst.a as i64,
+                production_val: enc.a as i64,
+            });
+        }
+        if indep_inst.b != enc.b {
+            return Err(DisasmComparisonError::PhysicalFieldMismatch {
+                pc,
+                field_name: "B".to_string(),
+                independent_val: indep_inst.b as i64,
+                production_val: enc.b as i64,
+            });
+        }
+        if indep_inst.c != enc.c {
+            return Err(DisasmComparisonError::PhysicalFieldMismatch {
+                pc,
+                field_name: "C".to_string(),
+                independent_val: indep_inst.c as i64,
+                production_val: enc.c as i64,
+            });
+        }
+        if indep_inst.bx != enc.bx {
+            return Err(DisasmComparisonError::PhysicalFieldMismatch {
+                pc,
+                field_name: "Bx".to_string(),
+                independent_val: indep_inst.bx as i64,
+                production_val: enc.bx as i64,
+            });
+        }
+        if indep_inst.sbx != enc.sbx {
+            return Err(DisasmComparisonError::PhysicalFieldMismatch {
+                pc,
+                field_name: "sBx".to_string(),
+                independent_val: indep_inst.sbx as i64,
+                production_val: enc.sbx as i64,
+            });
+        }
+
+        // 3. Jump targets
+        if let Some(op) = indep_inst.opcode {
+            let expected_target = match op {
+                IndependentOpcode51::Jmp
+                | IndependentOpcode51::Forloop
+                | IndependentOpcode51::Forprep => Some((pc as i32 + 1 + indep_inst.sbx) as usize),
+                _ => None,
+            };
+
+            if let Some(exp_target) = expected_target {
+                match prod_inst.jump_target {
+                    Some(act_target) if act_target == exp_target => (),
+                    Some(act_target) => {
+                        return Err(DisasmComparisonError::JumpTargetMismatch {
+                            pc,
+                            expected_target: exp_target,
+                            actual_target: act_target,
+                        });
+                    }
+                    None => {
+                        return Err(DisasmComparisonError::MissingJumpTarget {
+                            pc,
+                            expected_target: exp_target,
+                        });
+                    }
+                }
+            }
+        }
+
+        // 4. Source lines
+        match luac_inst.line_info {
+            DumpLineInfo::Known(l) => match prod_inst.line {
+                Some(prod_line) if prod_line == l => (),
+                Some(prod_line) => {
+                    return Err(DisasmComparisonError::LineMismatch {
+                        pc,
+                        expected_line: l,
+                        actual_line: prod_line,
+                    });
+                }
+                None => {
+                    return Err(DisasmComparisonError::MissingSourceLine {
+                        pc,
+                        expected_line: l,
+                    });
+                }
+            },
+            DumpLineInfo::Stripped => {
+                if let Some(prod_line) = prod_inst.line {
+                    return Err(DisasmComparisonError::UnexpectedSourceLine {
+                        pc,
+                        actual_line: prod_line,
+                    });
+                }
+            }
+        }
+
+        // 5. Constants and Prototype Resolution
+        if let Some(op) = indep_inst.opcode {
+            match op {
+                IndependentOpcode51::Loadk
+                | IndependentOpcode51::Getglobal
+                | IndependentOpcode51::Setglobal => {
+                    let bx = indep_inst.bx as usize;
+                    let exp_id = match &owning_proto.id {
+                        StableId::Proto(p) => StableId::Constant {
+                            proto: p.clone(),
+                            index: bx,
+                        },
+                        other => other.clone(),
+                    };
+                    let exp_val = owning_proto.constants.get(bx).map(|c| &c.value);
+                    let op_bx = prod_inst.operands.iter().find(|o| o.name == "Bx");
+                    match op_bx.and_then(|o| o.resolved.as_ref()) {
+                        Some(ResolvedFact::Constant {
+                            index,
+                            id,
+                            value,
+                            formatted_preview,
+                        }) if (*index != bx
+                            || *id != exp_id
+                            || Some(value) != exp_val
+                            || formatted_preview.is_empty()) =>
+                        {
+                            return Err(DisasmComparisonError::ConstantResolutionMismatch {
+                                pc,
+                                detail: format!(
+                                    "Lua 5.1 Bx constant resolution mismatch at PC {pc}: index={index}, id={id}, preview={formatted_preview}"
+                                ),
+                            });
+                        }
+                        None => {
+                            return Err(DisasmComparisonError::MissingResolvedFact {
+                                pc,
+                                operand_name: "Bx".to_string(),
+                                fact_type: "Constant".to_string(),
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+                IndependentOpcode51::Closure => {
+                    let bx = indep_inst.bx as usize;
+                    let exp_child = owning_proto.protos.get(bx);
+                    let op_bx = prod_inst.operands.iter().find(|o| o.name == "Bx");
+                    match op_bx.and_then(|o| o.resolved.as_ref()) {
+                        Some(ResolvedFact::Prototype { index, id })
+                            if (*index != bx || exp_child.map(|c| &c.id) != Some(id)) =>
+                        {
+                            return Err(DisasmComparisonError::PrototypeResolutionMismatch {
+                                pc,
+                                detail: format!(
+                                    "Lua 5.1 CLOSURE Bx resolution mismatch: index={index}, id={id}"
+                                ),
+                            });
+                        }
+                        None => {
+                            return Err(DisasmComparisonError::MissingResolvedFact {
+                                pc,
+                                operand_name: "Bx".to_string(),
+                                fact_type: "Prototype".to_string(),
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+
+            // Verify RK operand resolution for B and C fields
+            let is_b_rk = matches!(
+                op,
+                IndependentOpcode51::Gettable
+                    | IndependentOpcode51::SelfOp
+                    | IndependentOpcode51::Add
+                    | IndependentOpcode51::Sub
+                    | IndependentOpcode51::Mul
+                    | IndependentOpcode51::Div
+                    | IndependentOpcode51::Mod
+                    | IndependentOpcode51::Pow
+                    | IndependentOpcode51::Eq
+                    | IndependentOpcode51::Lt
+                    | IndependentOpcode51::Le
+            );
+            if is_b_rk {
+                let op_b = prod_inst.operands.iter().find(|o| o.name == "B");
+                if indep_inst.b >= 256 {
+                    let const_idx = (indep_inst.b - 256) as usize;
+                    let exp_val = owning_proto.constants.get(const_idx).map(|c| &c.value);
+                    match op_b.and_then(|o| o.resolved.as_ref()) {
+                        Some(ResolvedFact::Constant { index, value, .. })
+                            if (*index != const_idx || Some(value) != exp_val) =>
+                        {
+                            return Err(DisasmComparisonError::ConstantResolutionMismatch {
+                                pc,
+                                detail: format!(
+                                    "Lua 5.1 RK(B) constant resolution mismatch at PC {pc}: expected index {const_idx}, got {index}"
+                                ),
+                            });
+                        }
+                        None => {
+                            return Err(DisasmComparisonError::MissingResolvedFact {
+                                pc,
+                                operand_name: "B".to_string(),
+                                fact_type: "Constant".to_string(),
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            let is_c_rk = matches!(
+                op,
+                IndependentOpcode51::Gettable
+                    | IndependentOpcode51::Settable
+                    | IndependentOpcode51::SelfOp
+                    | IndependentOpcode51::Add
+                    | IndependentOpcode51::Sub
+                    | IndependentOpcode51::Mul
+                    | IndependentOpcode51::Div
+                    | IndependentOpcode51::Mod
+                    | IndependentOpcode51::Pow
+                    | IndependentOpcode51::Eq
+                    | IndependentOpcode51::Lt
+                    | IndependentOpcode51::Le
+            );
+            if is_c_rk {
+                let op_c = prod_inst.operands.iter().find(|o| o.name == "C");
+                if indep_inst.c >= 256 {
+                    let const_idx = (indep_inst.c - 256) as usize;
+                    let exp_val = owning_proto.constants.get(const_idx).map(|c| &c.value);
+                    match op_c.and_then(|o| o.resolved.as_ref()) {
+                        Some(ResolvedFact::Constant { index, value, .. })
+                            if (*index != const_idx || Some(value) != exp_val) =>
+                        {
+                            return Err(DisasmComparisonError::ConstantResolutionMismatch {
+                                pc,
+                                detail: format!(
+                                    "Lua 5.1 RK(C) constant resolution mismatch at PC {pc}: expected index {const_idx}, got {index}"
+                                ),
+                            });
+                        }
+                        None => {
+                            return Err(DisasmComparisonError::MissingResolvedFact {
+                                pc,
+                                operand_name: "C".to_string(),
+                                fact_type: "Constant".to_string(),
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        // 6. CLI JSON agreement if provided
+        if let Some(json_proto) = cli_json_proto {
+            let json_inst = &json_proto.instructions[pc];
+            if json_inst != prod_inst {
+                return Err(DisasmComparisonError::JsonMismatch {
+                    pc,
+                    detail: format!(
+                        "Lua 5.1 JSON instruction at PC {pc} did not match production instruction: JSON={json_inst:?}, PROD={prod_inst:?}"
                     ),
                 });
             }

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-validator-soundness-lua54",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_validator_soundness_lua54",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_all_83_opcodes_parse_and_validate_without_false_positives",
+    "test_constant_index_out_of_bounds_fails",
+    "test_corrupted_forward_jump_target_fails",
+    "test_corrupted_negative_jump_before_instruction_zero_fails",
+    "test_jmp_with_high_a_slot_bits_does_not_fail_stack_size_check",
+    "test_register_a_out_of_bounds_on_instruction_using_a_triggers_warning",
+    "test_strict_mode_halts_early_permissive_accumulates_all",
+    "test_upvalue_index_out_of_bounds_fails"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness"
+  ],
+  "allowed_capability_mutations": []
+}

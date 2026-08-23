@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "tool_version": "0.1.0",
+  "input_identity": {
+    "path": "tests/fixtures/precompiled/lua54/hello.luac",
+    "sha256": "a171c4c88ec40b1c871a57a888f66d7a93144e1d742f4071af286c9dc7b93575",
+    "byte_length": 191
+  },
+  "interpretation": {
+    "base_dialect": "lua5.4",
+    "patch_or_oracle_version": "5.4.8",
+    "profile": "lua5.4",
+    "validated_layout": "int=8,sizet=8,inst=4,num=8,endian=1",
+    "parse_mode": "permissive",
+    "selection_mode": "detected",
+    "detection_evidence": "Lua 5.4 signature matched (0x1bLua, version 0x54)"
+  },
+  "analysis_configuration": {
+    "mode": "permissive",
+    "limits": {
+      "max_input_bytes": 67108864,
+      "max_nesting_depth": 128,
+      "max_total_prototypes": 10000,
+      "max_instructions_per_proto": 1000000,
+      "max_constants_per_proto": 262144,
+      "max_upvalues_per_proto": 1024,
+      "max_string_bytes": 16777216,
+      "max_diagnostics": 50000
+    }
+  },
+  "data": {
+    "verdict": "valid-for-analysis",
+    "diagnostic_count": 0,
+    "diagnostics": []
+  }
+}

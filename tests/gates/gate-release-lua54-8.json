@@ -16,7 +16,7 @@
     "test_killer_probe_missing_prerequisite_result_rejects_verification",
     "test_killer_probe_tampered_success_flag_rejects_verification",
     "test_killer_probe_unqualified_dialect_string_rejected",
-    "test_r0_baseline_supported_dialects_empty",
+    "test_supported_dialects_empty_without_promoted_release_evidence",
     "test_unproven_dialects_remain_experimental"
   ],
   "required_compiler_version": null,
@@ -29,13 +29,8 @@
     "gate-public-disasm-lua54-8",
     "gate-analysis-r3",
     "gate-lossless-lua54-8",
-    "gate-layout-lua51-stock",
-    "gate-profile-lua51-lnum",
-    "gate-closures-lua51",
-    "gate-resolved-constants-lua51",
-    "gate-field-reproducers-lua51"
+    "gate-validation-null-hypothesis",
+    "gate-machine-contract"
   ],
-
-
   "allowed_capability_mutations": []
 }

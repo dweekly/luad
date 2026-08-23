@@ -463,6 +463,8 @@ fn test_probe_10_mutated_result_after_manifest_assembly_rejected() {
         "rel-1",
         "lua5.4",
         "Lua 5.4.8",
+        None,
+        None,
         "1111",
         true,
         &[(result.clone(), spec.clone())],
@@ -850,7 +852,7 @@ fn test_all_canonical_gate_scripts_and_specs_consistency() {
                     "test_killer_probe_unqualified_dialect_string_rejected",
                     "test_killer_probe_tampered_success_flag_rejects_verification",
                     "test_killer_probe_missing_prerequisite_result_rejects_verification",
-                    "test_r0_baseline_supported_dialects_empty",
+                    "test_supported_dialects_empty_without_promoted_release_evidence",
                     "test_unproven_dialects_remain_experimental",
                 ];
                 for probe in required_probes {

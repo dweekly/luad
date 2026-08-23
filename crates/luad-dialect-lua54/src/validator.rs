@@ -50,6 +50,17 @@ pub fn validate_chunk_lua54(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
     (verdict, diagnostics)
 }
 
+fn uses_register_a(op: Opcode54) -> bool {
+    !matches!(
+        op,
+        Opcode54::Jmp
+            | Opcode54::Extraarg
+            | Opcode54::Settabup
+            | Opcode54::Return0
+            | Opcode54::Varargprep
+    )
+}
+
 fn validate_proto_lua54(proto: &Prototype, diagnostics: &mut Vec<Diagnostic>) {
     let _proto_id = proto.id.clone();
     let num_instructions = proto.instructions.len();
@@ -76,9 +87,7 @@ fn validate_proto_lua54(proto: &Prototype, diagnostics: &mut Vec<Diagnostic>) {
         };
 
         // Stack size validation: check destination register A
-        if raw.a >= proto.maxstacksize && op != Opcode54::Extraarg {
-            // Note: In some return/vararg/call sequences registers at maxstacksize might be touched,
-            // but A should not exceed maxstacksize.
+        if uses_register_a(op) && raw.a >= proto.maxstacksize {
             diagnostics.push(
                 Diagnostic::warning(
                     "L54-VAL-REG-001",

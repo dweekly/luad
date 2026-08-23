@@ -54,7 +54,7 @@ fn test_lua51_32bit_sizet_and_lnum_constants() {
     bytes.push(0x04); // sizeof(size_t) = 4 (32-bit target)
     bytes.push(0x04); // sizeof(Instruction) = 4
     bytes.push(0x08); // sizeof(lua_Number) = 8
-    bytes.push(0x00); // integral flag = 0
+    bytes.push(0x04); // integral flag = 4 (LNUM32)
 
     // Proto: source name (4-byte size_t = 11: "test32.lua\0")
     bytes.extend_from_slice(&11u32.to_le_bytes());
@@ -96,11 +96,11 @@ fn test_lua51_32bit_sizet_and_lnum_constants() {
     let mut reader = luad_core::reader::SafeReader::new(&bytes);
     let chunk = luad_dialect_lua51::decode_chunk_lua51_with_profile(
         &mut reader,
-        luad_dialect_lua51::Lua51Profile::Lnum,
+        luad_dialect_lua51::Lua51Profile::Lnum32,
     )
     .expect("32-bit Lua 5.1 chunk with LNUM constants must parse successfully");
 
-    assert_eq!(chunk.dialect, "lua5.1");
+    assert_eq!(chunk.dialect, "lua5.1-lnum32");
     assert_eq!(chunk.header.sizeof_sizet, 4);
     assert_eq!(chunk.header.lua_integer_size, 4);
     assert_eq!(
@@ -117,10 +117,10 @@ fn test_lua51_32bit_sizet_and_lnum_constants() {
     }
 
     match &chunk.main_proto.constants[1].value {
-        luad_core::model::ConstantValue::Float { val, .. } => {
-            assert_eq!(*val, 1337.0);
+        luad_core::model::ConstantValue::Integer { val, .. } => {
+            assert_eq!(*val, 1337);
         }
-        other => panic!("Expected Float for LNUM int, got {other:?}"),
+        other => panic!("Expected Integer for LNUM int, got {other:?}"),
     }
 
     // Truncation safety

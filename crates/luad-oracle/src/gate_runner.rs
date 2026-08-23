@@ -88,6 +88,10 @@ pub struct ReleaseManifest {
     pub release_id: String,
     pub target_dialect: String,
     pub target_patch_version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_profile: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_layout: Option<String>,
     pub git_commit: String,
     pub clean: bool,
     pub prerequisite_results: Vec<PrerequisiteResultRef>,
@@ -167,6 +171,17 @@ pub enum GateRunnerError {
         gate_id: String,
         expected: String,
         actual: String,
+    },
+    #[error("Prerequisite dialect mismatch: gate '{gate_id}' is incompatible with release target '{target_dialect}'")]
+    PrerequisiteDialectMismatch {
+        gate_id: String,
+        target_dialect: String,
+    },
+    #[error("Missing target profile or layout for dialect '{target_dialect}': profile={profile:?}, layout={layout:?}")]
+    MissingTargetProfileOrLayout {
+        target_dialect: String,
+        profile: Option<String>,
+        layout: Option<String>,
     },
     #[error("Evidence tampering detected in '{0}': {1}")]
     TamperDetected(String, String),
@@ -687,10 +702,13 @@ pub fn verify_gate_result(
 }
 
 /// Assemble a ReleaseManifest from validated prerequisite GateResults.
+#[allow(clippy::too_many_arguments)]
 pub fn assemble_release_manifest(
     release_id: &str,
     target_dialect: &str,
     target_patch_version: &str,
+    target_profile: Option<&str>,
+    target_layout: Option<&str>,
     git_commit: &str,
     clean: bool,
     prerequisite_results: &[(GateResult, GateSpec)],
@@ -699,9 +717,59 @@ pub fn assemble_release_manifest(
         return Err(GateRunnerError::DirtyPromotionArtifact);
     }
 
+    if target_dialect.starts_with("lua5.1") && (target_profile.is_none() || target_layout.is_none())
+    {
+        return Err(GateRunnerError::MissingTargetProfileOrLayout {
+            target_dialect: target_dialect.to_string(),
+            profile: target_profile.map(String::from),
+            layout: target_layout.map(String::from),
+        });
+    }
+
     let mut refs = Vec::new();
     for (result, spec) in prerequisite_results {
         verify_gate_result(result, spec, Some(git_commit), true)?;
+
+        // Validate dialect compatibility of prerequisite gates
+        if target_dialect.starts_with("lua5.1") {
+            if let Some(req_ver) = &spec.required_compiler_version {
+                if !req_ver.contains("5.1") {
+                    return Err(GateRunnerError::PrerequisiteDialectMismatch {
+                        gate_id: spec.gate_id.clone(),
+                        target_dialect: target_dialect.to_string(),
+                    });
+                }
+            }
+            if let Some(req_prof) = &spec.required_profile {
+                if !req_prof.starts_with("lua5.1") {
+                    return Err(GateRunnerError::PrerequisiteDialectMismatch {
+                        gate_id: spec.gate_id.clone(),
+                        target_dialect: target_dialect.to_string(),
+                    });
+                }
+            }
+            if spec.gate_id.contains("lua54")
+                || spec.gate_id.contains("lua52")
+                || spec.gate_id.contains("lua53")
+                || spec.gate_id.contains("lua55")
+            {
+                return Err(GateRunnerError::PrerequisiteDialectMismatch {
+                    gate_id: spec.gate_id.clone(),
+                    target_dialect: target_dialect.to_string(),
+                });
+            }
+        } else if target_dialect.starts_with("lua5.4")
+            && (spec.gate_id.contains("lua51")
+                || spec.gate_id.contains("lua52")
+                || spec.gate_id.contains("lua53")
+                || spec.gate_id.contains("lua55"))
+        {
+            return Err(GateRunnerError::PrerequisiteDialectMismatch {
+                gate_id: spec.gate_id.clone(),
+                target_dialect: target_dialect.to_string(),
+            });
+        }
+
         refs.push(PrerequisiteResultRef {
             gate_id: result.gate_id.clone(),
             result_sha256: result.compute_hash(),
@@ -714,6 +782,8 @@ pub fn assemble_release_manifest(
         release_id: release_id.to_string(),
         target_dialect: target_dialect.to_string(),
         target_patch_version: target_patch_version.to_string(),
+        target_profile: target_profile.map(|s| s.to_string()),
+        target_layout: target_layout.map(|s| s.to_string()),
         git_commit: git_commit.to_string(),
         clean,
         prerequisite_results: refs,
@@ -735,6 +805,16 @@ pub fn verify_release_manifest(
                 manifest.schema_version
             ),
         ));
+    }
+
+    if manifest.target_dialect.starts_with("lua5.1")
+        && (manifest.target_profile.is_none() || manifest.target_layout.is_none())
+    {
+        return Err(GateRunnerError::MissingTargetProfileOrLayout {
+            target_dialect: manifest.target_dialect.clone(),
+            profile: manifest.target_profile.clone(),
+            layout: manifest.target_layout.clone(),
+        });
     }
 
     if manifest.git_commit != expected_commit {
@@ -1036,6 +1116,8 @@ pub fn record_all_adversarial_probes(
         "checkpoint-probe10",
         "proof-harness-checkpoint-r1",
         "R1-Harness-v1",
+        None,
+        None,
         "feedface00000000000000000000000000000000",
         true,
         &[(fake_res10_clean.clone(), spec10.clone())],

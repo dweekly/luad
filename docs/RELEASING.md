@@ -2,7 +2,11 @@
 
 ## Current release stop
 
-Do not make a production release until R5 in the [coding-agent execution plan](CODING-AGENT-PLAN.md) passes with its complete prerequisite closure from one clean revision. Pre-release tags must identify every dialect as experimental and enumerate the public boundaries that remain ungated.
+Do not make a production release until the exact target-specific release gate in
+the [coding-agent execution plan](CODING-AGENT-PLAN.md) passes from one clean
+revision. Lua 5.4.8 and embedded Lua 5.1 use separate evidence manifests;
+prerequisites for one target cannot promote the other. Pre-release tags must
+enumerate every experimental or ungated public surface.
 
 ## Preconditions
 

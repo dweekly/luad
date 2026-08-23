@@ -1,0 +1,184 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Diagnostic",
+  "description": "Structured diagnostic item.",
+  "type": "object",
+  "required": [
+    "category",
+    "code",
+    "message",
+    "severity",
+    "target"
+  ],
+  "properties": {
+    "category": {
+      "description": "Category of the diagnostic.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/DiagnosticCategory"
+        }
+      ]
+    },
+    "code": {
+      "description": "Stable diagnostic error code (e.g. \"L54-HEADER-001\", \"L54-JUMP-003\").",
+      "type": "string"
+    },
+    "evidence": {
+      "description": "Supporting evidence or context.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "help_topic": {
+      "description": "Topic resolvable via `luad help <topic>`.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "message": {
+      "description": "Human-readable explanation.",
+      "type": "string"
+    },
+    "severity": {
+      "description": "Severity level.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/Severity"
+        }
+      ]
+    },
+    "source": {
+      "description": "Raw byte location if applicable.",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/SourceLocation"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "suggested_action": {
+      "description": "Suggested next action for researcher or agent.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "target": {
+      "description": "Target artifact stable ID.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/StableId"
+        }
+      ]
+    }
+  },
+  "definitions": {
+    "DiagnosticCategory": {
+      "description": "Category of diagnostic check.",
+      "oneOf": [
+        {
+          "description": "Raw binary parsing, truncation, or format-envelope error.",
+          "type": "string",
+          "enum": [
+            "parse"
+          ]
+        },
+        {
+          "description": "Structural integrity or header consistency error.",
+          "type": "string",
+          "enum": [
+            "structure"
+          ]
+        },
+        {
+          "description": "Opcode, operand, or companion-instruction invariant violation.",
+          "type": "string",
+          "enum": [
+            "instruction"
+          ]
+        },
+        {
+          "description": "Control-flow anomaly, out-of-bounds jump, or unreachable entry.",
+          "type": "string",
+          "enum": [
+            "control-flow"
+          ]
+        },
+        {
+          "description": "Corrupt, inconsistent, or missing debug metadata.",
+          "type": "string",
+          "enum": [
+            "debug-metadata"
+          ]
+        },
+        {
+          "description": "Higher-level analysis precondition failure.",
+          "type": "string",
+          "enum": [
+            "analysis"
+          ]
+        }
+      ]
+    },
+    "Severity": {
+      "description": "Diagnostic severity level.",
+      "oneOf": [
+        {
+          "description": "Informational note or hint.",
+          "type": "string",
+          "enum": [
+            "info"
+          ]
+        },
+        {
+          "description": "Warning about suspicious, unconventional, or non-fatal condition.",
+          "type": "string",
+          "enum": [
+            "warning"
+          ]
+        },
+        {
+          "description": "Error indicating structural invalidity or parsing failure.",
+          "type": "string",
+          "enum": [
+            "error"
+          ]
+        }
+      ]
+    },
+    "SourceLocation": {
+      "description": "Source byte location and raw byte representation of a field or instruction.",
+      "type": "object",
+      "required": [
+        "byte_length",
+        "byte_offset",
+        "raw_hex"
+      ],
+      "properties": {
+        "byte_length": {
+          "description": "Encoded length in bytes.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "byte_offset": {
+          "description": "Absolute byte offset in the input chunk.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "raw_hex": {
+          "description": "Lowercase hex encoding of the raw bytes.",
+          "type": "string"
+        }
+      }
+    },
+    "StableId": {
+      "type": "string"
+    }
+  }
+}

@@ -823,7 +823,7 @@ confidence. Evidence generation consumes verified gate results only; canonical
 gate names map one-to-one to specifications; static semantic effects remain
 reviewed or unverified; official-source citations identify exact releases.
 
-Exit outcome: C0 in the coding plan passes.
+Exit outcome: T0 in the coding plan passes.
 
 ### 12.2 Lua 5.4.8 public vertical slice
 
@@ -841,7 +841,9 @@ Normalized text goldens separately prove presentation. Analysis preconditions,
 CFG/dominators, model serialization, and byte accounting receive their own
 review gates; none is implied by the instruction oracle.
 
-Exit outcomes: R6, R3, and R4 in the coding plan pass.
+The accepted Lua 5.4.8 gates remain prerequisites for the target-specific release
+manifest. New work must preserve those public-disassembly, analysis, and lossless
+serialization guarantees while V1 and M1 close the remaining shared contracts.
 
 ### 12.3 Embedded Lua 5.1 vertical slice
 
@@ -858,7 +860,9 @@ Prioritize the layouts and workflows found in deployed firmware:
 Each requirement must be demonstrated at the CLI/schema boundary as well as in
 the owning library layer.
 
-Exit outcomes: F1, F2, F3, and F4 in the coding plan pass.
+Exit outcomes: L1 proves exact profile selection and identity, and L2 proves the
+public Lua 5.1 disassembly and capture facts. Q1 and V1 close the shared
+fail-closed query and validator contracts before machine promotion.
 
 ### 12.4 Evidence-derived release candidate
 
@@ -867,7 +871,9 @@ clean revision. Derive capability and README status from that manifest. Promote
 only exact releases, layouts, and profiles represented by the evidence; leave
 other dialects and runtime semantic effects experimental.
 
-Exit outcome: R5 in the coding plan passes.
+Exit outcomes: M1 establishes the versioned machine contract, W1 establishes
+deterministic firmware-scale export, and the applicable REL54 or REL51 gate
+promotes only the exact target and command surfaces supported by its evidence.
 
 ### 12.5 Post-release development
 
@@ -992,7 +998,7 @@ Adoption is secondary to correctness, but useful signals include:
 4. Which public schemas can freeze at version 1, and which dialect-specific records still require tagged extension points?
 5. Which cross-version semantic vocabulary is proven useful without erasing dialect differences?
 6. Does user evidence justify SARIF, an in-process library contract, or additional export formats?
-7. Which facts have independent evidence strong enough to support exact retrieval and full-fidelity export after R5?
+7. Which facts have independent evidence strong enough to support exact retrieval and full-fidelity export after the applicable target-specific release gate?
 
 ### 16.3 Criteria for reconsidering a GUI or TUI
 
@@ -1025,6 +1031,12 @@ The project documentation set includes:
 - Known limitations and unsupported-format guidance.
 
 Documentation examples must be executable tests. Version-specific pages state the exact Lua release used as their reference.
+
+The root README indexes every maintained Markdown document with a summary, a
+last-fresh date, and a concrete revalidation or deletion trigger. Plans and roadmaps
+contain only future work and acceptance conditions; implementation history belongs in
+the changelog, release notes, pull requests, and commits. Source comments describe
+present invariants and rationale rather than earlier implementations.
 
 ## 18. Reference sources
 

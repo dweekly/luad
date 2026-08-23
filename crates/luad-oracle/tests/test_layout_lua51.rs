@@ -72,27 +72,80 @@ fn test_stock_lua51_rejects_lnum_tag_9() {
 }
 
 #[test]
-fn test_profile_lua51_lnum_accepts_tag_9() {
+fn test_profile_lua51_lnum32_accepts_tag_9() {
     let raw_bytes = get_fixture_bytes("lua5.1", "hello", false).expect("fixture failed");
     let mut reader = SafeReader::new(&raw_bytes);
     let chunk = decode_chunk_lua51(&mut reader).expect("clean decode");
     let const_offset = chunk.main_proto.constants[0].source.byte_offset;
 
-    // Construct valid LNUM constant: tag 9 followed by 4-byte LE int (42)
+    // Construct valid LNUM constant: byte 11 = 4, tag 9 followed by 4-byte LE int (42)
     let mut mutated = raw_bytes[..const_offset].to_vec();
+    mutated[11] = 4; // LNUM32 integral slot
     mutated.push(9); // tag 9
     mutated.extend_from_slice(&42i32.to_le_bytes()); // 4-byte int
-                                                     // Rest of prototype following the original string constant
     let orig_const_len = chunk.main_proto.constants[0].source.byte_length;
     mutated.extend_from_slice(&raw_bytes[const_offset + orig_const_len..]);
 
     let mut reader_lnum = SafeReader::new(&mutated);
-    let res = decode_chunk_lua51_with_profile(&mut reader_lnum, Lua51Profile::Lnum);
+    let res = decode_chunk_lua51_with_profile(&mut reader_lnum, Lua51Profile::Lnum32);
     assert!(
         res.is_ok(),
-        "Lnum profile must accept tag 9: {:?}",
+        "Lnum32 profile must accept tag 9: {:?}",
         res.err()
     );
+    let decoded = res.unwrap();
+    match &decoded.main_proto.constants[0].value {
+        luad_core::model::ConstantValue::Integer { val, raw_hex } => {
+            assert_eq!(*val, 42);
+            assert_eq!(raw_hex, "2a000000");
+        }
+        other => panic!(
+            "Tag 9 MUST decode as ConstantValue::Integer, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn test_negative_control_lnum32_rejects_stock_integral_flag() {
+    let raw_bytes = get_fixture_bytes("lua5.1", "hello", false).expect("fixture failed");
+    let mut reader = SafeReader::new(&raw_bytes);
+    let res = decode_chunk_lua51_with_profile(&mut reader, Lua51Profile::Lnum32);
+    assert!(
+        res.is_err(),
+        "Explicit LNUM32 selection must reject stock header"
+    );
+    let diag = res.unwrap_err();
+    assert_eq!(diag.code, "L51-HEADER-003");
+    assert!(diag
+        .message
+        .contains("Invalid lua_Integer size 0 for LNUM32"));
+}
+
+#[test]
+fn test_negative_control_stock_rejects_lnum_byte11_flag4() {
+    let mut raw_bytes = get_fixture_bytes("lua5.1", "hello", false).expect("fixture failed");
+    raw_bytes[11] = 4; // LNUM32 marker
+    let mut reader = SafeReader::new(&raw_bytes);
+    let res = decode_chunk_lua51_with_profile(&mut reader, Lua51Profile::Stock);
+    assert!(res.is_err(), "Stock profile must reject byte 11 == 4");
+    let diag = res.unwrap_err();
+    assert_eq!(diag.code, "L51-HEADER-003");
+    assert!(diag.message.contains("lua5.1-lnum32"));
+}
+
+#[test]
+fn test_negative_control_byte11_non_profile_value_fails() {
+    let mut raw_bytes = get_fixture_bytes("lua5.1", "hello", false).expect("fixture failed");
+    raw_bytes[11] = 5; // non-profile value
+    let mut reader = SafeReader::new(&raw_bytes);
+    let res = parse_header_lua51(&mut reader, Lua51Profile::Stock);
+    assert!(
+        res.is_err(),
+        "Non-profile byte 11 value must fail header validation"
+    );
+    let diag = res.unwrap_err();
+    assert_eq!(diag.code, "L51-HEADER-003");
 }
 
 #[test]

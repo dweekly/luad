@@ -18,8 +18,8 @@ use crate::provenance::{Confidence, SourceLocation};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
 pub struct EncodedOperands {
     pub a: u8,
-    pub b: u8,
-    pub c: u8,
+    pub b: u32,
+    pub c: u32,
     pub k: u8,
     pub bx: u32,
     pub sbx: i32,

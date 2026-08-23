@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-semantics-lua51",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_lua51_semantics",
+    "--test",
+    "test_closures_lua51",
+    "--test",
+    "test_operands_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_lua51_all_38_opcodes_round_trip",
+    "test_lua51_closure_binding_descriptors_attached_to_closure",
+    "test_lua51_closure_binding_preserves_physical_pc_words",
+    "test_lua51_closure_bindings_not_executed_as_standalone_instructions",
+    "test_lua51_golden_word_vectors",
+    "test_lua51_lifting_and_effects",
+    "test_lua51_operand_resolution_getglobal",
+    "test_lua51_operand_resolution_rk_operands",
+    "test_negative_control_binding_move_produces_no_standalone_write",
+    "test_negative_control_getglobal_oob_rejected",
+    "test_negative_control_invalid_binding_opcode_rejected",
+    "test_negative_control_rk_constant_oob_rejected"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness"
+  ],
+  "allowed_capability_mutations": []
+}

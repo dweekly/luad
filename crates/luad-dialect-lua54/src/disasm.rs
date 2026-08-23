@@ -91,8 +91,8 @@ pub fn disassemble_instruction_lua54(
 
     let encoded_operands = EncodedOperands {
         a: raw.a,
-        b: raw.b,
-        c: raw.c,
+        b: raw.b as u32,
+        c: raw.c as u32,
         k: raw.k,
         bx: raw.bx,
         sbx: raw.sbx,

@@ -306,6 +306,9 @@ pub struct Chunk {
     pub byte_length: usize,
     /// Identified dialect (e.g. "lua5.4").
     pub dialect: String,
+    /// Resolved dialect/profile interpretation if recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interpretation: Option<crate::dialect::ResolvedInterpretation>,
     /// Chunk header.
     pub header: Header,
     /// Main root prototype (`proto:0`).

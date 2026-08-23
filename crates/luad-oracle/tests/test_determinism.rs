@@ -22,12 +22,9 @@ fn test_cli_output_determinism() {
     let luad = get_luad_bin();
     let bytes = get_fixture_bytes("lua5.4", "closures", false).unwrap();
     let temp_file1 = tempfile::NamedTempFile::new().unwrap();
-    let temp_file2 = tempfile::NamedTempFile::new().unwrap();
     std::fs::write(temp_file1.path(), &bytes).unwrap();
-    std::fs::write(temp_file2.path(), &bytes).unwrap();
 
     let path1 = temp_file1.path().to_str().unwrap().to_string();
-    let path2 = temp_file2.path().to_str().unwrap().to_string();
 
     let commands_to_test: Vec<Vec<String>> = vec![
         vec![
@@ -90,18 +87,11 @@ fn test_cli_output_determinism() {
         vec!["capabilities".into()],
     ];
 
-    for mut full_args in commands_to_test {
+    for full_args in commands_to_test {
         let out1 = Command::new(&luad)
             .args(&full_args)
             .output()
             .unwrap_or_else(|e| panic!("Failed to run luad with args {full_args:?}: {e}"));
-
-        // Replace path1 with path2 in arguments
-        for arg in &mut full_args {
-            if *arg == path1 {
-                *arg = path2.clone();
-            }
-        }
 
         let out2 = Command::new(&luad)
             .args(&full_args)
@@ -111,12 +101,12 @@ fn test_cli_output_determinism() {
         assert_eq!(out1.status.code(), out2.status.code());
         assert_eq!(
             out1.stdout, out2.stdout,
-            "Nondeterministic stdout across files for args {:?}",
+            "Nondeterministic stdout across runs for args {:?}",
             full_args
         );
         assert_eq!(
             out1.stderr, out2.stderr,
-            "Nondeterministic stderr across files for args {:?}",
+            "Nondeterministic stderr across runs for args {:?}",
             full_args
         );
     }

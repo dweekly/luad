@@ -1,0 +1,625 @@
+{
+  "schema_version": 1,
+  "tool_version": "0.1.0",
+  "input_identity": {
+    "path": "tests/fixtures/precompiled/lua54/hello.luac",
+    "sha256": "a171c4c88ec40b1c871a57a888f66d7a93144e1d742f4071af286c9dc7b93575",
+    "byte_length": 191
+  },
+  "interpretation": {
+    "base_dialect": "lua5.4",
+    "patch_or_oracle_version": "5.4.8",
+    "profile": "lua5.4",
+    "validated_layout": "int=8,sizet=8,inst=4,num=8,endian=1",
+    "parse_mode": "permissive",
+    "selection_mode": "detected",
+    "detection_evidence": "Lua 5.4 signature matched (0x1bLua, version 0x54)"
+  },
+  "analysis_configuration": {
+    "mode": "permissive",
+    "limits": {
+      "max_input_bytes": 67108864,
+      "max_nesting_depth": 128,
+      "max_total_prototypes": 10000,
+      "max_instructions_per_proto": 1000000,
+      "max_constants_per_proto": 262144,
+      "max_upvalues_per_proto": 1024,
+      "max_string_bytes": 16777216,
+      "max_diagnostics": 50000
+    }
+  },
+  "data": {
+    "id": "proto:0",
+    "source_name": "@tests/fixtures/hello.lua",
+    "line_defined": 0,
+    "last_line_defined": 0,
+    "numparams": 0,
+    "is_vararg": true,
+    "maxstacksize": 4,
+    "instructions": [
+      {
+        "id": "proto:0:pc:0",
+        "pc": 0,
+        "raw_word": 81,
+        "raw_hex": "0x00000051",
+        "mnemonic": "VARARGPREP",
+        "opcode_num": 81,
+        "role": "instruction",
+        "encoded_operands": {
+          "a": 0,
+          "b": 0,
+          "c": 0,
+          "k": 0,
+          "bx": 0,
+          "sbx": -65535,
+          "ax": 0,
+          "sb": -127,
+          "sc": -127,
+          "sj": -16777215
+        },
+        "line": 1,
+        "operands": [
+          {
+            "name": "A",
+            "kind": {
+              "kind": "register",
+              "index": 0
+            },
+            "display": "0"
+          }
+        ],
+        "confidence": "fact",
+        "source": {
+          "byte_offset": 64,
+          "byte_length": 4,
+          "raw_hex": "51000000"
+        }
+      },
+      {
+        "id": "proto:0:pc:1",
+        "pc": 1,
+        "raw_word": 11,
+        "raw_hex": "0x0000000b",
+        "mnemonic": "GETTABUP",
+        "opcode_num": 11,
+        "role": "instruction",
+        "encoded_operands": {
+          "a": 0,
+          "b": 0,
+          "c": 0,
+          "k": 0,
+          "bx": 0,
+          "sbx": -65535,
+          "ax": 0,
+          "sb": -127,
+          "sc": -127,
+          "sj": -16777215
+        },
+        "line": 1,
+        "operands": [
+          {
+            "name": "A",
+            "kind": {
+              "kind": "register",
+              "index": 0
+            },
+            "display": "0"
+          },
+          {
+            "name": "B",
+            "kind": {
+              "kind": "register",
+              "index": 0
+            },
+            "display": "0",
+            "resolved": {
+              "type": "upvalue",
+              "index": 0,
+              "id": "proto:0:upvalue:0",
+              "name": "_ENV"
+            }
+          },
+          {
+            "name": "C",
+            "kind": {
+              "kind": "immediate-unsigned",
+              "value": 0
+            },
+            "display": "0",
+            "resolved": {
+              "type": "constant",
+              "index": 0,
+              "id": "proto:0:k:0",
+              "value": {
+                "type": "short-string",
+                "value": {
+                  "raw_bytes": [
+                    112,
+                    114,
+                    105,
+                    110,
+                    116
+                  ],
+                  "display": "print",
+                  "is_utf8": true
+                }
+              },
+              "formatted_preview": "\"print\""
+            }
+          }
+        ],
+        "comment": "_ENV \"print\"",
+        "confidence": "fact",
+        "source": {
+          "byte_offset": 68,
+          "byte_length": 4,
+          "raw_hex": "0b000000"
+        }
+      },
+      {
+        "id": "proto:0:pc:2",
+        "pc": 2,
+        "raw_word": 32899,
+        "raw_hex": "0x00008083",
+        "mnemonic": "LOADK",
+        "opcode_num": 3,
+        "role": "instruction",
+        "encoded_operands": {
+          "a": 1,
+          "b": 0,
+          "c": 0,
+          "k": 1,
+          "bx": 1,
+          "sbx": -65534,
+          "ax": 257,
+          "sb": -127,
+          "sc": -127,
+          "sj": -16776958
+        },
+        "line": 1,
+        "operands": [
+          {
+            "name": "A",
+            "kind": {
+              "kind": "register",
+              "index": 1
+            },
+            "display": "1"
+          },
+          {
+            "name": "Bx",
+            "kind": {
+              "kind": "immediate-unsigned",
+              "value": 1
+            },
+            "display": "1",
+            "resolved": {
+              "type": "constant",
+              "index": 1,
+              "id": "proto:0:k:1",
+              "value": {
+                "type": "short-string",
+                "value": {
+                  "raw_bytes": [
+                    72,
+                    101,
+                    108,
+                    108,
+                    111,
+                    44,
+                    32,
+                    108,
+                    117,
+                    97,
+                    100,
+                    33
+                  ],
+                  "display": "Hello, luad!",
+                  "is_utf8": true
+                }
+              },
+              "formatted_preview": "\"Hello, luad!\""
+            }
+          }
+        ],
+        "comment": "\"Hello, luad!\"",
+        "confidence": "fact",
+        "source": {
+          "byte_offset": 72,
+          "byte_length": 4,
+          "raw_hex": "83800000"
+        }
+      },
+      {
+        "id": "proto:0:pc:3",
+        "pc": 3,
+        "raw_word": 16908356,
+        "raw_hex": "0x01020044",
+        "mnemonic": "CALL",
+        "opcode_num": 68,
+        "role": "instruction",
+        "encoded_operands": {
+          "a": 0,
+          "b": 2,
+          "c": 1,
+          "k": 0,
+          "bx": 516,
+          "sbx": -65019,
+          "ax": 132096,
+          "sb": -125,
+          "sc": -126,
+          "sj": -16645119
+        },
+        "line": 1,
+        "operands": [
+          {
+            "name": "A",
+            "kind": {
+              "kind": "register",
+              "index": 0
+            },
+            "display": "0"
+          },
+          {
+            "name": "B",
+            "kind": {
+              "kind": "immediate-unsigned",
+              "value": 2
+            },
+            "display": "2"
+          },
+          {
+            "name": "C",
+            "kind": {
+              "kind": "immediate-unsigned",
+              "value": 1
+            },
+            "display": "1"
+          }
+        ],
+        "comment": "1 in 0 out",
+        "confidence": "fact",
+        "source": {
+          "byte_offset": 76,
+          "byte_length": 4,
+          "raw_hex": "44000201"
+        }
+      },
+      {
+        "id": "proto:0:pc:4",
+        "pc": 4,
+        "raw_word": 65539,
+        "raw_hex": "0x00010003",
+        "mnemonic": "LOADK",
+        "opcode_num": 3,
+        "role": "instruction",
+        "encoded_operands": {
+          "a": 0,
+          "b": 1,
+          "c": 0,
+          "k": 0,
+          "bx": 2,
+          "sbx": -65533,
+          "ax": 512,
+          "sb": -126,
+          "sc": -127,
+          "sj": -16776703
+        },
+        "line": 2,
+        "operands": [
+          {
+            "name": "A",
+            "kind": {
+              "kind": "register",
+              "index": 0
+            },
+            "display": "0"
+          },
+          {
+            "name": "Bx",
+            "kind": {
+              "kind": "immediate-unsigned",
+              "value": 2
+            },
+            "display": "2",
+            "resolved": {
+              "type": "constant",
+              "index": 2,
+              "id": "proto:0:k:2",
+              "value": {
+                "type": "short-string",
+                "value": {
+                  "raw_bytes": [
+                    76,
+                    117,
+                    97,
+                    32,
+                    53,
+                    46,
+                    52,
+                    32,
+                    98,
+                    121,
+                    116,
+                    101,
+                    99,
+                    111,
+                    100,
+                    101,
+                    32,
+                    97,
+                    110,
+                    97,
+                    108,
+                    121,
+                    115,
+                    105,
+                    115
+                  ],
+                  "display": "Lua 5.4 bytecode analysis",
+                  "is_utf8": true
+                }
+              },
+              "formatted_preview": "\"Lua 5.4 bytecode analysis\""
+            }
+          }
+        ],
+        "comment": "\"Lua 5.4 bytecode analysis\"",
+        "confidence": "fact",
+        "source": {
+          "byte_offset": 80,
+          "byte_length": 4,
+          "raw_hex": "03000100"
+        }
+      },
+      {
+        "id": "proto:0:pc:5",
+        "pc": 5,
+        "raw_word": 2148827265,
+        "raw_hex": "0x80148081",
+        "mnemonic": "LOADI",
+        "opcode_num": 1,
+        "role": "instruction",
+        "encoded_operands": {
+          "a": 1,
+          "b": 20,
+          "c": 128,
+          "k": 1,
+          "bx": 65577,
+          "sbx": 42,
+          "ax": 16787713,
+          "sb": -107,
+          "sc": 1,
+          "sj": 10498
+        },
+        "line": 3,
+        "operands": [
+          {
+            "name": "A",
+            "kind": {
+              "kind": "register",
+              "index": 1
+            },
+            "display": "1"
+          },
+          {
+            "name": "sBx",
+            "kind": {
+              "kind": "immediate-signed",
+              "value": 42
+            },
+            "display": "42"
+          }
+        ],
+        "confidence": "fact",
+        "source": {
+          "byte_offset": 84,
+          "byte_length": 4,
+          "raw_hex": "81801480"
+        }
+      },
+      {
+        "id": "proto:0:pc:6",
+        "pc": 6,
+        "raw_word": 256,
+        "raw_hex": "0x00000100",
+        "mnemonic": "MOVE",
+        "opcode_num": 0,
+        "role": "instruction",
+        "encoded_operands": {
+          "a": 2,
+          "b": 0,
+          "c": 0,
+          "k": 0,
+          "bx": 0,
+          "sbx": -65535,
+          "ax": 2,
+          "sb": -127,
+          "sc": -127,
+          "sj": -16777213
+        },
+        "line": 4,
+        "operands": [
+          {
+            "name": "A",
+            "kind": {
+              "kind": "register",
+              "index": 2
+            },
+            "display": "2"
+          },
+          {
+            "name": "B",
+            "kind": {
+              "kind": "register",
+              "index": 0
+            },
+            "display": "0"
+          }
+        ],
+        "confidence": "fact",
+        "source": {
+          "byte_offset": 88,
+          "byte_length": 4,
+          "raw_hex": "00010000"
+        }
+      },
+      {
+        "id": "proto:0:pc:7",
+        "pc": 7,
+        "raw_word": 65920,
+        "raw_hex": "0x00010180",
+        "mnemonic": "MOVE",
+        "opcode_num": 0,
+        "role": "instruction",
+        "encoded_operands": {
+          "a": 3,
+          "b": 1,
+          "c": 0,
+          "k": 0,
+          "bx": 2,
+          "sbx": -65533,
+          "ax": 515,
+          "sb": -126,
+          "sc": -127,
+          "sj": -16776700
+        },
+        "line": 4,
+        "operands": [
+          {
+            "name": "A",
+            "kind": {
+              "kind": "register",
+              "index": 3
+            },
+            "display": "3"
+          },
+          {
+            "name": "B",
+            "kind": {
+              "kind": "register",
+              "index": 1
+            },
+            "display": "1"
+          }
+        ],
+        "confidence": "fact",
+        "source": {
+          "byte_offset": 92,
+          "byte_length": 4,
+          "raw_hex": "80010100"
+        }
+      },
+      {
+        "id": "proto:0:pc:8",
+        "pc": 8,
+        "raw_word": 16974150,
+        "raw_hex": "0x01030146",
+        "mnemonic": "RETURN",
+        "opcode_num": 70,
+        "role": "instruction",
+        "encoded_operands": {
+          "a": 2,
+          "b": 3,
+          "c": 1,
+          "k": 0,
+          "bx": 518,
+          "sbx": -65017,
+          "ax": 132610,
+          "sb": -124,
+          "sc": -126,
+          "sj": -16644605
+        },
+        "line": 4,
+        "operands": [
+          {
+            "name": "A",
+            "kind": {
+              "kind": "register",
+              "index": 2
+            },
+            "display": "2"
+          },
+          {
+            "name": "B",
+            "kind": {
+              "kind": "immediate-unsigned",
+              "value": 3
+            },
+            "display": "3"
+          },
+          {
+            "name": "C",
+            "kind": {
+              "kind": "immediate-unsigned",
+              "value": 1
+            },
+            "display": "1"
+          }
+        ],
+        "comment": "2 out",
+        "confidence": "fact",
+        "source": {
+          "byte_offset": 96,
+          "byte_length": 4,
+          "raw_hex": "46010301"
+        }
+      },
+      {
+        "id": "proto:0:pc:9",
+        "pc": 9,
+        "raw_word": 16843078,
+        "raw_hex": "0x01010146",
+        "mnemonic": "RETURN",
+        "opcode_num": 70,
+        "role": "instruction",
+        "encoded_operands": {
+          "a": 2,
+          "b": 1,
+          "c": 1,
+          "k": 0,
+          "bx": 514,
+          "sbx": -65021,
+          "ax": 131586,
+          "sb": -126,
+          "sc": -126,
+          "sj": -16645629
+        },
+        "line": 4,
+        "operands": [
+          {
+            "name": "A",
+            "kind": {
+              "kind": "register",
+              "index": 2
+            },
+            "display": "2"
+          },
+          {
+            "name": "B",
+            "kind": {
+              "kind": "immediate-unsigned",
+              "value": 1
+            },
+            "display": "1"
+          },
+          {
+            "name": "C",
+            "kind": {
+              "kind": "immediate-unsigned",
+              "value": 1
+            },
+            "display": "1"
+          }
+        ],
+        "comment": "0 out",
+        "confidence": "fact",
+        "source": {
+          "byte_offset": 100,
+          "byte_length": 4,
+          "raw_hex": "46010101"
+        }
+      }
+    ]
+  }
+}

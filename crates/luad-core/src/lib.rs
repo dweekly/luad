@@ -6,6 +6,7 @@ pub mod capabilities;
 pub mod diagnostic;
 pub mod dialect;
 pub mod disasm;
+pub mod envelope;
 pub mod id;
 pub mod ir;
 pub mod limits;
@@ -18,9 +19,15 @@ pub use capabilities::{
 };
 
 pub use diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
-pub use dialect::{DetectionResult, Dialect};
+pub use dialect::{DetectionResult, Dialect, ResolvedInterpretation, SelectionMode};
 pub use disasm::{
-    DisassembledInstruction, DisassembledOperand, DisassembledPrototype, OperandKind, ResolvedFact,
+    DisassembledInstruction, DisassembledOperand, DisassembledPrototype, EncodedOperands,
+    OperandKind, ResolvedFact,
+};
+pub use envelope::{
+    AnalysisConfiguration, ExportEndRecord, ExportStartRecord, FileEndRecord, FileStartRecord,
+    InputIdentity, JsonlDataRecord, JsonlMetadataRecord, JsonlSummaryRecord, MachineDocument,
+    ValidationResponse,
 };
 pub use id::{ProtoPath, StableId};
 

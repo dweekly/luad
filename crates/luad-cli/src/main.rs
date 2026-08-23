@@ -1,12 +1,13 @@
 //! `luad` command-line interface entry point.
 
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, BufRead, Read};
 use std::path::Path;
 
 use clap::{CommandFactory, Parser};
 use colored::Colorize;
 use schemars::schema_for;
+use sha2::{Digest, Sha256};
 
 mod args;
 mod exit_codes;
@@ -14,13 +15,24 @@ mod render;
 
 use args::{
     CapabilitiesArgs, CfgArgs, Cli, Commands, CompletionsArgs, DiffArgs, DisasmArgs, ExplainArgs,
-    InspectArgs, OutputFormat, QueryArgs, SchemaArgs, ValidateArgs, XrefsArgs,
+    ExportArgs, InspectArgs, OutputFormat, QueryArgs, SchemaArgs, ValidateArgs, XrefsArgs,
 };
 use exit_codes::ExitCode;
-use luad_core::diagnostic::{Diagnostic, Severity, Verdict};
-use luad_core::id::StableId;
+use luad_analysis::{
+    execute_query, validate_for_analysis, validate_target, ControlFlowGraph, QueryResponse,
+    XrefIndex, XrefResponse,
+};
+use luad_core::diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
+use luad_core::dialect::{ResolvedInterpretation, SelectionMode};
+use luad_core::disasm::DisassembledPrototype;
+use luad_core::envelope::{
+    AnalysisConfiguration, ExportEndRecord, ExportStartRecord, FileEndRecord, FileStartRecord,
+    InputIdentity, JsonlDataRecord, JsonlMetadataRecord, JsonlSummaryRecord, MachineDocument,
+    ValidationResponse,
+};
+use luad_core::id::{ProtoPath, StableId};
 use luad_core::limits::{ParseMode, ResourceLimits};
-use luad_core::model::Chunk;
+use luad_core::model::{Chunk, Prototype};
 use luad_core::reader::SafeReader;
 use luad_core::Dialect;
 use luad_dialect_lua54::Lua54Dialect;
@@ -78,10 +90,19 @@ fn read_input_bytes(file_path: &str) -> Result<Vec<u8>, ExitCode> {
 }
 
 fn parse_chunk(
+    file_path: &str,
     bytes: &[u8],
     strict: bool,
     dialect_override: Option<&str>,
-) -> Result<Chunk, ExitCode> {
+) -> Result<
+    (
+        Chunk,
+        InputIdentity,
+        AnalysisConfiguration,
+        ResolvedInterpretation,
+    ),
+    ExitCode,
+> {
     let mode = if strict {
         ParseMode::Strict
     } else {
@@ -99,23 +120,49 @@ fn parse_chunk(
         return Err(ExitCode::LimitExceeded);
     }
 
+    let sha256 = hex::encode(Sha256::digest(bytes));
+    let input_identity = InputIdentity {
+        path: file_path.to_string(),
+        sha256,
+        byte_length: bytes.len(),
+    };
+
+    let analysis_config = AnalysisConfiguration {
+        mode,
+        limits: limits.clone(),
+        dialect_override: dialect_override.map(ToString::to_string),
+    };
+
     let lua55 = luad_dialect_lua55::Lua55Dialect;
     let lua54 = Lua54Dialect;
     let lua53 = luad_dialect_lua53::Lua53Dialect;
     let lua52 = luad_dialect_lua52::Lua52Dialect;
     let lua51 = luad_dialect_lua51::Lua51Dialect::default();
     let lua51_lnum = luad_dialect_lua51::Lua51Dialect {
-        profile: luad_dialect_lua51::Lua51Profile::Lnum,
+        profile: luad_dialect_lua51::Lua51Profile::Lnum32,
+    };
+    let lua51_stock32 = luad_dialect_lua51::Lua51Dialect {
+        profile: luad_dialect_lua51::Lua51Profile::Stock32,
     };
 
-    let selected_dialect: &dyn Dialect = if let Some(d) = dialect_override {
-        match d {
+    let (selected_dialect, selection_mode): (&dyn Dialect, SelectionMode) = if let Some(d) =
+        dialect_override
+    {
+        let dialect: &dyn Dialect = match d {
             "lua5.5" => &lua55,
             "lua5.4" => &lua54,
             "lua5.3" => &lua53,
             "lua5.2" => &lua52,
             "lua5.1" => &lua51,
-            "lua5.1-lnum" => &lua51_lnum,
+            "lua5.1-stock32" => &lua51_stock32,
+            "lua5.1-lnum32" => &lua51_lnum,
+            "lua5.1-lnum" => {
+                eprintln!(
+                        "{}: Ambiguous dialect 'lua5.1-lnum'. Please specify exact profile '--dialect lua5.1-lnum32'",
+                        "error".red().bold()
+                    );
+                return Err(ExitCode::UsageError);
+            }
             other => {
                 eprintln!(
                     "{}: Dialect '{other}' is not yet supported in this build",
@@ -123,19 +170,20 @@ fn parse_chunk(
                 );
                 return Err(ExitCode::UnsupportedFormat);
             }
-        }
+        };
+        (dialect, SelectionMode::Explicit)
     } else if lua55.detect(bytes).is_some() {
-        &lua55
+        (&lua55, SelectionMode::Detected)
     } else if lua54.detect(bytes).is_some() {
-        &lua54
+        (&lua54, SelectionMode::Detected)
     } else if lua53.detect(bytes).is_some() {
-        &lua53
+        (&lua53, SelectionMode::Detected)
     } else if lua52.detect(bytes).is_some() {
-        &lua52
-    } else if bytes.len() >= 12 && bytes[4] == 0x51 && bytes[11] == 4 {
-        &lua51_lnum
+        (&lua52, SelectionMode::Detected)
+    } else if lua51_lnum.detect(bytes).is_some() {
+        (&lua51_lnum, SelectionMode::Detected)
     } else if lua51.detect(bytes).is_some() {
-        &lua51
+        (&lua51, SelectionMode::Detected)
     } else {
         eprintln!(
             "{}: Unknown or unsupported bytecode format (header did not match known dialects)",
@@ -146,7 +194,29 @@ fn parse_chunk(
 
     let mut reader = SafeReader::with_options(bytes, 0, limits, mode);
     match selected_dialect.decode_chunk(&mut reader) {
-        Ok(chunk) => Ok(chunk),
+        Ok(mut chunk) => {
+            if let Some(interp) = &mut chunk.interpretation {
+                interp.selection_mode = selection_mode;
+            }
+            let interpretation =
+                chunk
+                    .interpretation
+                    .clone()
+                    .unwrap_or_else(|| ResolvedInterpretation {
+                        base_dialect: chunk.dialect.clone(),
+                        patch_or_oracle_version: None,
+                        profile: chunk.dialect.clone(),
+                        profile_version_or_hash: None,
+                        validated_layout: None,
+                        parse_mode: match mode {
+                            ParseMode::Strict => "strict".to_string(),
+                            ParseMode::Permissive => "permissive".to_string(),
+                        },
+                        selection_mode,
+                        detection_evidence: String::new(),
+                    });
+            Ok((chunk, input_identity, analysis_config, interpretation))
+        }
         Err(diag) => {
             eprintln!(
                 "{}: Parsing failed at offset {}: {}",
@@ -156,6 +226,24 @@ fn parse_chunk(
             );
             Err(ExitCode::InvalidInput)
         }
+    }
+}
+
+fn wrap_document<T>(
+    input_identity: InputIdentity,
+    interpretation: ResolvedInterpretation,
+    analysis_configuration: AnalysisConfiguration,
+    data: T,
+    diagnostics: Vec<Diagnostic>,
+) -> MachineDocument<T> {
+    MachineDocument {
+        schema_version: 1,
+        tool_version: env!("CARGO_PKG_VERSION").to_string(),
+        input_identity,
+        interpretation,
+        analysis_configuration,
+        data,
+        diagnostics,
     }
 }
 
@@ -174,6 +262,7 @@ fn main() {
         Commands::Explain(args) => handle_explain(args),
         Commands::Query(args) => handle_query(args),
         Commands::Diff(args) => handle_diff(args),
+        Commands::Export(args) => handle_export(args),
         Commands::Compile(_) => {
             eprintln!(
                 "{}: 'compile' command is not supported in bytecode analysis mode",
@@ -190,15 +279,47 @@ fn handle_inspect(args: InspectArgs) {
         Err(code) => code.exit(),
     };
 
-    let chunk = match parse_chunk(&bytes, args.strict, args.dialect.as_deref()) {
-        Ok(c) => c,
-        Err(code) => code.exit(),
-    };
+    let (chunk, identity, config, interp) =
+        match parse_chunk(&args.file, &bytes, args.strict, args.dialect.as_deref()) {
+            Ok(c) => c,
+            Err(code) => code.exit(),
+        };
 
     match args.format {
         OutputFormat::Text => render::render_inspect(&chunk, args.summary),
-        OutputFormat::Json => render::print_json(&chunk),
-        OutputFormat::Jsonl => render::print_jsonl(&[chunk]),
+        OutputFormat::Json => {
+            let doc = wrap_document(
+                identity,
+                interp,
+                config,
+                chunk.clone(),
+                chunk.diagnostics.clone(),
+            );
+            render::print_json(&doc);
+        }
+        OutputFormat::Jsonl => {
+            let meta = JsonlMetadataRecord {
+                record_type: "metadata".to_string(),
+                schema_version: 1,
+                tool_version: env!("CARGO_PKG_VERSION").to_string(),
+                input_identity: identity,
+                interpretation: interp,
+                analysis_configuration: config,
+            };
+            println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            let data_rec = JsonlDataRecord {
+                record_type: "chunk".to_string(),
+                data: chunk.clone(),
+            };
+            println!("{}", serde_json::to_string(&data_rec).unwrap_or_default());
+            let summary = JsonlSummaryRecord {
+                record_type: "summary".to_string(),
+                total_records: 1,
+                diagnostic_count: chunk.diagnostics.len(),
+                is_truncated: false,
+            };
+            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+        }
         OutputFormat::Dot => {
             eprintln!("{}: DOT format not supported for inspect", "error".red());
             ExitCode::UsageError.exit();
@@ -208,16 +329,62 @@ fn handle_inspect(args: InspectArgs) {
     ExitCode::Success.exit();
 }
 
+fn get_disasm_proto(dialect: &str, proto: &luad_core::model::Prototype) -> DisassembledPrototype {
+    if dialect == "lua5.4" {
+        luad_dialect_lua54::disassemble_proto_lua54(proto)
+    } else if dialect.starts_with("lua5.1") {
+        luad_dialect_lua51::disassemble_proto_lua51(proto)
+    } else {
+        let lifted = luad_analysis::lift_proto_for_dialect(dialect, proto);
+        let instructions: Vec<_> = lifted
+            .into_iter()
+            .map(|sem| luad_core::DisassembledInstruction {
+                id: sem.id,
+                pc: sem.pc,
+                raw_word: sem.raw_word,
+                raw_hex: sem.raw_hex,
+                mnemonic: sem.mnemonic,
+                opcode_num: 0,
+                role: "instruction".to_string(),
+                encoded_operands: luad_core::EncodedOperands::default(),
+                line: None,
+                operands: vec![],
+                jump_target: sem.jump_target,
+                companion_pc: sem.companion_pc,
+                metamethod: None,
+                comment: None,
+                confidence: sem.confidence,
+                source: sem.source,
+                diagnostics: vec![],
+            })
+            .collect();
+
+        DisassembledPrototype {
+            id: proto.id.clone(),
+            source_name: proto.source_name.as_ref().map(|s| s.display.clone()),
+            line_defined: proto.line_defined,
+            last_line_defined: proto.last_line_defined,
+            numparams: proto.numparams,
+            is_vararg: proto.is_vararg != 0,
+            maxstacksize: proto.maxstacksize,
+            instructions,
+            diagnostics: vec![],
+            child_protos: vec![],
+        }
+    }
+}
+
 fn handle_disasm(args: DisasmArgs) {
     let bytes = match read_input_bytes(&args.file) {
         Ok(b) => b,
         Err(code) => code.exit(),
     };
 
-    let chunk = match parse_chunk(&bytes, args.strict, None) {
-        Ok(c) => c,
-        Err(code) => code.exit(),
-    };
+    let (chunk, identity, config, interp) =
+        match parse_chunk(&args.file, &bytes, args.strict, args.dialect.as_deref()) {
+            Ok(c) => c,
+            Err(code) => code.exit(),
+        };
 
     let target_proto = if let Some(path_str) = &args.proto {
         let path: StableId = match path_str.parse() {
@@ -230,7 +397,7 @@ fn handle_disasm(args: DisasmArgs) {
                 ExitCode::UsageError.exit();
             }
         };
-        let Some(proto) = find_proto(&chunk.main_proto, &path) else {
+        let Some(proto) = find_proto_by_stable_id(&chunk.main_proto, &path) else {
             eprintln!("{}: Prototype '{path}' not found in chunk", "error".red());
             ExitCode::UsageError.exit();
         };
@@ -239,55 +406,72 @@ fn handle_disasm(args: DisasmArgs) {
         &chunk.main_proto
     };
 
-    if chunk.dialect == "lua5.4" {
-        let disasm_proto = luad_dialect_lua54::disassemble_proto_lua54(target_proto);
-        match args.format {
-            OutputFormat::Text => {
-                render::render_disasm(
-                    &chunk.dialect,
-                    target_proto,
-                    args.raw,
-                    args.debug_info,
-                    args.effects,
-                );
-            }
-            OutputFormat::Json => render::print_json(&disasm_proto),
-            OutputFormat::Jsonl => render::print_jsonl(&disasm_proto.instructions),
-            OutputFormat::Dot => {
+    let disasm_proto = get_disasm_proto(&chunk.dialect, target_proto);
+
+    match args.format {
+        OutputFormat::Text => {
+            if chunk.dialect == "lua5.5" {
                 eprintln!(
-                    "{}: Use 'luad cfg --format dot' for graphviz output",
-                    "error".red()
+                    "{}: Dialect 'lua5.5' disassembly is experimental and unverified",
+                    "warning".yellow().bold()
                 );
-                ExitCode::UsageError.exit();
             }
+            render::render_disasm(
+                &chunk.dialect,
+                target_proto,
+                args.raw,
+                args.debug_info,
+                args.effects,
+            );
         }
-    } else {
-        match args.format {
-            OutputFormat::Text => {
-                render::render_disasm(
-                    &chunk.dialect,
-                    target_proto,
-                    args.raw,
-                    args.debug_info,
-                    args.effects,
-                );
+        OutputFormat::Json => {
+            let doc = wrap_document(
+                identity,
+                interp,
+                config,
+                disasm_proto.clone(),
+                disasm_proto.diagnostics.clone(),
+            );
+            render::print_json(&doc);
+        }
+        OutputFormat::Jsonl => {
+            let meta = JsonlMetadataRecord {
+                record_type: "metadata".to_string(),
+                schema_version: 1,
+                tool_version: env!("CARGO_PKG_VERSION").to_string(),
+                input_identity: identity,
+                interpretation: interp,
+                analysis_configuration: config,
+            };
+            println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            for inst in &disasm_proto.instructions {
+                let rec = JsonlDataRecord {
+                    record_type: "instruction".to_string(),
+                    data: inst.clone(),
+                };
+                println!("{}", serde_json::to_string(&rec).unwrap_or_default());
             }
-            OutputFormat::Json => render::print_json(target_proto),
-            OutputFormat::Jsonl => render::print_jsonl(&target_proto.instructions),
-            OutputFormat::Dot => {
-                eprintln!(
-                    "{}: Use 'luad cfg --format dot' for graphviz output",
-                    "error".red()
-                );
-                ExitCode::UsageError.exit();
-            }
+            let summary = JsonlSummaryRecord {
+                record_type: "summary".to_string(),
+                total_records: disasm_proto.instructions.len(),
+                diagnostic_count: disasm_proto.diagnostics.len(),
+                is_truncated: false,
+            };
+            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+        }
+        OutputFormat::Dot => {
+            eprintln!(
+                "{}: Use 'luad cfg --format dot' for graphviz output",
+                "error".red()
+            );
+            ExitCode::UsageError.exit();
         }
     }
 
     ExitCode::Success.exit();
 }
 
-fn find_proto<'a>(
+fn find_proto_by_stable_id<'a>(
     proto: &'a luad_core::model::Prototype,
     target_id: &StableId,
 ) -> Option<&'a luad_core::model::Prototype> {
@@ -295,7 +479,7 @@ fn find_proto<'a>(
         return Some(proto);
     }
     for child in &proto.protos {
-        if let Some(found) = find_proto(child, target_id) {
+        if let Some(found) = find_proto_by_stable_id(child, target_id) {
             return Some(found);
         }
     }
@@ -308,17 +492,18 @@ fn handle_validate(args: ValidateArgs) {
         Err(code) => code.exit(),
     };
 
-    let chunk = match parse_chunk(&bytes, args.strict, None) {
-        Ok(c) => c,
-        Err(code) => code.exit(),
-    };
+    let (chunk, identity, config, interp) =
+        match parse_chunk(&args.file, &bytes, args.strict, args.dialect.as_deref()) {
+            Ok(c) => c,
+            Err(code) => code.exit(),
+        };
 
     let (verdict, diagnostics) = match chunk.dialect.as_str() {
         "lua5.5" => luad_dialect_lua55::validate_chunk_lua55(&chunk),
         "lua5.4" => luad_dialect_lua54::validate_chunk_lua54(&chunk),
         "lua5.3" => luad_dialect_lua53::validate_chunk_lua53(&chunk),
         "lua5.2" => luad_dialect_lua52::validate_chunk_lua52(&chunk),
-        "lua5.1" => luad_dialect_lua51::validate_chunk_lua51(&chunk),
+        d if d.starts_with("lua5.1") => luad_dialect_lua51::validate_chunk_lua51(&chunk),
         _ => (chunk.verdict, chunk.diagnostics.clone()),
     };
 
@@ -331,15 +516,13 @@ fn handle_validate(args: ValidateArgs) {
     match args.format {
         OutputFormat::Text => render::render_validate(verdict, &diagnostics),
         OutputFormat::Json => {
-            #[derive(serde::Serialize)]
-            struct ValidateOutput {
-                verdict: Verdict,
-                diagnostics: Vec<Diagnostic>,
-            }
-            render::print_json(&ValidateOutput {
+            let val_resp = ValidationResponse {
                 verdict,
-                diagnostics,
-            });
+                diagnostic_count: diagnostics.len(),
+                diagnostics: diagnostics.clone(),
+            };
+            let doc = wrap_document(identity, interp, config, val_resp, diagnostics);
+            render::print_json(&doc);
         }
         _ => {
             eprintln!("{}: Format not supported for validate", "error".red());
@@ -386,7 +569,7 @@ fn handle_schema(args: SchemaArgs) {
 
     match args.name.as_str() {
         "chunk" => {
-            let schema = schema_for!(Chunk);
+            let schema = schema_for!(MachineDocument<Chunk>);
             println!(
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
@@ -407,34 +590,34 @@ fn handle_schema(args: SchemaArgs) {
             );
         }
         "cfg" => {
-            let schema = schema_for!(luad_analysis::ControlFlowGraph);
+            let schema = schema_for!(MachineDocument<ControlFlowGraph>);
             println!(
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
             );
         }
         "xrefs" => {
-            let schema = schema_for!(luad_analysis::XrefEntry);
+            let schema = schema_for!(MachineDocument<XrefResponse>);
             println!(
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
             );
         }
-        "query" => {
-            let schema = schema_for!(luad_analysis::QueryResponse);
+        "query" | "analysis" => {
+            let schema = schema_for!(MachineDocument<QueryResponse>);
             println!(
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
             );
         }
         "diff" => {
-            let schema = schema_for!(luad_analysis::ChunkDiff);
+            let schema = schema_for!(MachineDocument<luad_analysis::ChunkDiff>);
             println!(
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
             );
         }
-        "capabilities" => {
+        "capabilities" | "manifest" => {
             let schema = schema_for!(luad_core::CapabilityManifest);
             println!(
                 "{}",
@@ -442,7 +625,21 @@ fn handle_schema(args: SchemaArgs) {
             );
         }
         "disasm" => {
-            let schema = schema_for!(luad_core::DisassembledPrototype);
+            let schema = schema_for!(MachineDocument<DisassembledPrototype>);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            );
+        }
+        "validate" => {
+            let schema = schema_for!(MachineDocument<ValidationResponse>);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            );
+        }
+        "export" => {
+            let schema = schema_for!(ExportRecord);
             println!(
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
@@ -450,7 +647,7 @@ fn handle_schema(args: SchemaArgs) {
         }
         other => {
             eprintln!(
-                "{}: Unknown schema '{other}'. Supported: chunk, diagnostic, instruction, disasm, cfg, xrefs, query, diff, capabilities",
+                "{}: Unknown schema '{other}'. Supported: chunk, disasm, validate, diagnostic, instruction, cfg, xrefs, query, analysis, diff, capabilities, manifest",
                 "error".red()
             );
             ExitCode::UsageError.exit();
@@ -472,7 +669,7 @@ fn handle_explain(args: ExplainArgs) {
         Err(code) => code.exit(),
     };
 
-    let chunk = match parse_chunk(&bytes, false, None) {
+    let (chunk, _, _, _) = match parse_chunk(&args.file, &bytes, false, args.dialect.as_deref()) {
         Ok(c) => c,
         Err(code) => code.exit(),
     };
@@ -491,8 +688,8 @@ fn handle_explain(args: ExplainArgs) {
 
     match target_id {
         StableId::Instruction { proto, pc } => {
-            let proto_id = StableId::Proto(proto);
-            let Some(target_proto) = find_proto(&chunk.main_proto, &proto_id) else {
+            let proto_id = StableId::Proto(proto.clone());
+            let Some(target_proto) = find_proto_by_stable_id(&chunk.main_proto, &proto_id) else {
                 eprintln!(
                     "{}: Prototype '{}' not found in chunk",
                     "error".red(),
@@ -501,12 +698,8 @@ fn handle_explain(args: ExplainArgs) {
                 ExitCode::UsageError.exit();
             };
 
-            let disasm_proto = if chunk.dialect == "lua5.4" {
-                Some(luad_dialect_lua54::disassemble_proto_lua54(target_proto))
-            } else {
-                None
-            };
-            let disasm_inst = disasm_proto.as_ref().and_then(|p| p.instructions.get(pc));
+            let disasm_proto = get_disasm_proto(&chunk.dialect, target_proto);
+            let disasm_inst = disasm_proto.instructions.get(pc);
 
             let lifted = luad_analysis::lift_proto_for_dialect(&chunk.dialect, target_proto);
             let Some(sem_inst) = lifted.get(pc) else {
@@ -547,12 +740,13 @@ fn handle_cfg(args: CfgArgs) {
         Err(code) => code.exit(),
     };
 
-    let chunk = match parse_chunk(&bytes, false, None) {
-        Ok(c) => c,
-        Err(code) => code.exit(),
-    };
+    let (chunk, identity, config, interp) =
+        match parse_chunk(&args.file, &bytes, false, args.dialect.as_deref()) {
+            Ok(c) => c,
+            Err(code) => code.exit(),
+        };
 
-    if let Err(diags) = luad_analysis::validate_for_analysis(&chunk) {
+    if let Err(diags) = validate_for_analysis(&chunk) {
         eprintln!(
             "{}: Analysis refused: chunk failed validation checks",
             "error".red()
@@ -577,7 +771,7 @@ fn handle_cfg(args: CfgArgs) {
         }
     };
 
-    let Some(target_proto) = find_proto(&chunk.main_proto, &target_id) else {
+    let Some(target_proto) = find_proto_by_stable_id(&chunk.main_proto, &target_id) else {
         eprintln!(
             "{}: Prototype '{}' not found in chunk",
             "error".red(),
@@ -587,12 +781,45 @@ fn handle_cfg(args: CfgArgs) {
     };
 
     let lifted = luad_analysis::lift_proto_for_dialect(&chunk.dialect, target_proto);
-    let cfg = luad_analysis::ControlFlowGraph::build(target_proto, &lifted);
+    let cfg = ControlFlowGraph::build(target_proto, &lifted);
 
     match args.format {
         OutputFormat::Text => render::render_cfg(&cfg),
-        OutputFormat::Json => render::print_json(&cfg),
-        OutputFormat::Jsonl => render::print_jsonl(&cfg.blocks),
+        OutputFormat::Json => {
+            let doc = wrap_document(
+                identity,
+                interp,
+                config,
+                cfg.clone(),
+                chunk.diagnostics.clone(),
+            );
+            render::print_json(&doc);
+        }
+        OutputFormat::Jsonl => {
+            let meta = JsonlMetadataRecord {
+                record_type: "metadata".to_string(),
+                schema_version: 1,
+                tool_version: env!("CARGO_PKG_VERSION").to_string(),
+                input_identity: identity,
+                interpretation: interp,
+                analysis_configuration: config,
+            };
+            println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            for block in &cfg.blocks {
+                let rec = JsonlDataRecord {
+                    record_type: "basic_block".to_string(),
+                    data: block.clone(),
+                };
+                println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+            }
+            let summary = JsonlSummaryRecord {
+                record_type: "summary".to_string(),
+                total_records: cfg.blocks.len(),
+                diagnostic_count: chunk.diagnostics.len(),
+                is_truncated: false,
+            };
+            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+        }
         OutputFormat::Dot => print!("{}", cfg.to_dot()),
     }
 
@@ -605,12 +832,13 @@ fn handle_xrefs(args: XrefsArgs) {
         Err(code) => code.exit(),
     };
 
-    let chunk = match parse_chunk(&bytes, false, None) {
-        Ok(c) => c,
-        Err(code) => code.exit(),
-    };
+    let (chunk, identity, config, interp) =
+        match parse_chunk(&args.file, &bytes, false, args.dialect.as_deref()) {
+            Ok(c) => c,
+            Err(code) => code.exit(),
+        };
 
-    if let Err(diags) = luad_analysis::validate_for_analysis(&chunk) {
+    if let Err(diags) = validate_for_analysis(&chunk) {
         eprintln!(
             "{}: Analysis refused: chunk failed validation checks",
             "error".red()
@@ -623,9 +851,9 @@ fn handle_xrefs(args: XrefsArgs) {
         ExitCode::InvalidInput.exit();
     }
 
-    let index = luad_analysis::XrefIndex::build(&chunk);
+    let index = XrefIndex::build(&chunk);
 
-    let matching_refs: Vec<&luad_analysis::XrefEntry> = if let Some(to_str) = &args.to {
+    let target_id = if let Some(to_str) = &args.to {
         let to_id: StableId = match to_str.parse() {
             Ok(id) => id,
             Err(e) => {
@@ -633,8 +861,20 @@ fn handle_xrefs(args: XrefsArgs) {
                 ExitCode::UsageError.exit();
             }
         };
-        index.query_to(&to_id)
-    } else if let Some(from_str) = &args.from {
+        if !validate_target(&chunk, &to_id) {
+            eprintln!(
+                "{}: Target '{}' does not exist in chunk",
+                "error".red(),
+                to_id
+            );
+            ExitCode::UsageError.exit();
+        }
+        Some(to_id)
+    } else {
+        None
+    };
+
+    let source_id = if let Some(from_str) = &args.from {
         let from_id: StableId = match from_str.parse() {
             Ok(id) => id,
             Err(e) => {
@@ -642,15 +882,72 @@ fn handle_xrefs(args: XrefsArgs) {
                 ExitCode::UsageError.exit();
             }
         };
-        index.query_from(&from_id)
+        if !validate_target(&chunk, &from_id) {
+            eprintln!(
+                "{}: Source target '{}' does not exist in chunk",
+                "error".red(),
+                from_id
+            );
+            ExitCode::UsageError.exit();
+        }
+        Some(from_id)
     } else {
-        index.entries.iter().collect()
+        None
+    };
+
+    let matching_refs: Vec<luad_analysis::XrefEntry> = if let Some(t) = &target_id {
+        index.query_to(t).into_iter().cloned().collect()
+    } else if let Some(s) = &source_id {
+        index.query_from(s).into_iter().cloned().collect()
+    } else {
+        index.entries.clone()
+    };
+
+    let total_count = matching_refs.len();
+    let xref_response = XrefResponse {
+        target: target_id,
+        source: source_id,
+        entries: matching_refs.clone(),
+        total_count,
     };
 
     match args.format {
-        OutputFormat::Text => render::render_xrefs(&matching_refs),
-        OutputFormat::Json => render::print_json(&matching_refs),
-        OutputFormat::Jsonl => render::print_jsonl(&matching_refs),
+        OutputFormat::Text => render::render_xrefs(&matching_refs.iter().collect::<Vec<_>>()),
+        OutputFormat::Json => {
+            let doc = wrap_document(
+                identity,
+                interp,
+                config,
+                xref_response,
+                chunk.diagnostics.clone(),
+            );
+            render::print_json(&doc);
+        }
+        OutputFormat::Jsonl => {
+            let meta = JsonlMetadataRecord {
+                record_type: "metadata".to_string(),
+                schema_version: 1,
+                tool_version: env!("CARGO_PKG_VERSION").to_string(),
+                input_identity: identity,
+                interpretation: interp,
+                analysis_configuration: config,
+            };
+            println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            for entry in &matching_refs {
+                let rec = JsonlDataRecord {
+                    record_type: "xref".to_string(),
+                    data: entry.clone(),
+                };
+                println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+            }
+            let summary = JsonlSummaryRecord {
+                record_type: "summary".to_string(),
+                total_records: total_count,
+                diagnostic_count: chunk.diagnostics.len(),
+                is_truncated: false,
+            };
+            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+        }
         OutputFormat::Dot => {
             eprintln!("{}: DOT format not applicable to xrefs", "error".red());
             ExitCode::UsageError.exit();
@@ -666,12 +963,13 @@ fn handle_query(args: QueryArgs) {
         Err(code) => code.exit(),
     };
 
-    let chunk = match parse_chunk(&bytes, false, None) {
-        Ok(c) => c,
-        Err(code) => code.exit(),
-    };
+    let (chunk, identity, config, interp) =
+        match parse_chunk(&args.file, &bytes, false, args.dialect.as_deref()) {
+            Ok(c) => c,
+            Err(code) => code.exit(),
+        };
 
-    if let Err(diags) = luad_analysis::validate_for_analysis(&chunk) {
+    if let Err(diags) = validate_for_analysis(&chunk) {
         eprintln!(
             "{}: Analysis refused: chunk failed validation checks",
             "error".red()
@@ -684,17 +982,56 @@ fn handle_query(args: QueryArgs) {
         ExitCode::InvalidInput.exit();
     }
 
-    let response = luad_analysis::execute_query(
+    let response = match execute_query(
         &chunk,
         args.r#where.as_deref(),
         args.limit,
         args.cursor.as_deref(),
-    );
+    ) {
+        Ok(res) => res,
+        Err(e) => {
+            eprintln!("{}: Query error: {e}", "error".red());
+            ExitCode::UsageError.exit();
+        }
+    };
 
     match args.format {
         OutputFormat::Text => render::render_query(&response),
-        OutputFormat::Json => render::print_json(&response),
-        OutputFormat::Jsonl => render::print_jsonl(&response.matches),
+        OutputFormat::Json => {
+            let doc = wrap_document(
+                identity,
+                interp,
+                config,
+                response.clone(),
+                chunk.diagnostics.clone(),
+            );
+            render::print_json(&doc);
+        }
+        OutputFormat::Jsonl => {
+            let meta = JsonlMetadataRecord {
+                record_type: "metadata".to_string(),
+                schema_version: 1,
+                tool_version: env!("CARGO_PKG_VERSION").to_string(),
+                input_identity: identity,
+                interpretation: interp,
+                analysis_configuration: config,
+            };
+            println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            for m in &response.matches {
+                let rec = JsonlDataRecord {
+                    record_type: "query_match".to_string(),
+                    data: m.clone(),
+                };
+                println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+            }
+            let summary = JsonlSummaryRecord {
+                record_type: "summary".to_string(),
+                total_records: response.matches.len(),
+                diagnostic_count: chunk.diagnostics.len(),
+                is_truncated: response.is_truncated,
+            };
+            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+        }
         OutputFormat::Dot => {
             eprintln!("{}: DOT format not applicable to query", "error".red());
             ExitCode::UsageError.exit();
@@ -714,16 +1051,17 @@ fn handle_diff(args: DiffArgs) {
         Err(code) => code.exit(),
     };
 
-    let old_chunk = match parse_chunk(&old_bytes, false, None) {
-        Ok(c) => c,
-        Err(code) => code.exit(),
-    };
-    let new_chunk = match parse_chunk(&new_bytes, false, None) {
+    let (old_chunk, identity, config, interp) =
+        match parse_chunk(&args.old_file, &old_bytes, false, None) {
+            Ok(c) => c,
+            Err(code) => code.exit(),
+        };
+    let (new_chunk, _, _, _) = match parse_chunk(&args.new_file, &new_bytes, false, None) {
         Ok(c) => c,
         Err(code) => code.exit(),
     };
 
-    if let Err(diags) = luad_analysis::validate_for_analysis(&old_chunk) {
+    if let Err(diags) = validate_for_analysis(&old_chunk) {
         eprintln!(
             "{}: Analysis refused: old chunk failed validation checks",
             "error".red()
@@ -736,7 +1074,7 @@ fn handle_diff(args: DiffArgs) {
         ExitCode::InvalidInput.exit();
     }
 
-    if let Err(diags) = luad_analysis::validate_for_analysis(&new_chunk) {
+    if let Err(diags) = validate_for_analysis(&new_chunk) {
         eprintln!(
             "{}: Analysis refused: new chunk failed validation checks",
             "error".red()
@@ -749,13 +1087,52 @@ fn handle_diff(args: DiffArgs) {
         ExitCode::InvalidInput.exit();
     }
 
+    if old_chunk.dialect != new_chunk.dialect && !args.semantic {
+        eprintln!(
+            "{}: Cross-dialect diff between '{}' and '{}' requires --semantic flag",
+            "error".red(),
+            old_chunk.dialect,
+            new_chunk.dialect
+        );
+        ExitCode::UsageError.exit();
+    }
+
     let ignore_debug = args.ignore.as_deref() == Some("debug");
     let diff = luad_analysis::diff_chunks(&old_chunk, &new_chunk, args.semantic, ignore_debug);
 
     match args.format {
         OutputFormat::Text => render::render_diff(&diff),
-        OutputFormat::Json => render::print_json(&diff),
-        OutputFormat::Jsonl => render::print_jsonl(&[diff]),
+        OutputFormat::Json => {
+            let doc = wrap_document(identity, interp, config, diff.clone(), vec![]);
+            render::print_json(&doc);
+        }
+        OutputFormat::Jsonl => {
+            let meta = JsonlMetadataRecord {
+                record_type: "metadata".to_string(),
+                schema_version: 1,
+                tool_version: env!("CARGO_PKG_VERSION").to_string(),
+                input_identity: identity,
+                interpretation: interp,
+                analysis_configuration: config,
+            };
+            println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            let mut record_count = 0;
+            for proto_diff in &diff.proto_diffs {
+                let rec = JsonlDataRecord {
+                    record_type: "diff_prototype".to_string(),
+                    data: proto_diff.clone(),
+                };
+                println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+                record_count += 1;
+            }
+            let summary = JsonlSummaryRecord {
+                record_type: "summary".to_string(),
+                total_records: record_count,
+                diagnostic_count: 0,
+                is_truncated: false,
+            };
+            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+        }
         OutputFormat::Dot => {
             eprintln!("{}: DOT format not applicable to diff", "error".red());
             ExitCode::UsageError.exit();
@@ -763,4 +1140,341 @@ fn handle_diff(args: DiffArgs) {
     }
 
     ExitCode::Success.exit();
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+struct ExportProtoMeta {
+    id: StableId,
+    path: ProtoPath,
+    source_name: Option<String>,
+    line_defined: usize,
+    last_line_defined: usize,
+    numparams: usize,
+    is_vararg: bool,
+    maxstacksize: usize,
+    instructions_count: usize,
+    constants_count: usize,
+    upvalues_count: usize,
+    protos_count: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[serde(tag = "record_type", rename_all = "snake_case")]
+enum ExportRecord {
+    ExportStart {
+        tool_version: String,
+        total_files: usize,
+    },
+    FileStart {
+        path: String,
+        sha256: String,
+        byte_length: usize,
+        interpretation: Option<ResolvedInterpretation>,
+    },
+    Prototype {
+        data: ExportProtoMeta,
+    },
+    Instruction {
+        data: luad_core::DisassembledInstruction,
+    },
+    Constant {
+        data: luad_core::model::Constant,
+    },
+    Upvalue {
+        data: luad_core::model::UpvalueDesc,
+    },
+    Xref {
+        data: luad_analysis::XrefEntry,
+    },
+    Diagnostic {
+        data: luad_core::Diagnostic,
+    },
+    FileEnd {
+        path: String,
+        status: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+        instruction_count: usize,
+        diagnostic_count: usize,
+    },
+    ExportEnd {
+        files_processed: usize,
+        files_succeeded: usize,
+        files_failed: usize,
+        total_instructions: usize,
+    },
+}
+
+fn emit_export_proto_tree(
+    proto: &Prototype,
+    disasm: &DisassembledPrototype,
+    total_instructions: &mut usize,
+) {
+    let proto_rec = JsonlDataRecord {
+        record_type: "prototype".to_string(),
+        data: ExportProtoMeta {
+            id: proto.id.clone(),
+            path: proto.path.clone(),
+            source_name: proto.source_name.as_ref().map(|s| s.display.clone()),
+            line_defined: proto.line_defined,
+            last_line_defined: proto.last_line_defined,
+            numparams: proto.numparams as usize,
+            is_vararg: proto.is_vararg != 0,
+            maxstacksize: proto.maxstacksize as usize,
+            instructions_count: proto.instructions.len(),
+            constants_count: proto.constants.len(),
+            upvalues_count: proto.upvalues.len(),
+            protos_count: proto.protos.len(),
+        },
+    };
+    println!("{}", serde_json::to_string(&proto_rec).unwrap_or_default());
+
+    for inst in &disasm.instructions {
+        *total_instructions += 1;
+        let rec = JsonlDataRecord {
+            record_type: "instruction".to_string(),
+            data: inst.clone(),
+        };
+        println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+    }
+
+    for c in &proto.constants {
+        let rec = JsonlDataRecord {
+            record_type: "constant".to_string(),
+            data: c.clone(),
+        };
+        println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+    }
+
+    for u in &proto.upvalues {
+        let rec = JsonlDataRecord {
+            record_type: "upvalue".to_string(),
+            data: u.clone(),
+        };
+        println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+    }
+
+    for (child, child_disasm) in proto.protos.iter().zip(disasm.child_protos.iter()) {
+        emit_export_proto_tree(child, child_disasm, total_instructions);
+    }
+}
+
+fn handle_export(args: ExportArgs) {
+    if args.format != OutputFormat::Jsonl {
+        eprintln!(
+            "{}: Export command requires JSONL format (--format jsonl)",
+            "error".red()
+        );
+        ExitCode::UsageError.exit();
+    }
+
+    let mut file_paths = args.files;
+
+    if let Some(list_file) = &args.input_list {
+        if list_file == "-" {
+            let stdin = io::stdin();
+            for l in stdin.lock().lines().map_while(Result::ok) {
+                let trimmed = l.trim();
+                if !trimmed.is_empty() {
+                    file_paths.push(trimmed.to_string());
+                }
+            }
+        } else {
+            let content = match fs::read_to_string(list_file) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!(
+                        "{}: Failed to read input list '{}': {e}",
+                        "error".red(),
+                        list_file
+                    );
+                    ExitCode::IoError.exit();
+                }
+            };
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    file_paths.push(trimmed.to_string());
+                }
+            }
+        }
+    }
+
+    if file_paths.is_empty() {
+        eprintln!("{}: No input files provided for export", "error".red());
+        ExitCode::UsageError.exit();
+    }
+
+    let mut any_failed = false;
+    let mut succeeded_count = 0;
+    let mut failed_count = 0;
+    let mut total_instructions = 0;
+
+    println!(
+        "{}",
+        serde_json::to_string(&ExportStartRecord {
+            record_type: "export_start".to_string(),
+            tool_version: env!("CARGO_PKG_VERSION").to_string(),
+            total_files: file_paths.len(),
+        })
+        .unwrap_or_default()
+    );
+
+    for path_str in &file_paths {
+        let bytes = match read_input_bytes(path_str) {
+            Ok(b) => b,
+            Err(_) => {
+                any_failed = true;
+                failed_count += 1;
+                let start_rec = FileStartRecord {
+                    record_type: "file_start".to_string(),
+                    path: path_str.clone(),
+                    sha256: String::new(),
+                    byte_length: 0,
+                    interpretation: None,
+                };
+                println!("{}", serde_json::to_string(&start_rec).unwrap_or_default());
+                let diag = Diagnostic::error(
+                    "IO-001",
+                    DiagnosticCategory::Structure,
+                    StableId::Chunk,
+                    format!("Failed to read input file '{path_str}'"),
+                );
+                let diag_rec = JsonlDataRecord {
+                    record_type: "diagnostic".to_string(),
+                    data: diag,
+                };
+                println!("{}", serde_json::to_string(&diag_rec).unwrap_or_default());
+                let end_rec = FileEndRecord {
+                    record_type: "file_end".to_string(),
+                    path: path_str.clone(),
+                    status: "failed".to_string(),
+                    error: Some(format!("Failed to read input file '{path_str}'")),
+                    instruction_count: 0,
+                    diagnostic_count: 1,
+                };
+                println!("{}", serde_json::to_string(&end_rec).unwrap_or_default());
+                continue;
+            }
+        };
+
+        let parse_res = parse_chunk(path_str, &bytes, args.strict, args.dialect.as_deref());
+        let (chunk, identity, _config, interp) = match parse_res {
+            Ok(c) => c,
+            Err(_) => {
+                any_failed = true;
+                failed_count += 1;
+                let sha256 = format!("{:x}", sha2::Sha256::digest(&bytes));
+                let start_rec = FileStartRecord {
+                    record_type: "file_start".to_string(),
+                    path: path_str.clone(),
+                    sha256,
+                    byte_length: bytes.len(),
+                    interpretation: None,
+                };
+                println!("{}", serde_json::to_string(&start_rec).unwrap_or_default());
+                let is_source = !bytes.starts_with(b"\x1bLua")
+                    && (bytes.starts_with(b"--")
+                        || bytes
+                            .iter()
+                            .take(256)
+                            .all(|&b| b.is_ascii() || b.is_ascii_whitespace()));
+                let (code, msg) = if is_source {
+                    (
+                        "PARSE-SOURCE-001",
+                        format!("Plain Lua source text is unsupported for bytecode export; compile with luac first: '{path_str}'"),
+                    )
+                } else {
+                    (
+                        "PARSE-001",
+                        format!("Failed to parse Lua bytecode chunk '{path_str}'"),
+                    )
+                };
+                let diag = Diagnostic::error(
+                    code,
+                    DiagnosticCategory::Parse,
+                    StableId::Chunk,
+                    msg.clone(),
+                );
+                let diag_rec = JsonlDataRecord {
+                    record_type: "diagnostic".to_string(),
+                    data: diag,
+                };
+                println!("{}", serde_json::to_string(&diag_rec).unwrap_or_default());
+                let end_rec = FileEndRecord {
+                    record_type: "file_end".to_string(),
+                    path: path_str.clone(),
+                    status: "failed".to_string(),
+                    error: Some(msg),
+                    instruction_count: 0,
+                    diagnostic_count: 1,
+                };
+                println!("{}", serde_json::to_string(&end_rec).unwrap_or_default());
+                continue;
+            }
+        };
+
+        println!(
+            "{}",
+            serde_json::to_string(&FileStartRecord {
+                record_type: "file_start".to_string(),
+                path: identity.path.clone(),
+                sha256: identity.sha256.clone(),
+                byte_length: identity.byte_length,
+                interpretation: Some(interp),
+            })
+            .unwrap_or_default()
+        );
+
+        let disasm = get_disasm_proto(&chunk.dialect, &chunk.main_proto);
+        let mut file_inst_count = 0;
+        emit_export_proto_tree(&chunk.main_proto, &disasm, &mut file_inst_count);
+        total_instructions += file_inst_count;
+
+        let xref_index = XrefIndex::build(&chunk);
+        for entry in &xref_index.entries {
+            let rec = JsonlDataRecord {
+                record_type: "xref".to_string(),
+                data: entry.clone(),
+            };
+            println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+        }
+
+        for diag in &chunk.diagnostics {
+            let rec = JsonlDataRecord {
+                record_type: "diagnostic".to_string(),
+                data: diag.clone(),
+            };
+            println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+        }
+
+        succeeded_count += 1;
+        let end_rec = FileEndRecord {
+            record_type: "file_end".to_string(),
+            path: identity.path.clone(),
+            status: "succeeded".to_string(),
+            error: None,
+            instruction_count: file_inst_count,
+            diagnostic_count: chunk.diagnostics.len(),
+        };
+        println!("{}", serde_json::to_string(&end_rec).unwrap_or_default());
+    }
+
+    println!(
+        "{}",
+        serde_json::to_string(&ExportEndRecord {
+            record_type: "export_end".to_string(),
+            files_processed: file_paths.len(),
+            files_succeeded: succeeded_count,
+            files_failed: failed_count,
+            total_instructions,
+        })
+        .unwrap_or_default()
+    );
+
+    if any_failed {
+        ExitCode::InvalidInput.exit();
+    } else {
+        ExitCode::Success.exit();
+    }
 }

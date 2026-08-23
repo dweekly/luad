@@ -1,0 +1,1515 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ExportRecord",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "record_type",
+        "tool_version",
+        "total_files"
+      ],
+      "properties": {
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "export_start"
+          ]
+        },
+        "tool_version": {
+          "type": "string"
+        },
+        "total_files": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "byte_length",
+        "path",
+        "record_type",
+        "sha256"
+      ],
+      "properties": {
+        "byte_length": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "interpretation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ResolvedInterpretation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "file_start"
+          ]
+        },
+        "sha256": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "data",
+        "record_type"
+      ],
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/ExportProtoMeta"
+        },
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "prototype"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "data",
+        "record_type"
+      ],
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/DisassembledInstruction"
+        },
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "instruction"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "data",
+        "record_type"
+      ],
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/Constant"
+        },
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "constant"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "data",
+        "record_type"
+      ],
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/UpvalueDesc"
+        },
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "upvalue"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "data",
+        "record_type"
+      ],
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/XrefEntry"
+        },
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "xref"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "data",
+        "record_type"
+      ],
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/Diagnostic"
+        },
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "diagnostic"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "diagnostic_count",
+        "instruction_count",
+        "path",
+        "record_type",
+        "status"
+      ],
+      "properties": {
+        "diagnostic_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instruction_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "path": {
+          "type": "string"
+        },
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "file_end"
+          ]
+        },
+        "status": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "files_failed",
+        "files_processed",
+        "files_succeeded",
+        "record_type",
+        "total_instructions"
+      ],
+      "properties": {
+        "files_failed": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "files_processed": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "files_succeeded": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "export_end"
+          ]
+        },
+        "total_instructions": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "Confidence": {
+      "description": "Confidence level of an analysis fact or artifact.",
+      "oneOf": [
+        {
+          "description": "Directly parsed physical fact from raw input bytes (ground truth).",
+          "type": "string",
+          "enum": [
+            "fact"
+          ]
+        },
+        {
+          "description": "Analytically reviewed static property or effect definition.",
+          "type": "string",
+          "enum": [
+            "reviewed"
+          ]
+        },
+        {
+          "description": "Unverified semantic effect or model property lacking an instrumented runtime proof.",
+          "type": "string",
+          "enum": [
+            "unverified"
+          ]
+        },
+        {
+          "description": "Derived mathematically or structurally through deterministic rule/analysis (e.g. CFG edge, use-def set).",
+          "type": "string",
+          "enum": [
+            "derived"
+          ]
+        },
+        {
+          "description": "Inferred using heuristics or pattern matching (e.g. loop structure, high-level expression reconstruction).",
+          "type": "string",
+          "enum": [
+            "heuristic"
+          ]
+        }
+      ]
+    },
+    "Constant": {
+      "description": "A parsed constant in a prototype's constant vector.",
+      "type": "object",
+      "required": [
+        "id",
+        "index",
+        "source",
+        "value"
+      ],
+      "properties": {
+        "id": {
+          "description": "Deterministic stable ID (e.g. `proto:0:k:3`).",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        },
+        "index": {
+          "description": "0-indexed position in constant table.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "source": {
+          "description": "Source byte location.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            }
+          ]
+        },
+        "value": {
+          "description": "Preserved constant value.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ConstantValue"
+            }
+          ]
+        }
+      }
+    },
+    "ConstantValue": {
+      "description": "Constant value preserved without loss of floating-point or integer bit patterns.",
+      "oneOf": [
+        {
+          "description": "`nil` constant.",
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "nil"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Boolean `false` or `true`.",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "boolean"
+              ]
+            },
+            "value": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "description": "64-bit signed integer with raw hex representation.",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "integer"
+              ]
+            },
+            "value": {
+              "type": "object",
+              "required": [
+                "raw_hex",
+                "val"
+              ],
+              "properties": {
+                "raw_hex": {
+                  "description": "Exact hex bytes.",
+                  "type": "string"
+                },
+                "val": {
+                  "description": "Parsed 64-bit integer value.",
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "IEEE-754 64-bit float with raw hex representation (preserves NaN payloads and signed zero).",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "float"
+              ]
+            },
+            "value": {
+              "type": "object",
+              "required": [
+                "is_inf",
+                "is_nan",
+                "raw_hex",
+                "val"
+              ],
+              "properties": {
+                "is_inf": {
+                  "description": "Positive or negative infinity.",
+                  "type": "boolean"
+                },
+                "is_nan": {
+                  "description": "Special float classifications.",
+                  "type": "boolean"
+                },
+                "raw_hex": {
+                  "description": "Exact 8-byte hex representation.",
+                  "type": "string"
+                },
+                "val": {
+                  "description": "Parsed float value.",
+                  "type": "number",
+                  "format": "double"
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "Short string constant.",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "short-string"
+              ]
+            },
+            "value": {
+              "$ref": "#/definitions/LuaString"
+            }
+          }
+        },
+        {
+          "description": "Long string constant.",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "long-string"
+              ]
+            },
+            "value": {
+              "$ref": "#/definitions/LuaString"
+            }
+          }
+        }
+      ]
+    },
+    "Diagnostic": {
+      "description": "Structured diagnostic item.",
+      "type": "object",
+      "required": [
+        "category",
+        "code",
+        "message",
+        "severity",
+        "target"
+      ],
+      "properties": {
+        "category": {
+          "description": "Category of the diagnostic.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/DiagnosticCategory"
+            }
+          ]
+        },
+        "code": {
+          "description": "Stable diagnostic error code (e.g. \"L54-HEADER-001\", \"L54-JUMP-003\").",
+          "type": "string"
+        },
+        "evidence": {
+          "description": "Supporting evidence or context.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "help_topic": {
+          "description": "Topic resolvable via `luad help <topic>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "description": "Human-readable explanation.",
+          "type": "string"
+        },
+        "severity": {
+          "description": "Severity level.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Severity"
+            }
+          ]
+        },
+        "source": {
+          "description": "Raw byte location if applicable.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "suggested_action": {
+          "description": "Suggested next action for researcher or agent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "description": "Target artifact stable ID.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        }
+      }
+    },
+    "DiagnosticCategory": {
+      "description": "Category of diagnostic check.",
+      "oneOf": [
+        {
+          "description": "Raw binary parsing, truncation, or format-envelope error.",
+          "type": "string",
+          "enum": [
+            "parse"
+          ]
+        },
+        {
+          "description": "Structural integrity or header consistency error.",
+          "type": "string",
+          "enum": [
+            "structure"
+          ]
+        },
+        {
+          "description": "Opcode, operand, or companion-instruction invariant violation.",
+          "type": "string",
+          "enum": [
+            "instruction"
+          ]
+        },
+        {
+          "description": "Control-flow anomaly, out-of-bounds jump, or unreachable entry.",
+          "type": "string",
+          "enum": [
+            "control-flow"
+          ]
+        },
+        {
+          "description": "Corrupt, inconsistent, or missing debug metadata.",
+          "type": "string",
+          "enum": [
+            "debug-metadata"
+          ]
+        },
+        {
+          "description": "Higher-level analysis precondition failure.",
+          "type": "string",
+          "enum": [
+            "analysis"
+          ]
+        }
+      ]
+    },
+    "DisassembledInstruction": {
+      "description": "A disassembled instruction with physical and semantic details.",
+      "type": "object",
+      "required": [
+        "confidence",
+        "encoded_operands",
+        "id",
+        "mnemonic",
+        "opcode_num",
+        "operands",
+        "pc",
+        "raw_hex",
+        "raw_word",
+        "role",
+        "source"
+      ],
+      "properties": {
+        "comment": {
+          "description": "Bounded trailing comment preview (e.g. constant value, jump annotation).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "companion_pc": {
+          "description": "Companion instruction PC if paired with another physical instruction.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "confidence": {
+          "description": "Analysis confidence level.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Confidence"
+            }
+          ]
+        },
+        "diagnostics": {
+          "description": "Structured diagnostics emitted during disassembly (e.g. invalid opcode, invalid constant reference).",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Diagnostic"
+          }
+        },
+        "encoded_operands": {
+          "description": "Decoded raw bitfield parameters.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/EncodedOperands"
+            }
+          ]
+        },
+        "id": {
+          "description": "Deterministic stable ID (e.g. `proto:0:pc:14`).",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        },
+        "jump_target": {
+          "description": "Resolved jump target PC (0-indexed) if this is a branch instruction.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "line": {
+          "description": "1-based source line number if debug info is present.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "metamethod": {
+          "description": "Metamethod name (e.g. \"__add\") if applicable.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mnemonic": {
+          "description": "Official opcode mnemonic (e.g. \"MOVE\", \"ADDI\", \"MMBINI\", \"JMP\").",
+          "type": "string"
+        },
+        "opcode_num": {
+          "description": "Raw numeric opcode byte.",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "operands": {
+          "description": "Ordered list of typed operands.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/DisassembledOperand"
+          }
+        },
+        "pc": {
+          "description": "0-indexed physical program counter.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "raw_hex": {
+          "description": "Hex-encoded instruction word (e.g. \"0x00000046\").",
+          "type": "string"
+        },
+        "raw_word": {
+          "description": "Raw 32-bit physical instruction word.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "role": {
+          "description": "Physical semantic role (\"instruction\", \"companion\", \"closure_binding\", \"extra_argument\").",
+          "type": "string"
+        },
+        "source": {
+          "description": "Source byte location in chunk.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            }
+          ]
+        }
+      }
+    },
+    "DisassembledOperand": {
+      "description": "A single typed operand within a disassembled instruction.",
+      "type": "object",
+      "required": [
+        "display",
+        "kind",
+        "name"
+      ],
+      "properties": {
+        "display": {
+          "description": "Canonical display string of the operand.",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Typed kind and numeric value of the operand.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/OperandKind"
+            }
+          ]
+        },
+        "name": {
+          "description": "Name or descriptor of operand field (e.g. \"A\", \"B\", \"sC\", \"k\", \"sBx\", \"sJ\").",
+          "type": "string"
+        },
+        "resolved": {
+          "description": "Optional resolved semantic fact attached to this operand.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ResolvedFact"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "EncodedOperands": {
+      "description": "Raw decoded bitfield operands preserved from physical instruction word.",
+      "type": "object",
+      "required": [
+        "a",
+        "ax",
+        "b",
+        "bx",
+        "c",
+        "k",
+        "sb",
+        "sbx",
+        "sc",
+        "sj"
+      ],
+      "properties": {
+        "a": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "ax": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "b": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "bx": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "c": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "k": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "sb": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "sbx": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "sc": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "sj": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "ExportProtoMeta": {
+      "type": "object",
+      "required": [
+        "constants_count",
+        "id",
+        "instructions_count",
+        "is_vararg",
+        "last_line_defined",
+        "line_defined",
+        "maxstacksize",
+        "numparams",
+        "path",
+        "protos_count",
+        "upvalues_count"
+      ],
+      "properties": {
+        "constants_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "id": {
+          "$ref": "#/definitions/StableId"
+        },
+        "instructions_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "is_vararg": {
+          "type": "boolean"
+        },
+        "last_line_defined": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "line_defined": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "maxstacksize": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "numparams": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "path": {
+          "$ref": "#/definitions/ProtoPath"
+        },
+        "protos_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "source_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "upvalues_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    },
+    "LuaString": {
+      "description": "A lossless Lua string retaining exact byte contents along with escaped display representation.",
+      "type": "object",
+      "required": [
+        "display",
+        "is_utf8",
+        "raw_bytes"
+      ],
+      "properties": {
+        "display": {
+          "description": "Escaped ASCII/UTF-8 representation suitable for human inspection.",
+          "type": "string"
+        },
+        "is_utf8": {
+          "description": "Whether the string is valid UTF-8.",
+          "type": "boolean"
+        },
+        "raw_bytes": {
+          "description": "Raw byte sequence of the string.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        }
+      }
+    },
+    "OperandKind": {
+      "description": "Category of an operand in a disassembled instruction.",
+      "oneOf": [
+        {
+          "description": "Virtual register R(index).",
+          "type": "object",
+          "required": [
+            "index",
+            "kind"
+          ],
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "register"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Unsigned immediate integer value (e.g. Bx, Ax).",
+          "type": "object",
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "immediate-unsigned"
+              ]
+            },
+            "value": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        },
+        {
+          "description": "Signed immediate integer value (e.g. sB, sC, sBx, sJ).",
+          "type": "object",
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "immediate-signed"
+              ]
+            },
+            "value": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        },
+        {
+          "description": "1-bit boolean or constant selection flag (k).",
+          "type": "object",
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "flag"
+              ]
+            },
+            "value": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            }
+          }
+        },
+        {
+          "description": "Raw uninterpreted integer.",
+          "type": "object",
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "raw"
+              ]
+            },
+            "value": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            }
+          }
+        }
+      ]
+    },
+    "ProtoPath": {
+      "type": "string"
+    },
+    "ResolvedFact": {
+      "description": "Resolved semantic target or value attached to an operand.",
+      "oneOf": [
+        {
+          "description": "Resolved constant from prototype's constant table.",
+          "type": "object",
+          "required": [
+            "formatted_preview",
+            "id",
+            "index",
+            "type",
+            "value"
+          ],
+          "properties": {
+            "formatted_preview": {
+              "type": "string"
+            },
+            "id": {
+              "$ref": "#/definitions/StableId"
+            },
+            "index": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0.0
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "constant"
+              ]
+            },
+            "value": {
+              "$ref": "#/definitions/ConstantValue"
+            }
+          }
+        },
+        {
+          "description": "Resolved upvalue descriptor.",
+          "type": "object",
+          "required": [
+            "id",
+            "index",
+            "type"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/StableId"
+            },
+            "index": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "upvalue"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Resolved local variable debug info.",
+          "type": "object",
+          "required": [
+            "id",
+            "index",
+            "name",
+            "type"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/StableId"
+            },
+            "index": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0.0
+            },
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "local"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Resolved child prototype.",
+          "type": "object",
+          "required": [
+            "id",
+            "index",
+            "type"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/StableId"
+            },
+            "index": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0.0
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "prototype"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Resolved jump destination PC.",
+          "type": "object",
+          "required": [
+            "id",
+            "target_pc",
+            "type"
+          ],
+          "properties": {
+            "id": {
+              "$ref": "#/definitions/StableId"
+            },
+            "target_pc": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0.0
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "jump-target"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Resolved metamethod name for metamethod-bearing dispatch instructions.",
+          "type": "object",
+          "required": [
+            "name",
+            "type"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "metamethod"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ResolvedInterpretation": {
+      "description": "Resolved interpretation record capturing base dialect, vendor profile, layout, and selection evidence.",
+      "type": "object",
+      "required": [
+        "base_dialect",
+        "detection_evidence",
+        "parse_mode",
+        "profile",
+        "selection_mode"
+      ],
+      "properties": {
+        "base_dialect": {
+          "description": "Base Lua language dialect (e.g. \"lua5.1\", \"lua5.4\").",
+          "type": "string"
+        },
+        "detection_evidence": {
+          "description": "Human-readable evidence explaining why this dialect/profile was resolved.",
+          "type": "string"
+        },
+        "parse_mode": {
+          "description": "Parse mode (\"strict\" or \"permissive\").",
+          "type": "string"
+        },
+        "patch_or_oracle_version": {
+          "description": "Patch or vendor variant if applicable (e.g. \"lnum32\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "description": "Exact resolved profile identifier (e.g. \"lua5.1\", \"lua5.1-lnum32\").",
+          "type": "string"
+        },
+        "profile_version_or_hash": {
+          "description": "Specific profile version or cryptographic specification hash if known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selection_mode": {
+          "description": "How the profile was selected.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SelectionMode"
+            }
+          ]
+        },
+        "validated_layout": {
+          "description": "Summary of validated architectural layout widths and byte order.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "SelectionMode": {
+      "description": "Selection mode for dialect and profile resolution.",
+      "oneOf": [
+        {
+          "description": "Dialect / profile was automatically detected from bytecode header.",
+          "type": "string",
+          "enum": [
+            "detected"
+          ]
+        },
+        {
+          "description": "Dialect / profile was explicitly selected via CLI option or API.",
+          "type": "string",
+          "enum": [
+            "explicit"
+          ]
+        }
+      ]
+    },
+    "Severity": {
+      "description": "Diagnostic severity level.",
+      "oneOf": [
+        {
+          "description": "Informational note or hint.",
+          "type": "string",
+          "enum": [
+            "info"
+          ]
+        },
+        {
+          "description": "Warning about suspicious, unconventional, or non-fatal condition.",
+          "type": "string",
+          "enum": [
+            "warning"
+          ]
+        },
+        {
+          "description": "Error indicating structural invalidity or parsing failure.",
+          "type": "string",
+          "enum": [
+            "error"
+          ]
+        }
+      ]
+    },
+    "SourceLocation": {
+      "description": "Source byte location and raw byte representation of a field or instruction.",
+      "type": "object",
+      "required": [
+        "byte_length",
+        "byte_offset",
+        "raw_hex"
+      ],
+      "properties": {
+        "byte_length": {
+          "description": "Encoded length in bytes.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "byte_offset": {
+          "description": "Absolute byte offset in the input chunk.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "raw_hex": {
+          "description": "Lowercase hex encoding of the raw bytes.",
+          "type": "string"
+        }
+      }
+    },
+    "StableId": {
+      "type": "string"
+    },
+    "UpvalueDesc": {
+      "description": "Upvalue descriptor within a prototype.",
+      "type": "object",
+      "required": [
+        "id",
+        "idx",
+        "index",
+        "instack",
+        "kind",
+        "source"
+      ],
+      "properties": {
+        "id": {
+          "description": "Deterministic stable ID (e.g. `proto:0:upvalue:1`).",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        },
+        "idx": {
+          "description": "Register or upvalue index in outer scope.",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "index": {
+          "description": "0-indexed position in upvalue vector.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "instack": {
+          "description": "Whether upvalue is in enclosing stack (1) or outer upvalue (0).",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "kind": {
+          "description": "Upvalue kind/tag (e.g. in Lua 5.4: 0 = regular, 1 = read-only/const, 2 = to-be-closed).",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "name": {
+          "description": "Debug variable name if present.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/LuaString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "description": "Source byte location.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            }
+          ]
+        }
+      }
+    },
+    "XrefEntry": {
+      "description": "A cross-reference relationship between two stable artifacts.",
+      "type": "object",
+      "required": [
+        "relation",
+        "source",
+        "target"
+      ],
+      "properties": {
+        "relation": {
+          "description": "Reference type.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/XrefRelation"
+            }
+          ]
+        },
+        "source": {
+          "description": "Originating artifact StableId (e.g. `proto:0:pc:4`).",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        },
+        "target": {
+          "description": "Referenced target StableId (e.g. `proto:0:k:2`, `proto:0:upvalue:0`).",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        }
+      }
+    },
+    "XrefRelation": {
+      "description": "Semantic nature of a reference.",
+      "oneOf": [
+        {
+          "description": "Source reads from target.",
+          "type": "string",
+          "enum": [
+            "reads"
+          ]
+        },
+        {
+          "description": "Source writes or mutates target.",
+          "type": "string",
+          "enum": [
+            "writes"
+          ]
+        },
+        {
+          "description": "Source invokes or calls target function/closure.",
+          "type": "string",
+          "enum": [
+            "calls"
+          ]
+        },
+        {
+          "description": "Source instantiates child prototype.",
+          "type": "string",
+          "enum": [
+            "instantiates"
+          ]
+        },
+        {
+          "description": "Source branches or jumps to target instruction PC.",
+          "type": "string",
+          "enum": [
+            "jumps-to"
+          ]
+        },
+        {
+          "description": "Parent closure instruction or binding descriptor binds to child upvalue.",
+          "type": "string",
+          "enum": [
+            "binds"
+          ]
+        }
+      ]
+    }
+  }
+}

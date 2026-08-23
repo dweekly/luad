@@ -1,6 +1,6 @@
 //! Release verification tests for Lua 5.4.8.
 //!
-//! Conforms to CODING-AGENT-PLAN.md Section 14 (Gate R5).
+//! Verifies exact Lua 5.4.8 promotion invariants and adversarial rejection behavior.
 
 use luad_core::capabilities::{get_canonical_capabilities, SupportTier};
 use luad_oracle::gate_runner::{
@@ -8,11 +8,11 @@ use luad_oracle::gate_runner::{
 };
 
 #[test]
-fn test_r0_baseline_supported_dialects_empty() {
+fn test_supported_dialects_empty_without_promoted_release_evidence() {
     let manifest = get_canonical_capabilities("0.1.0");
     assert!(
         manifest.supported_dialects.is_empty(),
-        "Under Gate R0 baseline, supported_dialects must be empty"
+        "supported_dialects must remain empty without promoted release evidence"
     );
 }
 
@@ -82,6 +82,8 @@ fn test_killer_probe_dirty_result_rejects_promotion() {
         "rel-1",
         "lua5.4.8",
         "Lua 5.4.8",
+        None,
+        None,
         "1111",
         true,
         &[(dirty_res, spec)],
@@ -140,6 +142,8 @@ fn test_killer_probe_missing_prerequisite_result_rejects_verification() {
         "rel-1",
         "lua5.4.8",
         "Lua 5.4.8",
+        None,
+        None,
         "1111",
         true,
         &[(result, spec)],
@@ -200,6 +204,8 @@ fn test_killer_probe_tampered_success_flag_rejects_verification() {
         "rel-1",
         "lua5.4.8",
         "Lua 5.4.8",
+        None,
+        None,
         "1111",
         true,
         &[(result.clone(), spec.clone())],
@@ -268,6 +274,8 @@ fn test_killer_probe_unqualified_dialect_string_rejected() {
         "rel-1",
         "lua5.4.8",
         "Lua 5.4.8",
+        None,
+        None,
         "1111",
         true,
         &[(result, spec)],

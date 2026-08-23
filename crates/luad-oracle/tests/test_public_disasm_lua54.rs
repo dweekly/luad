@@ -34,7 +34,7 @@ const LUA54_FIXTURES: [&str; 10] = [
 ];
 
 const PINNED_DISASM_SCHEMA_SHA256: &str =
-    "53e2478d798114ad54a983951ecdcd523d32d823ae79255c30f7a44c86f090f3";
+    "e8166b9c69b8b2c37b9f6d13d9a1bac8dee52291325cfcc46ae8ecf820f28c29";
 
 fn load_fixture(rel_path: &str) -> (Vec<u8>, Chunk, LuacDump) {
     let root = find_workspace_root();
@@ -81,8 +81,11 @@ fn get_cli_json_disasm(fixture_rel_path: &str) -> DisassembledPrototype {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    serde_json::from_slice(&output.stdout)
-        .unwrap_or_else(|e| panic!("Failed to deserialize CLI JSON for {fixture_rel_path}: {e}"))
+    let doc: luad_core::MachineDocument<DisassembledPrototype> =
+        serde_json::from_slice(&output.stdout).unwrap_or_else(|e| {
+            panic!("Failed to deserialize CLI JSON for {fixture_rel_path}: {e}")
+        });
+    doc.data
 }
 
 fn decode_indep_proto(proto: &Prototype) -> Vec<IndependentInstruction54> {
@@ -637,8 +640,8 @@ fn test_public_disasm_schema_major_and_hash_pinned() {
     // Validate major schema version
     assert_eq!(
         parsed_schema["title"].as_str(),
-        Some("DisassembledPrototype"),
-        "Schema title must be DisassembledPrototype"
+        Some("MachineDocument_for_DisassembledPrototype"),
+        "Schema title must be MachineDocument_for_DisassembledPrototype"
     );
 
     // Validate pinned SHA-256 schema hash

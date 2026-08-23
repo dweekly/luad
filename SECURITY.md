@@ -4,11 +4,17 @@
 
 `luad` is pre-release software. Only the current `main` branch is considered for security fixes. No released version is currently designated production-supported.
 
-The project is intended to process untrusted Lua bytecode, but all dialects remain experimental until their exact public and release gates pass. Do not rely on `luad` as the sole control for accepting, rejecting, or characterizing hostile code. See the evidence boundaries in [ROADMAP.md](ROADMAP.md).
+The project is intended to process untrusted Lua bytecode, but all dialects remain
+experimental until their exact public and release gates pass. Do not rely on `luad`
+as the sole control for accepting, rejecting, or characterizing hostile code. See
+the evidence boundaries in the [coding-agent plan](docs/CODING-AGENT-PLAN.md) and
+[machine-interface contract](docs/MACHINE-INTERFACE.md).
 
 ## Reporting a vulnerability
 
-Use GitHub's private vulnerability-reporting or Security Advisory facility for `dew/luad` when available. Include the affected commit, a minimal reproducer, the command and options, expected and observed behavior, and the security impact.
+Use GitHub's private vulnerability-reporting or Security Advisory facility for
+`dweekly/luad` when available. Include the affected commit, a minimal reproducer,
+the command and options, expected and observed behavior, and the security impact.
 
 Do not place exploit artifacts or sensitive details in a public issue. If private reporting is unavailable, open a minimal public issue requesting a private contact channel without disclosing the vulnerability.
 

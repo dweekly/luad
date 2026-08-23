@@ -1,0 +1,115 @@
+{
+  "tool_name": "luad",
+  "tool_version": "0.1.0",
+  "schema_version": 1,
+  "supported_dialects": [],
+  "experimental_dialects": [
+    "lua5.1",
+    "lua5.2",
+    "lua5.3",
+    "lua5.4",
+    "lua5.5"
+  ],
+  "planned_dialects": [
+    "luajit"
+  ],
+  "dialects": [
+    {
+      "id": "lua5.1",
+      "display_name": "Lua 5.1.5",
+      "opcode_count": 38,
+      "features": [
+        "lossless parse (experimental)",
+        "disasm",
+        "validate"
+      ],
+      "status": "experimental",
+      "required_gates": [
+        "gate-layout-lua51-stock",
+        "gate-profile-lua51-lnum",
+        "gate-closures-lua51",
+        "gate-resolved-constants-lua51"
+      ],
+      "completed_gates": [],
+      "evidence": []
+    },
+    {
+      "id": "lua5.2",
+      "display_name": "Lua 5.2.4",
+      "opcode_count": 40,
+      "features": [
+        "lossless parse (experimental)",
+        "disasm",
+        "validate"
+      ],
+      "status": "experimental",
+      "required_gates": [],
+      "completed_gates": [],
+      "evidence": []
+    },
+    {
+      "id": "lua5.3",
+      "display_name": "Lua 5.3.6",
+      "opcode_count": 47,
+      "features": [
+        "lossless parse (experimental)",
+        "disasm",
+        "validate"
+      ],
+      "status": "experimental",
+      "required_gates": [],
+      "completed_gates": [],
+      "evidence": []
+    },
+    {
+      "id": "lua5.4",
+      "display_name": "Lua 5.4.8",
+      "opcode_count": 83,
+      "features": [
+        "lossless parse (experimental)",
+        "disasm",
+        "validate"
+      ],
+      "status": "experimental",
+      "required_gates": [
+        "gate-proof-harness",
+        "gate-facts-lua54-8",
+        "gate-public-disasm-lua54-8",
+        "gate-analysis-r3",
+        "gate-lossless-lua54-8",
+        "gate-release-lua54-8"
+      ],
+      "completed_gates": [],
+      "evidence": []
+    },
+    {
+      "id": "lua5.5",
+      "display_name": "Lua 5.5.1",
+      "opcode_count": 85,
+      "features": [
+        "lossless parse (experimental)",
+        "disasm",
+        "validate"
+      ],
+      "status": "experimental",
+      "required_gates": [],
+      "completed_gates": [],
+      "evidence": []
+    },
+    {
+      "id": "luajit",
+      "display_name": "LuaJIT 2.0 / 2.1",
+      "opcode_count": 0,
+      "features": [
+        "planned"
+      ],
+      "status": "planned",
+      "required_gates": [
+        "gate-luajit-parser"
+      ],
+      "completed_gates": [],
+      "evidence": []
+    }
+  ],
+  "evidence": []
+}

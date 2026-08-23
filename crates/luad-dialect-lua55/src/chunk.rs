@@ -82,10 +82,25 @@ pub fn decode_chunk_lua55(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
         Verdict::ValidForParser
     };
 
+    let interpretation = luad_core::dialect::ResolvedInterpretation {
+        base_dialect: "lua5.5".to_string(),
+        patch_or_oracle_version: Some("5.5.1".to_string()),
+        profile: "lua5.5".to_string(),
+        profile_version_or_hash: None,
+        validated_layout: Some("int=8,sizet=8,inst=4,num=8,endian=1".to_string()),
+        parse_mode: match reader.mode() {
+            luad_core::limits::ParseMode::Strict => "strict".to_string(),
+            luad_core::limits::ParseMode::Permissive => "permissive".to_string(),
+        },
+        selection_mode: luad_core::dialect::SelectionMode::Detected,
+        detection_evidence: "Lua 5.5 signature matched (0x1bLua, version 0x55)".to_string(),
+    };
+
     let mut chunk = Chunk {
         sha256,
         byte_length,
         dialect: "lua5.5".to_string(),
+        interpretation: Some(interpretation),
         verdict,
         header,
         main_proto,

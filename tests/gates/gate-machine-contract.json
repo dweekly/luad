@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-machine-contract",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_machine_interface",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_all_schema_exports_return_valid_json_schema",
+    "test_cross_dialect_diff_without_semantic_flag_rejected",
+    "test_jsonl_streaming_batch_export_deterministic_and_recursive",
+    "test_jsonl_streaming_cfg_format_integrity",
+    "test_jsonl_streaming_diff_format_integrity",
+    "test_jsonl_streaming_disasm_format_integrity",
+    "test_live_capabilities_json_and_schema_validation",
+    "test_live_cfg_json_envelope_and_schema_validation",
+    "test_live_diff_json_envelope_and_schema_validation",
+    "test_live_disasm_json_envelope_and_schema_validation",
+    "test_live_inspect_json_envelope_and_schema_validation",
+    "test_live_query_json_envelope_and_schema_validation",
+    "test_live_validate_json_envelope_and_schema_validation",
+    "test_live_xrefs_json_envelope_and_schema_validation",
+    "test_negative_control_envelope_field_mutations_rejected",
+    "test_negative_control_missing_provenance_field_rejected",
+    "test_negative_control_trailing_garbage_fails_json_parser",
+    "test_schema_goldens_consistency",
+    "test_validate_all_generated_examples_against_schemas"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness"
+  ],
+  "allowed_capability_mutations": []
+}

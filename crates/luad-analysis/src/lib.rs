@@ -7,8 +7,10 @@ pub mod xrefs;
 
 pub use cfg::{BasicBlock, CfgEdge, CfgEdgeKind, ControlFlowGraph};
 pub use diff::{diff_chunks, ChunkDiff, InstructionDiff, ProtoDiff};
-pub use query::{execute_query, QueryMatch, QueryResponse};
-pub use xrefs::{XrefEntry, XrefIndex, XrefRelation};
+pub use query::{
+    execute_query, QueryError, QueryExpr, QueryField, QueryMatch, QueryOp, QueryResponse,
+};
+pub use xrefs::{find_proto, validate_target, XrefEntry, XrefIndex, XrefRelation, XrefResponse};
 
 /// Validate chunk for analysis preconditions.
 pub fn validate_for_analysis(
@@ -19,7 +21,7 @@ pub fn validate_for_analysis(
         "lua5.4" => luad_dialect_lua54::validate_chunk_lua54(chunk),
         "lua5.3" => luad_dialect_lua53::validate_chunk_lua53(chunk),
         "lua5.2" => luad_dialect_lua52::validate_chunk_lua52(chunk),
-        "lua5.1" => luad_dialect_lua51::validate_chunk_lua51(chunk),
+        d if d.starts_with("lua5.1") => luad_dialect_lua51::validate_chunk_lua51(chunk),
         _ => (chunk.verdict, chunk.diagnostics.clone()),
     };
 
@@ -46,7 +48,7 @@ pub fn lift_proto_for_dialect(
         "lua5.4" => luad_dialect_lua54::lift_proto_lua54(proto),
         "lua5.3" => luad_dialect_lua53::lift_proto_lua53(proto),
         "lua5.2" => luad_dialect_lua52::lift_proto_lua52(proto),
-        "lua5.1" => luad_dialect_lua51::lift_proto_lua51(proto),
+        d if d.starts_with("lua5.1") => luad_dialect_lua51::lift_proto_lua51(proto),
         _ => luad_dialect_lua54::lift_proto_lua54(proto),
     }
 }

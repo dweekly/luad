@@ -1,0 +1,161 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CapabilityManifest",
+  "description": "Global tool capability manifest serialized across text and JSON interfaces.",
+  "type": "object",
+  "required": [
+    "dialects",
+    "evidence",
+    "experimental_dialects",
+    "planned_dialects",
+    "schema_version",
+    "supported_dialects",
+    "tool_name",
+    "tool_version"
+  ],
+  "properties": {
+    "dialects": {
+      "description": "Full capabilities by dialect.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/DialectCapability"
+      }
+    },
+    "evidence": {
+      "description": "Verification and evidence claims.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "experimental_dialects": {
+      "description": "List of dialect identifiers currently in `experimental` tier.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "planned_dialects": {
+      "description": "List of dialect identifiers currently in `planned` tier.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "schema_version": {
+      "description": "Schema major version.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "supported_dialects": {
+      "description": "List of dialect identifiers currently in `supported` tier (empty until full release gates pass).",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tool_name": {
+      "description": "Tool name.",
+      "type": "string"
+    },
+    "tool_version": {
+      "description": "Tool semver version.",
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "DialectCapability": {
+      "description": "Detailed metadata for a supported or planned bytecode dialect.",
+      "type": "object",
+      "required": [
+        "completed_gates",
+        "display_name",
+        "evidence",
+        "features",
+        "id",
+        "opcode_count",
+        "required_gates",
+        "status"
+      ],
+      "properties": {
+        "completed_gates": {
+          "description": "Completed and verified evidence gates.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "display_name": {
+          "description": "Human-readable title and version span.",
+          "type": "string"
+        },
+        "evidence": {
+          "description": "Provenance evidence backing the dialect claims.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "features": {
+          "description": "Feature capabilities supported by luad for this dialect.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "id": {
+          "description": "Canonical identifier (e.g. \"lua5.4\").",
+          "type": "string"
+        },
+        "opcode_count": {
+          "description": "Number of verified opcodes in the instruction set table.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "required_gates": {
+          "description": "Required evidence gates needed before becoming `supported`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "description": "Support tier: planned, experimental, supported.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SupportTier"
+            }
+          ]
+        }
+      }
+    },
+    "SupportTier": {
+      "description": "Support tier for a dialect or feature.",
+      "oneOf": [
+        {
+          "description": "Dialect is planned on roadmap but not yet implemented.",
+          "type": "string",
+          "enum": [
+            "planned"
+          ]
+        },
+        {
+          "description": "Dialect implementation is present but proof gates are incomplete.",
+          "type": "string",
+          "enum": [
+            "experimental"
+          ]
+        },
+        {
+          "description": "All required evidence and differential oracle gates pass.",
+          "type": "string",
+          "enum": [
+            "supported"
+          ]
+        }
+      ]
+    }
+  }
+}

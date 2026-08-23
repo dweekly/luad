@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-cli-selection-contract",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_cli_selection",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_cli_query_cursor_offset_tampering_and_integer_contract",
+    "test_cli_selection_stock_and_lnum32_automatic_and_explicit",
+    "test_table_driven_cli_selection_conformance"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness"
+  ],
+  "allowed_capability_mutations": []
+}

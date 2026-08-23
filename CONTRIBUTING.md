@@ -6,13 +6,15 @@ Thank you for helping make Lua bytecode analysis more trustworthy. Correctness a
 
 Before changing parser, decoder, validator, analysis, evidence, or capability code, read:
 
-1. [The coding-agent execution plan](docs/CODING-AGENT-PLAN.md)
-2. [The evidence-gated roadmap](ROADMAP.md)
-3. [The embedded Lua 5.1 field requirements](docs/FIELD-REPORT-TP-LINK-LUA51.md)
+1. [The evidence-gated development workflow](docs/DEVELOPMENT-WORKFLOW.md)
+2. [The current coding-agent execution plan](docs/CODING-AGENT-PLAN.md)
+3. [The embedded-firmware requirements](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md)
 4. [Architecture and invariants](ARCHITECTURE.md)
 5. [The machine interface](docs/MACHINE-INTERFACE.md)
 
-Do not add new dialects or composability features while the release critical path in the coding plan is open.
+The current broad coding plan is a one-time transition. After it closes, do not work
+outside the single active `docs/NEXT-SPRINT.md`, and do not let an implementation
+agent modify frozen acceptance tests or gate definitions without explicit review.
 
 ## Development setup
 
@@ -168,3 +170,19 @@ A change is complete only when:
 - unrelated user changes are preserved.
 
 Commit messages and phase labels do not establish completion; executable gates do.
+
+## Documentation lifecycle
+
+The [README documentation index](README.md#documentation-index) owns discovery and
+freshness for every maintained Markdown document. Any documentation change must keep
+its summary, last-fresh date, and stale trigger accurate. A new unindexed document is
+incomplete work.
+
+Plans and roadmaps are replaceable statements of future work. They contain no completed
+checklists, implementation retrospectives, or comparisons with superseded behavior.
+Move user-visible implementation history to `CHANGELOG.md`; use release notes, pull
+requests, and commits for additional historical detail.
+
+Apply the same rule to source comments: explain the invariant or reason that is true
+for the present code. Version history and migration narratives do not belong in code
+comments.

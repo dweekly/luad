@@ -99,6 +99,12 @@ impl<'a> SafeReader<'a> {
         self.data
     }
 
+    /// Reader parse mode.
+    #[must_use]
+    pub fn mode(&self) -> ParseMode {
+        self.mode
+    }
+
     /// Get current prototype path.
     #[must_use]
     pub fn current_proto_path(&self) -> &ProtoPath {

@@ -18,6 +18,17 @@ pub fn render_inspect(chunk: &Chunk, summary: bool) {
         "Dialect:".dimmed(),
         chunk.dialect.green().bold()
     );
+    if let Some(interp) = &chunk.interpretation {
+        println!("{:<18} {}", "Profile:".dimmed(), interp.profile);
+        println!(
+            "{:<18} {:?}",
+            "Selection Mode:".dimmed(),
+            interp.selection_mode
+        );
+        if let Some(layout) = &interp.validated_layout {
+            println!("{:<18} {}", "Layout:".dimmed(), layout);
+        }
+    }
     println!("{:<18} {:?}", "Verdict:".dimmed(), chunk.verdict);
 
     if let Some(trailing) = &chunk.trailing_bytes {
@@ -184,154 +195,139 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
 
     println!();
     for inst in &proto.instructions {
-        let (op_name, operands_str) = match dialect {
-            "lua5.5" => {
-                let raw_info = luad_dialect_lua55::RawInstruction55::decode(inst.raw_word);
-                let name = raw_info.opcode.map(|op| op.name()).unwrap_or("UNKNOWN_OP");
-                let ops = if let Some(op) = raw_info.opcode {
-                    match op.mode() {
-                        luad_dialect_lua55::OpMode55::IABC => {
-                            if raw_info.k != 0 {
-                                format!(
-                                    "{} {} {} (k={})",
-                                    raw_info.a, raw_info.b, raw_info.c, raw_info.k
-                                )
-                            } else {
-                                format!("{} {} {}", raw_info.a, raw_info.b, raw_info.c)
-                            }
-                        }
-                        luad_dialect_lua55::OpMode55::IvABC => {
-                            format!(
-                                "{} {} {} (k={})",
-                                raw_info.a, raw_info.vb, raw_info.vc, raw_info.k
-                            )
-                        }
-                        luad_dialect_lua55::OpMode55::IABx => {
-                            format!("{} {}", raw_info.a, raw_info.bx)
-                        }
-                        luad_dialect_lua55::OpMode55::IAsBx => {
-                            format!("{} {}", raw_info.a, raw_info.sbx)
-                        }
-                        luad_dialect_lua55::OpMode55::IAx => format!("{}", raw_info.ax),
-                        luad_dialect_lua55::OpMode55::IsJ => format!("{}", raw_info.sj),
-                    }
-                } else {
-                    format!("(raw=0x{:08x})", inst.raw_word)
-                };
-                (name.to_string(), ops)
-            }
-            "lua5.3" => {
-                let raw_info = luad_dialect_lua53::RawInstruction53::decode(inst.raw_word);
-                let name = raw_info.opcode.map(|op| op.name()).unwrap_or("UNKNOWN_OP");
-                let ops = if let Some(op) = raw_info.opcode {
-                    match op.mode() {
-                        luad_dialect_lua53::OpMode53::IABC => {
-                            let b_str = if raw_info.is_b_k() {
-                                format!("k({})", raw_info.b_index_k())
-                            } else {
-                                raw_info.b.to_string()
-                            };
-                            let c_str = if raw_info.is_c_k() {
-                                format!("k({})", raw_info.c_index_k())
-                            } else {
-                                raw_info.c.to_string()
-                            };
-                            format!("{} {} {}", raw_info.a, b_str, c_str)
-                        }
-                        luad_dialect_lua53::OpMode53::IABx => {
-                            format!("{} {}", raw_info.a, raw_info.bx)
-                        }
-                        luad_dialect_lua53::OpMode53::IAsBx => {
-                            format!("{} {}", raw_info.a, raw_info.sbx)
-                        }
-                        luad_dialect_lua53::OpMode53::IAx => format!("{}", raw_info.ax),
-                    }
-                } else {
-                    format!("(raw=0x{:08x})", inst.raw_word)
-                };
-                (name.to_string(), ops)
-            }
-            "lua5.2" => {
-                let raw_info = luad_dialect_lua52::RawInstruction52::decode(inst.raw_word);
-                let name = raw_info.opcode.map(|op| op.name()).unwrap_or("UNKNOWN_OP");
-                let ops = if let Some(op) = raw_info.opcode {
-                    match op.mode() {
-                        luad_dialect_lua52::OpMode52::IABC => {
-                            let b_str = if raw_info.is_b_k() {
-                                format!("k({})", raw_info.b_index_k())
-                            } else {
-                                raw_info.b.to_string()
-                            };
-                            let c_str = if raw_info.is_c_k() {
-                                format!("k({})", raw_info.c_index_k())
-                            } else {
-                                raw_info.c.to_string()
-                            };
-                            format!("{} {} {}", raw_info.a, b_str, c_str)
-                        }
-                        luad_dialect_lua52::OpMode52::IABx => {
-                            format!("{} {}", raw_info.a, raw_info.bx)
-                        }
-                        luad_dialect_lua52::OpMode52::IAsBx => {
-                            format!("{} {}", raw_info.a, raw_info.sbx)
-                        }
-                        luad_dialect_lua52::OpMode52::IAx => format!("{}", raw_info.ax),
-                    }
-                } else {
-                    format!("(raw=0x{:08x})", inst.raw_word)
-                };
-                (name.to_string(), ops)
-            }
-            "lua5.1" => {
-                let raw_info = luad_dialect_lua51::RawInstruction51::decode(inst.raw_word);
-                let name = raw_info.opcode.map(|op| op.name()).unwrap_or("UNKNOWN_OP");
-                let ops = if let Some(op) = raw_info.opcode {
-                    match op.mode() {
-                        luad_dialect_lua51::OpMode51::IABC => {
-                            let b_str = if raw_info.is_b_k() {
-                                format!("k({})", raw_info.b_index_k())
-                            } else {
-                                raw_info.b.to_string()
-                            };
-                            let c_str = if raw_info.is_c_k() {
-                                format!("k({})", raw_info.c_index_k())
-                            } else {
-                                raw_info.c.to_string()
-                            };
-                            format!("{} {} {}", raw_info.a, b_str, c_str)
-                        }
-                        luad_dialect_lua51::OpMode51::IABx => {
-                            format!("{} {}", raw_info.a, raw_info.bx)
-                        }
-                        luad_dialect_lua51::OpMode51::IAsBx => {
-                            format!("{} {}", raw_info.a, raw_info.sbx)
-                        }
-                    }
-                } else {
-                    format!("(raw=0x{:08x})", inst.raw_word)
-                };
-                (name.to_string(), ops)
-            }
-            _ => {
-                let d_inst = luad_dialect_lua54::disassemble_instruction_lua54(
-                    proto,
-                    inst.pc,
-                    inst.raw_word,
-                );
-                let name = d_inst.mnemonic;
+        let (op_name, operands_str) = if dialect.starts_with("lua5.1") {
+            let d_proto = luad_dialect_lua51::disassemble_proto_lua51(proto);
+            let d_inst = &d_proto.instructions[inst.pc];
+            if d_inst.role == "closure_binding" {
+                let binding_text = d_inst.comment.as_deref().unwrap_or("closure_binding");
+                ("|->".to_string(), binding_text.to_string())
+            } else {
                 let ops_str = d_inst
                     .operands
                     .iter()
                     .map(|o| o.display.as_str())
                     .collect::<Vec<_>>()
                     .join(" ");
-                let comment_suffix = if let Some(c) = d_inst.comment {
+                let comment_suffix = if let Some(c) = &d_inst.comment {
                     format!(" ; {c}")
                 } else {
                     String::new()
                 };
-                (name, format!("{ops_str}{comment_suffix}"))
+                (
+                    d_inst.mnemonic.clone(),
+                    format!("{ops_str}{comment_suffix}"),
+                )
             }
+        } else if dialect.starts_with("lua5.5") {
+            let raw_info = luad_dialect_lua55::RawInstruction55::decode(inst.raw_word);
+            let name = raw_info.opcode.map(|op| op.name()).unwrap_or("UNKNOWN_OP");
+            let ops = if let Some(op) = raw_info.opcode {
+                match op.mode() {
+                    luad_dialect_lua55::OpMode55::IABC => {
+                        if raw_info.k != 0 {
+                            format!(
+                                "{} {} {} (k={})",
+                                raw_info.a, raw_info.b, raw_info.c, raw_info.k
+                            )
+                        } else {
+                            format!("{} {} {}", raw_info.a, raw_info.b, raw_info.c)
+                        }
+                    }
+                    luad_dialect_lua55::OpMode55::IvABC => {
+                        format!(
+                            "{} {} {} (k={})",
+                            raw_info.a, raw_info.vb, raw_info.vc, raw_info.k
+                        )
+                    }
+                    luad_dialect_lua55::OpMode55::IABx => {
+                        format!("{} {}", raw_info.a, raw_info.bx)
+                    }
+                    luad_dialect_lua55::OpMode55::IAsBx => {
+                        format!("{} {}", raw_info.a, raw_info.sbx)
+                    }
+                    luad_dialect_lua55::OpMode55::IAx => format!("{}", raw_info.ax),
+                    luad_dialect_lua55::OpMode55::IsJ => format!("{}", raw_info.sj),
+                }
+            } else {
+                format!("(raw=0x{:08x})", inst.raw_word)
+            };
+            (name.to_string(), ops)
+        } else if dialect.starts_with("lua5.3") {
+            let raw_info = luad_dialect_lua53::RawInstruction53::decode(inst.raw_word);
+            let name = raw_info.opcode.map(|op| op.name()).unwrap_or("UNKNOWN_OP");
+            let ops = if let Some(op) = raw_info.opcode {
+                match op.mode() {
+                    luad_dialect_lua53::OpMode53::IABC => {
+                        let b_str = if raw_info.is_b_k() {
+                            format!("k({})", raw_info.b_index_k())
+                        } else {
+                            raw_info.b.to_string()
+                        };
+                        let c_str = if raw_info.is_c_k() {
+                            format!("k({})", raw_info.c_index_k())
+                        } else {
+                            raw_info.c.to_string()
+                        };
+                        format!("{} {} {}", raw_info.a, b_str, c_str)
+                    }
+                    luad_dialect_lua53::OpMode53::IABx => {
+                        format!("{} {}", raw_info.a, raw_info.bx)
+                    }
+                    luad_dialect_lua53::OpMode53::IAsBx => {
+                        format!("{} {}", raw_info.a, raw_info.sbx)
+                    }
+                    luad_dialect_lua53::OpMode53::IAx => format!("{}", raw_info.ax),
+                }
+            } else {
+                format!("(raw=0x{:08x})", inst.raw_word)
+            };
+            (name.to_string(), ops)
+        } else if dialect.starts_with("lua5.2") {
+            let raw_info = luad_dialect_lua52::RawInstruction52::decode(inst.raw_word);
+            let name = raw_info.opcode.map(|op| op.name()).unwrap_or("UNKNOWN_OP");
+            let ops = if let Some(op) = raw_info.opcode {
+                match op.mode() {
+                    luad_dialect_lua52::OpMode52::IABC => {
+                        let b_str = if raw_info.is_b_k() {
+                            format!("k({})", raw_info.b_index_k())
+                        } else {
+                            raw_info.b.to_string()
+                        };
+                        let c_str = if raw_info.is_c_k() {
+                            format!("k({})", raw_info.c_index_k())
+                        } else {
+                            raw_info.c.to_string()
+                        };
+                        format!("{} {} {}", raw_info.a, b_str, c_str)
+                    }
+                    luad_dialect_lua52::OpMode52::IABx => {
+                        format!("{} {}", raw_info.a, raw_info.bx)
+                    }
+                    luad_dialect_lua52::OpMode52::IAsBx => {
+                        format!("{} {}", raw_info.a, raw_info.sbx)
+                    }
+                    luad_dialect_lua52::OpMode52::IAx => format!("{}", raw_info.ax),
+                }
+            } else {
+                format!("(raw=0x{:08x})", inst.raw_word)
+            };
+            (name.to_string(), ops)
+        } else {
+            let d_inst =
+                luad_dialect_lua54::disassemble_instruction_lua54(proto, inst.pc, inst.raw_word);
+            let name = d_inst.mnemonic;
+            let ops_str = d_inst
+                .operands
+                .iter()
+                .map(|o| o.display.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let comment_suffix = if let Some(c) = d_inst.comment {
+                format!(" ; {c}")
+            } else {
+                String::new()
+            };
+            (name, format!("{ops_str}{comment_suffix}"))
         };
 
         let raw_col = if raw {

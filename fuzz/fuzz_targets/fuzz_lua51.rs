@@ -7,7 +7,7 @@ use luad_core::Dialect;
 use luad_dialect_lua51::Lua51Dialect;
 
 fuzz_target!(|data: &[u8]| {
-    let dialect = Lua51Dialect;
+    let dialect = Lua51Dialect::default();
 
     // Strict mode
     let mut reader_strict =

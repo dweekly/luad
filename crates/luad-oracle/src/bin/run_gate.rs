@@ -26,39 +26,16 @@ fn resolve_compiler_path_for_spec(
         return Some(cp.to_path_buf());
     }
     if let Some(req_ver) = &spec.required_compiler_version {
-        let candidates = if req_ver.contains("5.4") {
-            vec![
-                PathBuf::from("/tmp/lua-tools/bin/luac5.4"),
-                PathBuf::from("/usr/local/bin/luac5.4"),
-                PathBuf::from("/opt/homebrew/bin/luac5.4"),
-            ]
-        } else if req_ver.contains("5.1") {
-            vec![
-                PathBuf::from("/tmp/lua-tools/bin/luac5.1"),
-                PathBuf::from("/usr/local/bin/luac5.1"),
-            ]
+        if req_ver.contains("5.1") {
+            return luad_oracle::find_luac51();
+        } else if req_ver.contains("5.4") {
+            return luad_oracle::find_luac54();
         } else if req_ver.contains("5.2") {
-            vec![
-                PathBuf::from("/tmp/lua-tools/bin/luac5.2"),
-                PathBuf::from("/usr/local/bin/luac5.2"),
-            ]
+            return luad_oracle::find_luac52();
         } else if req_ver.contains("5.3") {
-            vec![
-                PathBuf::from("/tmp/lua-tools/bin/luac5.3"),
-                PathBuf::from("/usr/local/bin/luac5.3"),
-            ]
+            return luad_oracle::find_luac53();
         } else if req_ver.contains("5.5") {
-            vec![
-                PathBuf::from("/tmp/lua-tools/bin/luac5.5"),
-                PathBuf::from("/usr/local/bin/luac5.5"),
-            ]
-        } else {
-            vec![]
-        };
-        for cand in candidates {
-            if cand.exists() {
-                return Some(cand);
-            }
+            return luad_oracle::find_luac55();
         }
     }
     None
@@ -260,8 +237,9 @@ fn main() {
     }
     all_results_and_specs.push((result.clone(), spec.clone()));
 
-    // Assemble and verify checkpoint manifest artifact
+    // Release manifests are promotion artifacts and exist only for release gates.
     let manifest_path = out_dir.join("release-manifest.json");
+    let is_release_gate = spec.gate_id.starts_with("gate-release-");
     let target_dialect = if spec.gate_id.contains("lua54") {
         "lua5.4"
     } else if spec.gate_id.contains("lua51") {
@@ -279,29 +257,43 @@ fn main() {
         spec.required_profile.as_deref().unwrap_or("R1-Harness-v1")
     };
 
-    match assemble_release_manifest(
-        &format!("checkpoint-{}", spec.gate_id),
-        target_dialect,
-        target_patch_version,
-        &current_commit,
-        !result.dirty,
-        &all_results_and_specs,
-    ) {
-        Ok(manifest) => {
-            if let Err(e) =
-                verify_release_manifest(&manifest, &current_commit, &all_results_and_specs)
-            {
-                eprintln!("==> Failed to verify checkpoint manifest artifact: {e}");
-                exit(1);
-            }
-            if let Ok(json_bytes) = serde_json::to_vec_pretty(&manifest) {
-                let _ = std::fs::write(&manifest_path, json_bytes);
-            }
-        }
+    let (target_profile, target_layout) = if target_dialect.starts_with("lua5.1") {
+        let prof = spec.required_profile.as_deref().unwrap_or("lua5.1");
+        let layout = match prof {
+            "lua5.1-lnum32" => "int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4",
+            "lua5.1-stock32" => "int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=0",
+            _ => "int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0",
+        };
+        (Some(prof), Some(layout))
+    } else {
+        (spec.required_profile.as_deref(), None)
+    };
 
-        Err(e) => {
-            if require_clean {
-                eprintln!("==> Failed to assemble checkpoint manifest: {e}");
+    if is_release_gate {
+        match assemble_release_manifest(
+            &format!("release-{}", spec.gate_id),
+            target_dialect,
+            target_patch_version,
+            target_profile,
+            target_layout,
+            &current_commit,
+            !result.dirty,
+            &all_results_and_specs,
+        ) {
+            Ok(manifest) => {
+                if let Err(e) =
+                    verify_release_manifest(&manifest, &current_commit, &all_results_and_specs)
+                {
+                    eprintln!("==> Failed to verify release manifest artifact: {e}");
+                    exit(1);
+                }
+                if let Ok(json_bytes) = serde_json::to_vec_pretty(&manifest) {
+                    let _ = std::fs::write(&manifest_path, json_bytes);
+                }
+            }
+
+            Err(e) => {
+                eprintln!("==> Failed to assemble release manifest: {e}");
                 exit(1);
             }
         }
@@ -360,23 +352,32 @@ fn main() {
     }
 
     // Re-verify on-disk manifest
-    let disk_manifest_bytes = match std::fs::read(&manifest_path) {
-        Ok(b) => b,
-        Err(e) => {
-            eprintln!("Error re-reading manifest from disk: {e}");
+    if manifest_path.exists() {
+        let disk_manifest_bytes = match std::fs::read(&manifest_path) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("Error re-reading manifest from disk: {e}");
+                exit(1);
+            }
+        };
+        let disk_manifest: ReleaseManifest = match serde_json::from_slice(&disk_manifest_bytes) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Error parsing on-disk ReleaseManifest JSON: {e}");
+                exit(1);
+            }
+        };
+        if let Err(e) =
+            verify_release_manifest(&disk_manifest, &current_commit, &all_results_and_specs)
+        {
+            eprintln!("Error verifying on-disk ReleaseManifest: {e}");
             exit(1);
         }
-    };
-    let disk_manifest: ReleaseManifest = match serde_json::from_slice(&disk_manifest_bytes) {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("Error parsing on-disk ReleaseManifest JSON: {e}");
-            exit(1);
-        }
-    };
-    if let Err(e) = verify_release_manifest(&disk_manifest, &current_commit, &all_results_and_specs)
-    {
-        eprintln!("Error verifying on-disk ReleaseManifest: {e}");
+    } else if require_clean && is_release_gate {
+        eprintln!(
+            "Error: Required release manifest was not written at {:?}",
+            manifest_path
+        );
         exit(1);
     }
 
@@ -386,5 +387,7 @@ fn main() {
     );
     println!("==> GateSpec artifact: {}", spec_copy_path.display());
     println!("==> GateResult artifact: {}", result_path.display());
-    println!("==> ReleaseManifest artifact: {}", manifest_path.display());
+    if is_release_gate {
+        println!("==> ReleaseManifest artifact: {}", manifest_path.display());
+    }
 }

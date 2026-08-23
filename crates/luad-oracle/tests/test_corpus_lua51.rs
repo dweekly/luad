@@ -29,7 +29,34 @@ fn test_lua51_stock_corpus_regression() {
 }
 
 #[test]
-fn test_lua51_lnum_corpus_regression() {
+fn test_lua51_lnum32_fixture_regression() {
+    let root = luad_oracle::find_workspace_root();
+    let lnum_path = root.join("tests/fixtures/precompiled/lua51_lnum32/hello.luac");
+    let lnum_bytes = std::fs::read(&lnum_path).expect("Read lnum32 fixture");
+
+    let mut reader = SafeReader::new(&lnum_bytes);
+    let chunk = decode_chunk_lua51_with_profile(&mut reader, Lua51Profile::Lnum32)
+        .expect("Decode LNUM32 fixture");
+
+    assert_eq!(chunk.verdict, Verdict::ValidForParser);
+    assert_eq!(chunk.dialect, "lua5.1-lnum32");
+    assert_eq!(chunk.header.lua_integer_size, 4);
+    assert_eq!(chunk.header.sizeof_sizet, 4);
+
+    // 32-bit stock fixture
+    let stock32_path = root.join("tests/fixtures/precompiled/lua51_32bit/hello.luac");
+    let stock32_bytes = std::fs::read(&stock32_path).expect("Read stock32 fixture");
+
+    let mut reader32 = SafeReader::new(&stock32_bytes);
+    let chunk32 = decode_chunk_lua51_with_profile(&mut reader32, Lua51Profile::Stock32)
+        .expect("Decode stock32 fixture");
+
+    assert_eq!(chunk32.verdict, Verdict::ValidForParser);
+    assert_eq!(chunk32.header.sizeof_sizet, 4);
+}
+
+#[test]
+fn test_negative_control_stock_fixtures_rejected_by_lnum32() {
     let fixtures = ["hello", "control_flow", "closures", "tables", "numerics"];
 
     for fixture_name in fixtures {
@@ -38,43 +65,35 @@ fn test_lua51_lnum_corpus_regression() {
                 .unwrap_or_else(|e| panic!("Failed to load fixture {fixture_name}: {e}"));
 
             let mut reader = SafeReader::new(&raw_bytes);
-            let chunk = decode_chunk_lua51_with_profile(&mut reader, Lua51Profile::Lnum)
-                .unwrap_or_else(|e| panic!("Failed to decode {fixture_name} (Lnum): {e:?}"));
-
-            assert_eq!(
-                chunk.verdict,
-                Verdict::ValidForParser,
-                "Fixture {fixture_name} (stripped={is_stripped}) failed validation under Lnum profile"
+            let res = decode_chunk_lua51_with_profile(&mut reader, Lua51Profile::Lnum32);
+            assert!(
+                res.is_err(),
+                "Stock fixture '{fixture_name}' MUST be rejected under LNUM32 profile"
             );
-            assert_eq!(chunk.byte_length, raw_bytes.len());
+            let diag = res.unwrap_err();
+            assert_eq!(diag.code, "L51-HEADER-003");
+            assert!(diag
+                .message
+                .contains("Invalid lua_Integer size 0 for LNUM32"));
         }
     }
 }
 
 #[test]
-fn test_negative_control_stock_lnum_identity_on_standard_chunks() {
-    let fixtures = ["hello", "control_flow", "closures", "tables", "numerics"];
+fn test_negative_control_lnum32_fixture_rejected_by_stock() {
+    let root = luad_oracle::find_workspace_root();
+    let lnum_path = root.join("tests/fixtures/precompiled/lua51_lnum32/hello.luac");
+    let lnum_bytes = std::fs::read(&lnum_path).expect("Read lnum32 fixture");
 
-    for fixture_name in fixtures {
-        for is_stripped in [false, true] {
-            let raw_bytes = get_fixture_bytes("lua5.1", fixture_name, is_stripped)
-                .unwrap_or_else(|e| panic!("Failed to load fixture {fixture_name}: {e}"));
-
-            let mut reader_stock = SafeReader::new(&raw_bytes);
-            let chunk_stock =
-                decode_chunk_lua51_with_profile(&mut reader_stock, Lua51Profile::Stock)
-                    .expect("Stock decode");
-
-            let mut reader_lnum = SafeReader::new(&raw_bytes);
-            let chunk_lnum = decode_chunk_lua51_with_profile(&mut reader_lnum, Lua51Profile::Lnum)
-                .expect("Lnum decode");
-
-            assert_eq!(
-                chunk_stock, chunk_lnum,
-                "Stock and Lnum profiles MUST produce identical ASTs on standard chunk '{fixture_name}' (stripped={is_stripped})"
-            );
-        }
-    }
+    let mut reader = SafeReader::new(&lnum_bytes);
+    let res = decode_chunk_lua51_with_profile(&mut reader, Lua51Profile::Stock);
+    assert!(
+        res.is_err(),
+        "Lnum32 fixture MUST be rejected under Stock profile"
+    );
+    let diag = res.unwrap_err();
+    assert_eq!(diag.code, "L51-HEADER-003");
+    assert!(diag.message.contains("lua5.1-lnum32"));
 }
 
 #[test]

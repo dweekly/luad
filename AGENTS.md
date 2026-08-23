@@ -6,16 +6,21 @@ This repository analyzes potentially hostile Lua bytecode. Correctness, evidence
 
 Before modifying correctness-sensitive code, read:
 
-1. `docs/CODING-AGENT-PLAN.md`
-2. `ROADMAP.md`
-3. `docs/FIELD-REPORT-TP-LINK-LUA51.md`
+1. `docs/DEVELOPMENT-WORKFLOW.md`
+2. `docs/CODING-AGENT-PLAN.md`
+3. `docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`
 4. `ARCHITECTURE.md`
 5. `docs/MACHINE-INTERFACE.md`
 6. `CONTRIBUTING.md`
 
 ## Current priority
 
-Work the gates in `docs/CODING-AGENT-PLAN.md` in order, beginning with C0 and R6. Do not add dialects, decompiler features, overlays, persistent state, or new capability claims while the release critical path is open.
+Work the current packages in `docs/CODING-AGENT-PLAN.md` in dependency order and
+stop at every checkpoint. Do not add dialects, decompiler features, persistent
+state, or inference-heavy analysis while the embedded Lua 5.1 and machine-contract
+path is open. This broad plan is the transition described in
+`docs/DEVELOPMENT-WORKFLOW.md`; after it closes, work proceeds through one active
+`docs/NEXT-SPRINT.md` contract at a time.
 
 ## Repository rules
 
@@ -47,4 +52,21 @@ This aggregate check is necessary but not sufficient. Report which named oracle 
 
 ## Documentation
 
-Keep documentation honest about current behavior. Link claims to evidence; do not promote roadmap intent into present-tense support. If code and documentation disagree, either correct the code in scope or downgrade the claim explicitly.
+Keep documentation honest about current behavior. Link claims to evidence; do not
+promote roadmap intent into present-tense support. If code and documentation disagree,
+either correct the code in scope or downgrade the claim explicitly.
+
+- Every maintained Markdown document must appear in the documentation index in
+  `README.md` with a summary, a last-fresh date, and a concrete revalidation or
+  deletion trigger. Add, rename, move, or delete the index entry in the same change as
+  the document.
+- Plans and roadmaps contain only future obligations, decisions, dependencies, gates,
+  and stop conditions. Remove accepted work instead of retaining completed checklists
+  or comparisons with an earlier implementation.
+- Implementation history belongs only in `CHANGELOG.md`, version release notes, pull
+  requests, and Git commits. Requirements and reference documents describe the current
+  truth and future needs.
+- Code comments describe the present invariant, intent, safety condition, or externally
+  relevant constraint. They do not narrate how the code differed in an earlier version.
+- When a freshness trigger fires, update or delete the document before declaring the
+  associated change complete. Deletion includes repairing the index and inbound links.

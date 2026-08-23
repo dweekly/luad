@@ -22,4 +22,6 @@ tempfile = "3.10"
 proptest = "1.4"
 thiserror = { workspace = true }
 
+[dev-dependencies]
+jsonschema = { version = "0.51.0", default-features = false }
 

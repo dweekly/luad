@@ -89,7 +89,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
             ],
             completed_gates: vec![],
             evidence: vec![
-                "Experimental dialect; qualification in progress under CODING-AGENT-PLAN.md"
+                "Experimental dialect; exact target qualification remains required before promotion"
                     .to_string(),
             ],
         },
@@ -141,7 +141,8 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
             ],
             completed_gates: vec![],
             evidence: vec![
-                "Release critical path proof dialect under CODING-AGENT-PLAN.md".to_string(),
+                "Experimental dialect; named evidence gates do not by themselves promote support"
+                    .to_string(),
             ],
         },
         DialectCapability {
@@ -255,19 +256,19 @@ mod tests {
         let manifest = get_canonical_capabilities("0.1.0");
         assert!(
             manifest.supported_dialects.is_empty(),
-            "Under Gate R0 baseline, supported_dialects must be empty"
+            "supported_dialects must remain empty without promoted release evidence"
         );
     }
 
     #[test]
-    fn test_all_stock_dialects_experimental_at_baseline() {
+    fn test_all_stock_dialects_experimental_without_promoted_release_evidence() {
         let manifest = get_canonical_capabilities("0.1.0");
         for dialect in &manifest.dialects {
             if dialect.id != "luajit" {
                 assert_eq!(
                     dialect.status,
                     SupportTier::Experimental,
-                    "Dialect '{}' must be Experimental at baseline",
+                    "Dialect '{}' must remain Experimental without promoted release evidence",
                     dialect.id
                 );
                 assert!(
@@ -286,7 +287,7 @@ mod tests {
             if dialect.status == SupportTier::Experimental {
                 assert!(
                     dialect.completed_gates.is_empty(),
-                    "Experimental dialect '{}' must have empty completed_gates at baseline",
+                    "Experimental dialect '{}' must have empty completed_gates",
                     dialect.id
                 );
             }

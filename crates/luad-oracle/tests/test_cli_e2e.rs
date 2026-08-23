@@ -246,8 +246,9 @@ fn test_cli_inspect_and_disasm() {
         .unwrap();
     assert_eq!(inspect_out.status.code(), Some(0));
     let inspect_json: serde_json::Value = serde_json::from_slice(&inspect_out.stdout).unwrap();
-    assert_eq!(inspect_json["dialect"], "lua5.4");
-    assert_eq!(inspect_json["verdict"], "valid-for-parser");
+    assert_eq!(inspect_json["schema_version"], 1);
+    assert_eq!(inspect_json["data"]["dialect"], "lua5.4");
+    assert_eq!(inspect_json["data"]["verdict"], "valid-for-parser");
 
     // Disasm Text
     let disasm_out = Command::new(&luad)
@@ -283,5 +284,5 @@ fn test_cli_inspect_and_disasm() {
         .unwrap();
     assert_eq!(query_out.status.code(), Some(0));
     let query_json: serde_json::Value = serde_json::from_slice(&query_out.stdout).unwrap();
-    assert!(query_json["count"].as_u64().unwrap() > 0);
+    assert!(query_json["data"]["count"].as_u64().unwrap() > 0);
 }

@@ -87,8 +87,66 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
             }
         }
 
+        // Register bounds validation
+        let max_reg = proto.maxstacksize as usize;
+        if raw.a as usize >= max_reg && op != crate::opcodes::Opcode51::Close {
+            let diag = Diagnostic::error(
+                "L51-REG-001",
+                DiagnosticCategory::Instruction,
+                inst.id.clone(),
+                format!(
+                    "Register A ({}) exceeds maxstacksize ({}) at PC {pc}",
+                    raw.a, max_reg
+                ),
+            )
+            .with_source(inst.source.clone());
+            diags.push(diag);
+        }
+
         // RK operand bounds validation
         if op.mode() == OpMode51::IABC {
+            if !raw.is_b_k()
+                && raw.b as usize >= max_reg
+                && op != crate::opcodes::Opcode51::VarArg
+                && op != crate::opcodes::Opcode51::Test
+                && op != crate::opcodes::Opcode51::LoadBool
+                && op != crate::opcodes::Opcode51::Call
+                && op != crate::opcodes::Opcode51::TailCall
+                && op != crate::opcodes::Opcode51::Return
+            {
+                let diag = Diagnostic::error(
+                    "L51-REG-002",
+                    DiagnosticCategory::Instruction,
+                    inst.id.clone(),
+                    format!(
+                        "Register B ({}) exceeds maxstacksize ({}) at PC {pc}",
+                        raw.b, max_reg
+                    ),
+                )
+                .with_source(inst.source.clone());
+                diags.push(diag);
+            }
+            if !raw.is_c_k()
+                && raw.c as usize >= max_reg
+                && op != crate::opcodes::Opcode51::SetList
+                && op != crate::opcodes::Opcode51::Test
+                && op != crate::opcodes::Opcode51::TestSet
+                && op != crate::opcodes::Opcode51::LoadBool
+                && op != crate::opcodes::Opcode51::Call
+                && op != crate::opcodes::Opcode51::Return
+            {
+                let diag = Diagnostic::error(
+                    "L51-REG-003",
+                    DiagnosticCategory::Instruction,
+                    inst.id.clone(),
+                    format!(
+                        "Register C ({}) exceeds maxstacksize ({}) at PC {pc}",
+                        raw.c, max_reg
+                    ),
+                )
+                .with_source(inst.source.clone());
+                diags.push(diag);
+            }
             if raw.is_b_k() {
                 let k_idx = raw.b_index_k();
                 if k_idx >= proto.constants.len() {
