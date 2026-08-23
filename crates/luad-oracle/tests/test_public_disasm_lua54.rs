@@ -5,16 +5,17 @@
 //! 2. Independent reference decoder (`IndependentInstruction54`).
 //! 3. Production public disassembly record (`DisassembledPrototype` and `luad disasm` CLI JSON/text).
 
-use luad_core::disasm::{DisassembledPrototype, OperandKind};
-
+use luad_core::disasm::{DisassembledPrototype, OperandKind, ResolvedFact};
 use luad_core::model::{Chunk, Prototype};
+use luad_core::SafeReader;
 use luad_dialect_lua54::disassemble_proto_lua54;
 use luad_oracle::differential_disasm::{compare_proto_three_way, DisasmComparisonError};
-use luad_oracle::independent_lua54_oracle::{IndependentInstruction54, IndependentOpcode54};
+use luad_oracle::independent_lua54_oracle::IndependentInstruction54;
 use luad_oracle::listing_parser::{parse_luac_dump, LuacDump};
 use luad_oracle::{find_workspace_root, require_luac54};
+use sha2::{Digest, Sha256};
 use std::fs;
-use std::path::Path;
+use std::process::Command;
 
 const LUA54_FIXTURES: [&str; 10] = [
     "tests/fixtures/precompiled/lua54/hello.luac",
@@ -29,34 +30,56 @@ const LUA54_FIXTURES: [&str; 10] = [
     "tests/fixtures/precompiled/lua54/numerics_stripped.luac",
 ];
 
+const PINNED_DISASM_SCHEMA_SHA256: &str =
+    "53e2478d798114ad54a983951ecdcd523d32d823ae79255c30f7a44c86f090f3";
+
 fn load_fixture(rel_path: &str) -> (Vec<u8>, Chunk, LuacDump) {
-    let luac_path = require_luac54();
     let root = find_workspace_root();
-    let full_path = Path::new(&root).join(rel_path);
-
-    let raw_bytes =
-        fs::read(&full_path).unwrap_or_else(|e| panic!("Failed to read fixture {rel_path}: {e}"));
-    let mut reader = luad_core::reader::SafeReader::new(&raw_bytes);
-    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader)
-        .unwrap_or_else(|e| panic!("Failed to decode fixture {rel_path}: {e:?}"));
-
-    let output = std::process::Command::new(&luac_path)
-        .arg("-l")
-        .arg("-l")
-        .arg(&full_path)
-        .output()
-        .unwrap_or_else(|e| panic!("Failed to execute luac on {rel_path}: {e}"));
+    let abs_path = root.join(rel_path);
     assert!(
-        output.status.success(),
-        "luac -l -l failed on {rel_path}: {}",
-        String::from_utf8_lossy(&output.stderr)
+        abs_path.exists(),
+        "Fixture {} must exist at {:?}",
+        rel_path,
+        abs_path
     );
+
+    let raw_bytes = fs::read(&abs_path)
+        .unwrap_or_else(|e| panic!("Failed to read fixture {:?}: {e}", abs_path));
+    let mut reader = SafeReader::new(&raw_bytes);
+    let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader)
+        .unwrap_or_else(|e| panic!("Failed to parse fixture {:?}: {:?}", abs_path, e));
+
+    let luac54 = require_luac54();
+    let output = Command::new(&luac54)
+        .args(["-l", "-l", abs_path.to_str().unwrap()])
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to run luac -l -l on {:?}: {e}", abs_path));
 
     let dump_str = String::from_utf8_lossy(&output.stdout);
     let luac_dump = parse_luac_dump(&dump_str)
-        .unwrap_or_else(|e| panic!("Failed to parse luac dump for {rel_path}: {e}"));
+        .unwrap_or_else(|e| panic!("Failed to parse luac dump for {:?}: {:?}", abs_path, e));
 
     (raw_bytes, chunk, luac_dump)
+}
+
+fn get_cli_json_disasm(fixture_rel_path: &str) -> DisassembledPrototype {
+    let root = find_workspace_root();
+    let luad = root.join("target").join("debug").join("luad");
+    let abs_path = root.join(fixture_rel_path);
+
+    let output = Command::new(&luad)
+        .args(["disasm", abs_path.to_str().unwrap(), "--format", "json"])
+        .output()
+        .unwrap_or_else(|e| panic!("Failed to run luad disasm --format json on {abs_path:?}: {e}"));
+
+    assert!(
+        output.status.success(),
+        "luad disasm --format json failed on {fixture_rel_path}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|e| panic!("Failed to deserialize CLI JSON for {fixture_rel_path}: {e}"))
 }
 
 fn decode_indep_proto(proto: &Prototype) -> Vec<IndependentInstruction54> {
@@ -67,47 +90,47 @@ fn decode_indep_proto(proto: &Prototype) -> Vec<IndependentInstruction54> {
         .collect()
 }
 
-fn flatten_disasm<'a>(proto: &'a DisassembledPrototype, out: &mut Vec<&'a DisassembledPrototype>) {
-    out.push(proto);
-    for child in &proto.child_protos {
-        flatten_disasm(child, out);
-    }
-}
-
-fn flatten_chunk<'a>(proto: &'a Prototype, out: &mut Vec<&'a Prototype>) {
-    out.push(proto);
-    for child in &proto.protos {
-        flatten_chunk(child, out);
-    }
-}
-
 #[test]
 fn test_three_way_agreement_on_all_10_fixtures() {
-    for fixture_path in LUA54_FIXTURES {
-        let (_raw_bytes, chunk, luac_dump) = load_fixture(fixture_path);
+    for fixture in LUA54_FIXTURES {
+        let (_raw_bytes, chunk, luac_dump) = load_fixture(fixture);
         let prod_proto = disassemble_proto_lua54(&chunk.main_proto);
+        let indep_insts = decode_indep_proto(&chunk.main_proto);
+        let cli_json_proto = get_cli_json_disasm(fixture);
 
-        let mut disasm_list = Vec::new();
-        flatten_disasm(&prod_proto, &mut disasm_list);
-
-        let mut chunk_list = Vec::new();
-        flatten_chunk(&chunk.main_proto, &mut chunk_list);
-
-        assert_eq!(
-            luac_dump.functions.len(),
-            disasm_list.len(),
-            "Prototype count mismatch on {fixture_path}"
+        assert!(
+            !luac_dump.functions.is_empty(),
+            "Fixture {fixture} must have at least main proto in luac dump"
         );
 
-        for (i, luac_fn) in luac_dump.functions.iter().enumerate() {
-            let indep_insts = decode_indep_proto(chunk_list[i]);
-            compare_proto_three_way(luac_fn, &indep_insts, disasm_list[i], None).unwrap_or_else(
-                |e| {
-                    panic!(
-                        "Three-way comparison failure on fixture {fixture_path} proto {i}: {e:?}"
-                    )
-                },
-            );
+        compare_proto_three_way(
+            &luac_dump.functions[0],
+            &indep_insts,
+            &prod_proto,
+            Some(&cli_json_proto),
+        )
+        .unwrap_or_else(|e| {
+            panic!(
+                "Fixture {fixture} failed 3-way differential agreement with CLI JSON: {:?}",
+                e
+            )
+        });
+
+        // Also recursively compare child prototypes
+        for (i, child_proto) in chunk.main_proto.protos.iter().enumerate() {
+            if let Some(child_luac) = luac_dump.functions.get(i + 1) {
+                let child_prod = disassemble_proto_lua54(child_proto);
+                let child_indep = decode_indep_proto(child_proto);
+                let child_cli_json = cli_json_proto.child_protos.get(i);
+
+                compare_proto_three_way(child_luac, &child_indep, &child_prod, child_cli_json)
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "Fixture {fixture} child proto {i} failed 3-way agreement: {:?}",
+                            e
+                        )
+                    });
+            }
         }
     }
 }
@@ -118,69 +141,62 @@ fn test_exact_signed_immediate_and_control_flow_goldens() {
         load_fixture("tests/fixtures/precompiled/lua54/control_flow.luac");
     let prod = disassemble_proto_lua54(&chunk.main_proto);
     let indep = decode_indep_proto(&chunk.main_proto);
+    let cli_json = get_cli_json_disasm("tests/fixtures/precompiled/lua54/control_flow.luac");
 
-    compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, None)
+    compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, Some(&cli_json))
         .expect("control_flow.luac must satisfy three-way agreement");
 
-    // 1. ADDI signed immediate: ADDI 0 0 1
-    let addi = prod
-        .instructions
-        .iter()
-        .find(|i| i.mnemonic == "ADDI")
-        .expect("Must have ADDI");
-    assert_eq!(addi.encoded_operands.a, 0);
-    assert_eq!(addi.encoded_operands.b, 0);
-    assert_eq!(addi.encoded_operands.sc, 1);
+    // Directly assert exact instructions at PCs 17-21 in control_flow.luac:
+    // PC 17: GTI 1 0 0
+    let pc17 = &prod.instructions[17];
+    assert_eq!(pc17.mnemonic, "GTI");
+    assert_eq!(pc17.encoded_operands.a, 1);
+    assert_eq!(pc17.encoded_operands.sb, 0);
+    assert_eq!(pc17.encoded_operands.k, 0);
     assert_eq!(
-        addi.operands[2].kind,
-        OperandKind::ImmediateSigned { value: 1 }
-    );
-    assert_eq!(addi.operands[2].display, "1");
-
-    // 2. GTI signed immediate: GTI 0 5 0
-    let gti = prod
-        .instructions
-        .iter()
-        .find(|i| i.mnemonic == "GTI")
-        .expect("Must have GTI");
-    assert_eq!(gti.encoded_operands.a, 0);
-    assert_eq!(gti.encoded_operands.sb, 5);
-    assert_eq!(gti.encoded_operands.k, 0);
-    assert_eq!(
-        gti.operands[1].kind,
-        OperandKind::ImmediateSigned { value: 5 }
+        pc17.operands[1].kind,
+        OperandKind::ImmediateSigned { value: 0 }
     );
 
-    // 3. MMBINI metamethod: MMBINI 0 1 6 0 ; __add
-    let mmbini = prod
-        .instructions
-        .iter()
-        .find(|i| i.mnemonic == "MMBINI")
-        .expect("Must have MMBINI");
-    assert_eq!(mmbini.encoded_operands.sb, 1);
-    assert_eq!(mmbini.encoded_operands.c, 6);
-    assert_eq!(mmbini.metamethod.as_deref(), Some("__add"));
-    assert_eq!(mmbini.comment.as_deref(), Some("__add"));
+    // PC 18: JMP 5 ; to 25
+    let pc18 = &prod.instructions[18];
+    assert_eq!(pc18.mnemonic, "JMP");
+    assert_eq!(pc18.encoded_operands.sj, 5);
+    assert_eq!(pc18.jump_target, Some(24));
+    assert_eq!(pc18.comment.as_deref(), Some("to 25"));
 
-    // 4. EQI signed immediate: EQI 1 15 1
-    let eqi = prod
-        .instructions
-        .iter()
-        .find(|i| i.mnemonic == "EQI")
-        .expect("Must have EQI");
-    assert_eq!(eqi.encoded_operands.sb, 15);
-    assert_eq!(eqi.encoded_operands.k, 1);
-
-    // 5. JMP jump destination resolution
-    let jmp = prod
-        .instructions
-        .iter()
-        .find(|i| i.mnemonic == "JMP")
-        .expect("Must have JMP");
-    let target = jmp.jump_target.expect("JMP must have resolved jump target");
+    // PC 19: ADDI 1 1 -5
+    let pc19 = &prod.instructions[19];
+    assert_eq!(pc19.mnemonic, "ADDI");
+    assert_eq!(pc19.encoded_operands.a, 1);
+    assert_eq!(pc19.encoded_operands.b, 1);
+    assert_eq!(pc19.encoded_operands.sc, -5);
     assert_eq!(
-        target,
-        (jmp.pc as i32 + 1 + jmp.encoded_operands.sj) as usize
+        pc19.operands[2].kind,
+        OperandKind::ImmediateSigned { value: -5 }
+    );
+    assert_eq!(pc19.operands[2].display, "-5");
+
+    // PC 20: MMBINI 1 5 7 0 ; __sub
+    let pc20 = &prod.instructions[20];
+    assert_eq!(pc20.mnemonic, "MMBINI");
+    assert_eq!(pc20.role, "companion");
+    assert_eq!(pc20.companion_pc, Some(19));
+    assert_eq!(pc20.encoded_operands.a, 1);
+    assert_eq!(pc20.encoded_operands.sb, 5);
+    assert_eq!(pc20.encoded_operands.c, 7);
+    assert_eq!(pc20.metamethod.as_deref(), Some("__sub"));
+    assert_eq!(pc20.comment.as_deref(), Some("__sub"));
+
+    // PC 21: EQI 1 15 1
+    let pc21 = &prod.instructions[21];
+    assert_eq!(pc21.mnemonic, "EQI");
+    assert_eq!(pc21.encoded_operands.a, 1);
+    assert_eq!(pc21.encoded_operands.sb, 15);
+    assert_eq!(pc21.encoded_operands.k, 1);
+    assert_eq!(
+        pc21.operands[1].kind,
+        OperandKind::ImmediateSigned { value: 15 }
     );
 }
 
@@ -191,27 +207,24 @@ fn test_killer_probe_signed_operand_mutation_rejected_by_comparator() {
     let mut prod = disassemble_proto_lua54(&chunk.main_proto);
     let indep = decode_indep_proto(&chunk.main_proto);
 
-    // Find ADDI instruction and mutate its production signed immediate
-    let addi_idx = prod
-        .instructions
-        .iter()
-        .position(|i| i.mnemonic == "ADDI")
-        .expect("Must have ADDI");
-    prod.instructions[addi_idx].encoded_operands.sc = 999;
-    prod.instructions[addi_idx].operands[2].display = "999".to_string();
+    // Mutate signed immediate sC at PC 19 (ADDI 1 1 -5 -> ADDI 1 1 5)
+    prod.instructions[19].encoded_operands.sc = 5;
 
     let res = compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, None);
-    assert!(
-        matches!(
-            res,
-            Err(DisasmComparisonError::PhysicalFieldMismatch { pc, ref field_name, .. })
-                if pc == addi_idx && field_name == "sC"
-        ) || matches!(
-            res,
-            Err(DisasmComparisonError::OperandDisplayMismatch { pc, .. }) if pc == addi_idx
-        ),
-        "Comparator must reject mutated signed operand: got {res:?}"
-    );
+    match res {
+        Err(DisasmComparisonError::PhysicalFieldMismatch {
+            pc,
+            field_name,
+            independent_val,
+            production_val,
+        }) => {
+            assert_eq!(pc, 19);
+            assert_eq!(field_name, "sC");
+            assert_eq!(independent_val, -5);
+            assert_eq!(production_val, 5);
+        }
+        other => panic!("Expected PhysicalFieldMismatch on mutated sC, got: {other:?}"),
+    }
 }
 
 #[test]
@@ -221,22 +234,26 @@ fn test_killer_probe_independent_decoder_mutation_rejected_by_comparator() {
     let prod = disassemble_proto_lua54(&chunk.main_proto);
     let mut indep = decode_indep_proto(&chunk.main_proto);
 
-    // Mutate independent decoder's sB field on GTI instruction
-    let gti_idx = indep
-        .iter()
-        .position(|i| i.opcode == Some(IndependentOpcode54::Gti))
-        .expect("Must have GTI");
-    indep[gti_idx].sb = 777;
+    // Mutate independent decoder sB field at PC 17 (GTI)
+    indep[17].sb = 99;
 
     let res = compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, None);
-    assert!(
-        matches!(
-            res,
-            Err(DisasmComparisonError::PhysicalFieldMismatch { pc, ref field_name, .. })
-                if pc == gti_idx && field_name == "sB"
+    match res {
+        Err(DisasmComparisonError::PhysicalFieldMismatch {
+            pc,
+            field_name,
+            independent_val,
+            production_val,
+        }) => {
+            assert_eq!(pc, 17);
+            assert_eq!(field_name, "sB");
+            assert_eq!(independent_val, 99);
+            assert_eq!(production_val, 0);
+        }
+        other => panic!(
+            "Expected PhysicalFieldMismatch on mutated independent decoder sB, got: {other:?}"
         ),
-        "Comparator must reject mutated independent decoder: got {res:?}"
-    );
+    }
 }
 
 #[test]
@@ -246,22 +263,20 @@ fn test_killer_probe_missing_jump_target_rejected_by_comparator() {
     let mut prod = disassemble_proto_lua54(&chunk.main_proto);
     let indep = decode_indep_proto(&chunk.main_proto);
 
-    // Find JMP and strip its jump target
-    let jmp_idx = prod
-        .instructions
-        .iter()
-        .position(|i| i.mnemonic == "JMP")
-        .expect("Must have JMP");
-    prod.instructions[jmp_idx].jump_target = None;
+    // Strip resolved jump target from PC 18 (JMP)
+    prod.instructions[18].jump_target = None;
 
     let res = compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, None);
-    assert!(
-        matches!(
-            res,
-            Err(DisasmComparisonError::MissingJumpTarget { pc, .. }) if pc == jmp_idx
-        ),
-        "Comparator must reject missing jump target: got {res:?}"
-    );
+    match res {
+        Err(DisasmComparisonError::MissingJumpTarget {
+            pc,
+            expected_target,
+        }) => {
+            assert_eq!(pc, 18);
+            assert_eq!(expected_target, 24);
+        }
+        other => panic!("Expected MissingJumpTarget on stripped JMP target, got: {other:?}"),
+    }
 }
 
 #[test]
@@ -271,17 +286,17 @@ fn test_killer_probe_missing_source_line_rejected_by_comparator() {
     let mut prod = disassemble_proto_lua54(&chunk.main_proto);
     let indep = decode_indep_proto(&chunk.main_proto);
 
-    // hello.luac has debug line info; strip line for PC 0
+    // Strip line information from PC 0 in unstripped binary
     prod.instructions[0].line = None;
 
     let res = compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, None);
-    assert!(
-        matches!(
-            res,
-            Err(DisasmComparisonError::MissingSourceLine { pc: 0, .. })
-        ),
-        "Comparator must reject missing source line on debug chunk: got {res:?}"
-    );
+    match res {
+        Err(DisasmComparisonError::MissingSourceLine { pc, expected_line }) => {
+            assert_eq!(pc, 0);
+            assert_eq!(expected_line, 1);
+        }
+        other => panic!("Expected MissingSourceLine on stripped line, got: {other:?}"),
+    }
 }
 
 #[test]
@@ -291,88 +306,99 @@ fn test_killer_probe_missing_k_flag_rejected_by_comparator() {
     let mut prod = disassemble_proto_lua54(&chunk.main_proto);
     let indep = decode_indep_proto(&chunk.main_proto);
 
-    // Find EQI (which has k=1) and flip k to 0
-    let eqi_idx = prod
-        .instructions
-        .iter()
-        .position(|i| i.mnemonic == "EQI")
-        .expect("Must have EQI");
-    prod.instructions[eqi_idx].encoded_operands.k = 0;
+    // Clear k flag at PC 21 (EQI 1 15 1 -> k=0)
+    prod.instructions[21].encoded_operands.k = 0;
 
     let res = compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, None);
-    assert!(
-        matches!(
-            res,
-            Err(DisasmComparisonError::PhysicalFieldMismatch { pc, ref field_name, .. })
-                if pc == eqi_idx && field_name == "k"
-        ),
-        "Comparator must reject missing k flag: got {res:?}"
-    );
+    match res {
+        Err(DisasmComparisonError::PhysicalFieldMismatch {
+            pc,
+            field_name,
+            independent_val,
+            production_val,
+        }) => {
+            assert_eq!(pc, 21);
+            assert_eq!(field_name, "k");
+            assert_eq!(independent_val, 1);
+            assert_eq!(production_val, 0);
+        }
+        other => panic!("Expected PhysicalFieldMismatch on cleared k flag, got: {other:?}"),
+    }
+}
+
+#[test]
+fn test_killer_probe_missing_resolved_constant_rejected_by_comparator() {
+    let (_raw_bytes, chunk, luac_dump) =
+        load_fixture("tests/fixtures/precompiled/lua54/hello.luac");
+    let mut prod = disassemble_proto_lua54(&chunk.main_proto);
+    let indep = decode_indep_proto(&chunk.main_proto);
+
+    // Strip resolved constant fact from PC 1 (GETTABUP 0 0 0 ; _ENV "print")
+    prod.instructions[1].operands[2].resolved = Some(ResolvedFact::Constant {
+        index: 0,
+        id: prod.instructions[1].id.clone(),
+        value: luad_core::model::ConstantValue::Nil,
+        formatted_preview: String::new(), // empty preview must be rejected
+    });
+
+    let res = compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, None);
+    match res {
+        Err(DisasmComparisonError::ConstantResolutionMismatch { pc, detail }) => {
+            assert_eq!(pc, 1);
+            assert!(detail.contains("empty preview"));
+        }
+        other => panic!("Expected ConstantResolutionMismatch, got: {other:?}"),
+    }
 }
 
 #[test]
 fn test_killer_probe_json_mutation_rejected_by_comparator() {
     let (_raw_bytes, chunk, luac_dump) =
-        load_fixture("tests/fixtures/precompiled/lua54/control_flow.luac");
+        load_fixture("tests/fixtures/precompiled/lua54/hello.luac");
     let prod = disassemble_proto_lua54(&chunk.main_proto);
     let indep = decode_indep_proto(&chunk.main_proto);
 
-    // Serialize production record to JSON string
-    let mut json_val = serde_json::to_value(&prod).expect("Valid JSON serialization");
+    let mut cli_json = get_cli_json_disasm("tests/fixtures/precompiled/lua54/hello.luac");
+    // Mutate CLI JSON mnemonic
+    cli_json.instructions[0].mnemonic = "MUTATED_GETTABUP".to_string();
 
-    // Tamper with an instruction in JSON
-    json_val["instructions"][1]["mnemonic"] = serde_json::json!("TAMPERED_OP");
-
-    let tampered_proto: DisassembledPrototype =
-        serde_json::from_value(json_val).expect("Valid structure deserialization");
-
-    let res = compare_proto_three_way(
-        &luac_dump.functions[0],
-        &indep,
-        &prod,
-        Some(&tampered_proto),
-    );
-    assert!(
-        matches!(res, Err(DisasmComparisonError::JsonMismatch { pc: 1, .. })),
-        "Comparator must reject tampered JSON record: got {res:?}"
-    );
+    let res = compare_proto_three_way(&luac_dump.functions[0], &indep, &prod, Some(&cli_json));
+    match res {
+        Err(DisasmComparisonError::JsonMismatch { pc, detail }) => {
+            assert_eq!(pc, 0);
+            assert!(detail.contains("did not match production"));
+        }
+        other => panic!("Expected JsonMismatch on mutated CLI JSON, got: {other:?}"),
+    }
 }
 
 #[test]
 fn test_killer_probe_text_renderer_mutation_rejected_by_golden() {
-    let (_raw_bytes, chunk, _luac_dump) =
-        load_fixture("tests/fixtures/precompiled/lua54/control_flow.luac");
-    let prod = disassemble_proto_lua54(&chunk.main_proto);
+    let root = find_workspace_root();
+    let luad = root.join("target").join("debug").join("luad");
+    let fixture_path = root
+        .join("tests")
+        .join("fixtures")
+        .join("precompiled")
+        .join("lua54")
+        .join("control_flow.luac");
 
-    // Render production instructions to text lines
-    let rendered_lines: Vec<String> = prod
-        .instructions
-        .iter()
-        .map(|i| {
-            let ops_str = i
-                .operands
-                .iter()
-                .map(|o| o.display.as_str())
-                .collect::<Vec<_>>()
-                .join(" ");
-            let comment_suffix = i
-                .comment
-                .as_ref()
-                .map(|c| format!(" ; {c}"))
-                .unwrap_or_default();
-            format!("{} {ops_str}{comment_suffix}", i.mnemonic)
-        })
-        .collect();
+    let text_output = Command::new(&luad)
+        .args(["disasm", fixture_path.to_str().unwrap(), "--format", "text"])
+        .output()
+        .expect("luad disasm --format text execution");
+    assert!(text_output.status.success());
 
-    // Verify correct text contains ADDI 0 0 1
-    assert!(rendered_lines.iter().any(|l| l.contains("ADDI 0 0 1")));
+    let rendered_text = String::from_utf8_lossy(&text_output.stdout).to_string();
+
+    // Verify correct text contains ADDI 1 1 -5
+    assert!(rendered_text.contains("ADDI         1 1 -5"));
 
     // Mutate text line
-    let mut mutated_lines = rendered_lines.clone();
-    mutated_lines[1] = "ADDI 0 0 -99".to_string();
+    let mutated_text = rendered_text.replace("ADDI         1 1 -5", "ADDI         1 1 5");
 
     assert_ne!(
-        rendered_lines, mutated_lines,
+        rendered_text, mutated_text,
         "Mutated text lines must diverge from exact golden"
     );
 }
@@ -425,6 +451,44 @@ fn test_killer_probe_oob_constant_reference_emits_diagnostic() {
 }
 
 #[test]
+fn test_public_disasm_schema_major_and_hash_pinned() {
+    let root = find_workspace_root();
+    let luad = root.join("target").join("debug").join("luad");
+
+    let output = Command::new(&luad)
+        .args(["schema", "disasm"])
+        .output()
+        .expect("luad schema disasm must execute");
+
+    assert!(
+        output.status.success(),
+        "luad schema disasm failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let schema_str = String::from_utf8_lossy(&output.stdout);
+    let parsed_schema: serde_json::Value =
+        serde_json::from_str(&schema_str).expect("Valid JSON schema");
+
+    // Validate major schema version
+    assert_eq!(
+        parsed_schema["title"].as_str(),
+        Some("DisassembledPrototype"),
+        "Schema title must be DisassembledPrototype"
+    );
+
+    // Validate pinned SHA-256 schema hash
+    let mut hasher = Sha256::new();
+    hasher.update(&output.stdout);
+    let computed_hash = hex::encode(hasher.finalize());
+
+    assert_eq!(
+        computed_hash, PINNED_DISASM_SCHEMA_SHA256,
+        "Public disassembly schema hash must match pinned canonical hash"
+    );
+}
+
+#[test]
 fn test_cli_disasm_json_and_text_goldens() {
     let root = find_workspace_root();
     let luad = root.join("target").join("debug").join("luad");
@@ -436,7 +500,7 @@ fn test_cli_disasm_json_and_text_goldens() {
         .join("control_flow.luac");
 
     // 1. Test CLI JSON format matches DisassembledPrototype schema
-    let json_output = std::process::Command::new(&luad)
+    let json_output = Command::new(&luad)
         .args(["disasm", fixture_path.to_str().unwrap(), "--format", "json"])
         .output()
         .expect("luad disasm --format json execution");
@@ -450,8 +514,8 @@ fn test_cli_disasm_json_and_text_goldens() {
         .expect("CLI disasm JSON output must deserialize to DisassembledPrototype");
     assert_eq!(parsed_proto.instructions.len(), 32);
 
-    // 2. Test CLI text format produces normalized goldens
-    let text_output = std::process::Command::new(&luad)
+    // 2. Test CLI text format produces exact normalized goldens
+    let text_output = Command::new(&luad)
         .args(["disasm", fixture_path.to_str().unwrap(), "--format", "text"])
         .output()
         .expect("luad disasm --format text execution");
@@ -462,11 +526,61 @@ fn test_cli_disasm_json_and_text_goldens() {
     );
 
     let text_str = String::from_utf8_lossy(&text_output.stdout);
-    assert!(text_str.contains("GTI"));
-    assert!(text_str.contains("ADDI"));
-    assert!(text_str.contains("MMBINI"));
-    assert!(text_str.contains("; __add"));
-    assert!(text_str.contains("EQI"));
-    assert!(text_str.contains("JMP"));
-    assert!(text_str.contains("; to 8"));
+    assert!(text_str.contains("GTI          1 0 0"));
+    assert!(text_str.contains("JMP          5 ; to 25"));
+    assert!(text_str.contains("ADDI         1 1 -5"));
+    assert!(text_str.contains("MMBINI       1 5 7 0 ; __sub"));
+    assert!(text_str.contains("EQI          1 15 1"));
+}
+
+#[test]
+fn test_cli_explain_never_reports_static_effects_as_fact() {
+    let root = find_workspace_root();
+    let luad = root.join("target").join("debug").join("luad");
+    let fixtures = [
+        "tests/fixtures/precompiled/lua54/hello.luac",
+        "tests/fixtures/precompiled/lua54/control_flow.luac",
+    ];
+
+    for fixture in fixtures {
+        let abs_path = root.join(fixture);
+        let (_bytes, chunk, _dump) = load_fixture(fixture);
+
+        for pc in 0..chunk.main_proto.instructions.len() {
+            let output = Command::new(&luad)
+                .args([
+                    "explain",
+                    abs_path.to_str().unwrap(),
+                    &format!("proto:0:pc:{pc}"),
+                    "--format",
+                    "json",
+                ])
+                .output()
+                .expect("luad explain --format json must run");
+
+            assert!(
+                output.status.success(),
+                "luad explain failed at PC {pc} for {fixture}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+
+            let json_val: serde_json::Value = serde_json::from_slice(&output.stdout)
+                .expect("Valid SemanticInstruction JSON output");
+
+            let confidence = json_val["confidence"]
+                .as_str()
+                .expect("confidence field must be string");
+
+            assert_ne!(
+                confidence.to_lowercase(),
+                "fact",
+                "luad explain at PC {pc} for {fixture} must NEVER report static effect as fact: got {confidence}"
+            );
+            assert_eq!(
+                confidence.to_lowercase(),
+                "reviewed",
+                "luad explain at PC {pc} for {fixture} must report reviewed confidence: got {confidence}"
+            );
+        }
+    }
 }

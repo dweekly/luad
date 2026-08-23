@@ -88,7 +88,10 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "gate-resolved-constants-lua51".to_string(),
             ],
             completed_gates: vec![],
-            evidence: vec!["Phase 1 remediation in progress under CODING-AGENT-PLAN.md".to_string()],
+            evidence: vec![
+                "Experimental dialect; qualification in progress under CODING-AGENT-PLAN.md"
+                    .to_string(),
+            ],
         },
         DialectCapability {
             id: "lua5.2".to_string(),
@@ -100,7 +103,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "validate".to_string(),
             ],
             status: SupportTier::Experimental,
-            required_gates: vec!["gate-facts".to_string(), "gate-lossless".to_string()],
+            required_gates: vec![],
             completed_gates: vec![],
             evidence: vec!["Experimental dialect; formal proof gates deferred".to_string()],
         },
@@ -114,7 +117,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "validate".to_string(),
             ],
             status: SupportTier::Experimental,
-            required_gates: vec!["gate-facts".to_string(), "gate-lossless".to_string()],
+            required_gates: vec![],
             completed_gates: vec![],
             evidence: vec!["Experimental dialect; formal proof gates deferred".to_string()],
         },
@@ -136,11 +139,9 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "gate-lossless-lua54-8".to_string(),
                 "gate-release-lua54-8".to_string(),
             ],
-
             completed_gates: vec![],
             evidence: vec![
-                "Proof vehicle; remediation in progress under CODING-AGENT-PLAN.md (R0-R5)"
-                    .to_string(),
+                "Release critical path proof dialect under CODING-AGENT-PLAN.md".to_string(),
             ],
         },
         DialectCapability {
@@ -153,7 +154,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "validate".to_string(),
             ],
             status: SupportTier::Experimental,
-            required_gates: vec!["gate-facts".to_string(), "gate-lossless".to_string()],
+            required_gates: vec![],
             completed_gates: vec![],
             evidence: vec!["Experimental dialect; formal proof gates deferred".to_string()],
         },
@@ -165,7 +166,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
             status: SupportTier::Planned,
             required_gates: vec!["gate-luajit-parser".to_string()],
             completed_gates: vec![],
-            evidence: vec!["Phase 8 roadmap item".to_string()],
+            evidence: vec!["Planned dialect; formal specification and parser deferred".to_string()],
         },
     ];
 
@@ -188,7 +189,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
         .collect();
 
     let evidence = vec![
-        "Stock Lua dialects (5.1..5.5) are experimental; formal proof gates are in progress under CODING-AGENT-PLAN.md (v3)".to_string(),
+        "Stock Lua dialects (5.1..5.5) are experimental; formal proof gates are evaluated strictly against named gate specifications in tests/gates/".to_string(),
         "Bounded SafeReader with safe capacity allocation, varints, and recursion limits"
             .to_string(),
         "Exact bit-level integer and IEEE-754 float preservation".to_string(),

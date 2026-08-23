@@ -26,6 +26,16 @@ pub fn disassemble_proto_lua54(proto: &Prototype) -> DisassembledPrototype {
         instructions.push(d_inst);
     }
 
+    // Link forward companion pointers (e.g. instruction preceding MMBIN or EXTRAARG)
+    for pc in 0..instructions.len() {
+        if pc + 1 < instructions.len() {
+            let next_role = &instructions[pc + 1].role;
+            if next_role == "companion" || next_role == "extra_argument" {
+                instructions[pc].companion_pc = Some(pc + 1);
+            }
+        }
+    }
+
     let mut child_protos = Vec::with_capacity(proto.protos.len());
     for child in &proto.protos {
         let child_disasm = disassemble_proto_lua54(child);
@@ -170,6 +180,13 @@ pub fn disassemble_instruction_lua54(
             operands.push(op_reg("A", raw.a));
             if pc + 1 < proto.instructions.len() {
                 companion_pc = Some(pc + 1);
+                let next_raw = RawInstruction54::decode(proto.instructions[pc + 1].raw_word);
+                if next_raw.opcode == Some(Opcode54::Extraarg) {
+                    let ax = next_raw.ax as usize;
+                    let res = resolve_const(proto, ax, &inst_id, &source, &mut diagnostics);
+                    let prev = res.as_ref().map(|c| c.preview.clone());
+                    comment = prev;
+                }
             }
         }
 
@@ -364,6 +381,10 @@ pub fn disassemble_instruction_lua54(
         }
 
         Opcode54::Mmbin => {
+            role = "companion".to_string();
+            if pc > 0 {
+                companion_pc = Some(pc - 1);
+            }
             operands.push(op_reg("A", raw.a));
             operands.push(op_reg("B", raw.b));
             operands.push(op_unsigned("C", raw.c as u64));
@@ -373,6 +394,10 @@ pub fn disassemble_instruction_lua54(
         }
 
         Opcode54::Mmbini => {
+            role = "companion".to_string();
+            if pc > 0 {
+                companion_pc = Some(pc - 1);
+            }
             operands.push(op_reg("A", raw.a));
             operands.push(op_signed("sB", raw.sb as i64));
             operands.push(op_unsigned("C", raw.c as u64));
@@ -383,6 +408,10 @@ pub fn disassemble_instruction_lua54(
         }
 
         Opcode54::Mmbink => {
+            role = "companion".to_string();
+            if pc > 0 {
+                companion_pc = Some(pc - 1);
+            }
             operands.push(op_reg("A", raw.a));
             let b_idx = raw.b as usize;
             let res = resolve_const(proto, b_idx, &inst_id, &source, &mut diagnostics);
@@ -512,7 +541,37 @@ pub fn disassemble_instruction_lua54(
 
         Opcode54::Closure => {
             operands.push(op_reg("A", raw.a));
-            operands.push(op_unsigned("Bx", raw.bx as u64));
+            let bx = raw.bx as usize;
+            let res_proto = if let Some(child) = proto.protos.get(bx) {
+                Some(ResolvedFact::Prototype {
+                    index: bx,
+                    id: child.id.clone(),
+                })
+            } else {
+                diagnostics.push(Diagnostic {
+                    code: "L54-OOB-PROTO".to_string(),
+                    category: DiagnosticCategory::Instruction,
+                    severity: Severity::Error,
+                    target: inst_id.clone(),
+                    message: format!(
+                        "Prototype index {bx} out of bounds (child proto table length {})",
+                        proto.protos.len()
+                    ),
+                    source: Some(source.clone()),
+                    evidence: None,
+                    suggested_action: None,
+                    help_topic: None,
+                });
+                None
+            };
+            operands.push(DisassembledOperand {
+                name: "Bx".to_string(),
+                kind: OperandKind::ImmediateUnsigned {
+                    value: raw.bx as u64,
+                },
+                display: format!("{}", raw.bx),
+                resolved: res_proto,
+            });
         }
 
         Opcode54::Vararg => {
@@ -706,7 +765,6 @@ fn resolve_const_tagged(
             suggested_action: None,
             help_topic: None,
         });
-
         return None;
     };
 
@@ -724,7 +782,7 @@ fn resolve_const_tagged(
         ConstantValue::Integer { val, .. } => format!("{val}"),
         ConstantValue::Float { val, .. } => format_float(*val),
         ConstantValue::ShortString(s) | ConstantValue::LongString(s) => {
-            format!("\"{}\"", s.display)
+            format_string_preview(&s.display)
         }
     };
     Some(ResolvedConstInfo {
@@ -733,6 +791,16 @@ fn resolve_const_tagged(
         preview,
         is_k,
     })
+}
+
+fn format_string_preview(s: &str) -> String {
+    let max_len = 64;
+    if s.len() > max_len {
+        let truncated: String = s.chars().take(max_len).collect();
+        format!("\"{truncated}...\"")
+    } else {
+        format!("\"{s}\"")
+    }
 }
 
 fn format_float(val: f64) -> String {

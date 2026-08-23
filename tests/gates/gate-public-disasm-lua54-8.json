@@ -13,18 +13,22 @@
   ],
   "expected_tests": [
     "test_cli_disasm_json_and_text_goldens",
+    "test_cli_explain_never_reports_static_effects_as_fact",
     "test_exact_signed_immediate_and_control_flow_goldens",
     "test_killer_probe_independent_decoder_mutation_rejected_by_comparator",
     "test_killer_probe_json_mutation_rejected_by_comparator",
     "test_killer_probe_missing_jump_target_rejected_by_comparator",
     "test_killer_probe_missing_k_flag_rejected_by_comparator",
+    "test_killer_probe_missing_resolved_constant_rejected_by_comparator",
     "test_killer_probe_missing_source_line_rejected_by_comparator",
     "test_killer_probe_oob_constant_reference_emits_diagnostic",
     "test_killer_probe_signed_operand_mutation_rejected_by_comparator",
     "test_killer_probe_text_renderer_mutation_rejected_by_golden",
     "test_killer_probe_unknown_opcode_produces_structured_diagnostic",
+    "test_public_disasm_schema_major_and_hash_pinned",
     "test_three_way_agreement_on_all_10_fixtures"
   ],
+
   "required_compiler_version": "Lua 5.4.8",
   "required_compiler_sha256": "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",
   "required_fixtures": [

@@ -5,7 +5,7 @@
 
 #![forbid(unsafe_code)]
 
-use luad_core::disasm::{DisassembledPrototype, OperandKind};
+use luad_core::disasm::{DisassembledPrototype, OperandKind, ResolvedFact};
 
 use crate::independent_lua54_oracle::{IndependentInstruction54, IndependentOpcode54};
 use crate::listing_parser::{DumpLineInfo, LuacProtoDump};
@@ -63,6 +63,27 @@ pub enum DisasmComparisonError {
         field_name: String,
         expected_k: u8,
         actual_k: u8,
+    },
+    RoleMismatch {
+        pc: usize,
+        expected: String,
+        actual: String,
+    },
+    CompanionMismatch {
+        pc: usize,
+        detail: String,
+    },
+    ConstantResolutionMismatch {
+        pc: usize,
+        detail: String,
+    },
+    PrototypeResolutionMismatch {
+        pc: usize,
+        detail: String,
+    },
+    UpvalueResolutionMismatch {
+        pc: usize,
+        detail: String,
     },
     JsonMismatch {
         pc: usize,
@@ -264,7 +285,7 @@ pub fn compare_proto_three_way(
                         }
                     }
                 }
-                _ => (),
+                _ => {}
             }
         }
 
@@ -345,17 +366,119 @@ pub fn compare_proto_three_way(
             });
         }
 
-        // 7. CLI JSON agreement if provided
+        // 7. Role and Companion Verification
+        if let Some(op) = indep_inst.opcode {
+            match op {
+                IndependentOpcode54::Mmbin
+                | IndependentOpcode54::Mmbini
+                | IndependentOpcode54::Mmbink => {
+                    if prod_inst.role != "companion" {
+                        return Err(DisasmComparisonError::RoleMismatch {
+                            pc,
+                            expected: "companion".to_string(),
+                            actual: prod_inst.role.clone(),
+                        });
+                    }
+                    if pc > 0 && prod_inst.companion_pc != Some(pc - 1) {
+                        return Err(DisasmComparisonError::CompanionMismatch {
+                            pc,
+                            detail: format!(
+                                "Metamethod companion at PC {pc} must link back to PC {}",
+                                pc - 1
+                            ),
+                        });
+                    }
+                }
+                IndependentOpcode54::Extraarg => {
+                    if prod_inst.role != "extra_argument" {
+                        return Err(DisasmComparisonError::RoleMismatch {
+                            pc,
+                            expected: "extra_argument".to_string(),
+                            actual: prod_inst.role.clone(),
+                        });
+                    }
+                    if pc > 0 && prod_inst.companion_pc != Some(pc - 1) {
+                        return Err(DisasmComparisonError::CompanionMismatch {
+                            pc,
+                            detail: format!(
+                                "EXTRAARG at PC {pc} must link back to companion instruction at PC {}",
+                                pc - 1
+                            ),
+                        });
+                    }
+                }
+                _ => {
+                    if prod_inst.role != "instruction" {
+                        return Err(DisasmComparisonError::RoleMismatch {
+                            pc,
+                            expected: "instruction".to_string(),
+                            actual: prod_inst.role.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // 8. Resolved Constants and Upvalues
+        for op in &prod_inst.operands {
+            if let Some(resolved) = &op.resolved {
+                match resolved {
+                    ResolvedFact::Constant {
+                        index,
+                        formatted_preview,
+                        ..
+                    } => {
+                        if formatted_preview.is_empty() {
+                            return Err(DisasmComparisonError::ConstantResolutionMismatch {
+                                pc,
+                                detail: format!("Resolved constant {index} has empty preview"),
+                            });
+                        }
+                    }
+                    ResolvedFact::Upvalue { index, .. }
+                        if *index != indep_inst.b && *index != indep_inst.a =>
+                    {
+                        return Err(DisasmComparisonError::UpvalueResolutionMismatch {
+                            pc,
+                            detail: format!(
+                                "Resolved upvalue index {index} does not match operand"
+                            ),
+                        });
+                    }
+                    ResolvedFact::Prototype { index, .. } if *index != indep_inst.bx as usize => {
+                        return Err(DisasmComparisonError::PrototypeResolutionMismatch {
+                            pc,
+                            detail: format!("Resolved prototype index {index} does not match Bx"),
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // 9. CLI JSON agreement if provided
         if let Some(json_proto) = cli_json_proto {
             let json_inst = &json_proto.instructions[pc];
             if json_inst != prod_inst {
                 return Err(DisasmComparisonError::JsonMismatch {
                     pc,
                     detail: format!(
-                        "JSON instruction at PC {pc} did not match production instruction"
+                        "JSON instruction at PC {pc} did not match production instruction: JSON={json_inst:?}, PROD={prod_inst:?}"
                     ),
                 });
             }
+        }
+    }
+
+    // Recursively compare all child prototypes if present
+    if let Some(json_proto) = cli_json_proto {
+        if json_proto.child_protos.len() != prod_proto.child_protos.len() {
+            return Err(DisasmComparisonError::InstructionCountMismatch {
+                proto_id: prod_proto.id.to_string(),
+                luac_count: 0,
+                independent_count: 0,
+                production_count: prod_proto.child_protos.len(),
+            });
         }
     }
 
