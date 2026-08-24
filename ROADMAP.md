@@ -30,15 +30,33 @@ register `B`, fixed-role register `C`, conditional RK operands, implicit registe
 spans, and public diagnostic discoverability. Each slice owns one field or semantic
 distinction and one canonical gate.
 
+The `B` and `C` slices derive operand roles from executed Lua 5.1 VM semantics, with
+the official opcode-mode table serving as a mechanically checked input rather than an
+unexamined authority. Contextually ignored fields and declared roles that the VM does
+not read, including `OP_TEST.B`, must be named in the acceptance oracle. Unsigned size
+hints and counts such as `NEWTABLE.B/C`, `SETLIST.B`, and `TFORLOOP.C` must never
+acquire register diagnostics.
+
+Prototype-identity acceptance compares every referenced child path across disassembly,
+queries, xrefs, and export. A surface may not render a raw child index as a top-level
+prototype path.
+
 Exit outcome: valid compiler-produced fixtures have no unjustified diagnostics,
 targeted corruptions produce exact documented diagnostics, and every emitted code is
-present in the public catalog.
+present in the public catalog. Acceptance also exercises manifest-pinned,
+redistributable embedded-firmware cases that contain operand values and prototype
+depths absent from small compiler fixtures.
 
 ## 2. Exact Lua 5.1 target qualification
 
 Stock Lua 5.1 layouts and the supported LNUM32 profile need separate promotion
 boundaries. Each target must identify its compiler or vendor authority, profile,
 layout, public fixtures, schemas, supported command surfaces, and known limitations.
+
+Qualification includes a reproducible corpus manifest with artifact provenance,
+expected parse status, expected validation verdict, and bounded execution. Plain Lua
+source and supported bytecode profiles remain distinguishable outcomes. Private
+corpora may supplement this evidence but cannot be the only promotion proof.
 
 Exit outcome: a release manifest promotes one exact Lua 5.1 profile/layout target at
 a time. Evidence for one target cannot substitute for another.
