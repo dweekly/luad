@@ -11,6 +11,9 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Validation
 
+- Lua 5.1 validation and public disassembly now use an exhaustive VM-derived authority
+  for fixed direct-register field `B`, exclude scalar/count/unused and closure-binding
+  fields, and avoid misclassifying bit 8 of a direct register as an RK constant.
 - Lua 5.1 disassembly and validation now use the executed VM role of field `A` across
   all 38 stock opcodes, including register-bearing `CLOSE`, non-register `JMP` and
   comparison flags, and ignored closure-binding descriptor fields.
@@ -32,6 +35,9 @@ All notable changes will be documented here. The project has not yet made a prod
 - Refined agent orchestration with provider preflight, staged acceptance outlines,
   proportional evidence levels, subscription-aware usage checkpoints, and
   steward-owned final verification.
+- Added repository-owned provider wrappers, curated context packets, ranged reads,
+  semantic edit checkpoints, post-interrupt diff inspection, aggregate per-model
+  sprint accounting, and mandatory remote preservation.
 - Established a canonical documentation index with freshness triggers and consolidated
   the dated TP-Link/OpenWrt reports into present-facing embedded-firmware requirements.
 - Reclassified all implemented dialects as experimental pending executable proof gates.

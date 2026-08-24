@@ -152,6 +152,14 @@ The steward reviews tests for vacuous loops, shared production code on both side
 comparison, assertions that check only existence or counts, and mutations that never
 reach the comparator. Only then is the acceptance commit frozen.
 
+Acceptance authors receive a curated context packet: the sprint contract and hash,
+the exact relevant source files or line ranges, the existing public schema boundary,
+and the permitted paths. They do not begin by rereading the whole repository or this
+workflow. Files too large for one reliable tool read are inspected in explicit ranges.
+Every authoring prompt owns one semantic checkpoint, such as one durable red test or
+one table audit. A file write is not a checkpoint until the steward verifies the named
+assertion, expected red defect, and diff scope.
+
 ### Proportional evidence levels
 
 Select the least expensive level that can falsify the claim:
@@ -241,7 +249,7 @@ speedup alone is not sufficient authority to parallelize.
 
 ## 7. CLI orchestration
 
-The installed interfaces inspected on 2026-08-23 are:
+The installed interfaces inspected on 2026-08-24 are:
 
 - Claude Code `2.1.241`, available as `claude`;
 - Antigravity CLI `1.1.19`, available as `agy`;
@@ -284,42 +292,19 @@ Use a staged invocation. The read-only outline stage is deliberately inexpensive
 has no edit or shell tools:
 
 ```console
-env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
-  claude -p \
-  --safe-mode \
-  --strict-mcp-config \
-  --mcp-config '{"mcpServers":{}}' \
-  --model opus \
-  --effort high \
-  --permission-mode plan \
-  --tools "Read,Glob,Grep" \
-  --output-format json \
-  --json-schema ACCEPTANCE_OUTLINE_SCHEMA \
-  --no-session-persistence \
-  "Read the sprint and workflow. Return the minimum acceptance outline. Do not edit files or run commands."
+scripts/agents/claude-opus.sh readonly /tmp/sprint-outline-prompt.txt
 ```
 
 After steward approval, start a separate authoring invocation with the approved outline
 included in the prompt:
 
 ```console
-env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
-  claude -p \
-  --safe-mode \
-  --strict-mcp-config \
-  --mcp-config '{"mcpServers":{}}' \
-  --model opus \
-  --effort high \
-  --permission-mode dontAsk \
-  --tools "Read,Glob,Grep,Edit,Write,Bash" \
-  --allowedTools "Read,Glob,Grep,Edit,Write,Bash(cargo test -p luad-oracle --test SPRINT_TEST -- --nocapture)" \
-  --output-format stream-json \
-  "Implement only the approved acceptance outline. Produce the first durable red test before expanding the suite. Do not modify production code."
+scripts/agents/claude-opus.sh author /tmp/sprint-author-prompt.txt SPRINT_TEST
 ```
 
-`--tools` controls which built-in tools exist. `--allowedTools` preapproves matching
-uses; it is not an exclusive allowlist while the permission mode can still ask for
-approval. `dontAsk` makes every unmatched request fail closed. Prefer a shell-free
+`--allowedTools` preapproves matching uses; it is not an exclusive allowlist while the
+permission mode can still ask for approval. `dontAsk` makes every unmatched request
+fail closed. Prefer a shell-free
 authoring invocation with `Read,Glob,Grep,Edit,Write`; add `Bash` only after the exact
 focused test command is known. Broad patterns such as `Bash(cargo test *)` are not an
 acceptable substitute for an exact command.
@@ -337,15 +322,15 @@ compiler-directed correction, prefer a fresh prompt containing the exact diagnos
 and allowed paths; resume a large session only when preserving its context is worth
 reloading it.
 
-`--safe-mode` disables project customizations while preserving Claude subscription
-authentication. The strict empty MCP configuration and explicit tool list keep the
-session scoped. Pass every required file and instruction explicitly. Verify the init
-event reports `claude-opus-5`, no unintended MCP servers, and only the allowed built-in
-tools; the `opus` alias alone is not evidence. Do not use
+The wrapper removes Console credentials, verifies `claude.ai` authentication, pins the
+current `opus` alias at high effort, disables slash commands and connected MCP servers,
+and constrains preapproved tools. Pass every required file and instruction explicitly.
+Verify the init event resolves the expected canonical Opus model; the alias alone is
+not evidence. Do not use
 `--dangerously-skip-permissions`.
 
-Independent review uses the same safe mode, strict empty MCP configuration, and
-shell-free tools. An eight-turn ceiling is normally sufficient for one sprint contract,
+Independent review uses the same read-only wrapper and shell-free tools. An eight-turn
+ceiling is normally sufficient for one sprint contract,
 its frozen acceptance module, and the candidate production paths. Increase the review
 surface only when the claim requires it; a large duplicated oracle is a reason to
 narrow acceptance, not automatically to allocate more reviewer context.
@@ -357,20 +342,12 @@ Antigravity supports non-interactive print mode, exact model and effort selectio
 streaming output, JSON-schema-constrained final output, timeouts, and resumable
 conversations.
 
-Representative invocation from the implementation worktree:
+Representative invocations from the implementation worktree:
 
 ```console
-agy --print='Implement only docs/NEXT-SPRINT.md against the frozen acceptance commit. Do not edit the sprint contract, acceptance tests, fixtures, sprint gate, or shared proof harness. Run only the named focused acceptance test and stop at the candidate checkpoint.' \
-  --model gemini-3.7-flash-high \
-  --effort high \
-  --mode accept-edits \
-  --sandbox \
-  --output-format json \
-  --print-timeout 30m
+scripts/agents/agy-gemini.sh plan /tmp/sprint-plan-prompt.txt
+scripts/agents/agy-gemini.sh implement /tmp/sprint-implementation-prompt.txt
 ```
-
-`agy` treats `-p` and `--print` as value-taking options. Attach the prompt with
-`-p='...'` or `--print='...'`; a bare `-p` consumes the next option as its prompt.
 
 Before allowing edits, request a read-only implementation outline containing the
 expected production paths, invariants, smallest proposed change, and focused test
@@ -391,6 +368,26 @@ agent safety controls globally.
 For both tools, prompts should identify the exact sprint document, base and acceptance
 commits, allowed paths, forbidden paths, required gate, and stop condition. Store the
 prompt text or its SHA-256 with the handoff when reproducibility matters.
+
+Repository-owned wrappers are the canonical provider interface:
+
+```console
+scripts/agents/claude-opus.sh readonly PROMPT_FILE
+scripts/agents/claude-opus.sh author PROMPT_FILE SPRINT_TEST_MODULE
+scripts/agents/agy-gemini.sh plan PROMPT_FILE
+scripts/agents/agy-gemini.sh implement PROMPT_FILE
+scripts/agents/agy-gemini.sh resume CONVERSATION_ID PROMPT_FILE
+```
+
+The wrappers pin model, effort, authentication, sandbox, permission mode, and output
+defaults. They fail closed instead of silently falling back from Claude subscription
+authentication to Console credentials. Provider flags change in the wrapper and this
+document together; sprint controllers do not reconstruct them from memory.
+
+When an invocation is interrupted or reaches a time limit during an edit, inspect the
+worktree before retrying: an in-flight tool call may have completed. Resume only after
+checking the semantic checkpoint, changed paths, and diff. More context or budget does
+not repair a blocked filesystem read, permission denial, or over-broad prompt.
 
 The implementation agent runs one focused sprint test while editing. It does not run
 the canonical gate or aggregate repository check. This keeps implementation feedback
@@ -446,7 +443,15 @@ Acceptance requires all of:
 If rejected, return a bounded defect list against the same sprint. Do not expand the
 sprint or review unrelated downstream work.
 
-### Step 8: advance
+### Step 8: preserve
+
+Once acceptance is authorized, push the acceptance and implementation branches, merge
+their reviewed pull requests in dependency order, push `main`, and run
+`scripts/verify-main-pushed.sh`. A local green revision is not a closed sprint.
+External publication still requires the repository owner's explicit or standing
+authorization.
+
+### Step 9: advance
 
 After acceptance, update `ROADMAP.md`, replace `docs/NEXT-SPRINT.md` with the next
 contract, and begin again from the newly accepted revision.
@@ -460,11 +465,15 @@ acceptance-test overgrowth, or a gate that permits a known defect. The maintaine
 workflow describes the resulting present process; retrospective history belongs in
 the pull request, commit, or changelog.
 
-The retrospective records time to outline, time to first durable red, acceptance test
-and line count, implementation turns, permission denials, steward corrections,
-canonical-gate duration, aggregate-check duration, resolved model identity, allocation
-status, and API-equivalent usage when the provider reports it. These measurements are
-diagnostic signals rather than dollar ceilings for subscription-authenticated runs.
+The controller collects measurements during the loop without narrating them at every
+iteration. The sprint-close report aggregates, separately for the controller,
+acceptance/review model, and implementation model: invocation or round count, failed
+infrastructure attempts, wall time, input/output/thinking/cache tokens where exposed,
+permission denials, steward corrections, canonical-gate duration, aggregate-check
+duration, resolved model identity, authentication mode, allocation status, and actual
+or API-equivalent usage. Unavailable measurements are labeled unavailable rather than
+estimated. These measurements are diagnostic signals rather than dollar ceilings for
+subscription-authenticated runs.
 
 ## 9. Handoff format
 
@@ -536,3 +545,5 @@ document. Deletion also removes its index entry and repairs all references.
   unpromoted.
 - No agent may broaden authority from “finish the sprint” into releasing, publishing,
   pushing, deleting user work, or changing external systems.
+- A sprint is not reported as accepted until its authorized reviewed commits are
+  merged, pushed, and verified against the remote default branch.

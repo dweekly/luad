@@ -25,17 +25,17 @@ comment, text rendering, and xref. Direct register fields, implicit register spa
 non-register scalar fields need independently proved domain rules before target
 qualification.
 
-Qualification advances through separately accepted slices beginning with fixed-role
-register `B`, followed by fixed-role register `C`, conditional RK operands,
+Qualification advances through separately accepted slices for fixed-role register `C`,
+conditional RK operands,
 closure-capture source bounds, implicit register spans, and public diagnostic
 discoverability. Each slice owns one field or semantic distinction and one canonical
 gate.
 
-The `B` and `C` slices derive operand roles from executed Lua 5.1 VM semantics, with
+Operand-role slices derive their authority from executed Lua 5.1 VM semantics, with
 the official opcode-mode table serving as a mechanically checked input rather than an
 unexamined authority. Contextually ignored fields and declared roles that the VM does
-not read, including `OP_TEST.B`, must be named in the acceptance oracle. Unsigned size
-hints and counts such as `NEWTABLE.B/C`, `SETLIST.B`, and `TFORLOOP.C` must never
+not read must be named in the acceptance oracle. Unsigned size hints and counts such
+as `NEWTABLE.C`, `SETLIST.C`, and `TFORLOOP.C` must never
 acquire register diagnostics.
 
 Prototype-identity acceptance compares every referenced child path across disassembly,
