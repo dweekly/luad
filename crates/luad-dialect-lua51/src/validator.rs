@@ -173,7 +173,8 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
         }
 
         // Register bounds validation (field B)
-        if !is_binding_descriptor && op.b_is_fixed_register() && raw.b as usize >= max_reg {
+        let is_reg_b = op.b_is_fixed_register() || (op.b_is_rk() && !raw.is_b_k());
+        if !is_binding_descriptor && is_reg_b && raw.b as usize >= max_reg {
             let diag = Diagnostic::error(
                 "L51-REG-002",
                 DiagnosticCategory::Instruction,
@@ -205,18 +206,17 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
 
         // RK operand constant bounds validation
         if op.mode() == OpMode51::IABC {
-            if raw.is_b_k()
-                && !op.b_is_fixed_register()
-                && op != crate::opcodes::Opcode51::GetUpval
-                && op != crate::opcodes::Opcode51::SetUpval
-            {
+            if raw.is_b_k() && op.b_is_rk() {
                 let k_idx = raw.b_index_k();
                 if k_idx >= proto.constants.len() {
                     let diag = Diagnostic::error(
                         "L51-CONST-004",
                         DiagnosticCategory::Instruction,
                         inst.id.clone(),
-                        format!("RK operand B constant index {k_idx} out of bounds (total constants: {})", proto.constants.len()),
+                        format!(
+                            "RK operand B constant index {k_idx} out of bounds (total constants: {})",
+                            proto.constants.len()
+                        ),
                     )
                     .with_source(inst.source.clone());
                     diags.push(diag);
@@ -229,7 +229,10 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
                         "L51-CONST-005",
                         DiagnosticCategory::Instruction,
                         inst.id.clone(),
-                        format!("RK operand C constant index {k_idx} out of bounds (total constants: {})", proto.constants.len()),
+                        format!(
+                            "RK operand C constant index {k_idx} out of bounds (total constants: {})",
+                            proto.constants.len()
+                        ),
                     )
                     .with_source(inst.source.clone());
                     diags.push(diag);
@@ -537,7 +540,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validator_register_b_fixed_and_deferred_rk() {
+    fn test_validator_register_b_fixed_and_scalar() {
         let fixed_b_ops = [
             Opcode51::Move,
             Opcode51::LoadNil,
@@ -627,19 +630,6 @@ mod tests {
             !d_nt.iter().any(|d| d.code == "L51-REG-002"),
             "NEWTABLE.B must not report L51-REG-002"
         );
-
-        // Deferred RK opcodes (e.g. ADD, SETTABLE, EQ) with B=2 (no RK bit) must not report L51-REG-002
-        for op in [Opcode51::Add, Opcode51::SetTable, Opcode51::Eq] {
-            let inst_rk = RawInstruction51::encode_iabc(op, 0, 2, 0);
-            let proto_rk = make_test_proto(vec![inst_rk], 0, 0);
-            let chunk_rk = make_test_chunk(proto_rk);
-            let (_, d_rk) = validate_chunk_lua51(&chunk_rk);
-            assert!(
-                !d_rk.iter().any(|d| d.code == "L51-REG-002"),
-                "Deferred RK opcode {:?} must not report L51-REG-002",
-                op
-            );
-        }
     }
 
     #[test]

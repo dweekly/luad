@@ -207,6 +207,24 @@ impl Opcode51 {
         )
     }
 
+    /// Returns `true` if field `B` is a conditional RK operand (register or constant).
+    #[must_use]
+    pub const fn b_is_rk(self) -> bool {
+        matches!(
+            self,
+            Self::SetTable
+                | Self::Add
+                | Self::Sub
+                | Self::Mul
+                | Self::Div
+                | Self::Mod
+                | Self::Pow
+                | Self::Eq
+                | Self::Lt
+                | Self::Le
+        )
+    }
+
     /// Returns `true` if field `C` is used as an unconditional direct register bounded by `maxstacksize`.
     #[must_use]
     pub const fn c_is_fixed_register(self) -> bool {

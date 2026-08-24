@@ -21,14 +21,13 @@ public diagnostic needs discoverable semantics, severity, category, and a useful
 action.
 
 Prototype references must retain their owning prototype path in every structured fact,
-comment, text rendering, and xref. Direct register fields, implicit register spans, and
-non-register scalar fields need independently proved domain rules before target
-qualification.
+comment, text rendering, and xref. Remaining operand qualification must preserve the
+same owner isolation while proving implicit register spans and closure-capture sources.
 
-Qualification advances through separately accepted slices for remaining conditional
-RK root fields, recursive RK ownership, non-RK role exclusion, closure-capture source
-bounds, implicit register spans, and public diagnostic discoverability. Each slice owns
-one field or semantic distinction and one canonical gate.
+Qualification advances through separately accepted slices for recursive RK ownership,
+closure-capture source bounds, implicit register spans, and public diagnostic
+discoverability. Each slice owns one field or semantic distinction and one canonical
+gate.
 
 Operand-role slices derive their authority from executed Lua 5.1 VM semantics, with
 the official opcode-mode table serving as a mechanically checked input rather than an
