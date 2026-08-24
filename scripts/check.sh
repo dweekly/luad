@@ -10,9 +10,9 @@ cargo fmt --all -- --check
 echo "==> agent wrapper configuration"
 bash -n scripts/agents/agy-gemini.sh scripts/agents/claude-opus.sh
 actual_agy_config=$(scripts/agents/agy-gemini.sh config)
-expected_agy_config=$'model=gemini-3.7-flash-high\neffort=high'
+expected_agy_config=$'model=gemini-3.7-flash-high\nreasoning=high-model-variant'
 if [[ "$actual_agy_config" != "$expected_agy_config" ]]; then
-  echo "unexpected Antigravity model or effort configuration" >&2
+  echo "unexpected Antigravity model or reasoning configuration" >&2
   exit 1
 fi
 
