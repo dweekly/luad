@@ -206,6 +206,32 @@ impl Opcode51 {
                 | Self::TestSet
         )
     }
+
+    /// Returns `true` if field `C` is used as an unconditional direct register bounded by `maxstacksize`.
+    #[must_use]
+    pub const fn c_is_fixed_register(self) -> bool {
+        matches!(self, Self::Concat)
+    }
+
+    /// Returns `true` if field `C` is a conditional RK operand (register or constant).
+    #[must_use]
+    pub const fn c_is_rk(self) -> bool {
+        matches!(
+            self,
+            Self::GetTable
+                | Self::SetTable
+                | Self::SelfOp
+                | Self::Add
+                | Self::Sub
+                | Self::Mul
+                | Self::Div
+                | Self::Mod
+                | Self::Pow
+                | Self::Eq
+                | Self::Lt
+                | Self::Le
+        )
+    }
 }
 
 /// Lua 5.1 instruction format modes.
@@ -390,6 +416,52 @@ mod tests {
                     "{:?} should not use fixed register B",
                     opcode
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn test_c_is_fixed_register_matches_authority() {
+        for op in 0..=37 {
+            let opcode = Opcode51::from_u8(op).unwrap();
+            if opcode == Opcode51::Concat {
+                assert!(
+                    opcode.c_is_fixed_register(),
+                    "{:?} should use fixed register C",
+                    opcode
+                );
+            } else {
+                assert!(
+                    !opcode.c_is_fixed_register(),
+                    "{:?} should not use fixed register C",
+                    opcode
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_c_is_rk_matches_authority() {
+        let rk_c = [
+            Opcode51::GetTable,
+            Opcode51::SetTable,
+            Opcode51::SelfOp,
+            Opcode51::Add,
+            Opcode51::Sub,
+            Opcode51::Mul,
+            Opcode51::Div,
+            Opcode51::Mod,
+            Opcode51::Pow,
+            Opcode51::Eq,
+            Opcode51::Lt,
+            Opcode51::Le,
+        ];
+        for op in 0..=37 {
+            let opcode = Opcode51::from_u8(op).unwrap();
+            if rk_c.contains(&opcode) {
+                assert!(opcode.c_is_rk(), "{:?} should be RK C", opcode);
+            } else {
+                assert!(!opcode.c_is_rk(), "{:?} should not be RK C", opcode);
             }
         }
     }
