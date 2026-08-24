@@ -175,14 +175,27 @@
     {
       "type": "object",
       "required": [
+        "available_fact_count",
         "diagnostic_count",
+        "emitted_fact_count",
         "instruction_count",
+        "is_truncated",
         "path",
         "record_type",
         "status"
       ],
       "properties": {
+        "available_fact_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
         "diagnostic_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "emitted_fact_count": {
           "type": "integer",
           "format": "uint",
           "minimum": 0.0
@@ -197,6 +210,9 @@
           "type": "integer",
           "format": "uint",
           "minimum": 0.0
+        },
+        "is_truncated": {
+          "type": "boolean"
         },
         "path": {
           "type": "string"

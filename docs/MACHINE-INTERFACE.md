@@ -143,6 +143,13 @@ Prototype paths and enclosing fields are context, not replacements for that offs
 Lua 5.1 profile identity and header-field meaning are present in machine output but
 remain experimental until an exact target release is promoted.
 
+### `export`
+
+Batch exports firmware artifacts in streaming JSONL format.
+`--max-facts-per-file N` bounds the number of counted fact records (`prototype`,
+`instruction`, `constant`, `upvalue`, `xref`) emitted per input file while
+preserving stream framing, diagnostics, and per-file truncation metadata.
+
 ### `compile`
 
 The command is visible but intentionally unsupported and exits with code 4. It must not be used to execute untrusted source.
@@ -155,7 +162,13 @@ offset by a checksum. The checksum detects cross-context reuse; it is not an
 authentication mechanism. The CLI also accepts an explicit integer offset in
 `0..=total_matches`; integer offsets are not bound to a prior response.
 
-Any future bounded export or neighborhood command must expose truncation explicitly and deterministically.
+`export` supports `--max-facts-per-file N` to bound ordinary counted facts per
+input while preserving control records (`export_start`, `file_start`,
+`diagnostic`, `file_end`, `export_end`). Each `file_end` record reports
+`is_truncated`, `emitted_fact_count`, and `available_fact_count`.
+`instruction_count` and `export_end.total_instructions` count emitted
+`instruction` records, so they can be lower than the number of available
+instructions when a fact bound truncates the stream.
 
 ## Capability evidence
 

@@ -142,4 +142,7 @@ pub struct FileEndRecord {
     pub error: Option<String>,
     pub instruction_count: usize,
     pub diagnostic_count: usize,
+    pub is_truncated: bool,
+    pub emitted_fact_count: usize,
+    pub available_fact_count: usize,
 }

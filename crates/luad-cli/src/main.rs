@@ -1196,6 +1196,9 @@ enum ExportRecord {
         error: Option<String>,
         instruction_count: usize,
         diagnostic_count: usize,
+        is_truncated: bool,
+        emitted_fact_count: usize,
+        available_fact_count: usize,
     },
     ExportEnd {
         files_processed: usize,
@@ -1205,11 +1208,73 @@ enum ExportRecord {
     },
 }
 
+struct FactEmitter {
+    max_facts: Option<usize>,
+    emitted_count: usize,
+    instruction_count: usize,
+}
+
+impl FactEmitter {
+    fn new(max_facts: Option<usize>) -> Self {
+        Self {
+            max_facts,
+            emitted_count: 0,
+            instruction_count: 0,
+        }
+    }
+
+    fn should_emit(&self) -> bool {
+        match self.max_facts {
+            Some(limit) => self.emitted_count < limit,
+            None => true,
+        }
+    }
+
+    fn emit_fact<T: serde::Serialize>(&mut self, record_type: &str, data: &T) -> bool {
+        if !self.should_emit() {
+            return false;
+        }
+        let rec = JsonlDataRecord {
+            record_type: record_type.to_string(),
+            data,
+        };
+        println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+        self.emitted_count += 1;
+        true
+    }
+
+    fn emit_instruction(&mut self, inst: &luad_core::DisassembledInstruction) -> bool {
+        if !self.should_emit() {
+            return false;
+        }
+        let rec = JsonlDataRecord {
+            record_type: "instruction".to_string(),
+            data: inst,
+        };
+        println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+        self.emitted_count += 1;
+        self.instruction_count += 1;
+        true
+    }
+}
+
+fn count_available_facts_proto_tree(proto: &Prototype, disasm: &DisassembledPrototype) -> usize {
+    let mut count = 1 + disasm.instructions.len() + proto.constants.len() + proto.upvalues.len();
+    for (child, child_disasm) in proto.protos.iter().zip(disasm.child_protos.iter()) {
+        count += count_available_facts_proto_tree(child, child_disasm);
+    }
+    count
+}
+
 fn emit_export_proto_tree(
     proto: &Prototype,
     disasm: &DisassembledPrototype,
-    total_instructions: &mut usize,
+    emitter: &mut FactEmitter,
 ) {
+    if !emitter.should_emit() {
+        return;
+    }
+
     let proto_rec = JsonlDataRecord {
         record_type: "prototype".to_string(),
         data: ExportProtoMeta {
@@ -1227,35 +1292,33 @@ fn emit_export_proto_tree(
             protos_count: proto.protos.len(),
         },
     };
-    println!("{}", serde_json::to_string(&proto_rec).unwrap_or_default());
+    if !emitter.emit_fact("prototype", &proto_rec.data) {
+        return;
+    }
 
     for inst in &disasm.instructions {
-        *total_instructions += 1;
-        let rec = JsonlDataRecord {
-            record_type: "instruction".to_string(),
-            data: inst.clone(),
-        };
-        println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+        if !emitter.emit_instruction(inst) {
+            return;
+        }
     }
 
     for c in &proto.constants {
-        let rec = JsonlDataRecord {
-            record_type: "constant".to_string(),
-            data: c.clone(),
-        };
-        println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+        if !emitter.emit_fact("constant", c) {
+            return;
+        }
     }
 
     for u in &proto.upvalues {
-        let rec = JsonlDataRecord {
-            record_type: "upvalue".to_string(),
-            data: u.clone(),
-        };
-        println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+        if !emitter.emit_fact("upvalue", u) {
+            return;
+        }
     }
 
     for (child, child_disasm) in proto.protos.iter().zip(disasm.child_protos.iter()) {
-        emit_export_proto_tree(child, child_disasm, total_instructions);
+        if !emitter.should_emit() {
+            return;
+        }
+        emit_export_proto_tree(child, child_disasm, emitter);
     }
 }
 
@@ -1352,6 +1415,9 @@ fn handle_export(args: ExportArgs) {
                     error: Some(format!("Failed to read input file '{path_str}'")),
                     instruction_count: 0,
                     diagnostic_count: 1,
+                    is_truncated: false,
+                    emitted_fact_count: 0,
+                    available_fact_count: 0,
                 };
                 println!("{}", serde_json::to_string(&end_rec).unwrap_or_default());
                 continue;
@@ -1408,6 +1474,9 @@ fn handle_export(args: ExportArgs) {
                     error: Some(msg),
                     instruction_count: 0,
                     diagnostic_count: 1,
+                    is_truncated: false,
+                    emitted_fact_count: 0,
+                    available_fact_count: 0,
                 };
                 println!("{}", serde_json::to_string(&end_rec).unwrap_or_default());
                 continue;
@@ -1427,17 +1496,17 @@ fn handle_export(args: ExportArgs) {
         );
 
         let disasm = get_disasm_proto(&chunk.dialect, &chunk.main_proto);
-        let mut file_inst_count = 0;
-        emit_export_proto_tree(&chunk.main_proto, &disasm, &mut file_inst_count);
-        total_instructions += file_inst_count;
-
         let xref_index = XrefIndex::build(&chunk);
+        let available_fact_count =
+            count_available_facts_proto_tree(&chunk.main_proto, &disasm) + xref_index.entries.len();
+
+        let mut emitter = FactEmitter::new(args.max_facts_per_file);
+        emit_export_proto_tree(&chunk.main_proto, &disasm, &mut emitter);
+
         for entry in &xref_index.entries {
-            let rec = JsonlDataRecord {
-                record_type: "xref".to_string(),
-                data: entry.clone(),
-            };
-            println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+            if !emitter.emit_fact("xref", entry) {
+                break;
+            }
         }
 
         for diag in &chunk.diagnostics {
@@ -1449,13 +1518,19 @@ fn handle_export(args: ExportArgs) {
         }
 
         succeeded_count += 1;
+        total_instructions += emitter.instruction_count;
+
+        let is_truncated = emitter.emitted_count < available_fact_count;
         let end_rec = FileEndRecord {
             record_type: "file_end".to_string(),
             path: identity.path.clone(),
             status: "succeeded".to_string(),
             error: None,
-            instruction_count: file_inst_count,
+            instruction_count: emitter.instruction_count,
             diagnostic_count: chunk.diagnostics.len(),
+            is_truncated,
+            emitted_fact_count: emitter.emitted_count,
+            available_fact_count,
         };
         println!("{}", serde_json::to_string(&end_rec).unwrap_or_default());
     }
@@ -1476,5 +1551,64 @@ fn handle_export(args: ExportArgs) {
         ExitCode::InvalidInput.exit();
     } else {
         ExitCode::Success.exit();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fact_emitter_budget_and_counts() {
+        let mut emitter = FactEmitter::new(Some(2));
+        assert!(emitter.should_emit());
+        assert_eq!(emitter.emitted_count, 0);
+        assert_eq!(emitter.instruction_count, 0);
+
+        assert!(emitter.emit_fact("prototype", &"proto_data"));
+        assert_eq!(emitter.emitted_count, 1);
+        assert_eq!(emitter.instruction_count, 0);
+
+        let dummy_inst = luad_core::DisassembledInstruction {
+            id: StableId::instruction(luad_core::ProtoPath::root(), 0),
+            pc: 0,
+            raw_word: 0,
+            raw_hex: "0x00000000".to_string(),
+            mnemonic: "MOVE".to_string(),
+            opcode_num: 0,
+            role: "instruction".to_string(),
+            encoded_operands: luad_core::EncodedOperands::default(),
+            line: None,
+            operands: vec![],
+            jump_target: None,
+            companion_pc: None,
+            metamethod: None,
+            comment: None,
+            confidence: luad_core::Confidence::Fact,
+            source: luad_core::SourceLocation {
+                byte_offset: 0,
+                byte_length: 4,
+                raw_hex: "00000000".to_string(),
+            },
+            diagnostics: vec![],
+        };
+
+        assert!(emitter.emit_instruction(&dummy_inst));
+        assert_eq!(emitter.emitted_count, 2);
+        assert_eq!(emitter.instruction_count, 1);
+
+        assert!(!emitter.should_emit());
+        assert!(!emitter.emit_fact("constant", &"const_data"));
+        assert_eq!(emitter.emitted_count, 2);
+    }
+
+    #[test]
+    fn test_fact_emitter_unbounded() {
+        let mut emitter = FactEmitter::new(None);
+        assert!(emitter.should_emit());
+        assert!(emitter.emit_fact("prototype", &"proto_data"));
+        assert!(emitter.emit_fact("constant", &"const_data"));
+        assert!(emitter.emit_fact("upvalue", &"upvalue_data"));
+        assert_eq!(emitter.emitted_count, 3);
     }
 }

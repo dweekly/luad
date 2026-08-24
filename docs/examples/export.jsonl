@@ -18,5 +18,5 @@
 {"record_type":"xref","data":{"source":"proto:0:pc:1","target":"proto:0:upvalue:0","relation":"reads"}}
 {"record_type":"xref","data":{"source":"proto:0:pc:2","target":"proto:0:k:1","relation":"reads"}}
 {"record_type":"xref","data":{"source":"proto:0:pc:4","target":"proto:0:k:2","relation":"reads"}}
-{"record_type":"file_end","path":"tests/fixtures/precompiled/lua54/hello.luac","status":"succeeded","instruction_count":10,"diagnostic_count":0}
+{"record_type":"file_end","path":"tests/fixtures/precompiled/lua54/hello.luac","status":"succeeded","instruction_count":10,"diagnostic_count":0,"is_truncated":false,"emitted_fact_count":18,"available_fact_count":18}
 {"record_type":"export_end","files_processed":1,"files_succeeded":1,"files_failed":0,"total_instructions":10}

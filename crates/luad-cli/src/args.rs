@@ -258,6 +258,10 @@ pub struct ExportArgs {
     #[arg(short, long, value_enum, default_value_t = OutputFormat::Jsonl)]
     pub format: OutputFormat,
 
+    /// Maximum number of counted facts (prototype, instruction, constant, upvalue, xref) to emit per input file.
+    #[arg(long)]
+    pub max_facts_per_file: Option<usize>,
+
     /// Explicit dialect override.
     #[arg(short, long)]
     pub dialect: Option<String>,
