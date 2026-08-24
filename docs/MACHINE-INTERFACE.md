@@ -112,11 +112,10 @@ ordered closure-binding records, not as independently executed `MOVE` or `GETUPV
 instructions. Closure descriptors remain experimental evidence and are excluded from
 standalone effects and executable CFG nodes.
 
-For Lua 5.1 `CLOSURE`, the structured operand's `resolved.id` is the authoritative
-child-prototype identity. The instruction `comment` and corresponding text suffix can
-currently flatten a nested child path to `proto:<Bx>`; callers must not use that
-presentation field as an object reference until the active prototype-identity gate
-closes this limitation.
+For Lua 5.1 `CLOSURE`, the structured operand's `resolved.id`, instruction `comment`,
+text suffix, and `instantiates` xref identify the same owner-relative child prototype.
+`Proto(i)` is the encoded child index within the owning prototype; it is not an
+artifact-wide prototype identity by itself.
 
 Constant-bearing operands must include both their encoded index and a typed,
 structured resolved value. Text may add an escaped, bounded preview; machine

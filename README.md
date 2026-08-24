@@ -8,9 +8,9 @@
 
 Lua 5.4.8 public disassembly has normalized typed agreement with the official
 listing and an independent decoder. Embedded Lua 5.1 profile selection,
-disassembly, reference-operand validation, closure captures, queries, and machine
-output have named experimental public-boundary gates. Exact Lua 5.1 target promotion
-remains roadmap work.
+disassembly, reference-operand validation, closure captures and prototype identity,
+queries, and machine output have named experimental public-boundary gates. Exact Lua
+5.1 target promotion remains roadmap work.
 
 All stock-Lua dialects remain **experimental** unless an exact release artifact
 for the current revision and profile says otherwise. Internal library gates do not
@@ -61,7 +61,7 @@ This table describes code present in the repository, not verified support status
 
 | Dialect | Opcode table | Parser/lifter present | Current evidence status |
 |---|---:|---|---|
-| Lua 5.1 | 38 | Yes | Experimental; public layout, profile, disassembly, reference-operand validation, closure, query, and machine-interface evidence exists; exact target promotion remains pending |
+| Lua 5.1 | 38 | Yes | Experimental; public layout, profile, disassembly, reference-operand validation, closure identity, query, and machine-interface evidence exists; exact target promotion remains pending |
 | Lua 5.2 | 40 | Yes | Experimental; proof gates incomplete |
 | Lua 5.3 | 47 | Yes | Experimental; proof gates incomplete |
 | Lua 5.4 | 83 | Yes | Experimental; public disassembly, validation, analysis, lossless, and machine-contract evidence exists; exact target promotion remains pending |
@@ -134,7 +134,7 @@ luad schema chunk
 luad schema instruction
 ```
 
-Machine consumers should read [docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md), including the current correctness warning, exit codes, stable-ID scope, truncation behavior, and stdout/stderr contract.
+Machine consumers should read [docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md), including the stability warning, exit codes, stable-ID scope, truncation behavior, and stdout/stderr contract.
 
 ## Contributing
 

@@ -4,6 +4,11 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+### Disassembly
+
+- Lua 5.1 `CLOSURE` operands, JSON comments, text suffixes, and prototype xrefs
+  now use the same owner-relative child prototype identity at every nesting depth.
+
 ### Validation
 
 - Lua 5.1 validation now applies upvalue, child-prototype, and comparison-boolean
