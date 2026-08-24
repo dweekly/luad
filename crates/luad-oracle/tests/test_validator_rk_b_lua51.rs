@@ -179,8 +179,8 @@ fn zero_constant_chunk(word: u32, maxstacksize: u8) -> Vec<u8> {
     bytes
 }
 
-fn find_inst<'a>(v: &'a Json, pc: u64) -> &'a Json {
-    fn walk<'a>(v: &'a Json, pc: u64) -> Option<&'a Json> {
+fn find_inst(v: &Json, pc: u64) -> &Json {
+    fn walk(v: &Json, pc: u64) -> Option<&Json> {
         if v.get("opcode_num").is_some() && v.get("pc").and_then(Json::as_u64) == Some(pc) {
             return Some(v);
         }
