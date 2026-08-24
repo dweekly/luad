@@ -4,16 +4,20 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/agents/claude-opus.sh readonly PROMPT_FILE
-  scripts/agents/claude-opus.sh author PROMPT_FILE TEST_MODULE
+  scripts/agents/claude-opus.sh review-fresh PROMPT_FILE
+  scripts/agents/claude-opus.sh acceptance-start PROMPT_FILE TEST_MODULE
+  scripts/agents/claude-opus.sh acceptance-resume SESSION_ID PROMPT_FILE TEST_MODULE
 
 Runs Claude Opus through the logged-in claude.ai subscription. Console API
 credentials are removed from the child environment so they cannot silently
 override the subscription. Output is Claude Code JSON.
 
-readonly  Read-only outline or review with Read, Glob, and Grep.
-author    Acceptance authorship with file edits and exactly one allowed command:
-          cargo test -p luad-oracle --test TEST_MODULE -- --nocapture
+review-fresh       Independent read-only review with no persisted session.
+acceptance-start   Start a persistent acceptance-author session.
+acceptance-resume  Inject a checkpoint into that same session.
+
+Acceptance sessions permit file edits and exactly one command:
+  cargo test -p luad-oracle --test TEST_MODULE -- --nocapture
 EOF
 }
 
@@ -23,9 +27,34 @@ if [[ ${1:-} == "--help" || ${1:-} == "-h" ]]; then
 fi
 
 stage=${1:-}
-prompt_file=${2:-}
+case "$stage" in
+  review-fresh)
+    prompt_file=${2:-}
+    test_module=
+    session_args=(--no-session-persistence)
+    ;;
+  acceptance-start)
+    prompt_file=${2:-}
+    test_module=${3:-}
+    session_args=()
+    ;;
+  acceptance-resume)
+    session_id=${2:-}
+    prompt_file=${3:-}
+    test_module=${4:-}
+    if [[ ! "$session_id" =~ ^[a-zA-Z0-9-]+$ ]]; then
+      echo "invalid Claude session ID" >&2
+      exit 2
+    fi
+    session_args=(--resume "$session_id")
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
 
-if [[ -z "$stage" || -z "$prompt_file" || ! -f "$prompt_file" ]]; then
+if [[ -z "$prompt_file" || ! -f "$prompt_file" ]]; then
   usage >&2
   exit 2
 fi
@@ -52,29 +81,23 @@ common=(
   --disable-slash-commands
   --no-chrome
   --output-format json
-  --no-session-persistence
 )
 clean_env=(env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL)
 
 case "$stage" in
-  readonly)
-    exec "${clean_env[@]}" claude "${common[@]}" \
+  review-fresh)
+    exec "${clean_env[@]}" claude "${common[@]}" "${session_args[@]}" \
       --permission-mode plan \
       --allowedTools "Read,Glob,Grep"
     ;;
-  author)
-    test_module=${3:-}
+  acceptance-start|acceptance-resume)
     if [[ ! "$test_module" =~ ^[a-zA-Z0-9_-]+$ ]]; then
       echo "TEST_MODULE must contain only letters, digits, underscores, or hyphens" >&2
       exit 2
     fi
     allowed="Read,Glob,Grep,Edit,Write,Bash(cargo test -p luad-oracle --test $test_module -- --nocapture)"
-    exec "${clean_env[@]}" claude "${common[@]}" \
+    exec "${clean_env[@]}" claude "${common[@]}" "${session_args[@]}" \
       --permission-mode dontAsk \
       --allowedTools "$allowed"
-    ;;
-  *)
-    usage >&2
-    exit 2
     ;;
 esac

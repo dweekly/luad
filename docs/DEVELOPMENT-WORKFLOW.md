@@ -292,14 +292,14 @@ Use a staged invocation. The read-only outline stage is deliberately inexpensive
 has no edit or shell tools:
 
 ```console
-scripts/agents/claude-opus.sh readonly /tmp/sprint-outline-prompt.txt
+scripts/agents/claude-opus.sh acceptance-start /tmp/sprint-outline-prompt.txt SPRINT_TEST
 ```
 
 After steward approval, start a separate authoring invocation with the approved outline
 included in the prompt:
 
 ```console
-scripts/agents/claude-opus.sh author /tmp/sprint-author-prompt.txt SPRINT_TEST
+scripts/agents/claude-opus.sh acceptance-resume SESSION_ID /tmp/sprint-author-prompt.txt SPRINT_TEST
 ```
 
 `--allowedTools` preapproves matching uses; it is not an exclusive allowlist while the
@@ -372,8 +372,9 @@ prompt text or its SHA-256 with the handoff when reproducibility matters.
 Repository-owned wrappers are the canonical provider interface:
 
 ```console
-scripts/agents/claude-opus.sh readonly PROMPT_FILE
-scripts/agents/claude-opus.sh author PROMPT_FILE SPRINT_TEST_MODULE
+scripts/agents/claude-opus.sh review-fresh PROMPT_FILE
+scripts/agents/claude-opus.sh acceptance-start PROMPT_FILE SPRINT_TEST_MODULE
+scripts/agents/claude-opus.sh acceptance-resume SESSION_ID PROMPT_FILE SPRINT_TEST_MODULE
 scripts/agents/agy-gemini.sh plan PROMPT_FILE
 scripts/agents/agy-gemini.sh implement PROMPT_FILE
 scripts/agents/agy-gemini.sh resume CONVERSATION_ID PROMPT_FILE
