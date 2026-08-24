@@ -11,6 +11,9 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Validation
 
+- Lua 5.1 `MOVE` and `GETUPVAL` closure-binding descriptors now validate capture
+  sources against the executing parent's register and upvalue bounds, with public
+  owner, descriptor, companion, typed-source, and physical-offset evidence.
 - Lua 5.1 nested-prototype RK validation now has public owner-isolation evidence for
   register and constant forms of both conditional operands, including stable child
   identities, physical offsets, and unresolved out-of-range machine facts.

@@ -1,55 +1,54 @@
-# Active sprint: Lua 5.1 closure-capture source bounds
+# Active sprint: Lua 5.1 numeric-for register spans
 
 Lane: patch. Target: one focused public regression and one pull request.
 
 ## Claim and researcher value
 
-Lua 5.1 closure-binding descriptors validate their capture source in the executing
-parent prototype. `MOVE` descriptors use the parent's register-file bound and
-`GETUPVAL` descriptors use the parent's upvalue bound. Diagnostics and disassembly
-retain the descriptor's physical location, stable parent instruction identity, source
-domain, destination upvalue position, and owning `CLOSURE` link.
+Lua 5.1 `FORPREP` and `FORLOOP` validate their fixed four-register window
+`R(A)..R(A+3)` against the owning prototype's register file. A valid base register
+cannot conceal an out-of-range implicit control register. Diagnostics retain the exact
+instruction identity and physical bytes so researchers can distinguish malformed loop
+state from suspicious control flow.
 
 ## Focused public regression
 
-Use the pinned `closures.luac` fixture and two independent descriptor mutations:
+Use the pinned `control_flow.luac` fixture. Its root prototype has
+`maxstacksize = 6`; `FORPREP` at PC 10, byte offset 109 and `FORLOOP` at PC 12, byte
+offset 117 both use `A = 2`, so their window ends at valid `R(5)`.
 
-- `proto:0/0`, PC 4, byte offset 179 is the `MOVE` descriptor owned by the `CLOSURE`
-  at PC 3. Set `B = 3`. The executing parent has `maxstacksize = 3`, while its child
-  `proto:0/0/0` has `maxstacksize = 4`, so only parent ownership produces exactly one
-  `L51-REG-002`.
-- `proto:0/0/0`, PC 7, byte offset 260 is the `GETUPVAL` descriptor owned by the
-  `CLOSURE` at PC 6. Set `B = 1` against the executing parent's single declared
-  upvalue and require exactly one `L51-UPVAL-001`.
+For each opcode, prove two independent public cases while preserving the original
+signed jump field:
 
-Pin the fixture hash and obtain the stated parent/child bounds from live `inspect`
-JSON. Validate live `validate` and selected-prototype `disasm` JSON against their
-schemas. For each probe, assert the exact diagnostic code, descriptor stable ID,
-physical source range and raw bytes. Assert disassembly retains
-`role = closure_binding`, the matching descriptor mnemonic, `companion_pc`, destination
-`upvalue[0]`, and a typed unresolved capture source with raw value `3` or `1`.
+- the original `A = 2` instruction produces no register-span diagnostic;
+- setting only `A = 3` leaves the base register valid but reports exactly one
+  `L51-REG-SPAN-001` on that instruction because the window ends at `R(6)`.
 
-The regression may be green without production changes. Acceptance requires the public
-proof, not a minimum production diff. New acceptance/support code is capped at 250
+Pin the fixture hash and obtain the root bound from live `inspect` JSON. Validate live
+`validate` JSON against its schema. Assert exact diagnostic code, stable ID, source
+offset, byte length, raw hex, and a message naming the opcode, window, and bound. Use
+selected-prototype `disasm` JSON to prove the opcode, typed `A = R(3)`, unchanged signed
+jump and target, and schema validity.
+
+Acceptance/support code is capped at 250 formatted lines and production code at 30
 formatted lines.
 
 ## Allowed scope
 
 - one focused module at
-  `crates/luad-oracle/tests/test_validator_closure_capture_bounds_lua51.rs`;
-- `crates/luad-dialect-lua51/src/validator.rs` or `disasm.rs` only if the public
-  regression exposes a descriptor-source defect;
+  `crates/luad-oracle/tests/test_validator_numeric_for_span_lua51.rs`;
+- `crates/luad-dialect-lua51/src/validator.rs`;
 - `CHANGELOG.md`, `README.md`, `ROADMAP.md`, and the next forward-looking sprint handoff
   after acceptance.
 
-Use the existing fixture, schemas, diagnostics, CLI selectors, and closure-binding facts
-unchanged. Do not copy a field-authority suite or add a shared test framework.
+Use the existing fixture, schemas, diagnostics, CLI selectors, and decoded instruction
+facts unchanged. Do not add a fixture, schema, gate, shared test framework, or general
+range-analysis abstraction.
 
 ## Non-goals
 
-Implicit register spans, descriptor count or opcode-class validation, new fixtures,
-schemas, gates, capability changes, target promotion, CFG changes, and fields outside
-the two capture-source probes are outside this patch.
+Variable-width `CALL`, `RETURN`, `SETLIST`, `TFORLOOP`, or `VARARG` spans; implicit
+effects in disassembly; CFG changes; diagnostic-catalog publication; capability changes;
+and target promotion are outside this patch.
 
 ## Verification and stop condition
 
@@ -57,14 +56,14 @@ The implementation agent runs only:
 
 ```console
 cargo build -p luad-cli --bin luad
-cargo test -p luad-oracle --test test_validator_closure_capture_bounds_lua51
+cargo test -p luad-oracle --test test_validator_numeric_for_span_lua51
 ```
 
-The steward reviews parent ownership, stable IDs, physical offsets, descriptor roles,
-and both exact diagnostic families, then pushes one pull request. GitHub CI supplies
-the aggregate repository run. One bounded correction is available; exceeding ten
-delegated minutes, 250 acceptance lines, or the allowed paths stops the turn for
-respecification.
+The steward reviews the four-register VM rule, mutation isolation, exact diagnostic,
+stable IDs, physical offsets, and unchanged jump facts, then pushes one pull request.
+GitHub CI supplies the aggregate repository run. One bounded correction is available;
+exceeding ten delegated minutes, 250 acceptance lines, 30 production lines, or the
+allowed paths stops the turn for respecification.
 
 After green CI, merge, verify clean `main == origin/main`, replace this document with
 the next forward-looking patch, and remove the temporary branch and worktree.
