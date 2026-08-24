@@ -1,134 +1,118 @@
-# Active sprint: Lua 5.1 conditional RK operand `C`
+# Active sprint: Lua 5.1 conditional RK operand `B`
 
-Status: acceptance contract. No downstream roadmap work begins before this sprint is
-accepted or explicitly respecified.
+Status: specification. Acceptance authorship begins from the accepted `main` revision.
 
 ## Claim
 
-For each stock Lua 5.1 opcode whose encoded `C` field is an RK operand, `luad disasm`
-and `luad validate` agree on the bit-selected domain:
+For each stock Lua 5.1 opcode whose encoded `B` field is an RK operand, `luad disasm`
+and `luad validate` agree on the bit-selected domain in the root prototype:
 
-- bit 8 clear means a register index that must be inside `0..maxstacksize`;
-- bit 8 set means a constant-table index that must be inside the owning prototype's
-  constant table.
-
-This sprint proves the root-prototype RK distinction. Recursive ownership and public
-non-RK exclusion each retain a separate qualification boundary.
+- bit 8 clear means a register index inside `0..maxstacksize`;
+- bit 8 set means a constant-table index inside the owning prototype's constant table.
 
 ## Researcher value
 
-A human or agent can trust every conditional `C` operand as either a bounded register
-or a resolved constant without reimplementing Lua's `BITRK` rule. Corrupt bytecode
-fails at the owning instruction with a domain-specific diagnostic instead of allowing
-an invalid register reference to enter later analysis.
+A human or agent can consume arithmetic, comparison, and table-write operands without
+reimplementing Lua's `BITRK` rule or mistaking a selected constant for a register.
+Malformed references produce a domain-specific diagnostic at the owning instruction.
 
-## Starting evidence
+## Required evidence
 
-- The accepted behavior baseline is the clean `main` revision containing the
-  `gate-validator-register-c-lua51` result.
-- Required prerequisite gates are `gate-proof-harness`, `gate-public-disasm-lua51`,
+- Base: clean `main` with `gate-validator-rk-c-lua51` accepted.
+- Prerequisites: `gate-proof-harness`, `gate-public-disasm-lua51`,
   `gate-validator-reference-operands-lua51`, and
-  `gate-validator-register-c-lua51`.
-- The required compiler is PUC-Rio Lua 5.1.5, reported as `Lua 5.1.5`, with SHA-256
+  `gate-validator-register-b-lua51`.
+- Compiler: PUC-Rio Lua 5.1.5, reported as `Lua 5.1.5`, SHA-256
   `eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239`.
-- Lua 5.1 remains experimental; this sprint does not promote a target.
+- Target: stock Lua 5.1 root prototypes. The target remains experimental.
+
+## Exact authority
+
+Acceptance owns an independent 38-row `(opcode -> B role)` table derived from executed
+PUC-Rio Lua 5.1.5 VM semantics. Exactly these opcodes have conditional RK field `B`:
+
+```text
+SETTABLE ADD SUB MUL DIV MOD POW EQ LT LE
+```
+
+The acceptance authority and production role table must agree on this exact set without
+sharing classifier code. Fixed registers, counts, booleans, size hints, upvalue indices,
+prototype indices, and unused fields retain their distinct roles.
+
+## Public boundaries
+
+For each of the ten RK-`B` opcodes, acceptance constructs otherwise-equivalent root
+instructions at four boundaries:
+
+| Encoding | Public operand | Validation result for `B` |
+|---|---|---|
+| `B = maxstacksize - 1` | typed register | clean |
+| `B = maxstacksize` | typed register | exactly one `L51-REG-002` |
+| `B = BITRK \| (constants.len() - 1)` | typed, resolved constant | clean |
+| `B = BITRK \| constants.len()` | selected constant | exactly one `L51-CONST-004` |
+
+A zero-length constant table uses selected index zero as its first invalid boundary.
+Diagnostics preserve instruction identity, physical word, source location, and owning
+prototype. Invalid constants remain typed as selected constants and never produce a
+register diagnostic.
+
+## Acceptance surface
+
+One sprint module contains exactly four tests:
+
+1. the independent 38-row authority has one row per official opcode, the exact ten-opcode
+   RK-`B` set, and killer mutations for addition, removal, and role substitution;
+2. every RK-`B` register boundary produces the exact public register behavior and
+   diagnostic identity;
+3. every RK-`B` constant boundary produces the exact public constant behavior,
+   resolution, and diagnostic identity, including a zero-constant owner;
+4. live JSON disassembly types the domain by bit 8 and agrees with the independent
+   expectation for mnemonic, physical field, typed operand, and resolved fact.
+
+The first authoring checkpoint is one durable red test demonstrating that a bit-8-clear
+RK-`B` value at `maxstacksize` does not yet produce `L51-REG-002`. The steward verifies
+the red defect and the exact authority before authorizing the remaining three tests.
+
+Acceptance also includes comparator mutations for a swapped domain, shifted boundary,
+missing resolved fact, and altered diagnostic target. Each mutation must be rejected by
+the same comparator used for the positive case.
 
 ## Non-goals
 
-- RK authority for field `B`;
-- recursive child-prototype RK bounds;
-- public validator exclusion sweeps for non-RK `C` roles;
-- automatic/explicit selection and strict/permissive equivalence beyond the existing
-  machine-contract gates;
-- fixed-register authority for `A`, `B`, or `C`;
-- implicit register spans or register provenance;
-- closure capture-source bounds;
-- new constant encodings, constant preview policy, or global/prototype resolution;
-- effects, sinks, taint, decompilation, persistent research state, dialect promotion,
-  or vendor opcode recovery.
+- recursive child-prototype RK ownership;
+- public exclusion sweeps for non-RK `B` or `C` roles;
+- fixed-register fields or implicit register spans;
+- closure capture-source bounds or register provenance;
+- new schemas, diagnostics, fixtures, constant encodings, or preview policy;
+- effects, sinks, taint, decompilation, persistent state, target promotion, or vendor
+  opcode recovery.
 
-## Exact opcode authority
-
-Acceptance owns an independent 38-row `(opcode -> C role)` table derived from executed
-PUC-Rio Lua 5.1.5 VM semantics. Exactly these opcodes have conditional RK field `C`:
-
-```text
-GETTABLE SETTABLE SELF ADD SUB MUL DIV MOD POW EQ LT LE
-```
-
-The production opcode-role authority and the independent acceptance table must agree
-on that set but may not call each other. `CONCAT.C` remains a fixed direct register;
-`LOADBOOL.C`, `TEST.C`, and `TESTSET.C` remain booleans; `NEWTABLE.C` remains a size
-hint; `CALL.C` and `TFORLOOP.C` remain result counts; `SETLIST.C` remains a list block
-index; all other physical `C` bits retain their defined non-RK or unused role.
-
-## Public behavior
-
-For every RK-`C` opcode, acceptance constructs equivalent instructions at these exact
-boundaries:
-
-| Encoding | Expected public meaning | Expected validation |
-|---|---|---|
-| `C = maxstacksize - 1` | typed register | clean for the `C` operand |
-| `C = maxstacksize` | typed register | exactly one `L51-REG-003` for field `C` |
-| `C = BITRK | (constants.len() - 1)` | typed and resolved constant | clean for the `C` operand |
-| `C = BITRK | constants.len()` | selected constant index | exactly one `L51-CONST-005` for field `C` |
-
-Zero-length constant tables use index `0` as the first invalid selected constant.
-Register bounds use the raw bit-8-clear index; constant bounds use the low eight-bit
-index. Diagnostics retain the owning prototype/instruction identity and source word.
-
-The public CLI must preserve the selected domain, resolved fact, owning root-prototype
-identity, exact instruction, source word, and diagnostic location for every boundary.
-
-## Independent acceptance
-
-Acceptance fits in one module with exactly four named tests and one compact
-table-driven oracle. It must prove:
-
-- every official opcode occurs exactly once and the exact 12-opcode RK-`C` set is
-  non-vacuous;
-- all four register/constant boundaries above hold for every RK-`C` opcode;
-- public disassembly emits register kinds for bit-8-clear values and resolved constant
-  facts for valid selected constants;
-- invalid selected constants remain represented as selected constants and produce the
-  exact constant diagnostic, never a register diagnostic;
-- mutations that add or remove an RK opcode, swap the selected domain, alter either
-  boundary, remove a resolved fact, or change diagnostic identity are rejected by the
-  same positive comparator.
-
-The first authoring checkpoint is one durable red test showing that a bit-8-clear
-RK-`C` register at `maxstacksize` currently fails to produce `L51-REG-003`. The steward
-verifies the red defect and independent opcode table before authorizing suite
-expansion.
-
-## Canonical gate and boundaries
+## Canonical gate
 
 The sprint owns exactly:
 
 ```console
-bash scripts/gates/gate-validator-rk-c-lua51.sh ARTIFACT_DIR
+bash scripts/gates/gate-validator-rk-b-lua51.sh ARTIFACT_DIR
 ```
 
-with specification `tests/gates/gate-validator-rk-c-lua51.json`. The gate pins the
-compiler, fixtures, exact acceptance tests, prerequisite closure, clean revision, and
-zero ignored, skipped, filtered, missing, or substituted evidence.
+with specification `tests/gates/gate-validator-rk-b-lua51.json`. It pins the compiler,
+fixtures, four acceptance tests, prerequisite closure, clean revision, and zero ignored,
+skipped, filtered, missing, or substituted evidence.
 
-The acceptance author may change only its sprint module, independent table and minimal
-test helpers, gate specification, and gate wrapper. The implementation agent may
-change Lua 5.1 dialect-owned RK-`C` role facts and validation plus ordinary unit tests.
-Neither role may change maintained fixtures, schemas, capabilities, shared proof
-machinery, prerequisite gates, or this contract.
+The acceptance author may change only the sprint test module, test-local oracle and
+helpers, gate specification, and gate wrapper. The implementation agent may change
+Lua 5.1 dialect-owned RK-`B` role facts and validation plus ordinary unit tests. Neither
+role may change maintained fixtures, schemas, capabilities, shared proof machinery,
+prerequisite gates, or this contract.
 
 ## Handoff and stop condition
 
-Acceptance requires the base, frozen-acceptance, and candidate commits; exact CLI,
-model, authentication, and allocation identities; approved outline; durable red and
-green logs; frozen-path hashes; one clean canonical-gate artifact; zero failed,
-ignored, skipped, filtered, or missing tests; one steward-run `bash scripts/check.sh`;
-reviewed pull requests merged in dependency order; and clean local `main` identical to
-`origin/main`.
+Acceptance requires base, frozen-acceptance, and candidate commits; exact provider and
+model identities; approved outline; durable red and green logs; frozen-path hashes; one
+clean canonical-gate artifact; zero failed, ignored, skipped, filtered, or missing tests;
+one steward-run aggregate check; reviewed pull requests merged in dependency order; and
+clean local `main` identical to `origin/main`.
 
-Do not begin recursive RK-`C` ownership, non-RK `C` exclusion, RK-`B`, closure
-capture-source, implicit-span, diagnostic-catalog, target promotion, provenance, or
-later-dialect work until this sprint satisfies that handoff.
+Do not begin recursive RK ownership, non-RK exclusion, capture-source bounds,
+implicit-span validation, diagnostic-catalog work, or target promotion before this
+sprint is accepted or explicitly respecified.
