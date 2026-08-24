@@ -42,6 +42,10 @@ All notable changes will be documented here. The project has not yet made a prod
 - Refined agent orchestration with provider preflight, staged acceptance outlines,
   proportional evidence levels, subscription-aware usage checkpoints, and
   steward-owned final verification.
+- Added patch, semantic, and qualification delivery lanes so localized corrections use
+  one implementation turn, one branch, bounded tests, and one CI aggregate run.
+- Pinned Antigravity to both `gemini-3.7-flash-high` and its explicit highest reasoning
+  setting, `--effort high`, with a repository check for configuration drift.
 - Added persistent Opus and Gemini session wrappers with structured timing/token
   telemetry, shell-free acceptance authorship, and scoped interactive fallback when
   Antigravity print mode cannot acquire repository permissions.

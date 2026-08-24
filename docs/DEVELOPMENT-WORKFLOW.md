@@ -31,6 +31,35 @@ single semantic distinction. If its claim needs multiple independent matrices,
 diagnostic families, or public commands that could be accepted separately, split it
 before acceptance work begins.
 
+### Delivery lanes
+
+The steward selects the cheapest lane capable of falsifying the claim before invoking
+another model:
+
+- **Patch lane** is the default for a localized correction with no new schema, command,
+  fixture, capability claim, or target promotion. Expected production scope is at most
+  about 100 changed lines in one subsystem. It uses one worktree, one branch, one pull
+  request, one Gemini implementation turn, one controller review, focused tests, and
+  one final CI aggregate run. It does not use a separate acceptance branch or Opus
+  author by default.
+- **Semantic lane** covers a new enumerable opcode family, public record, analysis
+  primitive, or cross-component invariant. It may use independent acceptance authorship,
+  frozen acceptance and implementation commits, a sprint gate, and model-diverse review.
+- **Qualification lane** covers support promotion, release manifests, schema-major
+  stability, hostile-input boundaries, and exact target claims. It uses the complete
+  separated proof workflow and durable evidence bundle.
+
+A patch moves to the semantic lane only when the controller identifies a concrete
+independence, compatibility, or adversarial risk that focused evidence cannot falsify.
+Test volume, model prestige, or an existing elaborate gate is not by itself a reason
+to escalate. If acceptance/support code exceeds 400 changed lines or five times the
+production diff in the patch lane, stop before expanding it and respecify the evidence.
+
+Patch-lane target time is ten minutes of delegated model wall time and twenty minutes
+from clean worktree to pull request, excluding cold CI. One implementation turn and at
+most one bounded correction are allowed. Crossing either target triggers scope review,
+not a larger context or another open-ended model turn.
+
 ## 2. Roles and separation of responsibility
 
 ### Product and acceptance steward
@@ -39,7 +68,8 @@ The steward:
 
 - maintains the roadmap and active sprint contract;
 - chooses the next smallest useful product claim;
-- reviews and freezes acceptance tests before production implementation;
+- reviews patch regressions or freezes semantic/qualification acceptance tests before
+  production implementation;
 - controls changes to sprint scope, public fixtures, canonical gate specifications,
   and acceptance tests;
 - independently executes public-boundary probes and the canonical gate;
@@ -50,7 +80,8 @@ count, or implementation-agent walkthrough as proof.
 
 ### Independent acceptance-test author
 
-The test author works from the last accepted revision plus the sprint contract, before
+This role is optional in the patch lane and normally reserved for semantic and
+qualification lanes. The test author works from the last accepted revision plus the sprint contract, before
 seeing the implementation. Its job is to encode the promised public behavior and the
 ways a superficially plausible implementation could be wrong.
 
@@ -67,14 +98,16 @@ steward approves or narrows that outline before edits are allowed. Second, the a
 produces the first durable red test and diff before expanding the suite. An author that
 cannot reach either checkpoint stops without changing the sprint claim.
 
-Model diversity is preferred here because it reduces correlated interpretation errors.
+Model diversity is preferred for genuinely independent semantic or qualification
+evidence because it reduces correlated interpretation errors.
 The default test-author role uses Claude Code with the current `opus` alias at high
 effort. The evidence handoff records the CLI version and resolved model identity; an
 alias is not itself a reproducibility claim.
 
 ### Implementation agent
 
-The implementation agent receives the frozen sprint contract and acceptance commit.
+The implementation agent receives the sprint contract and, in semantic or qualification
+lanes, the frozen acceptance commit.
 It may choose the production design within the stated architecture and non-goals. It
 may add production code and ordinary unit tests, but it may not modify or bypass:
 
@@ -98,7 +131,10 @@ behavior and only then inspects implementation details and test coverage.
 
 ## 3. Required sprint contract
 
-`docs/NEXT-SPRINT.md` must be short enough to review as a single contract and contain:
+Every `docs/NEXT-SPRINT.md` must be short enough to review as a single contract and name
+its delivery lane. A patch-lane contract contains only the claim, researcher value,
+exact affected boundary, one focused red regression, non-goals, allowed paths, focused
+verification, and stop condition. Semantic and qualification contracts contain:
 
 1. **Claim** — one externally observable capability stated without implementation
    language.
@@ -129,9 +165,11 @@ not a default requirement for a bounded correction.
 
 ## 4. Acceptance-test design
 
-Acceptance tests are written and reviewed before production work begins.
+Patch regressions are stated before production work begins and may be implemented in
+the same bounded agent turn. Semantic and qualification acceptance tests are written
+and reviewed before production work begins.
 
-They must:
+Semantic and qualification tests must:
 
 - invoke the public CLI or deserialize the public schema whenever the claim is public;
 - compare complete semantic content, not only record counts or field presence;
@@ -169,8 +207,9 @@ assertion, expected red defect, and diff scope.
 
 Select the least expensive level that can falsify the claim:
 
-- **Bounded correction:** one public regression, one independently derived expected
-  value or boundary pair, and two to four targeted killer mutations.
+- **Bounded correction:** one table-driven or public regression, an independently
+  checked expected value or boundary pair, and only the negative controls needed to
+  distinguish the defect. It reuses accepted authority and gate infrastructure.
 - **Semantic matrix:** exhaustive independently owned rows for a dialect field,
   opcode family, schema union, or similarly enumerable subsystem, plus mutations for
   omission, misclassification, and boundaries.
@@ -210,8 +249,14 @@ the clean candidate revision and the resulting artifacts are available for revie
 
 ## 6. Worktree and branch isolation
 
-Use separate Git worktrees so agents do not edit the same files or inherit unrelated
-dirty state:
+Use isolated Git worktrees so agents do not edit the primary checkout or inherit
+unrelated dirty state. Patch work uses one branch:
+
+```text
+accepted revision -> sprint/<id>
+```
+
+Semantic and qualification work may use separated branches:
 
 ```text
 accepted revision
@@ -229,15 +274,15 @@ working directory. Before an agent starts, record:
 - model and CLI version;
 - sprint contract hash.
 
-The acceptance author does not see an implementation diff. The implementation agent
-does see the frozen tests. Final review uses a fresh session and the complete diff from
-the accepted base.
+In separated work, the acceptance author does not see an implementation diff and the
+implementation agent sees the frozen tests. Final review uses the complete diff from
+the accepted base; a fresh external review session is optional for patch work.
 
-Each role works on its own branch and reviewable pull request when a remote review
-surface is available. The acceptance branch freezes before the implementation branch
-is created. Shared planning documents, gate infrastructure, schemas, fixtures, and
-release manifests have one steward owner; agents do not resolve concurrent edits to
-those paths themselves.
+Each semantic or qualification role works on its own branch and reviewable pull request
+when a remote review surface is available. Patch work uses one pull request with a
+reviewable regression and implementation diff. Shared planning documents, gate
+infrastructure, schemas, fixtures, and release manifests have one steward owner; agents
+do not resolve concurrent edits to those paths themselves.
 
 ### Parallel execution threshold
 
@@ -363,11 +408,13 @@ scripts/agents/agy-gemini.sh interactive-resume-plan CONVERSATION_ID /tmp/sprint
 scripts/agents/agy-gemini.sh interactive-resume CONVERSATION_ID /tmp/sprint-implementation-prompt.txt
 ```
 
-Before allowing edits, request a read-only implementation outline containing the
-expected production paths, invariants, smallest proposed change, and focused test
-commands. Start one conversation with `plan`, obtain its ID from the structured JSON,
-and use `resume-plan` for any read-only refinement, then `resume` for the implementation
-and any single bounded correction. The JSON
+For semantic and qualification work, request a read-only implementation outline
+containing the expected production paths, invariants, smallest proposed change, and
+focused test commands. Start one conversation with `plan`, obtain its ID from the
+structured JSON, and use `resume-plan` for any read-only refinement, then `resume` for
+the implementation and any single bounded correction. Patch work uses one
+`implement` turn whose prompt requires a three-to-five-line plan before edits; a
+separate model planning turn is unnecessary. The JSON
 result is the authority for per-turn duration and input, output, thinking, and cache
 tokens; the log is diagnostic evidence, not the primary metrics interface. The steward
 rejects scope outside the sprint or frozen boundary. During the
@@ -405,8 +452,10 @@ scripts/agents/agy-gemini.sh interactive-resume CONVERSATION_ID PROMPT_FILE
 ```
 
 The wrappers pin model variant, authentication, sandbox, permission mode, and output
-defaults. Opus also receives an explicit effort setting; Antigravity's High setting is
-part of its model ID and does not accept a separate effort flag. The wrappers fail closed instead of silently falling back from Claude subscription
+defaults. Antigravity receives both the highest available Gemini 3.7 Flash variant,
+`gemini-3.7-flash-high`, and the CLI's highest reasoning setting, `--effort high`.
+`scripts/agents/agy-gemini.sh config` prints both pins without starting inference.
+The wrappers fail closed instead of silently falling back from Claude subscription
 authentication to Console credentials. The Antigravity wrapper records prompt identity,
 wall time, and its log path at session exit. Provider flags change in the wrapper and
 this document together; sprint controllers do not reconstruct them from memory.
@@ -416,10 +465,11 @@ worktree before retrying: an in-flight tool call may have completed. Resume only
 checking the semantic checkpoint, changed paths, and diff. More context or budget does
 not repair a blocked filesystem read, permission denial, or over-broad prompt.
 
-The steward runs focused sprint tests after implementation checkpoints. The
-implementation agent does not run the canonical gate or aggregate repository check.
-This keeps implementation feedback bounded and leaves one authoritative
-clean-revision gate and aggregate run to the steward.
+In the patch lane, the implementation agent runs the single focused command named by
+the contract. In semantic and qualification lanes, the steward runs focused tests after
+implementation checkpoints. The implementation agent does not run canonical gates or
+aggregate repository checks. This keeps feedback bounded and leaves authoritative
+clean-revision evidence to the steward or CI.
 
 Canonical gates run serially unless each invocation has an isolated Cargo target,
 temporary executable path, and artifact directory. A clean-worktree requirement does
@@ -427,10 +477,33 @@ not make shared build products concurrency-safe.
 
 ## 8. Sprint lifecycle
 
+### Patch fast path
+
+For a patch-lane sprint, the lifecycle is:
+
+1. The steward writes the compact contract and creates one clean worktree and branch.
+2. Gemini 3.7 Flash High at effort High receives only the contract and relevant file
+   ranges, states a short plan, writes the regression and implementation, runs the one
+   focused command, and stops.
+3. The steward reviews the algorithm, scope, and regression. One bounded correction is
+   available; Opus is consulted only when the expected semantics remain genuinely
+   ambiguous.
+4. The steward commits, pushes one pull request, and lets CI run the aggregate suite.
+   A local aggregate run is required only when CI is unavailable or the patch affects
+   CI itself. A semantic gate runs once if the active contract names one.
+5. After CI acceptance, merge, push, verify remote `main`, replace the sprint contract,
+   and remove the clean temporary branch and worktree.
+
+Do not create a second oracle, acceptance pull request, release manifest, or new gate
+for patch work unless the compact contract identifies the specific risk each artifact
+is required to detect.
+
 ### Step 1: select
 
 The steward chooses the smallest roadmap item that produces independently observable
 researcher value. If it cannot be stated as one claim, split it.
+
+The remaining steps describe semantic and qualification lanes.
 
 ### Step 2: specify
 

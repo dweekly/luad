@@ -4,6 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
+  scripts/agents/agy-gemini.sh config
   scripts/agents/agy-gemini.sh plan PROMPT_FILE
   scripts/agents/agy-gemini.sh implement PROMPT_FILE
   scripts/agents/agy-gemini.sh resume-plan CONVERSATION_ID PROMPT_FILE
@@ -14,21 +15,28 @@ Usage:
   scripts/agents/agy-gemini.sh interactive-resume CONVERSATION_ID PROMPT_FILE
 
 Runs one structured Antigravity turn in the current worktree using Gemini 3.7
-Flash High. Each result is JSON containing the conversation ID, duration, and
-token usage. Pass that ID to `resume` so later checkpoints retain the same
-conversation. The sandbox remains enabled. Wall time, prompt hash, and the
-Antigravity log path are printed to stderr when the turn exits. Set
-LUAD_AGY_LOG_FILE to choose the log location.
+Flash High with reasoning effort High. Each result is JSON containing the
+conversation ID, duration, and token usage. Pass that ID to `resume` so later
+checkpoints retain the same conversation. The sandbox remains enabled. Wall time,
+prompt hash, and the Antigravity log path are printed to stderr when the turn exits.
+Set LUAD_AGY_LOG_FILE to choose the log location.
 
-The interactive stages preserve the same model, mode, sandbox, and conversation
-rules while allowing narrowly reviewed file permissions when print mode fails
-closed. The model ID already selects the High variant; no separate effort flag is
-passed.
+The interactive stages preserve the same model, effort, mode, sandbox, and conversation
+rules while allowing narrowly reviewed file permissions when print mode fails closed.
+`config` prints the pinned model and effort without starting a model turn.
 EOF
 }
 
+model=gemini-3.7-flash-high
+effort=high
+
 if [[ ${1:-} == "--help" || ${1:-} == "-h" ]]; then
   usage
+  exit 0
+fi
+
+if [[ ${1:-} == "config" ]]; then
+  printf 'model=%s\neffort=%s\n' "$model" "$effort"
   exit 0
 fi
 
@@ -91,7 +99,8 @@ trap finish EXIT
 
 common=(
   "${conversation_args[@]}"
-  --model gemini-3.7-flash-high
+  --model "$model"
+  --effort "$effort"
   --mode "$mode"
   --sandbox
   --log-file "$log_file"
