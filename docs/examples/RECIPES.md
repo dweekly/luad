@@ -41,6 +41,15 @@ luad export firmware/*.luac --format jsonl | jq -rn '
   )'
 ```
 
+For large or mixed corpora, cap counted facts independently for each input while
+retaining every file's completion or failure record:
+
+```bash
+luad export firmware/*.lua --format jsonl --max-facts-per-file 10000 | jq -c '
+  select(.record_type == "file_end") |
+  {path, status, is_truncated, emitted_fact_count, available_fact_count}'
+```
+
 ---
 
 ## 3. Finding Globals and Call Sites

@@ -60,10 +60,10 @@ This table describes code present in the repository, not verified support status
 
 | Dialect | Opcode table | Parser/lifter present | Current evidence status |
 |---|---:|---|---|
-| Lua 5.1 | 38 | Yes | Experimental; internal layout/capture facts exist, public profile and disassembly gates pending |
+| Lua 5.1 | 38 | Yes | Experimental; public layout, profile, disassembly, closure, query, and machine-interface evidence exists; exact target promotion remains pending |
 | Lua 5.2 | 40 | Yes | Experimental; proof gates incomplete |
 | Lua 5.3 | 47 | Yes | Experimental; proof gates incomplete |
-| Lua 5.4 | 83 | Yes | Experimental; exact public disassembly accepted, validation and machine-contract work pending |
+| Lua 5.4 | 83 | Yes | Experimental; public disassembly, validation, analysis, lossless, and machine-contract evidence exists; exact target promotion remains pending |
 | Lua 5.5 | 85 | Yes | Experimental; independent proof gates incomplete |
 | LuaJIT 2.x | — | No | Planned; not supported |
 
@@ -116,6 +116,7 @@ luad cfg chunk.luac --proto 'proto:0' --format dot
 luad xrefs chunk.luac --to 'proto:0:upvalue:0' --format json
 luad query chunk.luac --where 'opcode == "CALL"' --format json
 luad diff old.luac new.luac --semantic --format json
+luad export firmware/*.lua --format jsonl --max-facts-per-file 10000
 ```
 
 The `compile` command is present in the CLI surface but intentionally returns an unsupported-format error; `luad` does not currently execute an external compiler through that command.

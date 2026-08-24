@@ -136,6 +136,9 @@ batch records, and stale or cross-revision evidence.
 ## Adjacent workflows
 
 Corpus-wide search, call-graph inference, sink classification, register provenance,
-firmware-tree diffing, pseudo-code structuring, and persistent research sessions may be
-valuable external layers. They do not enter the embedded Lua 5.1 release claim unless a
-future sprint gives one of them a separate public contract and independent proof gate.
+firmware-tree diffing, pseudo-code structuring, interpreter-semantic recovery,
+cross-language taint, native SRE synchronization, and persistent research sessions may
+be valuable external layers. `luad` may exchange provenance-bound mappings and factual
+schemas with those layers without owning their execution or judgments. They do not
+enter the embedded Lua 5.1 release claim unless a future sprint gives one of them a
+separate public contract and independent proof gate.

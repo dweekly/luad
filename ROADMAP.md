@@ -13,18 +13,7 @@ classification in the executable.
 Every capability remains experimental until an exact target release closes over its
 public-boundary evidence. Product growth follows the sequence below.
 
-## 1. Bounded firmware-scale export
-
-Large and mixed firmware corpora need predictable output size, deterministic ordering,
-per-input outcomes, and explicit truncation. Export records must remain independently
-consumable with standard streaming tools even when one artifact is malformed or much
-larger than its neighbors.
-
-Exit outcome: callers can set and observe documented export bounds without losing
-file-level completion or failure records. The active sprint owns the next smallest
-part of this capability.
-
-## 2. Validator authority and diagnostic discoverability
+## 1. Validator authority and diagnostic discoverability
 
 Validation, disassembly, and analysis need one dialect-owned understanding of operand
 roles so raw bitfields cannot acquire inconsistent meanings across consumers. Every
@@ -35,7 +24,7 @@ Exit outcome: valid compiler-produced fixtures have no unjustified diagnostics,
 targeted corruptions produce exact documented diagnostics, and every emitted code is
 present in the public catalog.
 
-## 3. Exact Lua 5.1 target qualification
+## 2. Exact Lua 5.1 target qualification
 
 Stock Lua 5.1 layouts and the supported LNUM32 profile need separate promotion
 boundaries. Each target must identify its compiler or vendor authority, profile,
@@ -44,7 +33,7 @@ layout, public fixtures, schemas, supported command surfaces, and known limitati
 Exit outcome: a release manifest promotes one exact Lua 5.1 profile/layout target at
 a time. Evidence for one target cannot substitute for another.
 
-## 4. Stable machine consumption
+## 3. Stable machine consumption
 
 Human and AI callers need schema-versioned JSON and JSONL with deterministic ordering,
 bounded strings, stable interpretation-scoped identifiers, and explicit compatibility
@@ -53,7 +42,7 @@ rules. Schema evolution must preserve discoverability and reject incompatible ma
 Exit outcome: every advertised response and stream record validates at the live CLI
 boundary, and consumers can negotiate or reject schema versions without prose parsing.
 
-## 5. Composable research facts
+## 4. Composable research facts
 
 Researchers need direct factual primitives for constants, globals, calls, prototypes,
 captures, control flow, and artifact comparison. External tools should be able to
@@ -63,10 +52,16 @@ Exit outcome: representative reverse-engineering workflows are expressible throu
 documented CLI composition without adding decompiler judgment, sink classification,
 or project state to `luad`.
 
-## 6. Additional dialect qualification
+## 5. Additional dialect qualification
 
 Lua 5.2, 5.3, 5.5, LuaJIT, and vendor profiles advance independently. Parser presence
 does not imply semantic, analysis, or release support.
+
+Vendor qualification may consume an explicit, provenance-bound description of opcode,
+header, field-layout, and numeric-format mappings recovered by an external tool.
+Interpreter execution, gadget testing, and firmware rehosting remain outside `luad`;
+the imported mapping and every normalized fact require deterministic validation and
+target-specific evidence.
 
 Exit outcome: each dialect or profile follows the same exact-target fixture, oracle,
 machine-contract, and promotion discipline used by qualified Lua targets.
@@ -74,11 +69,10 @@ machine-contract, and promotion discipline used by qualified Lua targets.
 ## Dependency order
 
 ```text
-bounded export
-  -> validator and diagnostic authority
-       -> exact Lua 5.1 target qualification
-            -> stable machine consumption
-                 -> composable research facts
+validator and diagnostic authority
+  -> exact Lua 5.1 target qualification
+       -> stable machine consumption
+            -> composable research facts
 
 additional dialect qualification depends on the relevant machine, validator,
 and exact-target evidence boundaries.
@@ -94,6 +88,7 @@ The roadmap does not place these responsibilities inside `luad`:
 - inferred names presented as facts;
 - persistent projects, annotations, hypotheses, or sessions;
 - autonomous research planning;
+- firmware unpacking, target-interpreter execution, or dynamic gadget testing;
 - execution of untrusted Lua bytecode.
 
 Those capabilities belong in composable external layers unless a future roadmap

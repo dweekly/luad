@@ -4,6 +4,11 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+### Machine interface
+
+- Added `export --max-facts-per-file` with deterministic per-input fact truncation,
+  unsuppressed control and diagnostic records, and explicit emitted/available counts.
+
 ### Documentation
 
 - Added an evidence-gated development workflow that separates the product roadmap,
