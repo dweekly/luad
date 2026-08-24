@@ -22,11 +22,11 @@ action.
 
 Prototype references must retain their owning prototype path in every structured fact,
 comment, text rendering, and xref. Remaining operand qualification must preserve the
-same owner isolation while proving implicit register spans and closure-capture sources.
+same owner isolation while proving implicit register spans.
 
-Qualification advances through separately accepted slices for closure-capture source
-bounds, implicit register spans, and public diagnostic discoverability. Each slice owns
-one field or semantic distinction and one canonical gate.
+Qualification advances through separately accepted slices for implicit register spans
+and public diagnostic discoverability. Each slice owns one field or semantic
+distinction and one canonical gate.
 
 Operand-role slices derive their authority from executed Lua 5.1 VM semantics, with
 the official opcode-mode table serving as a mechanically checked input rather than an

@@ -174,7 +174,10 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
 
         // Register bounds validation (field B)
         let is_reg_b = op.b_is_fixed_register() || (op.b_is_rk() && !raw.is_b_k());
-        if !is_binding_descriptor && is_reg_b && raw.b as usize >= max_reg {
+        // MOVE binding descriptors read B from this parent's register file.
+        let checks_reg_b =
+            is_reg_b && (!is_binding_descriptor || op == crate::opcodes::Opcode51::Move);
+        if checks_reg_b && raw.b as usize >= max_reg {
             let diag = Diagnostic::error(
                 "L51-REG-002",
                 DiagnosticCategory::Instruction,
