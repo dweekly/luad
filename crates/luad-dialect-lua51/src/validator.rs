@@ -172,24 +172,29 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
             diags.push(diag);
         }
 
-        // Numeric-for instructions use the fixed register window R(A)..R(A+3).
-        if (op == crate::opcodes::Opcode51::ForPrep || op == crate::opcodes::Opcode51::ForLoop)
-            && raw.a as usize + 3 >= max_reg
-        {
-            let diag = Diagnostic::error(
-                "L51-REG-SPAN-001",
-                DiagnosticCategory::Instruction,
-                inst.id.clone(),
-                format!(
-                    "{} register window R({})..R({}) exceeds maxstacksize ({}) at PC {pc}",
-                    op.name(),
-                    raw.a,
-                    raw.a + 3,
-                    max_reg
-                ),
-            )
-            .with_source(inst.source.clone());
-            diags.push(diag);
+        // SELF and numeric-for instructions use fixed register windows from R(A).
+        let span_end_delta = match op {
+            crate::opcodes::Opcode51::SelfOp => Some(1),
+            crate::opcodes::Opcode51::ForPrep | crate::opcodes::Opcode51::ForLoop => Some(3),
+            _ => None,
+        };
+        if let Some(end_delta) = span_end_delta {
+            if raw.a as usize + end_delta >= max_reg {
+                let diag = Diagnostic::error(
+                    "L51-REG-SPAN-001",
+                    DiagnosticCategory::Instruction,
+                    inst.id.clone(),
+                    format!(
+                        "{} register window R({})..R({}) exceeds maxstacksize ({}) at PC {pc}",
+                        op.name(),
+                        raw.a,
+                        raw.a as usize + end_delta,
+                        max_reg
+                    ),
+                )
+                .with_source(inst.source.clone());
+                diags.push(diag);
+            }
         }
 
         // Register bounds validation (field B)

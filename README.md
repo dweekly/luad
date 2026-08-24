@@ -10,7 +10,7 @@ Lua 5.4.8 public disassembly has normalized typed agreement with the official
 listing and an independent decoder. Embedded Lua 5.1 profile selection,
 disassembly, reference-operand validation, bounded closure captures and prototype identity,
 direct register-`A`/`B`/`C` authority, root and nested-prototype conditional
-RK-`B`/`C` authority, fixed numeric-for register spans, queries, and machine output have named
+RK-`B`/`C` authority, fixed numeric-for and `SELF` register spans, queries, and machine output have named
 experimental public-boundary gates. Exact Lua 5.1 target promotion remains roadmap
 work.
 
@@ -63,7 +63,7 @@ This table describes code present in the repository, not verified support status
 
 | Dialect | Opcode table | Parser/lifter present | Current evidence status |
 |---|---:|---|---|
-| Lua 5.1 | 38 | Yes | Experimental; public layout, profile, disassembly, reference-operand, direct register-`A`/`B`/`C`, root and nested conditional RK-`B`/`C`, fixed numeric-for span, and closure-capture source-bound evidence exists alongside closure identity, query, and machine-interface evidence; exact target promotion remains pending |
+| Lua 5.1 | 38 | Yes | Experimental; public layout, profile, disassembly, reference-operand, direct register-`A`/`B`/`C`, root and nested conditional RK-`B`/`C`, fixed numeric-for and `SELF` spans, and closure-capture source-bound evidence exists alongside closure identity, query, and machine-interface evidence; exact target promotion remains pending |
 | Lua 5.2 | 40 | Yes | Experimental; proof gates incomplete |
 | Lua 5.3 | 47 | Yes | Experimental; proof gates incomplete |
 | Lua 5.4 | 83 | Yes | Experimental; public disassembly, validation, analysis, lossless, and machine-contract evidence exists; exact target promotion remains pending |
