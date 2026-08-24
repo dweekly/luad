@@ -152,6 +152,11 @@ The steward reviews tests for vacuous loops, shared production code on both side
 comparison, assertions that check only existence or counts, and mutations that never
 reach the comparator. Only then is the acceptance commit frozen.
 
+Before freezing, the steward also compares every prerequisite gate's positive and
+negative claims with the proposed claim. A prerequisite negative control may not cover
+a semantic role delegated to the new sprint; resolve overlapping ownership explicitly
+instead of allowing the implementation to make two frozen contracts contradictory.
+
 Acceptance authors receive a curated context packet: the sprint contract and hash,
 the exact relevant source files or line ranges, the existing public schema boundary,
 and the permitted paths. They do not begin by rereading the whole repository or this
@@ -415,6 +420,10 @@ The steward runs focused sprint tests after implementation checkpoints. The
 implementation agent does not run the canonical gate or aggregate repository check.
 This keeps implementation feedback bounded and leaves one authoritative
 clean-revision gate and aggregate run to the steward.
+
+Canonical gates run serially unless each invocation has an isolated Cargo target,
+temporary executable path, and artifact directory. A clean-worktree requirement does
+not make shared build products concurrency-safe.
 
 ## 8. Sprint lifecycle
 

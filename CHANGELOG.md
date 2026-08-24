@@ -11,6 +11,9 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Validation
 
+- Lua 5.1 conditional RK field `C` now selects register or constant validation by bit 8
+  across its exact VM-derived opcode set, with root-prototype bounds and resolved public
+  constant facts.
 - Lua 5.1 validation and public disassembly now use an exhaustive VM-derived authority
   for fixed direct-register field `C`; `CONCAT.C` observes exact stack bounds, while
   booleans, counts, size hints, unused fields, and conditional RK operands remain
@@ -60,3 +63,9 @@ All notable changes will be documented here. The project has not yet made a prod
 - Lua 5.1 string lengths now honor 4-byte or 8-byte `size_t` as declared by the chunk header; commit `54e4b8d` was reported to parse and validate all 252 files in the TP-Link corpus.
 - Lua 5.1 LNUM integer tag 9 is decoded through profile-aware code and covered by the
   public profile gate; exact target release evidence remains unpromoted.
+
+### Build and CI
+
+- Official Lua compiler installation uses the dependency-minimal `generic` make target,
+  accepts a configurable destination directory, and keeps contributor checks directly
+  executable in CI.

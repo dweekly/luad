@@ -188,7 +188,8 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
         }
 
         // Register bounds validation (field C)
-        if !is_binding_descriptor && op.c_is_fixed_register() && raw.c as usize >= max_reg {
+        let is_reg_c = op.c_is_fixed_register() || (op.c_is_rk() && !raw.is_c_k());
+        if !is_binding_descriptor && is_reg_c && raw.c as usize >= max_reg {
             let diag = Diagnostic::error(
                 "L51-REG-003",
                 DiagnosticCategory::Instruction,
@@ -298,7 +299,7 @@ mod tests {
     use super::*;
     use crate::opcodes::Opcode51;
     use luad_core::id::{ProtoPath, StableId};
-    use luad_core::model::{Header, InstructionWord};
+    use luad_core::model::{Constant, ConstantValue, Header, InstructionWord};
     use luad_core::provenance::SourceLocation;
 
     fn make_test_proto(instructions: Vec<u32>, nups: usize, num_protos: usize) -> Prototype {
@@ -642,7 +643,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validator_register_c_fixed_and_deferred_rk() {
+    fn test_validator_register_c_fixed_and_rk() {
         // maxstacksize = 2: C=1 is valid, C=2 is invalid (L51-REG-003), C=256 reports L51-REG-003 and no L51-CONST-005
         let inst_valid = RawInstruction51::encode_iabc(Opcode51::Concat, 0, 0, 1);
         let proto_valid = make_test_proto(vec![inst_valid], 0, 0);
@@ -720,15 +721,67 @@ mod tests {
             );
         }
 
-        // Deferred RK opcodes (e.g. ADD, SETTABLE, EQ) with C=2 (no RK bit) must not report L51-REG-003
+        // Active RK opcodes (ADD, SETTABLE, EQ) at maxstacksize 2
         for op in [Opcode51::Add, Opcode51::SetTable, Opcode51::Eq] {
-            let inst_rk = RawInstruction51::encode_iabc(op, 0, 0, 2);
-            let proto_rk = make_test_proto(vec![inst_rk], 0, 0);
-            let chunk_rk = make_test_chunk(proto_rk);
-            let (_, d_rk) = validate_chunk_lua51(&chunk_rk);
+            // C=1 (bit 8 clear, inside frame) -> valid
+            let inst_valid = RawInstruction51::encode_iabc(op, 0, 0, 1);
+            let proto_valid = make_test_proto(vec![inst_valid], 0, 0);
+            let chunk_valid = make_test_chunk(proto_valid);
+            let (v_valid, d_valid) = validate_chunk_lua51(&chunk_valid);
+            assert_eq!(
+                v_valid,
+                Verdict::ValidForParser,
+                "{:?} with C=1 must be ValidForParser",
+                op
+            );
             assert!(
-                !d_rk.iter().any(|d| d.code == "L51-REG-003"),
-                "Deferred RK opcode {:?} must not report L51-REG-003",
+                d_valid.is_empty(),
+                "{:?} with C=1 must produce no diagnostics, got: {:?}",
+                op,
+                d_valid
+            );
+
+            // C=2 (bit 8 clear, >= maxstacksize) -> invalid (L51-REG-003)
+            let inst_invalid = RawInstruction51::encode_iabc(op, 0, 0, 2);
+            let proto_invalid = make_test_proto(vec![inst_invalid], 0, 0);
+            let chunk_invalid = make_test_chunk(proto_invalid);
+            let (v_invalid, d_invalid) = validate_chunk_lua51(&chunk_invalid);
+            assert_eq!(v_invalid, Verdict::Invalid);
+            let reg_c_invalid: Vec<_> = d_invalid
+                .iter()
+                .filter(|d| d.code == "L51-REG-003")
+                .collect();
+            assert_eq!(
+                reg_c_invalid.len(),
+                1,
+                "{:?} with C=2 must report L51-REG-003",
+                op
+            );
+            assert_eq!(
+                reg_c_invalid[0].message,
+                "Register C (2) exceeds maxstacksize (2) at PC 0"
+            );
+
+            // C=256 (bit 8 set, selects K(0) from a one-constant owner) -> produces no L51-REG-003
+            let inst_k = RawInstruction51::encode_iabc(op, 0, 0, 256);
+            let mut proto_k = make_test_proto(vec![inst_k], 0, 0);
+            proto_k.constants = vec![Constant {
+                id: StableId::constant(proto_k.path.clone(), 0),
+                index: 0,
+                value: ConstantValue::Nil,
+                source: SourceLocation::new(0, &[]),
+            }];
+            let chunk_k = make_test_chunk(proto_k);
+            let (v_k, d_k) = validate_chunk_lua51(&chunk_k);
+            assert_eq!(
+                v_k,
+                Verdict::ValidForParser,
+                "{:?} with C=256 and 1 constant must be ValidForParser",
+                op
+            );
+            assert!(
+                !d_k.iter().any(|d| d.code == "L51-REG-003"),
+                "{:?} with C=256 must not report L51-REG-003",
                 op
             );
         }
