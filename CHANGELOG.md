@@ -11,6 +11,9 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Validation
 
+- Lua 5.1 conditional RK field `B` now selects register or constant validation by bit 8
+  across its exact ten-opcode VM-derived set, with public register, constant, and
+  non-RK scalar boundary evidence.
 - Lua 5.1 conditional RK field `C` now selects register or constant validation by bit 8
   across its exact VM-derived opcode set, with root-prototype bounds and resolved public
   constant facts.
