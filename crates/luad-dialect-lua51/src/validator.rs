@@ -172,6 +172,26 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
             diags.push(diag);
         }
 
+        // Numeric-for instructions use the fixed register window R(A)..R(A+3).
+        if (op == crate::opcodes::Opcode51::ForPrep || op == crate::opcodes::Opcode51::ForLoop)
+            && raw.a as usize + 3 >= max_reg
+        {
+            let diag = Diagnostic::error(
+                "L51-REG-SPAN-001",
+                DiagnosticCategory::Instruction,
+                inst.id.clone(),
+                format!(
+                    "{} register window R({})..R({}) exceeds maxstacksize ({}) at PC {pc}",
+                    op.name(),
+                    raw.a,
+                    raw.a + 3,
+                    max_reg
+                ),
+            )
+            .with_source(inst.source.clone());
+            diags.push(diag);
+        }
+
         // Register bounds validation (field B)
         let is_reg_b = op.b_is_fixed_register() || (op.b_is_rk() && !raw.is_b_k());
         // MOVE binding descriptors read B from this parent's register file.

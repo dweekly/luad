@@ -1,41 +1,38 @@
-# Active sprint: Lua 5.1 numeric-for register spans
+# Active sprint: Lua 5.1 `SELF` output-register span
 
 Lane: patch. Target: one focused public regression and one pull request.
 
 ## Claim and researcher value
 
-Lua 5.1 `FORPREP` and `FORLOOP` validate their fixed four-register window
-`R(A)..R(A+3)` against the owning prototype's register file. A valid base register
-cannot conceal an out-of-range implicit control register. Diagnostics retain the exact
-instruction identity and physical bytes so researchers can distinguish malformed loop
-state from suspicious control flow.
+Lua 5.1 `SELF` validates its implicit output window `R(A)..R(A+1)` against the
+owning prototype's register file. A valid encoded `A` cannot conceal the out-of-range
+second destination used to prepare a method call. The public diagnostic retains exact
+instruction identity and physical bytes.
 
 ## Focused public regression
 
-Use the pinned `control_flow.luac` fixture. Its root prototype has
-`maxstacksize = 6`; `FORPREP` at PC 10, byte offset 109 and `FORLOOP` at PC 12, byte
-offset 117 both use `A = 2`, so their window ends at valid `R(5)`.
+Use the pinned `control_flow.luac` fixture, whose root prototype has
+`maxstacksize = 6`. At PC 0 and byte offset 69, replace the instruction word with an
+official Lua 5.1 iABC `SELF` word using valid `B = R(0)` and `C = R(0)` operands.
+Prove two public cases:
 
-For each opcode, prove two independent public cases while preserving the original
-signed jump field:
+- `A = 4` produces no `L51-REG-SPAN-001` because `R(4)..R(5)` is valid;
+- changing only `A` to 5 reports exactly one `L51-REG-SPAN-001` because the implicit
+  output window ends at `R(6)`.
 
-- the original `A = 2` instruction produces no register-span diagnostic;
-- setting only `A = 3` leaves the base register valid but reports exactly one
-  `L51-REG-SPAN-001` on that instruction because the window ends at `R(6)`.
+Pin the fixture hash and derive the root bound from live `inspect` JSON. Validate live
+`validate` and selected-prototype `disasm` JSON against their schemas. Prove the exact
+mnemonic, typed operands, raw word, stable instruction ID, source offset and length,
+raw hex, and a diagnostic message naming `SELF`, `R(5)..R(6)`, and the bound. Assert
+that the two words differ only in encoded field `A`.
 
-Pin the fixture hash and obtain the root bound from live `inspect` JSON. Validate live
-`validate` JSON against its schema. Assert exact diagnostic code, stable ID, source
-offset, byte length, raw hex, and a message naming the opcode, window, and bound. Use
-selected-prototype `disasm` JSON to prove the opcode, typed `A = R(3)`, unchanged signed
-jump and target, and schema validity.
-
-Acceptance/support code is capped at 250 formatted lines and production code at 30
+Acceptance/support code is capped at 220 formatted lines and production code at 25
 formatted lines.
 
 ## Allowed scope
 
 - one focused module at
-  `crates/luad-oracle/tests/test_validator_numeric_for_span_lua51.rs`;
+  `crates/luad-oracle/tests/test_validator_self_span_lua51.rs`;
 - `crates/luad-dialect-lua51/src/validator.rs`;
 - `CHANGELOG.md`, `README.md`, `ROADMAP.md`, and the next forward-looking sprint handoff
   after acceptance.
@@ -46,9 +43,9 @@ range-analysis abstraction.
 
 ## Non-goals
 
-Variable-width `CALL`, `RETURN`, `SETLIST`, `TFORLOOP`, or `VARARG` spans; implicit
-effects in disassembly; CFG changes; diagnostic-catalog publication; capability changes;
-and target promotion are outside this patch.
+Numeric-for validation; `LOADNIL`, `CONCAT`, `CALL`, `RETURN`, `TFORLOOP`, `SETLIST`,
+or `VARARG` spans; disassembly effects; CFG changes; diagnostic-catalog publication;
+capability changes; and target promotion are outside this patch.
 
 ## Verification and stop condition
 
@@ -56,14 +53,14 @@ The implementation agent runs only:
 
 ```console
 cargo build -p luad-cli --bin luad
-cargo test -p luad-oracle --test test_validator_numeric_for_span_lua51
+cargo test -p luad-oracle --test test_validator_self_span_lua51
 ```
 
-The steward reviews the four-register VM rule, mutation isolation, exact diagnostic,
-stable IDs, physical offsets, and unchanged jump facts, then pushes one pull request.
-GitHub CI supplies the aggregate repository run. One bounded correction is available;
-exceeding ten delegated minutes, 250 acceptance lines, 30 production lines, or the
-allowed paths stops the turn for respecification.
+The steward reviews the official `SELF` VM rule, isolated iABC encoding, exact
+diagnostic and provenance, stable ID, and typed public operands, then pushes one pull
+request. GitHub CI supplies the aggregate repository run. One bounded correction is
+available; exceeding ten delegated minutes, 220 acceptance lines, 25 production lines,
+or the allowed paths stops the turn for respecification.
 
 After green CI, merge, verify clean `main == origin/main`, replace this document with
 the next forward-looking patch, and remove the temporary branch and worktree.
