@@ -381,8 +381,9 @@ scripts/agents/agy-gemini.sh resume CONVERSATION_ID PROMPT_FILE
 
 The wrappers pin model, effort, authentication, sandbox, permission mode, and output
 defaults. They fail closed instead of silently falling back from Claude subscription
-authentication to Console credentials. Provider flags change in the wrapper and this
-document together; sprint controllers do not reconstruct them from memory.
+authentication to Console credentials. The Antigravity wrapper records prompt identity,
+wall time, and its log path at session exit. Provider flags change in the wrapper and
+this document together; sprint controllers do not reconstruct them from memory.
 
 When an invocation is interrupted or reaches a time limit during an edit, inspect the
 worktree before retrying: an in-flight tool call may have completed. Resume only after
