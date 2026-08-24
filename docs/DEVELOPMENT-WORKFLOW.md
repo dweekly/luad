@@ -342,7 +342,7 @@ narrow acceptance, not automatically to allocate more reviewer context.
 
 ### Antigravity implementation agent
 
-Antigravity supports non-interactive print mode, exact model and effort selection,
+Antigravity supports non-interactive print mode, exact model-variant selection,
 `plan` and `accept-edits` execution modes, sandboxed terminal use, structured JSON or
 streaming output, JSON-schema-constrained final output, timeouts, and resumable
 conversations.
@@ -354,6 +354,8 @@ scripts/agents/agy-gemini.sh plan /tmp/sprint-plan-prompt.txt
 scripts/agents/agy-gemini.sh implement /tmp/sprint-implementation-prompt.txt
 scripts/agents/agy-gemini.sh resume-plan CONVERSATION_ID /tmp/sprint-plan-correction-prompt.txt
 scripts/agents/agy-gemini.sh resume CONVERSATION_ID /tmp/sprint-correction-prompt.txt
+scripts/agents/agy-gemini.sh interactive-resume-plan CONVERSATION_ID /tmp/sprint-plan-prompt.txt
+scripts/agents/agy-gemini.sh interactive-resume CONVERSATION_ID /tmp/sprint-implementation-prompt.txt
 ```
 
 Before allowing edits, request a read-only implementation outline containing the
@@ -366,8 +368,8 @@ tokens; the log is diagnostic evidence, not the primary metrics interface. The s
 rejects scope outside the sprint or frozen boundary. During the
 edit stage, require a reviewable production diff before broad test execution. If
 non-interactive mode cannot obtain its scoped permissions, use an interactive session
-inside the already isolated worktree; do not widen filesystem access or redirect the
-agent to a different checkout. Trust only the worktree. Deny attempts to inspect a
+through the matching wrapper stage inside the already isolated worktree; do not widen
+filesystem access or redirect the agent to a different checkout. Trust only the worktree. Deny attempts to inspect a
 home directory or another checkout, restate the absolute worktree root, and approve
 only the exact focused test command. The implementation agent never receives blanket
 permission to run commands.
@@ -391,10 +393,15 @@ scripts/agents/agy-gemini.sh plan PROMPT_FILE
 scripts/agents/agy-gemini.sh implement PROMPT_FILE
 scripts/agents/agy-gemini.sh resume-plan CONVERSATION_ID PROMPT_FILE
 scripts/agents/agy-gemini.sh resume CONVERSATION_ID PROMPT_FILE
+scripts/agents/agy-gemini.sh interactive-plan PROMPT_FILE
+scripts/agents/agy-gemini.sh interactive-implement PROMPT_FILE
+scripts/agents/agy-gemini.sh interactive-resume-plan CONVERSATION_ID PROMPT_FILE
+scripts/agents/agy-gemini.sh interactive-resume CONVERSATION_ID PROMPT_FILE
 ```
 
-The wrappers pin model, effort, authentication, sandbox, permission mode, and output
-defaults. They fail closed instead of silently falling back from Claude subscription
+The wrappers pin model variant, authentication, sandbox, permission mode, and output
+defaults. Opus also receives an explicit effort setting; Antigravity's High setting is
+part of its model ID and does not accept a separate effort flag. The wrappers fail closed instead of silently falling back from Claude subscription
 authentication to Console credentials. The Antigravity wrapper records prompt identity,
 wall time, and its log path at session exit. Provider flags change in the wrapper and
 this document together; sprint controllers do not reconstruct them from memory.

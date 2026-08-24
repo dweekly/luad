@@ -8,6 +8,10 @@ Usage:
   scripts/agents/agy-gemini.sh implement PROMPT_FILE
   scripts/agents/agy-gemini.sh resume-plan CONVERSATION_ID PROMPT_FILE
   scripts/agents/agy-gemini.sh resume CONVERSATION_ID PROMPT_FILE
+  scripts/agents/agy-gemini.sh interactive-plan PROMPT_FILE
+  scripts/agents/agy-gemini.sh interactive-implement PROMPT_FILE
+  scripts/agents/agy-gemini.sh interactive-resume-plan CONVERSATION_ID PROMPT_FILE
+  scripts/agents/agy-gemini.sh interactive-resume CONVERSATION_ID PROMPT_FILE
 
 Runs one structured Antigravity turn in the current worktree using Gemini 3.7
 Flash High. Each result is JSON containing the conversation ID, duration, and
@@ -15,6 +19,11 @@ token usage. Pass that ID to `resume` so later checkpoints retain the same
 conversation. The sandbox remains enabled. Wall time, prompt hash, and the
 Antigravity log path are printed to stderr when the turn exits. Set
 LUAD_AGY_LOG_FILE to choose the log location.
+
+The interactive stages preserve the same model, mode, sandbox, and conversation
+rules while allowing narrowly reviewed file permissions when print mode fails
+closed. The model ID already selects the High variant; no separate effort flag is
+passed.
 EOF
 }
 
@@ -30,11 +39,11 @@ fi
 
 stage=${1:-}
 case "$stage" in
-  plan|implement)
+  plan|implement|interactive-plan|interactive-implement)
     prompt_file=${2:-}
     conversation_args=()
     ;;
-  resume-plan|resume)
+  resume-plan|resume|interactive-resume-plan|interactive-resume)
     conversation_id=${2:-}
     prompt_file=${3:-}
     if [[ ! "$conversation_id" =~ ^[a-zA-Z0-9-]+$ ]]; then
@@ -56,8 +65,14 @@ fi
 
 prompt=$(<"$prompt_file")
 mode=plan
-if [[ "$stage" == "implement" || "$stage" == "resume" ]]; then
+if [[ "$stage" == "implement" || "$stage" == "resume" || \
+  "$stage" == "interactive-implement" || "$stage" == "interactive-resume" ]]; then
   mode=accept-edits
+fi
+
+interactive=false
+if [[ "$stage" == interactive-* ]]; then
+  interactive=true
 fi
 
 started_at=$(date +%s)
@@ -74,11 +89,16 @@ finish() {
 }
 trap finish EXIT
 
-agy "${conversation_args[@]}" \
-  --model gemini-3.7-flash-high \
-  --effort high \
-  --mode "$mode" \
-  --sandbox \
-  --log-file "$log_file" \
-  --print "$prompt" \
-  --output-format json
+common=(
+  "${conversation_args[@]}"
+  --model gemini-3.7-flash-high
+  --mode "$mode"
+  --sandbox
+  --log-file "$log_file"
+)
+
+if [[ "$interactive" == true ]]; then
+  agy "${common[@]}" --prompt-interactive "$prompt"
+else
+  agy "${common[@]}" --print "$prompt" --output-format json
+fi

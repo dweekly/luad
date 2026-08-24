@@ -42,6 +42,8 @@ All notable changes will be documented here. The project has not yet made a prod
 - Added persistent Opus and Gemini session wrappers with structured timing/token
   telemetry, shell-free acceptance authorship, and scoped interactive fallback when
   Antigravity print mode cannot acquire repository permissions.
+- Added named interactive Antigravity wrapper stages and select its High model variant
+  without passing the CLI's unsupported separate effort flag.
 - Added repository-owned provider wrappers, curated context packets, ranged reads,
   semantic edit checkpoints, post-interrupt diff inspection, aggregate per-model
   sprint accounting, and mandatory remote preservation.
