@@ -189,6 +189,23 @@ impl Opcode51 {
     pub const fn a_is_register(self) -> bool {
         !matches!(self, Self::Jmp | Self::Eq | Self::Lt | Self::Le)
     }
+
+    /// Returns `true` if field `B` is used as an unconditional direct register bounded by `maxstacksize`.
+    #[must_use]
+    pub const fn b_is_fixed_register(self) -> bool {
+        matches!(
+            self,
+            Self::Move
+                | Self::LoadNil
+                | Self::GetTable
+                | Self::SelfOp
+                | Self::Unm
+                | Self::Not
+                | Self::Len
+                | Self::Concat
+                | Self::TestSet
+        )
+    }
 }
 
 /// Lua 5.1 instruction format modes.
@@ -340,6 +357,37 @@ mod tests {
                 assert!(
                     opcode.a_is_register(),
                     "{:?} should use A as register",
+                    opcode
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_b_is_fixed_register_matches_authority() {
+        let fixed_reg = [
+            Opcode51::Move,
+            Opcode51::LoadNil,
+            Opcode51::GetTable,
+            Opcode51::SelfOp,
+            Opcode51::Unm,
+            Opcode51::Not,
+            Opcode51::Len,
+            Opcode51::Concat,
+            Opcode51::TestSet,
+        ];
+        for op in 0..=37 {
+            let opcode = Opcode51::from_u8(op).unwrap();
+            if fixed_reg.contains(&opcode) {
+                assert!(
+                    opcode.b_is_fixed_register(),
+                    "{:?} should use fixed register B",
+                    opcode
+                );
+            } else {
+                assert!(
+                    !opcode.b_is_fixed_register(),
+                    "{:?} should not use fixed register B",
                     opcode
                 );
             }
