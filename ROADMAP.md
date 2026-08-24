@@ -25,10 +25,11 @@ comment, text rendering, and xref. Direct register fields, implicit register spa
 non-register scalar fields need independently proved domain rules before target
 qualification.
 
-Qualification advances through separately accepted slices: register `A`, fixed-role
-register `B`, fixed-role register `C`, conditional RK operands, implicit register
-spans, and public diagnostic discoverability. Each slice owns one field or semantic
-distinction and one canonical gate.
+Qualification advances through separately accepted slices beginning with fixed-role
+register `B`, followed by fixed-role register `C`, conditional RK operands,
+closure-capture source bounds, implicit register spans, and public diagnostic
+discoverability. Each slice owns one field or semantic distinction and one canonical
+gate.
 
 The `B` and `C` slices derive operand roles from executed Lua 5.1 VM semantics, with
 the official opcode-mode table serving as a mechanically checked input rather than an

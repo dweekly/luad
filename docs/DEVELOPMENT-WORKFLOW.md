@@ -220,6 +220,25 @@ The acceptance author does not see an implementation diff. The implementation ag
 does see the frozen tests. Final review uses a fresh session and the complete diff from
 the accepted base.
 
+Each role works on its own branch and reviewable pull request when a remote review
+surface is available. The acceptance branch freezes before the implementation branch
+is created. Shared planning documents, gate infrastructure, schemas, fixtures, and
+release manifests have one steward owner; agents do not resolve concurrent edits to
+those paths themselves.
+
+### Parallel execution threshold
+
+Serial execution is the default. Parallel work is eligible only when the steward can
+write a dependency graph showing that the slices have disjoint production and
+acceptance paths, independent gates, a common immutable base, and a deterministic
+integration order. Each slice receives a separate worktree, branch, pull request,
+allowed-path set, and artifact directory. One agent may not author acceptance for a
+slice whose implementation it has seen.
+
+Read-only roadmap refinement may proceed beside an isolated coding slice. Concurrent
+code or test authorship waits until the controller can prove non-overlap; anticipated
+speedup alone is not sufficient authority to parallelize.
+
 ## 7. CLI orchestration
 
 The installed interfaces inspected on 2026-08-23 are:
@@ -291,12 +310,19 @@ env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
   --mcp-config '{"mcpServers":{}}' \
   --model opus \
   --effort high \
-  --permission-mode acceptEdits \
+  --permission-mode dontAsk \
   --tools "Read,Glob,Grep,Edit,Write,Bash" \
-  --allowedTools "Read,Glob,Grep,Edit,Write,Bash(cargo test *),Bash(git diff *),Bash(git status *)" \
+  --allowedTools "Read,Glob,Grep,Edit,Write,Bash(cargo test -p luad-oracle --test SPRINT_TEST -- --nocapture)" \
   --output-format stream-json \
   "Implement only the approved acceptance outline. Produce the first durable red test before expanding the suite. Do not modify production code."
 ```
+
+`--tools` controls which built-in tools exist. `--allowedTools` preapproves matching
+uses; it is not an exclusive allowlist while the permission mode can still ask for
+approval. `dontAsk` makes every unmatched request fail closed. Prefer a shell-free
+authoring invocation with `Read,Glob,Grep,Edit,Write`; add `Bash` only after the exact
+focused test command is known. Broad patterns such as `Bash(cargo test *)` are not an
+acceptable substitute for an exact command.
 
 The steward interrupts authoring if the outline invocation does not return a usable
 structured result, or if the edit stage runs for 15 minutes without a durable red test
@@ -305,12 +331,24 @@ open-ended search does not extend the checkpoint. If the subscription allocation
 exhausted, retain durable files and resume after reset rather than switching to API
 credits implicitly.
 
+Turn ceilings belong on atomic read-only outline or review stages. Do not let a turn
+ceiling interrupt a multi-file edit before its durable checkpoint. For a small
+compiler-directed correction, prefer a fresh prompt containing the exact diagnostics
+and allowed paths; resume a large session only when preserving its context is worth
+reloading it.
+
 `--safe-mode` disables project customizations while preserving Claude subscription
 authentication. The strict empty MCP configuration and explicit tool list keep the
 session scoped. Pass every required file and instruction explicitly. Verify the init
 event reports `claude-opus-5`, no unintended MCP servers, and only the allowed built-in
 tools; the `opus` alias alone is not evidence. Do not use
 `--dangerously-skip-permissions`.
+
+Independent review uses the same safe mode, strict empty MCP configuration, and
+shell-free tools. An eight-turn ceiling is normally sufficient for one sprint contract,
+its frozen acceptance module, and the candidate production paths. Increase the review
+surface only when the claim requires it; a large duplicated oracle is a reason to
+narrow acceptance, not automatically to allocate more reviewer context.
 
 ### Antigravity implementation agent
 
@@ -322,15 +360,17 @@ conversations.
 Representative invocation from the implementation worktree:
 
 ```console
-agy -p \
+agy --print='Implement only docs/NEXT-SPRINT.md against the frozen acceptance commit. Do not edit the sprint contract, acceptance tests, fixtures, sprint gate, or shared proof harness. Run only the named focused acceptance test and stop at the candidate checkpoint.' \
   --model gemini-3.7-flash-high \
   --effort high \
   --mode accept-edits \
   --sandbox \
   --output-format json \
-  --print-timeout 30m \
-  "Implement only docs/NEXT-SPRINT.md against the frozen acceptance commit. Do not edit the sprint contract, acceptance tests, fixtures, sprint gate, or shared proof harness. Stop after the checkpoint handoff."
+  --print-timeout 30m
 ```
+
+`agy` treats `-p` and `--print` as value-taking options. Attach the prompt with
+`-p='...'` or `--print='...'`; a bare `-p` consumes the next option as its prompt.
 
 Before allowing edits, request a read-only implementation outline containing the
 expected production paths, invariants, smallest proposed change, and focused test
@@ -338,7 +378,10 @@ commands. The steward rejects scope outside the sprint or frozen boundary. Durin
 edit stage, require a reviewable production diff before broad test execution. If
 non-interactive mode cannot obtain its scoped permissions, use an interactive session
 inside the already isolated worktree; do not widen filesystem access or redirect the
-agent to a different checkout.
+agent to a different checkout. Trust only the worktree. Deny attempts to inspect a
+home directory or another checkout, restate the absolute worktree root, and approve
+only the exact focused test command. The implementation agent never receives blanket
+permission to run commands.
 
 `agy` starts a local helper and writes logs beneath its Antigravity configuration
 directory. In a managed outer sandbox it may require explicit permission for those
@@ -349,10 +392,9 @@ For both tools, prompts should identify the exact sprint document, base and acce
 commits, allowed paths, forbidden paths, required gate, and stop condition. Store the
 prompt text or its SHA-256 with the handoff when reproducibility matters.
 
-The implementation agent runs focused sprint tests while editing. It does not run the
-canonical gate or aggregate repository check unless the steward explicitly delegates
-those final-review duties. This keeps implementation feedback fast and leaves one
-authoritative clean-revision gate and aggregate run to the steward.
+The implementation agent runs one focused sprint test while editing. It does not run
+the canonical gate or aggregate repository check. This keeps implementation feedback
+fast and leaves one authoritative clean-revision gate and aggregate run to the steward.
 
 ## 8. Sprint lifecycle
 
@@ -417,6 +459,12 @@ sprints, or immediately after repeated failure, unexpected billing/authenticatio
 acceptance-test overgrowth, or a gate that permits a known defect. The maintained
 workflow describes the resulting present process; retrospective history belongs in
 the pull request, commit, or changelog.
+
+The retrospective records time to outline, time to first durable red, acceptance test
+and line count, implementation turns, permission denials, steward corrections,
+canonical-gate duration, aggregate-check duration, resolved model identity, allocation
+status, and API-equivalent usage when the provider reports it. These measurements are
+diagnostic signals rather than dollar ceilings for subscription-authenticated runs.
 
 ## 9. Handoff format
 

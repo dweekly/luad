@@ -11,6 +11,9 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Validation
 
+- Lua 5.1 disassembly and validation now use the executed VM role of field `A` across
+  all 38 stock opcodes, including register-bearing `CLOSE`, non-register `JMP` and
+  comparison flags, and ignored closure-binding descriptor fields.
 - Lua 5.1 validation now applies upvalue, child-prototype, and comparison-boolean
   domains to their encoded fields without treating those values as registers.
 - Lua 5.1 validation returns deterministic, de-duplicated diagnostics when the same
