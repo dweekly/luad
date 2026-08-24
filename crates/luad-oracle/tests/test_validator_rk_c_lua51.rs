@@ -1,13 +1,21 @@
 //! Independent public acceptance for the Lua 5.1 conditional `RK` operand `C`.
 //!
-//! This is the sprint's first authoring checkpoint, so it holds exactly two dimensions:
+//! This module holds four acceptance dimensions, all of them driven over the exact
+//! twelve-opcode `RK`-`C` set the independent authority states:
 //!
 //! - the independent `(opcode -> C role)` authority is exact, proved by a pure comparator
 //!   that first accepts the unmutated table and then rejects a false `RK` addition and an
 //!   omission;
-//! - for every one of the twelve `RK`-`C` opcodes, a bit-8-clear `C` is a register index
-//!   bounded by the owning prototype's `maxstacksize`: `maxstacksize - 1` is clean and
-//!   `maxstacksize` is exactly one `L51-REG-003` for field `C`.
+//! - a bit-8-clear `C` is a register index bounded by the owning prototype's
+//!   `maxstacksize`: `maxstacksize - 1` is clean and `maxstacksize` is exactly one
+//!   `L51-REG-003` for field `C`;
+//! - a bit-8-set `C` is a constant index bounded by the owning prototype's constant table:
+//!   the last index is clean and one past the end is exactly one `L51-CONST-005` for field
+//!   `C`, never a register diagnostic;
+//! - public disassembly types the operand by that same bit: bit 8 clear is a register with
+//!   no resolved constant, bit 8 set is a visible constant selection that carries the
+//!   resolved constant when the index exists and carries `L51-DISASM-002` instead when it
+//!   does not.
 //!
 //! The 38-row authority below is a test-local transcription of PUC-Rio Lua 5.1.5
 //! `lopcodes.h`, `lopcodes.c` and `lvm.c`: a row is `ConditionalRk` only where the VM arm
@@ -17,16 +25,20 @@
 //! disassembly, or validation helpers: the live CLI is the system under test, and only
 //! neutral plumbing (`find_workspace_root`, the published envelope types) is reused.
 //!
-//! Every case is one single-word replacement of the pinned `control_flow` fixture at the
-//! root prototype's PC 0, and records its full provenance: base hash, prototype path, PC,
-//! byte offset, original word, driven `C`, changed word, and result hash.
+//! Every case is one single-word replacement at the root prototype's PC 0, and records its
+//! full provenance: base hash, prototype path, PC, byte offset, original word, driven `C`,
+//! changed word, and result hash. Two owners are derived from the pinned `control_flow`
+//! fixture: the fixture itself, and one whose root constant table has been emptied by the
+//! same test-local machinery, so the zero-length rule - index `0` is the first invalid
+//! selected constant - is exercised on a real owning prototype.
 //!
-//! Scope note: schema validation, the selection/mode matrix, determinism, recursion, the
-//! constant half of the domain, and the non-`RK` control sweep belong to the later
-//! expansion and are deliberately absent here.
+//! Scope note: schema validation, the selection/mode matrix, determinism, recursion into
+//! child prototypes, and the non-`RK` control sweep belong to the later expansion and are
+//! deliberately absent here.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 
 use luad_core::diagnostic::Diagnostic;
 use luad_core::envelope::{MachineDocument, ValidationResponse};
@@ -48,13 +60,20 @@ const OPCODE_COUNT: usize = 38;
 /// The register-domain diagnostic this checkpoint claims for a bit-8-clear `RK`-`C`.
 const REG_C_CODE: &str = "L51-REG-003";
 
-/// The constant-domain diagnostic for field `C`. A bit-8-clear operand is a register, so
-/// this code must never stand in for the claim above.
+/// The constant-domain diagnostic this checkpoint claims for a bit-8-set `RK`-`C` whose
+/// selected index the owning constant table does not have. The two codes are exclusive: a
+/// bit-8-clear operand is a register and may never be reported under this code, and a
+/// bit-8-set operand is a constant selection and may never be reported under `REG_C_CODE`.
 const CONST_C_CODE: &str = "L51-CONST-005";
 
-/// Every operand-domain diagnostic other than the register-`C` one under test. `A` and `B`
-/// are held at legal values in every probe, and `C` never sets bit 8, so none of these may
-/// fire at either boundary; if one does, the case is not isolating field `C`.
+/// The disassembler's own out-of-bounds selected-constant diagnostic. It is attached to the
+/// disassembled instruction, not to the validator's finding list, and is asserted only
+/// there, so the two boundaries' diagnostics are never conflated.
+const DISASM_RK_CODE: &str = "L51-DISASM-002";
+
+/// Every operand-domain diagnostic that field `C` does not own. `A` and `B` are held at
+/// legal values in every probe, so none of these may fire at the instruction under test;
+/// if one does, the case is not isolating field `C`.
 const OTHER_OPERAND_CODES: [&str; 4] = [
     "L51-REG-001",
     "L51-REG-002",
@@ -402,7 +421,7 @@ fn test_lua51_rk_c_authority_is_exact_and_rejects_killer_mutations() {
         }],
     );
 
-    // Each of the four mutations that changes membership must also be caught by the set
+    // Each mutation that changes membership must also be caught by the twelve-name set
     // statement itself, not only row by row.
     for (label, rows) in [
         (
@@ -435,13 +454,20 @@ fn test_lua51_rk_c_authority_is_exact_and_rejects_killer_mutations() {
 // Test-local chunk reading and encoding
 // ---------------------------------------------------------------------------
 
-/// The root prototype facts every derived case is built from.
+/// The root prototype facts every derived case is built from: the register file and the
+/// constant table that bound field `C`, and the location of the word the cases replace.
 struct RootProto {
     path: String,
     maxstacksize: u8,
     pc: usize,
     byte_offset: usize,
     word: u32,
+    /// Number of entries in this prototype's own constant table.
+    constants_len: usize,
+    /// Byte offset of the `sizek` counter that precedes the constant table.
+    constants_count_offset: usize,
+    /// Byte span of the constant table's payload, after that counter.
+    constants_payload: (usize, usize),
 }
 
 /// Reads the root prototype prologue and its first instruction word, following the
@@ -453,7 +479,12 @@ fn read_root_proto(bytes: &[u8]) -> RootProto {
     assert_eq!(bytes[9], 4, "32-bit instruction words");
     let sizeof_int = bytes[7] as usize;
     let sizeof_sizet = bytes[8] as usize;
-    assert_eq!((sizeof_int, sizeof_sizet), (4, 8), "stock 64-bit layout");
+    let sizeof_number = bytes[10] as usize;
+    assert_eq!(
+        (sizeof_int, sizeof_sizet, sizeof_number),
+        (4, 8, 8),
+        "stock 64-bit layout with double numbers"
+    );
 
     let uint = |pos: usize, width: usize| -> usize {
         let mut value = 0_u64;
@@ -473,17 +504,48 @@ fn read_root_proto(bytes: &[u8]) -> RootProto {
     let instruction_count = uint(pos, sizeof_int);
     pos += sizeof_int;
     assert!(instruction_count > 0, "root prototype has code");
+    let code_offset = pos;
     assert!(
-        pos + 4 * instruction_count <= bytes.len(),
+        code_offset + 4 * instruction_count <= bytes.len(),
         "code array lies inside the chunk"
+    );
+
+    // The constant table follows the code array: a counter, then one tag-dispatched payload
+    // per entry, exactly as `lundump.c` writes them.
+    let constants_count_offset = code_offset + 4 * instruction_count;
+    let constants_len = uint(constants_count_offset, sizeof_int);
+    let payload_start = constants_count_offset + sizeof_int;
+    let mut walk = payload_start;
+    for index in 0..constants_len {
+        assert!(walk < bytes.len(), "constant {index} lies inside the chunk");
+        let tag = bytes[walk];
+        walk += 1;
+        walk += match tag {
+            0 => 0,                                       // nil carries no payload
+            1 => 1,                                       // boolean
+            3 => sizeof_number,                           // number
+            4 => sizeof_sizet + uint(walk, sizeof_sizet), // string: length then bytes
+            other => panic!("unknown constant tag {other} for constant {index} at byte {walk}"),
+        };
+    }
+    assert!(
+        walk <= bytes.len(),
+        "the constant table lies inside the chunk"
     );
 
     RootProto {
         path: "0".to_string(),
         maxstacksize,
         pc: 0,
-        byte_offset: pos,
-        word: u32::from_le_bytes(bytes[pos..pos + 4].try_into().expect("instruction word")),
+        byte_offset: code_offset,
+        word: u32::from_le_bytes(
+            bytes[code_offset..code_offset + 4]
+                .try_into()
+                .expect("instruction word"),
+        ),
+        constants_len,
+        constants_count_offset,
+        constants_payload: (payload_start, walk),
     }
 }
 
@@ -531,22 +593,27 @@ fn sha256(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
-fn luad_bin() -> PathBuf {
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
-        return path.into();
-    }
-    let workspace = luad_oracle::find_workspace_root();
-    let output = Command::new("cargo")
-        .args(["build", "-p", "luad-cli", "--bin", "luad"])
-        .current_dir(&workspace)
-        .output()
-        .expect("build luad CLI");
-    assert!(
-        output.status.success(),
-        "luad build failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    workspace.join("target/debug/luad")
+/// The CLI under test, located once: the many probes below all drive the same binary.
+fn luad_bin() -> &'static Path {
+    static BIN: OnceLock<PathBuf> = OnceLock::new();
+    BIN.get_or_init(|| {
+        if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
+            return path.into();
+        }
+        let workspace = luad_oracle::find_workspace_root();
+        let output = Command::new("cargo")
+            .args(["build", "-p", "luad-cli", "--bin", "luad"])
+            .current_dir(&workspace)
+            .output()
+            .expect("build luad CLI");
+        assert!(
+            output.status.success(),
+            "luad build failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        workspace.join("target/debug/luad")
+    })
+    .as_path()
 }
 
 /// Runs one public machine boundary over an in-memory chunk under explicit `lua5.1`
@@ -599,18 +666,19 @@ fn all_codes(doc: &MachineDocument<ValidationResponse>) -> Vec<String> {
         .collect()
 }
 
-/// One `L51-REG-003` finding reduced to the evidence this sprint freezes: owning target,
-/// source word location and bytes, and exact message.
-type RegCTuple = (String, usize, usize, String, String);
+/// One validator finding reduced to the evidence this sprint freezes: owning target,
+/// source word location and bytes, and message.
+type FindingTuple = (String, usize, usize, String, String);
 
-fn reg_c_tuples(doc: &MachineDocument<ValidationResponse>) -> Vec<RegCTuple> {
-    findings(doc, REG_C_CODE)
+/// Every finding carrying one code, as frozen tuples.
+fn finding_tuples(doc: &MachineDocument<ValidationResponse>, code: &str) -> Vec<FindingTuple> {
+    findings(doc, code)
         .iter()
         .map(|diagnostic| {
             let source = diagnostic
                 .source
                 .as_ref()
-                .expect("a register finding carries its source word");
+                .expect("an operand-domain finding carries its source word");
             (
                 diagnostic.target.to_string(),
                 source.byte_offset,
@@ -622,8 +690,27 @@ fn reg_c_tuples(doc: &MachineDocument<ValidationResponse>) -> Vec<RegCTuple> {
         .collect()
 }
 
+/// Every `L51-REG-003` finding anywhere in the document.
+fn reg_c_tuples(doc: &MachineDocument<ValidationResponse>) -> Vec<FindingTuple> {
+    finding_tuples(doc, REG_C_CODE)
+}
+
+/// The findings carrying one code that name one owning instruction. The `RK`-`C` claim is
+/// about the instruction that encodes the operand, so a derived chunk whose other
+/// instructions have their own problems cannot satisfy or defeat it.
+fn tuples_at(
+    doc: &MachineDocument<ValidationResponse>,
+    code: &str,
+    target: &str,
+) -> Vec<FindingTuple> {
+    finding_tuples(doc, code)
+        .into_iter()
+        .filter(|tuple| tuple.0 == target)
+        .collect()
+}
+
 /// The single finding a bit-8-clear `RK`-`C` at `maxstacksize` must carry.
-fn expected_tuple(proto: &RootProto, word: u32, c: u16) -> RegCTuple {
+fn expected_tuple(proto: &RootProto, word: u32, c: u16) -> FindingTuple {
     (
         format!("proto:{}:pc:{}", proto.path, proto.pc),
         proto.byte_offset,
@@ -660,6 +747,208 @@ fn instruction_at(document: &Json, pc: usize) -> Option<Json> {
     walk(document, &mut out);
     out.into_iter()
         .find(|instruction| instruction["pc"].as_u64() == Some(pc as u64))
+}
+
+/// The diagnostic codes public disassembly attached to one instruction. These are the
+/// disassembler's own findings and are never read as validator findings.
+fn instruction_codes(instruction: &Json) -> Vec<String> {
+    instruction
+        .get("diagnostics")
+        .and_then(Json::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item["code"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Disassembles a derived chunk and returns the instruction at the derived PC, having
+/// required it to be the opcode and the exact word the case intended. Every case runs this
+/// guard before its claim is judged, so no absence below can be an artefact of a chunk the
+/// boundary decoded some other way.
+fn observed_instruction(
+    case: &Derived,
+    proto: &RootProto,
+    op: u8,
+    name: &str,
+    path: &Path,
+) -> Result<Json, String> {
+    let document = run_public("disasm", &case.bytes, path);
+    let Some(instruction) = instruction_at(&document, proto.pc) else {
+        return Err(format!(
+            "{name}: the disassembly lists no instruction at PC {}\n  {}",
+            proto.pc, case.evidence
+        ));
+    };
+    let seen = (
+        instruction["opcode_num"].as_u64(),
+        instruction["mnemonic"].as_str().map(str::to_string),
+        instruction["raw_word"].as_u64(),
+    );
+    let intended = (
+        Some(u64::from(op)),
+        Some(name.to_string()),
+        Some(u64::from(case.word)),
+    );
+    if seen != intended {
+        return Err(format!(
+            "{name}: the derived word did not reach public disassembly as intended\n  \
+             seen={seen:?} intended={intended:?}\n  {}",
+            case.evidence
+        ));
+    }
+    Ok(instruction)
+}
+
+// ---------------------------------------------------------------------------
+// How public disassembly published the `C` operand
+// ---------------------------------------------------------------------------
+
+/// The published form of one instruction's `C` operand, read structurally.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum COperand {
+    /// A typed register index. `resolved` records whether a resolved fact was attached,
+    /// which a register may never carry.
+    Register { index: u64, resolved: bool },
+    /// A visible constant selection: the published value keeps all nine bits, including the
+    /// selection bit, and the display marks the selection. `resolved` carries the resolved
+    /// constant's index when the owning table has it.
+    SelectedConstant {
+        value: u64,
+        display: String,
+        resolved: Option<u64>,
+    },
+    /// Anything else, including an absent operand or an unexpected typed kind.
+    Other(String),
+}
+
+/// What the `RK` rule says the `C` operand of one probe must look like.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum CExpectation {
+    /// Bit 8 clear: the register at this index, with no resolved constant.
+    Register { index: u64 },
+    /// Bit 8 set: the selection of this constant index, published with the full nine-bit
+    /// value, resolved exactly when the owning table has that index.
+    Constant {
+        value: u64,
+        index: u64,
+        resolved: bool,
+    },
+}
+
+fn classify_c(instruction: &Json) -> COperand {
+    let Some(operand) = instruction["operands"].as_array().and_then(|operands| {
+        operands
+            .iter()
+            .find(|operand| operand["name"].as_str() == Some("C"))
+    }) else {
+        return COperand::Other("the instruction publishes no operand named C".to_string());
+    };
+    let resolved = operand.get("resolved").filter(|fact| !fact.is_null());
+    match operand["kind"]["kind"].as_str() {
+        Some("register") => match operand["kind"]["index"].as_u64() {
+            Some(index) => COperand::Register {
+                index,
+                resolved: resolved.is_some(),
+            },
+            None => COperand::Other(format!("a register C carrying no index: {operand}")),
+        },
+        Some("immediate-unsigned") => {
+            let Some(value) = operand["kind"]["value"].as_u64() else {
+                return COperand::Other(format!("a selected C carrying no value: {operand}"));
+            };
+            let resolved_index = match resolved {
+                None => None,
+                Some(fact) if fact["type"].as_str() == Some("constant") => {
+                    match fact["index"].as_u64() {
+                        Some(index) => Some(index),
+                        None => {
+                            return COperand::Other(format!(
+                                "a resolved constant carrying no index: {fact}"
+                            ));
+                        }
+                    }
+                }
+                Some(fact) => {
+                    return COperand::Other(format!("C resolved to a non-constant fact: {fact}"));
+                }
+            };
+            COperand::SelectedConstant {
+                value,
+                display: operand["display"].as_str().unwrap_or_default().to_string(),
+                resolved: resolved_index,
+            }
+        }
+        other => COperand::Other(format!("C typed as {other:?}: {operand}")),
+    }
+}
+
+/// The comparator over one published `C` operand. Pure, so the killer controls in the
+/// disassembly test drive it with synthetic observations and prove it is live.
+fn judge_c_operand(expected: &CExpectation, observed: &COperand) -> Option<String> {
+    match (expected, observed) {
+        (
+            CExpectation::Register { index },
+            COperand::Register {
+                index: seen,
+                resolved,
+            },
+        ) => {
+            if seen != index {
+                Some(format!(
+                    "expected register {index}, observed register {seen}"
+                ))
+            } else if *resolved {
+                Some("a register operand must carry no resolved constant".to_string())
+            } else {
+                None
+            }
+        }
+        (
+            CExpectation::Constant {
+                value,
+                index,
+                resolved,
+            },
+            COperand::SelectedConstant {
+                value: seen_value,
+                display,
+                resolved: seen_resolved,
+            },
+        ) => {
+            if seen_value != value {
+                Some(format!(
+                    "expected the published nine-bit selection {value}, observed {seen_value}"
+                ))
+            } else if !display.starts_with("K(") {
+                Some(format!(
+                    "expected the display to mark a constant selection, observed {display:?}"
+                ))
+            } else {
+                match (*resolved, seen_resolved) {
+                    (true, Some(seen)) if seen == index => None,
+                    (true, Some(seen)) => Some(format!(
+                        "expected the resolved constant index {index}, observed {seen}"
+                    )),
+                    (true, None) => Some(format!(
+                        "expected the resolved constant at index {index}, observed none"
+                    )),
+                    (false, None) => None,
+                    (false, Some(seen)) => Some(format!(
+                        "expected no resolved constant, observed one at index {seen}"
+                    )),
+                }
+            }
+        }
+        (CExpectation::Register { index }, observed) => {
+            Some(format!("expected register {index}, observed {observed:?}"))
+        }
+        (CExpectation::Constant { index, .. }, observed) => Some(format!(
+            "expected the selection of constant {index}, observed {observed:?}"
+        )),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -727,7 +1016,49 @@ fn pinned_base() -> (Vec<u8>, String, RootProto) {
          maxstacksize={}",
         proto.maxstacksize
     );
+    assert!(
+        (1..256).contains(&proto.constants_len),
+        "the base prototype must have a constant table to straddle, and its one-past-the-end \
+         index must still fit the eight index bits of an RK operand: constants={}",
+        proto.constants_len
+    );
     (base, base_hash, proto)
+}
+
+/// The pinned base with the root prototype's constant table emptied, so the zero-length
+/// rule - index `0` is the first invalid selected constant - has a real owning prototype.
+///
+/// Only the constant table is touched: its counter becomes zero and its payload bytes are
+/// removed, which is exactly what `lundump.c` writes for a constant-free prototype. The
+/// code array precedes it, so every instruction, byte offset and source word this module
+/// derives is unchanged, and the reader re-reads the result to prove it. The root's other
+/// instructions keep their own constant references and will have their own findings; every
+/// assertion below names the owning instruction, so that noise can neither satisfy nor
+/// defeat the claim.
+fn zero_constant_owner(base: &[u8], proto: &RootProto) -> (Vec<u8>, String, RootProto) {
+    let (start, end) = proto.constants_payload;
+    let counter = proto.constants_count_offset;
+    let mut bytes = base.to_vec();
+    bytes[counter..counter + 4].copy_from_slice(&0_u32.to_le_bytes());
+    bytes.drain(start..end);
+
+    let hash = sha256(&bytes);
+    let derived = read_root_proto(&bytes);
+    assert_eq!(
+        derived.constants_len, 0,
+        "the derived owner must declare an empty constant table"
+    );
+    assert_eq!(
+        (
+            derived.byte_offset,
+            derived.word,
+            derived.maxstacksize,
+            derived.pc
+        ),
+        (proto.byte_offset, proto.word, proto.maxstacksize, proto.pc),
+        "emptying the constant table must leave the code array and its offsets untouched"
+    );
+    (bytes, hash, derived)
 }
 
 // ---------------------------------------------------------------------------
@@ -741,16 +1072,9 @@ fn boundaries(maxstacksize: u8) -> [(u16, bool); 2] {
     [(max - 1, false), (max, true)]
 }
 
-#[test]
-fn test_rk_c_register_domain_is_bounded_by_maxstacksize() {
-    audit_authority();
-
-    let (base, base_hash, proto) = pinned_base();
-    let file = NamedTempFile::new().expect("temporary chunk");
-    let path = file.path();
-
-    // The sweep is the authority's own `RK` rows, so it cannot silently shrink to a
-    // hand-picked few or grow past the claim.
+/// The rows every sweep in this module drives: the authority's own `RK` rows, so no sweep
+/// can silently shrink to a hand-picked few or grow past the twelve-opcode claim.
+fn rk_rows() -> Vec<&'static CRow> {
     let driven: Vec<&CRow> = OFFICIAL_C_ROLES
         .iter()
         .filter(|entry| entry.role == CRole::ConditionalRk)
@@ -760,7 +1084,18 @@ fn test_rk_c_register_domain_is_bounded_by_maxstacksize() {
         RK_C_NAMES.to_vec(),
         "all twelve RK-C opcodes are driven"
     );
+    driven
+}
 
+#[test]
+fn test_rk_c_register_domain_is_bounded_by_maxstacksize() {
+    audit_authority();
+
+    let (base, base_hash, proto) = pinned_base();
+    let file = NamedTempFile::new().expect("temporary chunk");
+    let path = file.path();
+
+    let driven = rk_rows();
     let mut problems: Vec<String> = Vec::new();
     for entry in driven.iter() {
         let (op, name) = (entry.op, entry.name);
@@ -788,47 +1123,23 @@ fn test_rk_c_register_domain_is_bounded_by_maxstacksize() {
             // disassembly as this opcode at this PC, and its `C` must be typed as the
             // register the bit-8-clear encoding says it is. An absent finding below can
             // then not be an artefact of a chunk the boundary decoded some other way.
-            let document = run_public("disasm", &case.bytes, path);
-            let Some(instruction) = instruction_at(&document, proto.pc) else {
-                problems.push(format!(
-                    "{name}.C={c}: the disassembly lists no instruction at PC {}\n  {}",
-                    proto.pc, case.evidence
-                ));
-                continue;
+            let instruction = match observed_instruction(&case, &proto, op, name, path) {
+                Ok(instruction) => instruction,
+                Err(problem) => {
+                    problems.push(problem);
+                    continue;
+                }
             };
-            let seen = (
-                instruction["opcode_num"].as_u64(),
-                instruction["mnemonic"].as_str().map(str::to_string),
-                instruction["raw_word"].as_u64(),
-            );
-            let intended = (
-                Some(u64::from(op)),
-                Some(name.to_string()),
-                Some(u64::from(case.word)),
-            );
-            if seen != intended {
+            let observed_c = classify_c(&instruction);
+            if let Some(reason) = judge_c_operand(
+                &CExpectation::Register {
+                    index: u64::from(c),
+                },
+                &observed_c,
+            ) {
                 problems.push(format!(
-                    "{name}.C={c}: the derived word did not reach public disassembly as \
-                     intended\n  seen={seen:?} intended={intended:?}\n  {}",
-                    case.evidence
-                ));
-                continue;
-            }
-            let typed_c = instruction["operands"].as_array().and_then(|operands| {
-                operands
-                    .iter()
-                    .find(|operand| operand["name"].as_str() == Some("C"))
-                    .cloned()
-            });
-            let typed_as_register = typed_c.as_ref().is_some_and(|operand| {
-                operand["kind"]["kind"].as_str() == Some("register")
-                    && operand["kind"]["index"].as_u64() == Some(u64::from(c))
-            });
-            if !typed_as_register {
-                problems.push(format!(
-                    "{name}.C={c}: bit 8 is clear, so public disassembly must type C as \
-                     register {c}\n  operand={}\n  {}",
-                    typed_c.unwrap_or(Json::Null),
+                    "{name}.C={c}: bit 8 is clear, so public disassembly must type C as a \
+                     register: {reason}\n  {}",
                     case.evidence
                 ));
                 continue;
@@ -837,7 +1148,7 @@ fn test_rk_c_register_domain_is_bounded_by_maxstacksize() {
             // The claim. `C` is the only operand that can be at fault, so the register
             // bound decides the whole document's operand-domain content.
             let doc = validate_bytes(&case.bytes, path);
-            let expected: Vec<RegCTuple> = invalid
+            let expected: Vec<FindingTuple> = invalid
                 .then(|| expected_tuple(&proto, case.word, c))
                 .into_iter()
                 .collect();
@@ -887,6 +1198,588 @@ fn test_rk_c_register_domain_is_bounded_by_maxstacksize() {
          across {} RK-C opcode(s) disagree:\n\n{}",
         problems.len(),
         driven.len() * 2,
+        driven.len(),
+        problems.join("\n\n")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The constant half of the RK domain
+// ---------------------------------------------------------------------------
+
+/// One driven selected constant: the low eight-bit index, and whether the owning constant
+/// table has it.
+struct ConstCase {
+    index: usize,
+    valid: bool,
+}
+
+/// The two neighbours of the constant bound for one owning table: its last index, and the
+/// first index it does not have. A zero-length table has no valid neighbour, so index `0`
+/// is its first invalid selected constant.
+fn constant_cases(constants_len: usize) -> Vec<ConstCase> {
+    let mut cases = Vec::new();
+    if constants_len > 0 {
+        cases.push(ConstCase {
+            index: constants_len - 1,
+            valid: true,
+        });
+    }
+    cases.push(ConstCase {
+        index: constants_len,
+        valid: false,
+    });
+    cases
+}
+
+/// The identity a finding must carry to be the owning instruction's: its target, and the
+/// byte location and bytes of the source word.
+type Identity = (String, usize, usize, String);
+
+fn identity_of(proto: &RootProto, word: u32) -> Identity {
+    (
+        format!("proto:{}:pc:{}", proto.path, proto.pc),
+        proto.byte_offset,
+        4,
+        hex::encode(word.to_le_bytes()),
+    )
+}
+
+/// The comparator over one constant-domain case, judged from the validator's findings for
+/// the owning instruction alone. Pure, so the killer controls below drive it with synthetic
+/// findings and prove it is live.
+fn judge_constant_case(
+    case: &ConstCase,
+    identity: &Identity,
+    total: usize,
+    const_findings: &[FindingTuple],
+    reg_findings: &[FindingTuple],
+) -> Vec<String> {
+    let mut problems = Vec::new();
+    let index = case.index;
+    if !reg_findings.is_empty() {
+        problems.push(format!(
+            "bit 8 is set, so C selects a constant and may never be reported under \
+             {REG_C_CODE}; observed {reg_findings:#?}"
+        ));
+    }
+
+    if case.valid {
+        if !const_findings.is_empty() {
+            problems.push(format!(
+                "constant index {index} is inside a table of {total}, so field C must be \
+                 clean; observed {const_findings:#?}"
+            ));
+        }
+        return problems;
+    }
+
+    let [finding] = const_findings else {
+        problems.push(format!(
+            "constant index {index} is one past a table of {total}, so field C must carry \
+             exactly one {CONST_C_CODE}; observed {} finding(s): {const_findings:#?}",
+            const_findings.len()
+        ));
+        return problems;
+    };
+    let seen = (finding.0.clone(), finding.1, finding.2, finding.3.clone());
+    if &seen != identity {
+        problems.push(format!(
+            "the {CONST_C_CODE} must name the owning instruction and its source word: \
+             expected {identity:?}, observed {seen:?}"
+        ));
+    }
+    let message = &finding.4;
+    if !message.contains(&index.to_string()) || !message.contains(&total.to_string()) {
+        problems.push(format!(
+            "the {CONST_C_CODE} message must name the selected constant index {index} and \
+             the size {total} of the owning table: {message:?}"
+        ));
+    }
+    if message.contains("maxstacksize") {
+        problems.push(format!(
+            "the {CONST_C_CODE} message must report a constant bound, not a register frame: \
+             {message:?}"
+        ));
+    }
+    problems
+}
+
+/// Drives the pure constant-domain comparator with synthetic evidence: it accepts exactly
+/// the expected observation and rejects each way a boundary could appear to satisfy the
+/// claim without doing so.
+fn assert_constant_comparator_is_live() {
+    let identity: Identity = ("proto:0:pc:0".to_string(), 64, 4, "0a0b0c0d".to_string());
+    let valid = ConstCase {
+        index: 2,
+        valid: true,
+    };
+    let invalid = ConstCase {
+        index: 3,
+        valid: false,
+    };
+    let expected = vec![(
+        identity.0.clone(),
+        identity.1,
+        identity.2,
+        identity.3.clone(),
+        "RK operand C constant index 3 out of bounds (total constants: 3)".to_string(),
+    )];
+    let register_finding = vec![(
+        identity.0.clone(),
+        identity.1,
+        identity.2,
+        identity.3.clone(),
+        "Register C (3) exceeds maxstacksize (2) at PC 0".to_string(),
+    )];
+
+    // Positive: the comparator accepts both sides of the bound when the evidence is exact.
+    for (label, case, const_findings) in [
+        ("the last valid index is clean", &valid, Vec::new()),
+        ("one past the end is reported", &invalid, expected.clone()),
+    ] {
+        let problems = judge_constant_case(case, &identity, 3, &const_findings, &[]);
+        assert!(
+            problems.is_empty(),
+            "the comparator must accept the exact expected evidence: {label}\n{problems:#?}"
+        );
+    }
+
+    // Killers, each judged by that same comparator.
+    let mut wrong_owner = expected.clone();
+    wrong_owner[0].0 = "proto:0/0:pc:4".to_string();
+    let mut wrong_word = expected.clone();
+    wrong_word[0].3 = "ffffffff".to_string();
+    let mut wrong_bound = expected.clone();
+    wrong_bound[0].4 =
+        "RK operand C constant index 9 out of bounds (total constants: 9)".to_string();
+    let mut register_message = expected.clone();
+    register_message[0].4 = "Register C (259) exceeds maxstacksize (3) at PC 0".to_string();
+    for (label, case, const_findings, reg_findings) in [
+        (
+            "the invalid selection produced nothing at all",
+            &invalid,
+            Vec::new(),
+            Vec::new(),
+        ),
+        (
+            "a register diagnostic was substituted for the constant one",
+            &invalid,
+            Vec::new(),
+            register_finding.clone(),
+        ),
+        (
+            "a register diagnostic accompanied the constant one",
+            &invalid,
+            expected.clone(),
+            register_finding,
+        ),
+        (
+            "the finding named another instruction",
+            &invalid,
+            wrong_owner,
+            Vec::new(),
+        ),
+        (
+            "the finding named another source word",
+            &invalid,
+            wrong_word,
+            Vec::new(),
+        ),
+        (
+            "the finding named another bound",
+            &invalid,
+            wrong_bound,
+            Vec::new(),
+        ),
+        (
+            "the finding reported a register frame instead of a constant table",
+            &invalid,
+            register_message,
+            Vec::new(),
+        ),
+        (
+            "the same finding was reported twice",
+            &invalid,
+            [expected.clone(), expected.clone()].concat(),
+            Vec::new(),
+        ),
+        (
+            "the last valid index was reported as out of bounds",
+            &valid,
+            expected,
+            Vec::new(),
+        ),
+    ] {
+        let problems = judge_constant_case(case, &identity, 3, &const_findings, &reg_findings);
+        assert!(
+            !problems.is_empty(),
+            "the comparator must reject this killer: {label}"
+        );
+    }
+}
+
+#[test]
+fn test_rk_c_constant_domain_is_bounded_by_the_owning_constant_table() {
+    audit_authority();
+    assert_constant_comparator_is_live();
+
+    let (pinned, pinned_hash, pinned_proto) = pinned_base();
+    let (empty, empty_hash, empty_proto) = zero_constant_owner(&pinned, &pinned_proto);
+    let file = NamedTempFile::new().expect("temporary chunk");
+    let path = file.path();
+
+    // Two owning prototypes: the pinned fixture's own constant table, and one emptied by
+    // this module so the zero-length rule is exercised on a real owner.
+    let owners = [
+        ("pinned", &pinned, pinned_hash.as_str(), &pinned_proto),
+        ("zero-constant", &empty, empty_hash.as_str(), &empty_proto),
+    ];
+    assert_ne!(
+        pinned_proto.constants_len, empty_proto.constants_len,
+        "the two owners must impose different constant bounds"
+    );
+
+    let driven = rk_rows();
+    let mut problems: Vec<String> = Vec::new();
+    let mut cases = 0_usize;
+    for (owner, base, base_hash, proto) in owners {
+        let total = proto.constants_len;
+        for entry in driven.iter() {
+            let (op, name) = (entry.op, entry.name);
+            for case in constant_cases(total) {
+                cases += 1;
+                let index = case.index;
+                let c = BIT_EIGHT | u16::try_from(index).expect("a selected index fits nine bits");
+                assert_eq!(
+                    c & BIT_EIGHT,
+                    BIT_EIGHT,
+                    "{name}: the probe sets the RK selection bit"
+                );
+                let word = probe(op, c, proto);
+                assert_eq!(
+                    field_c(word),
+                    c,
+                    "{name}: the encoded word carries the driven C"
+                );
+                let derived = derive(
+                    base,
+                    base_hash,
+                    proto,
+                    word,
+                    &format!(
+                        "{owner} owner: {name}.C=K({index}) ({}) against a constant table of \
+                         {total}",
+                        if case.valid { "present" } else { "absent" }
+                    ),
+                );
+
+                // Vacuity: the word reached public disassembly as this opcode, and its `C`
+                // is visibly a constant selection rather than a register. Which constant it
+                // resolves to is the disassembly test's claim; here it is enough that the
+                // boundary is not reading a register.
+                let instruction = match observed_instruction(&derived, proto, op, name, path) {
+                    Ok(instruction) => instruction,
+                    Err(problem) => {
+                        problems.push(problem);
+                        continue;
+                    }
+                };
+                let observed_c = classify_c(&instruction);
+                if let Some(reason) = judge_c_operand(
+                    &CExpectation::Constant {
+                        value: u64::from(c),
+                        index: index as u64,
+                        resolved: case.valid,
+                    },
+                    &observed_c,
+                ) {
+                    problems.push(format!(
+                        "{owner} owner: {name}.C=K({index}): bit 8 is set, so public \
+                         disassembly must publish a constant selection: {reason}\n  {}",
+                        derived.evidence
+                    ));
+                    continue;
+                }
+
+                // The claim, judged from the validator's findings for this instruction.
+                let doc = validate_bytes(&derived.bytes, path);
+                let identity = identity_of(proto, derived.word);
+                let reported = judge_constant_case(
+                    &case,
+                    &identity,
+                    total,
+                    &tuples_at(&doc, CONST_C_CODE, &identity.0),
+                    &tuples_at(&doc, REG_C_CODE, &identity.0),
+                );
+                for problem in reported {
+                    problems.push(format!(
+                        "{owner} owner: {name}.C=K({index}) against a constant table of \
+                         {total}: {problem}\n  {}\n  all codes={:?}",
+                        derived.evidence,
+                        all_codes(&doc)
+                    ));
+                }
+
+                // `A` and `B` are legal for every row, so no other operand domain may fire
+                // at this instruction.
+                for code in OTHER_OPERAND_CODES {
+                    let stray = tuples_at(&doc, code, &identity.0);
+                    if !stray.is_empty() {
+                        problems.push(format!(
+                            "{owner} owner: {name}.C=K({index}): A and B are legal, so {code} \
+                             must not fire at this instruction; observed {stray:#?}\n  {}",
+                            derived.evidence
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    assert!(
+        problems.is_empty(),
+        "a conditional RK operand C with bit 8 set is a constant index bounded by the owning \
+         prototype's constant table: the last index must be clean and the first index the \
+         table does not have must be exactly one {CONST_C_CODE} for field C, never a \
+         register diagnostic. {} of {cases} case(s) across {} RK-C opcode(s) and two owners \
+         disagree:\n\n{}",
+        problems.len(),
+        driven.len(),
+        problems.join("\n\n")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// How public disassembly types `C`
+// ---------------------------------------------------------------------------
+
+/// Drives the pure operand comparator with synthetic observations: it accepts exactly the
+/// published form each encoding requires and rejects the domain swaps, lost resolutions and
+/// off-by-one indexes that would otherwise pass unnoticed.
+fn assert_operand_comparator_is_live() {
+    let register = CExpectation::Register { index: 3 };
+    let resolved = CExpectation::Constant {
+        value: 0x103,
+        index: 3,
+        resolved: true,
+    };
+    let unresolved = CExpectation::Constant {
+        value: 0x104,
+        index: 4,
+        resolved: false,
+    };
+    let selection = |value: u64, index: Option<u64>| COperand::SelectedConstant {
+        value,
+        display: format!("K({})", value & 0xff),
+        resolved: index,
+    };
+
+    for (label, expected, observed) in [
+        (
+            "a bit-8-clear operand published as that register",
+            &register,
+            COperand::Register {
+                index: 3,
+                resolved: false,
+            },
+        ),
+        (
+            "a resolvable selection published with its constant",
+            &resolved,
+            selection(0x103, Some(3)),
+        ),
+        (
+            "an unresolvable selection published without one",
+            &unresolved,
+            selection(0x104, None),
+        ),
+    ] {
+        assert!(
+            judge_c_operand(expected, &observed).is_none(),
+            "the comparator must accept the published form the RK rule requires: {label}"
+        );
+    }
+
+    for (label, expected, observed) in [
+        (
+            "the register domain published as a constant selection",
+            &register,
+            selection(3, Some(3)),
+        ),
+        (
+            "the constant domain published as a register, the selection bit dropped",
+            &resolved,
+            COperand::Register {
+                index: 3,
+                resolved: false,
+            },
+        ),
+        (
+            "a register carrying a resolved constant",
+            &register,
+            COperand::Register {
+                index: 3,
+                resolved: true,
+            },
+        ),
+        (
+            "a register at the neighbouring index",
+            &register,
+            COperand::Register {
+                index: 4,
+                resolved: false,
+            },
+        ),
+        (
+            "a selection that lost its resolved constant",
+            &resolved,
+            selection(0x103, None),
+        ),
+        (
+            "a selection resolved to the neighbouring constant",
+            &resolved,
+            selection(0x103, Some(2)),
+        ),
+        (
+            "an out-of-bounds selection resolved anyway",
+            &unresolved,
+            selection(0x104, Some(4)),
+        ),
+        (
+            "a selection whose published value lost the selection bit",
+            &resolved,
+            selection(3, Some(3)),
+        ),
+        (
+            "a selection displayed as a register",
+            &resolved,
+            COperand::SelectedConstant {
+                value: 0x103,
+                display: "R(3)".to_string(),
+                resolved: Some(3),
+            },
+        ),
+        (
+            "no C operand published at all",
+            &resolved,
+            COperand::Other("the instruction publishes no operand named C".to_string()),
+        ),
+    ] {
+        assert!(
+            judge_c_operand(expected, &observed).is_some(),
+            "the comparator must reject this killer: {label}"
+        );
+    }
+}
+
+#[test]
+fn test_public_disasm_types_rk_c_by_bit_eight_with_resolved_constants() {
+    audit_authority();
+    assert_operand_comparator_is_live();
+
+    let (base, base_hash, proto) = pinned_base();
+    let file = NamedTempFile::new().expect("temporary chunk");
+    let path = file.path();
+    let total = proto.constants_len;
+
+    // One probe per encoding the bit selects. The two valid indexes are driven so that the
+    // resolved fact must track the driven index rather than being a fixed attachment; when
+    // the pinned table holds a single constant they coincide and are driven once.
+    let mut probes: Vec<(u16, CExpectation, bool)> = vec![(
+        u16::from(proto.maxstacksize) - 1,
+        CExpectation::Register {
+            index: u64::from(proto.maxstacksize) - 1,
+        },
+        false,
+    )];
+    let mut valid_indexes = vec![0_usize, total - 1];
+    valid_indexes.dedup();
+    for index in valid_indexes.into_iter().chain(std::iter::once(total)) {
+        let resolvable = index < total;
+        let c = BIT_EIGHT | u16::try_from(index).expect("a selected index fits nine bits");
+        probes.push((
+            c,
+            CExpectation::Constant {
+                value: u64::from(c),
+                index: index as u64,
+                resolved: resolvable,
+            },
+            !resolvable,
+        ));
+    }
+
+    let driven = rk_rows();
+    let mut problems: Vec<String> = Vec::new();
+    for entry in driven.iter() {
+        let (op, name) = (entry.op, entry.name);
+        for (c, expected, expect_disasm_diagnostic) in probes.iter() {
+            let word = probe(op, *c, &proto);
+            assert_eq!(
+                field_c(word),
+                *c,
+                "{name}: the encoded word carries the driven C"
+            );
+            let derived = derive(
+                &base,
+                &base_hash,
+                &proto,
+                word,
+                &format!(
+                    "{name}.C={c} ({}) against maxstacksize={} and a constant table of {total}",
+                    if c & BIT_EIGHT == 0 {
+                        "bit 8 clear".to_string()
+                    } else {
+                        format!("bit 8 set, K({})", c & 0xff)
+                    },
+                    proto.maxstacksize
+                ),
+            );
+
+            let instruction = match observed_instruction(&derived, &proto, op, name, path) {
+                Ok(instruction) => instruction,
+                Err(problem) => {
+                    problems.push(problem);
+                    continue;
+                }
+            };
+
+            let observed_c = classify_c(&instruction);
+            if let Some(reason) = judge_c_operand(expected, &observed_c) {
+                problems.push(format!(
+                    "{name}.C={c}: {reason}\n  {}\n  instruction={instruction}",
+                    derived.evidence
+                ));
+            }
+
+            // The disassembler's own diagnostic, read from the instruction it belongs to. An
+            // unresolvable selection must carry exactly one; every resolvable operand, in
+            // either domain, must carry none.
+            let codes = instruction_codes(&instruction);
+            let observed = codes
+                .iter()
+                .filter(|code| code.as_str() == DISASM_RK_CODE)
+                .count();
+            let wanted = usize::from(*expect_disasm_diagnostic);
+            if observed != wanted {
+                problems.push(format!(
+                    "{name}.C={c}: expected {wanted} {DISASM_RK_CODE} on this instruction, \
+                     observed {observed}\n  {}\n  instruction codes={codes:?}",
+                    derived.evidence
+                ));
+            }
+        }
+    }
+
+    assert!(
+        problems.is_empty(),
+        "public disassembly must type a conditional RK operand C by bit 8: a register with \
+         no resolved constant when the bit is clear, and a visible constant selection when \
+         it is set - resolved to the selected constant when the owning table has it, and \
+         unresolved with exactly one {DISASM_RK_CODE} when it does not. {} of {} case(s) \
+         across {} RK-C opcode(s) disagree:\n\n{}",
+        problems.len(),
+        driven.len() * probes.len(),
         driven.len(),
         problems.join("\n\n")
     );
