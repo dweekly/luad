@@ -39,12 +39,10 @@ inference-heavy analysis unless the active sprint explicitly owns them.
 
 ## Verification
 
-Run the narrowest relevant test while iterating. In semantic and qualification lanes,
-the implementation agent stops at its candidate checkpoint; the steward runs the
-named gate from the active sprint and the aggregate check from the clean candidate.
-In the patch lane, the implementation agent runs only the focused command named by the
-sprint; the steward reviews the diff and relies on one final CI aggregate run. For work
-outside these lanes, run:
+The implementation agent stops after a reviewable candidate diff. The steward runs the
+narrowest relevant focused test, any named semantic or qualification gate, and the
+aggregate check from the clean candidate. Patch work relies on one final CI aggregate
+run after focused steward verification. For work outside these lanes, run:
 
 ```console
 bash scripts/check.sh

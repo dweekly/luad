@@ -18,15 +18,18 @@ Usage:
 Runs one Antigravity turn in the current worktree using the Gemini 3.7 Flash High
 model variant. Non-interactive results are JSON containing the conversation ID,
 duration, and token usage. Pass that ID to `resume` so later checkpoints retain the
-same conversation. The sandbox remains enabled. Wall time, prompt hash, and the
-Antigravity log path are printed to stderr when the turn exits. Set LUAD_AGY_LOG_FILE
-to choose the log location.
+same conversation. The sandbox remains enabled. Wall time, source/effective prompt
+hashes, and the Antigravity log path are printed to stderr when the turn exits. Set
+LUAD_AGY_LOG_FILE to choose the log location.
 
 The interactive stages preserve the same model variant, mode, sandbox, and conversation
-rules while allowing narrowly reviewed file permissions when print mode fails closed.
-`config` prints the pinned model, reasoning source, and workspace controls without
-starting a model turn. `access` prints Antigravity's effective configuration and
-permission records for review without starting a model task.
+rules while allowing narrowly reviewed file or command permissions when a compiler-led
+turn is explicitly required. Routine non-interactive implementation stages prepend an
+edit-only policy; the steward runs verification outside the model session.
+`config` prints the pinned model, reasoning source, workspace controls, execution, and
+verification owner without starting a model turn. `access` prints Antigravity's
+effective configuration and permission records for review without starting a model
+task.
 EOF
 }
 
@@ -39,7 +42,7 @@ if [[ ${1:-} == "--help" || ${1:-} == "-h" ]]; then
 fi
 
 if [[ ${1:-} == "config" ]]; then
-  printf 'model=%s\nreasoning=%s\nworkspace=git-worktree\nsandbox=enabled\n' \
+  printf 'model=%s\nreasoning=%s\nworkspace=git-worktree\nsandbox=enabled\nexecution=edit-only\nverification=steward\n' \
     "$model" "$reasoning"
   exit 0
 fi
@@ -100,13 +103,22 @@ if [[ "$stage" == interactive-* ]]; then
   interactive=true
 fi
 
+if [[ "$mode" == "accept-edits" && "$interactive" == false ]]; then
+  edit_only_policy=$'Repository execution policy: make the requested file edits and stop after producing a reviewable diff. '
+  edit_only_policy+=$'Do not run terminal commands, builds, tests, formatters, linters, gates, Git commands, or provider configuration commands. '
+  edit_only_policy+=$'The steward owns all verification.\n\n'
+  prompt="${edit_only_policy}${prompt}"
+fi
+
 started_at=$(date +%s)
 log_file=${LUAD_AGY_LOG_FILE:-/tmp/luad-agy-${started_at}.log}
-prompt_sha256=$(shasum -a 256 "$prompt_file" | awk '{print $1}')
+prompt_file_sha256=$(shasum -a 256 "$prompt_file" | awk '{print $1}')
+prompt_sha256=$(printf '%s' "$prompt" | shasum -a 256 | awk '{print $1}')
 
 finish() {
   status=$?
   finished_at=$(date +%s)
+  echo "agy_prompt_file_sha256=$prompt_file_sha256" >&2
   echo "agy_prompt_sha256=$prompt_sha256" >&2
   echo "agy_wall_seconds=$((finished_at - started_at))" >&2
   echo "agy_log_file=$log_file" >&2
