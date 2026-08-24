@@ -14,12 +14,6 @@ trap cleanup EXIT
 
 echo "=== Installing official Lua compilers with SHA-256 validation to ${DEST_DIR} ==="
 
-case "$(uname -s)" in
-    Darwin) LUA_MAKE_PLATFORM="macosx" ;;
-    Linux) LUA_MAKE_PLATFORM="linux" ;;
-    *) LUA_MAKE_PLATFORM="generic" ;;
-esac
-
 build_lua() {
     local version="$1"
     local tarball="$2"
@@ -56,10 +50,10 @@ build_lua() {
     tar -xzf "${tarball}"
     cd "lua-${version}"
 
-    # Lua's top-level makefiles select platform-specific compiler and linker
-    # settings through an explicit target. In Lua 5.1, `all` only prints the
-    # target-selection instructions and exits successfully.
-    make "${LUA_MAKE_PLATFORM}" -j4
+    # The generic target builds luac without optional platform libraries such
+    # as readline. Lua's top-level makefiles require an explicit target; in
+    # Lua 5.1, `all` only prints the target-selection instructions.
+    make generic -j4
 
     test -x "src/luac"
     cp "src/luac" "${DEST_DIR}/${bin_name}"
