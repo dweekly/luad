@@ -45,6 +45,9 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Documentation
 
+- Antigravity invocations now explicitly grant the current Git worktree through the
+  canonical wrapper, retain sandboxing, expose those workspace controls to drift
+  checks, and provide a named effective-access audit command.
 - Added an evidence-gated development workflow that separates the product roadmap,
   one active sprint, independent acceptance-test authorship, implementation, and
   clean-revision acceptance.

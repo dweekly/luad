@@ -5,6 +5,7 @@ usage() {
   cat <<'EOF'
 Usage:
   scripts/agents/agy-gemini.sh config
+  scripts/agents/agy-gemini.sh access
   scripts/agents/agy-gemini.sh plan PROMPT_FILE
   scripts/agents/agy-gemini.sh implement PROMPT_FILE
   scripts/agents/agy-gemini.sh resume-plan CONVERSATION_ID PROMPT_FILE
@@ -23,7 +24,9 @@ to choose the log location.
 
 The interactive stages preserve the same model variant, mode, sandbox, and conversation
 rules while allowing narrowly reviewed file permissions when print mode fails closed.
-`config` prints the pinned model and reasoning source without starting a model turn.
+`config` prints the pinned model, reasoning source, and workspace controls without
+starting a model turn. `access` prints Antigravity's effective configuration and
+permission records for review without starting a model task.
 EOF
 }
 
@@ -36,13 +39,27 @@ if [[ ${1:-} == "--help" || ${1:-} == "-h" ]]; then
 fi
 
 if [[ ${1:-} == "config" ]]; then
-  printf 'model=%s\nreasoning=%s\n' "$model" "$reasoning"
+  printf 'model=%s\nreasoning=%s\nworkspace=git-worktree\nsandbox=enabled\n' \
+    "$model" "$reasoning"
   exit 0
 fi
 
 if ! command -v agy >/dev/null 2>&1; then
   echo "agy is not installed or not on PATH" >&2
   exit 127
+fi
+
+if [[ ${1:-} == "access" ]]; then
+  echo "==> Antigravity configuration" >&2
+  agy -p '/config' --output-format json
+  echo "==> Antigravity permissions" >&2
+  agy -p '/permissions' --output-format json
+  exit 0
+fi
+
+if ! worktree_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+  echo "run the Antigravity wrapper from a Git worktree" >&2
+  exit 2
 fi
 
 stage=${1:-}
@@ -99,6 +116,7 @@ trap finish EXIT
 
 common=(
   "${conversation_args[@]}"
+  --add-dir "$worktree_root"
   --model "$model"
   --mode "$mode"
   --sandbox
