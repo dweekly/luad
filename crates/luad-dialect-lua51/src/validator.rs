@@ -1,9 +1,11 @@
 //! Structural and VM invariant validator for Lua 5.1 bytecode chunks.
 
+use std::collections::BTreeSet;
+
 use luad_core::diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
 use luad_core::model::{Chunk, Prototype};
 
-use crate::opcodes::{OpMode51, RawInstruction51};
+use crate::opcodes::{OpMode51, Opcode51, RawInstruction51};
 
 /// Validate Lua 5.1 chunk invariants.
 pub fn validate_chunk_lua51(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
@@ -29,6 +31,25 @@ pub fn validate_chunk_lua51(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
 
 fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
     let num_insts = proto.instructions.len();
+
+    // Map closure binding descriptor PCs
+    let mut binding_descriptors = BTreeSet::new();
+    for (pc, inst) in proto.instructions.iter().enumerate() {
+        let raw = RawInstruction51::decode(inst.raw_word);
+        if raw.opcode == Some(Opcode51::Closure) {
+            let child_bx = raw.bx as usize;
+            let nups = proto
+                .protos
+                .get(child_bx)
+                .map(|p| p.upvalues.len())
+                .unwrap_or(0);
+            for b_pc in (pc + 1)..=(pc + nups) {
+                if b_pc < num_insts {
+                    binding_descriptors.insert(b_pc);
+                }
+            }
+        }
+    }
 
     // 1. Stack bounds check
     if proto.maxstacksize > 250 {
@@ -136,12 +157,8 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
 
         // Register bounds validation (field A)
         let max_reg = proto.maxstacksize as usize;
-        if raw.a as usize >= max_reg
-            && op != crate::opcodes::Opcode51::Close
-            && op != crate::opcodes::Opcode51::Eq
-            && op != crate::opcodes::Opcode51::Lt
-            && op != crate::opcodes::Opcode51::Le
-        {
+        let is_binding_descriptor = binding_descriptors.contains(&pc);
+        if !is_binding_descriptor && op.a_is_register() && raw.a as usize >= max_reg {
             let diag = Diagnostic::error(
                 "L51-REG-001",
                 DiagnosticCategory::Instruction,
@@ -475,5 +492,55 @@ mod tests {
         assert_eq!(v1, v2);
         assert_eq!(d1, d2);
         assert_eq!(d2.len(), 1);
+    }
+
+    #[test]
+    fn test_validator_register_a_close_and_jmp_authority() {
+        // CLOSE with A = maxstacksize (invalid)
+        let close_invalid = RawInstruction51::encode_iabc(Opcode51::Close, 2, 0, 0);
+        let proto = make_test_proto(vec![close_invalid], 0, 0); // maxstacksize = 2
+        let chunk = make_test_chunk(proto);
+        let (verdict, diags) = validate_chunk_lua51(&chunk);
+        assert_eq!(verdict, Verdict::Invalid);
+        let reg_diags: Vec<_> = diags.iter().filter(|d| d.code == "L51-REG-001").collect();
+        assert_eq!(reg_diags.len(), 1);
+        assert_eq!(
+            reg_diags[0].message,
+            "Register A (2) exceeds maxstacksize (2) at PC 0"
+        );
+
+        // CLOSE with A = maxstacksize - 1 (valid)
+        let close_valid = RawInstruction51::encode_iabc(Opcode51::Close, 1, 0, 0);
+        let proto = make_test_proto(vec![close_valid], 0, 0);
+        let chunk = make_test_chunk(proto);
+        let (verdict, diags) = validate_chunk_lua51(&chunk);
+        assert_eq!(verdict, Verdict::ValidForParser);
+        assert!(diags.is_empty());
+
+        // JMP with A >= maxstacksize (A ignored in 5.1, must not report L51-REG-001)
+        let jmp_inst = RawInstruction51::encode_iasbx(Opcode51::Jmp, 255, -1);
+        let proto = make_test_proto(vec![jmp_inst], 0, 0);
+        let chunk = make_test_chunk(proto);
+        let (_, diags) = validate_chunk_lua51(&chunk);
+        assert!(!diags.iter().any(|d| d.code == "L51-REG-001"));
+    }
+
+    #[test]
+    fn test_validator_closure_binding_descriptor_a_ignored() {
+        // Prototype with 1 child proto having 2 upvalues
+        let closure = RawInstruction51::encode_iabx(Opcode51::Closure, 0, 0);
+        let desc_move = RawInstruction51::encode_iabc(Opcode51::Move, 255, 0, 0);
+        let desc_getupval = RawInstruction51::encode_iabc(Opcode51::GetUpval, 255, 0, 0);
+        let mut proto = make_test_proto(vec![closure, desc_move, desc_getupval], 1, 0);
+        proto.protos = vec![make_test_proto(vec![], 2, 0)]; // child has 2 upvalues
+        proto.maxstacksize = 2;
+
+        let chunk = make_test_chunk(proto);
+        let (verdict, diags) = validate_chunk_lua51(&chunk);
+        assert_eq!(verdict, Verdict::ValidForParser);
+        assert!(
+            !diags.iter().any(|d| d.code == "L51-REG-001"),
+            "binding descriptors must not report L51-REG-001: {diags:?}"
+        );
     }
 }

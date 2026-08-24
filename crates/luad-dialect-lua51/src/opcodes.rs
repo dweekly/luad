@@ -183,6 +183,12 @@ impl Opcode51 {
             Self::Jmp | Self::ForLoop | Self::ForPrep => OpMode51::IAsBx,
         }
     }
+
+    /// Returns `true` if field `A` is used as a direct register bounded by `maxstacksize`.
+    #[must_use]
+    pub const fn a_is_register(self) -> bool {
+        !matches!(self, Self::Jmp | Self::Eq | Self::Lt | Self::Le)
+    }
 }
 
 /// Lua 5.1 instruction format modes.
@@ -317,5 +323,26 @@ mod tests {
         assert_eq!(dec_sbx.opcode, Some(Opcode51::Jmp));
         assert_eq!(dec_sbx.sbx, -500);
         assert_eq!(dec_sbx.encode(), Some(word_sbx));
+    }
+
+    #[test]
+    fn test_a_is_register_matches_authority() {
+        let non_reg = [Opcode51::Jmp, Opcode51::Eq, Opcode51::Lt, Opcode51::Le];
+        for op in 0..=37 {
+            let opcode = Opcode51::from_u8(op).unwrap();
+            if non_reg.contains(&opcode) {
+                assert!(
+                    !opcode.a_is_register(),
+                    "{:?} should not use A as register",
+                    opcode
+                );
+            } else {
+                assert!(
+                    opcode.a_is_register(),
+                    "{:?} should use A as register",
+                    opcode
+                );
+            }
+        }
     }
 }
