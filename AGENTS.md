@@ -41,13 +41,19 @@ state, or inference-heavy analysis unless the active sprint explicitly owns them
 
 ## Verification
 
-Run the narrowest relevant test while iterating, then the named gate from the active sprint. Before declaring a task complete, run:
+Run the narrowest relevant test while iterating. In the separated sprint workflow,
+the implementation agent stops at its candidate checkpoint; the steward runs the
+named gate from the active sprint and the aggregate check from the clean candidate.
+For work outside that separated workflow, run:
 
 ```console
 bash scripts/check.sh
 ```
 
-This aggregate check is necessary but not sufficient. Report which named oracle or analysis gate passed, which official compiler versions were present, and whether any tests skipped. “All tests pass” is not an adequate handoff by itself.
+This aggregate check is necessary but not sufficient. Report which named oracle or
+analysis gate passed, which official compiler versions were present, and whether any
+tests skipped. “All tests pass” is not an adequate handoff by itself. Do not duplicate
+the steward's canonical or aggregate run unless explicitly asked.
 
 ## Documentation
 

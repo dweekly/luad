@@ -1,36 +1,25 @@
-# Active sprint: Lua 5.1 direct-register operand authority
+# Active sprint: Lua 5.1 register-`A` authority
 
 Status: acceptance contract. No downstream roadmap work begins before this sprint is
 accepted or explicitly respecified.
 
 ## Claim
 
-For every stock Lua 5.1 instruction word, `luad disasm` and `luad validate` agree with
-the official VM about which encoded fields are direct register references. Validation
-rejects each direct register index outside `0..maxstacksize` and never applies a
-register diagnostic to a flag, count, upvalue, prototype, jump, unused field, RK
-constant, or closure-binding metadata field.
-
-The public boundaries are:
-
-```console
-luad disasm CHUNK --dialect lua5.1 --format json
-luad validate CHUNK --dialect lua5.1 --format json
-luad validate CHUNK --dialect lua5.1 --strict --format json
-```
-
-The same rules apply when the stock profile is selected automatically.
+For every stock Lua 5.1 opcode, `luad disasm` identifies the encoded `A` field as a
+register exactly when the official VM uses it as a direct register, and `luad validate`
+emits `L51-REG-001` exactly when such a register index is outside
+`0..maxstacksize`. Flags, unused `A` fields, and ignored `A` fields in closure-binding
+descriptors never acquire a register fact or register diagnostic.
 
 ## Researcher value
 
-A human or agent can treat a register operand and an out-of-bounds-register diagnostic
-as a precise VM fact. Scalar operands cannot silently create false register findings,
-and a corrupt direct register cannot pass merely because the same physical field has a
-different role on another opcode.
+A human or agent can trust an `A`-register operand and `L51-REG-001` finding as precise
+VM facts without manually remembering which opcodes reuse the same physical bits as a
+flag or unused field.
 
 ## Starting evidence
 
-- The accepted baseline is revision
+- The accepted behavior baseline is revision
   `17a63156105767c37fd5b6bd7a8e15c790ca2a89`.
 - Required prerequisite gates are `gate-proof-harness`,
   `gate-public-disasm-lua51`, `gate-closures-lua51`,
@@ -42,110 +31,114 @@ different role on another opcode.
 
 ## Non-goals
 
-- implicit register-span bounds such as `A..A+n`, call arguments/results, loop working
-  sets, varargs, or open-ended top-of-stack ranges;
-- RK constant-index validation except proving that RK constants are not registers;
+- `B` or `C` register authority and `L51-REG-002` or `L51-REG-003`;
+- RK register/constant discrimination;
+- closure-binding `B` capture-source validation;
+- implicit register spans, call arguments/results, loop working sets, varargs, or
+  open-ended top-of-stack ranges;
 - upvalue, child-prototype, comparison-flag, jump-target, or constant-domain changes;
-- effects, liveness, reaching definitions, provenance slices, or sink analysis;
-- Lua 5.1 LNUM semantics, Lua 5.2 or later, LuaJIT, or vendor opcode mappings;
-- diagnostic-catalog publication or exact-target promotion;
-- persistent annotations, inferred names, or project state.
+- effects, liveness, register provenance, sink analysis, or decompilation;
+- LNUM semantics, later Lua versions, LuaJIT, or vendor opcode mappings;
+- diagnostic-catalog publication, exact-target promotion, or persistent project state.
 
-## Official direct-register matrix
+## Official `A`-field matrix
 
-Acceptance derives field roles independently from PUC-Rio Lua 5.1.5
-`lopcodes.h`, `lopcodes.c`, and `lvm.c`. It covers all 38 opcodes and treats only these
-encoded fields as direct registers:
+Acceptance owns an independent 38-row `(opcode -> A role)` table.
 
-| Field role | Opcodes |
-|---|---|
-| Always-register `A` | `MOVE`, `LOADK`, `LOADBOOL`, `LOADNIL`, `GETUPVAL`, `GETGLOBAL`, `GETTABLE`, `SETGLOBAL`, `SETUPVAL`, `SETTABLE`, `NEWTABLE`, `SELF`, `ADD`, `SUB`, `MUL`, `DIV`, `MOD`, `POW`, `UNM`, `NOT`, `LEN`, `CONCAT`, `TEST`, `TESTSET`, `CALL`, `TAILCALL`, `RETURN`, `FORLOOP`, `FORPREP`, `TFORLOOP`, `SETLIST`, `CLOSE`, `CLOSURE`, `VARARG` |
-| Always-register `B` | `MOVE`, `LOADNIL`, `GETTABLE`, `SELF`, `UNM`, `NOT`, `LEN`, `CONCAT`, `TESTSET` |
-| Always-register `C` | `CONCAT` |
-| RK `B`: register when `BITRK` is clear | `SETTABLE`, `ADD`, `SUB`, `MUL`, `DIV`, `MOD`, `POW`, `EQ`, `LT`, `LE` |
-| RK `C`: register when `BITRK` is clear | `GETTABLE`, `SETTABLE`, `SELF`, `ADD`, `SUB`, `MUL`, `DIV`, `MOD`, `POW`, `EQ`, `LT`, `LE` |
+The official direct-register `A` opcodes are:
 
-`LOADNIL.B` and `CONCAT.B/C` are encoded register endpoints and therefore belong in
-this sprint. Bounds implied beyond a directly encoded endpoint or base remain reserved
-for the register-span sprint.
+```text
+MOVE LOADK LOADBOOL LOADNIL GETUPVAL GETGLOBAL GETTABLE SETGLOBAL
+SETUPVAL SETTABLE NEWTABLE SELF ADD SUB MUL DIV MOD POW UNM NOT LEN
+CONCAT TEST TESTSET CALL TAILCALL RETURN FORLOOP FORPREP TFORLOOP
+SETLIST CLOSE CLOSURE VARARG
+```
 
-For ordinary executable instructions, an encoded direct register is valid exactly
-when its unsigned index is less than `maxstacksize`. Each invalid field produces the
-field-specific `L51-REG-001`, `L51-REG-002`, or `L51-REG-003` diagnostic at the owning
-instruction and source word. Strict and permissive validation agree on the first
-direct-register defect; permissive mode may continue to report independent defects.
+`JMP` has no semantic `A` operand. `EQ`, `LT`, and `LE` use `A` as a boolean condition
+flag. For an ordinary instruction in the register set, `A` is valid exactly when its
+unsigned value is less than `maxstacksize`.
 
-The physical words following `CLOSURE` are interpreted by their `closure_binding`
-role. A `MOVE` binding uses `B` as a parent register and ignores its encoded `A`; a
-`GETUPVAL` binding uses `B` as a parent upvalue and ignores its encoded `A`. Those words
-do not acquire ordinary executable operand roles merely because their opcode bits name
-`MOVE` or `GETUPVAL`.
+Physical `MOVE` and `GETUPVAL` words used as Lua 5.1 `closure_binding` descriptors are
+contextual exceptions: their encoded `A` field is ignored and must not be typed or
+validated as an executable register. Their physical PC and binding role remain visible.
+
+## Public behavior
+
+For a valid stock chunk:
+
+```console
+luad disasm CHUNK --dialect lua5.1 --format json
+luad validate CHUNK --dialect lua5.1 --format json
+luad validate CHUNK --dialect lua5.1 --strict --format json
+```
+
+- exit code is `0`;
+- stdout is one JSON document validating against the live command schema;
+- stderr is empty;
+- automatic stock-profile selection produces the same semantic records as explicit
+  `--dialect lua5.1`.
+
+For a parsed chunk whose direct register `A == maxstacksize`:
+
+- `validate` exits `1` in strict and permissive modes;
+- stdout is one validation JSON document containing `L51-REG-001` at the owning
+  instruction ID and source word;
+- stderr is empty;
+- strict and permissive modes agree on the first register-`A` defect.
 
 ## Fixture matrix
 
 | Fixture | SHA-256 | Purpose |
 |---|---|---|
-| `tests/fixtures/precompiled/lua51/hello.luac` | `d64567d2d41ff584b86602f98fff5906f58f101f6faf98598f3662bac6e96a4f` | Simple executable register operands and deterministic auto/explicit selection. |
-| `tests/fixtures/precompiled/lua51/control_flow.luac` | `d7e98a66c1ec34cde480a49c20aa5f070d2113294dd60b81100a1cf6d15ebe40` | Comparisons, jumps, tests, calls, returns, and loop base registers. |
-| `tests/fixtures/precompiled/lua51/tables.luac` | `b9db891cc3f8ea04338194bfeace1847a06e5be3ad5e0222c4d19a10ad766a8f` | Table, RK, count, and register-field separation. |
-| `tests/fixtures/precompiled/lua51/closures.luac` | `62c4438b660880fa546cbe377d1f40113d2efc25aefc40df227979276efa756e` | Recursive prototypes and role-aware closure-binding descriptors. |
+| `tests/fixtures/precompiled/lua51/hello.luac` | `d64567d2d41ff584b86602f98fff5906f58f101f6faf98598f3662bac6e96a4f` | Simple direct-register `A` instructions and auto/explicit selection. |
+| `tests/fixtures/precompiled/lua51/control_flow.luac` | `d7e98a66c1ec34cde480a49c20aa5f070d2113294dd60b81100a1cf6d15ebe40` | `EQ`, `LT`, `LE`, `JMP`, calls, returns, tests, and loop-base controls. |
+| `tests/fixtures/precompiled/lua51/closures.luac` | `62c4438b660880fa546cbe377d1f40113d2efc25aefc40df227979276efa756e` | Recursive prototypes and ignored descriptor-`A` cases. |
 
-Acceptance may generate test-local chunks or mutate one pinned instruction word to
-exercise every legal field boundary and every non-register control. Each derived case
-records the base hash, prototype path, PC, original word, changed field, changed word,
-and resulting hash. Maintained fixture bytes remain unchanged.
+Acceptance may derive test-local chunks by changing one pinned instruction word or by
+compiling recorded source with the pinned compiler. Every derived case records its
+base hash, prototype path, PC, original word, changed `A`, changed word, and result
+hash. Maintained fixture bytes remain unchanged.
 
 ## Independent authority
 
-The acceptance oracle transcribes the official operand comments, `OpArgMask` table,
-instruction encodings, and VM uses without calling production opcode, disassembly,
-validation, effects, or closure-binding helpers. It pins these official source files:
+The acceptance table is transcribed from official PUC-Rio Lua 5.1.5 operand comments,
+opcode modes, and VM uses without calling production opcode, disassembly, validation,
+effects, or closure-binding helpers:
 
 | Authority | SHA-256 |
 |---|---|
-| PUC-Rio Lua 5.1.5 `lopcodes.h` | `a15fe349da7c1e73b563e8c3249fe7d535eccc844cb30ec80b4e335b0699279b` |
-| PUC-Rio Lua 5.1.5 `lopcodes.c` | `63cd74edc75970092a8ce078c4ab970efa1ee18de960d00eb826d49fe98d8a76` |
-| PUC-Rio Lua 5.1.5 `lvm.c` | `b560aad0a1b8bfc4e4b732b2393e8f8ecc68b6c772e6d25763d6ef71c38ab709` |
-
-The test-local comparator owns an exhaustive `(opcode, field) -> role` table. A
-production enum, display operand kind, validator allowlist, or diagnostic is an
-observation under test and cannot define the expected role.
+| `lopcodes.h` | `a15fe349da7c1e73b563e8c3249fe7d535eccc844cb30ec80b4e335b0699279b` |
+| `lopcodes.c` | `63cd74edc75970092a8ce078c4ab970efa1ee18de960d00eb826d49fe98d8a76` |
+| `lvm.c` | `b560aad0a1b8bfc4e4b732b2393e8f8ecc68b6c772e6d25763d6ef71c38ab709` |
 
 ## Acceptance assertions
 
-- All 38 opcodes and all `A`, `B`, and `C` physical fields appear in the independent
-  role sweep; missing or duplicate cases fail.
-- Every direct-register field is typed as `register` in live disassembly JSON.
-- A direct-register value of `maxstacksize - 1` validates without an
-  `L51-REG-*` diagnostic; `maxstacksize` produces the exact field-specific diagnostic.
-- Every non-register field can carry a value at or above `maxstacksize` without a
-  register diagnostic when that value is otherwise legal for its role.
-- RK register forms below `BITRK` follow the register rule, while RK constant forms do
-  not produce register diagnostics.
-- Closure binding descriptors follow binding roles, retain their physical PCs, and do
-  not emit standalone executable-register diagnostics for ignored fields.
-- Diagnostic code, target ID, source offset, field name, observed index, and stack
-  bound are deterministic and agree between repeated invocations.
-- Automatic and explicit stock-profile selection produce the same semantic records.
+- The independent table contains every official opcode exactly once.
+- Live disassembly types `A` as `register` for every ordinary register-`A` opcode.
+- Live disassembly does not type `JMP.A`, comparison `A`, or descriptor `A` as a
+  register.
+- `A == maxstacksize - 1` produces no `L51-REG-001` diagnostic.
+- `A == maxstacksize` produces exactly one `L51-REG-001` with deterministic code,
+  target ID, source offset, field name, observed index, and stack bound.
+- Legal non-register `A` values at or above `maxstacksize` produce no register
+  diagnostic.
+- Strict/permissive and automatic/explicit invocations satisfy the public behavior.
+- The three unmodified fixtures produce no unjustified `L51-REG-001` diagnostic.
 - Live JSON validates against the current disassembly and validation schemas.
-- Every pinned compiler-produced fixture has no unjustified register diagnostic.
 
 ## Killer mutations
 
-The positive comparator must reject an otherwise-valid observation when a test:
+The positive comparator rejects an otherwise-valid observation when a test:
 
-- marks one scalar, unused, upvalue, prototype, jump, count, or flag field as a
-  register;
-- removes one official direct-register field from the matrix;
-- swaps the roles of `B` and `C` for one opcode;
-- accepts `index == maxstacksize` or rejects `index == maxstacksize - 1`;
-- treats an RK constant as a register or an RK register as a constant-only field;
-- validates a closure-binding descriptor's ignored `A` as an executable register;
-- omits or changes one diagnostic's target ID, source offset, code, or field identity;
-- exercises fewer than all 38 opcodes or silently drops one prototype depth;
-- makes auto and explicit profile output disagree.
+- removes one opcode or changes one row in the independent `A` matrix;
+- marks `JMP.A` or comparison `A` as a register;
+- accepts `A == maxstacksize` or rejects `A == maxstacksize - 1`;
+- validates an ignored closure-binding descriptor `A` as an executable register;
+- changes the diagnostic code, field, target, source offset, observed index, or bound;
+- omits a recursive prototype depth;
+- makes automatic and explicit stock-profile records disagree.
 
-Every mutation reaches the same comparator used by the positive cases and records a
+Each mutation reaches the same comparator used by the positive cases and records a
 specific rejection reason.
 
 ## Canonical gate
@@ -153,37 +146,36 @@ specific rejection reason.
 The independent acceptance author creates exactly one sprint gate:
 
 ```console
-bash scripts/gates/gate-validator-direct-registers-lua51.sh ARTIFACT_DIR
+bash scripts/gates/gate-validator-register-a-lua51.sh ARTIFACT_DIR
 ```
 
-Its specification is
-`tests/gates/gate-validator-direct-registers-lua51.json`. It depends on every gate in
-Starting evidence, pins the four fixtures and official compiler, enumerates every
+Its specification is `tests/gates/gate-validator-register-a-lua51.json`. It depends on
+the prerequisite gates above, pins the three fixtures and compiler, enumerates every
 positive and killer test exactly, and rejects missing, ignored, skipped, filtered, or
 zero-test execution.
 
 ## Role boundaries
 
-The acceptance-test author may add the sprint acceptance test, independent operand
-matrix and decoder, test-local chunk mutator, gate specification, and gate wrapper.
-Production code, maintained fixtures, current schemas, sprint contract, shared proof
-harness, gate runner, capability tiers, and prerequisite tests remain forbidden.
+The acceptance-test author may add one sprint acceptance test, the independent
+`A`-role table and minimal decoder, test-local derived cases, gate specification, and
+gate wrapper. Production code, maintained fixtures, schemas, sprint contract, shared
+proof machinery, capability tiers, and prerequisite tests remain forbidden.
 
-The implementation agent may change Lua 5.1 dialect-owned operand facts and validation
-plus ordinary unit tests and current interface documentation. It may not alter frozen
-acceptance material, maintained fixtures, schemas, the sprint gate, prerequisite
-evidence, shared proof machinery, or capability tiers.
+The implementation agent may change Lua 5.1 dialect-owned `A` operand facts and
+validation plus ordinary unit tests. It may not alter frozen acceptance material,
+fixtures, schemas, the sprint gate, prerequisite evidence, shared proof machinery, or
+capability tiers.
 
 ## Handoff
 
-Acceptance requires base, frozen-acceptance, and candidate commits; exact acceptance
-and implementation CLI/model identities; red and green logs; a clean candidate;
-canonical gate artifacts; fixture, compiler, authority, spec, and result hashes; zero
-failed, ignored, skipped, filtered, or missing tests; `bash scripts/check.sh` success;
-and confirmation that Lua 5.1 remains experimental.
+Acceptance requires base, frozen-acceptance, and candidate commits; exact CLI/model,
+authentication, allocation, and overage identities; approved outline; red and green
+logs; a clean candidate; canonical artifacts and hashes; zero failed, ignored, skipped,
+filtered, or missing tests; one steward-run `bash scripts/check.sh`; and confirmation
+that Lua 5.1 remains experimental.
 
 ## Stop condition
 
-Do not begin implicit register-span validation, the public diagnostic catalog,
-exact-target promotion, register provenance, or other roadmap work until this sprint
-passes independent review from one clean revision.
+Do not begin register-`B`, register-`C`, RK, implicit-span, diagnostic-catalog,
+promotion, or provenance work until this sprint passes independent review from one
+clean revision.

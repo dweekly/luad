@@ -26,6 +26,9 @@ All notable changes will be documented here. The project has not yet made a prod
 - Added an evidence-gated development workflow that separates the product roadmap,
   one active sprint, independent acceptance-test authorship, implementation, and
   clean-revision acceptance.
+- Refined agent orchestration with provider preflight, staged acceptance outlines,
+  proportional evidence levels, subscription-aware usage checkpoints, and
+  steward-owned final verification.
 - Established a canonical documentation index with freshness triggers and consolidated
   the dated TP-Link/OpenWrt reports into present-facing embedded-firmware requirements.
 - Reclassified all implemented dialects as experimental pending executable proof gates.

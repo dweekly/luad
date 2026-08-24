@@ -25,6 +25,11 @@ comment, text rendering, and xref. Direct register fields, implicit register spa
 non-register scalar fields need independently proved domain rules before target
 qualification.
 
+Qualification advances through separately accepted slices: register `A`, fixed-role
+register `B`, fixed-role register `C`, conditional RK operands, implicit register
+spans, and public diagnostic discoverability. Each slice owns one field or semantic
+distinction and one canonical gate.
+
 Exit outcome: valid compiler-produced fixtures have no unjustified diagnostics,
 targeted corruptions produce exact documented diagnostics, and every emitted code is
 present in the public catalog.

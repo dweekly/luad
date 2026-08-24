@@ -26,6 +26,11 @@ The roadmap answers **what matters next**. The sprint answers **what exact claim
 eligible for acceptance now**. Neither document may claim that unverified work is
 already supported.
 
+A sprint normally owns one physical field, diagnostic family, output record, or other
+single semantic distinction. If its claim needs multiple independent matrices,
+diagnostic families, or public commands that could be accepted separately, split it
+before acceptance work begins.
+
 ## 2. Roles and separation of responsibility
 
 ### Product and acceptance steward
@@ -54,6 +59,13 @@ fixtures and provenance, gate specification, and sprint-specific gate wrapper. I
 must not alter the shared proof harness or gate runner, and it must not implement
 production behavior. It records the expected red result and demonstrates that each
 mutation probe rejects the targeted defect.
+
+Acceptance authorship has two checkpoints. First, the author returns a read-only
+acceptance outline naming the independent authority, minimum fixtures, positive
+comparisons, killer mutations, expected red defect, and estimated test surface. The
+steward approves or narrows that outline before edits are allowed. Second, the author
+produces the first durable red test and diff before expanding the suite. An author that
+cannot reach either checkpoint stops without changing the sprint claim.
 
 Model diversity is preferred here because it reduces correlated interpretation errors.
 The default test-author role uses Claude Code with the current `opus` alias at high
@@ -111,6 +123,10 @@ Avoid implementation prescriptions unless they protect an architectural invarian
 For example, requiring typed encoded operands is appropriate; requiring a particular
 Rust helper name usually is not.
 
+The contract uses the minimum fixture and command set needed to distinguish the claim.
+Exhaustive coverage is appropriate when the claim itself is an exhaustive table; it is
+not a default requirement for a bounded correction.
+
 ## 4. Acceptance-test design
 
 Acceptance tests are written and reviewed before production work begins.
@@ -136,6 +152,24 @@ The steward reviews tests for vacuous loops, shared production code on both side
 comparison, assertions that check only existence or counts, and mutations that never
 reach the comparator. Only then is the acceptance commit frozen.
 
+### Proportional evidence levels
+
+Select the least expensive level that can falsify the claim:
+
+- **Bounded correction:** one public regression, one independently derived expected
+  value or boundary pair, and two to four targeted killer mutations.
+- **Semantic matrix:** exhaustive independently owned rows for a dialect field,
+  opcode family, schema union, or similarly enumerable subsystem, plus mutations for
+  omission, misclassification, and boundaries.
+- **Target promotion:** full public-command closure, exact compiler/profile/layout
+  identity, corpus and adversarial evidence, prerequisite manifests, and release
+  artifacts.
+
+Moving to a larger level requires a larger public claim, not merely a desire for more
+tests. Acceptance helpers should remain narrower than the production subsystem they
+judge. If the oracle becomes a second general implementation, reduce the sprint or
+justify that duplication as target-promotion evidence.
+
 ## 5. Gate standard
 
 A canonical sprint gate is manipulation-resistant rather than literally ungameable.
@@ -152,6 +186,10 @@ It must:
 - keep compiler absence, fixture absence, and unsupported profiles as hard failures;
 - make target profile/layout identity explicit in release evidence;
 - avoid treating `scripts/check.sh` as semantic proof.
+
+Development artifacts may live in a fresh temporary directory. An accepted gate's
+result, specification, hashes, and command log must be retained by a pull request, CI
+artifact, or release-evidence bundle before the temporary directory is discarded.
 
 The implementation agent may report a narrow test result while iterating. It may use
 the word `PASSED` for the canonical gate only when the actual gate script succeeds from
@@ -193,6 +231,29 @@ The installed interfaces inspected on 2026-08-23 are:
 These versions are observations, not permanent requirements. Every sprint handoff
 records the versions actually used.
 
+### Provider preflight
+
+Before delegating repository work, run a tool-disabled smoke request and confirm from
+machine output:
+
+- resolved canonical model, CLI version, and intended authentication source;
+- successful inference with no permission or OAuth-lock errors;
+- allocation or rate-limit status, overage status, and termination reason;
+- the exact built-in and MCP tool set exposed to the session.
+
+Then run a read-only repository probe with the intended mode and allowlist. Managed
+sandboxes must explicitly permit the provider's configuration directory and local
+helper when required. A request that never reaches inference is an environment failure,
+not a model or budget failure.
+
+For a Claude Pro or Max subscription, remove `ANTHROPIC_API_KEY`,
+`ANTHROPIC_AUTH_TOKEN`, and other Console or gateway credentials from the invocation
+environment. `claude auth status --json` must report `authMethod: claude.ai`. The init
+event must report `apiKeySource: none`, and the rate-limit event must report
+`isUsingOverage: false`. A reported `total_cost_usd` is an API-equivalent usage estimate
+in this mode, not a workflow spending ceiling. Console PAYG is a separate, explicitly
+selected mode.
+
 ### Claude acceptance author
 
 Claude supports non-interactive print mode, `--model`, `--effort`, structured JSON or
@@ -200,22 +261,56 @@ streaming output, JSON-schema-constrained final output, tool allowlists, permiss
 modes, resumable sessions, and native `--worktree` creation. The steward normally
 creates the worktree explicitly so both providers follow the same isolation model.
 
-Representative invocation from the acceptance worktree:
+Use a staged invocation. The read-only outline stage is deliberately inexpensive and
+has no edit or shell tools:
 
 ```console
-claude -p \
+env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
+  claude -p \
+  --safe-mode \
+  --strict-mcp-config \
+  --mcp-config '{"mcpServers":{}}' \
+  --model opus \
+  --effort high \
+  --permission-mode plan \
+  --tools "Read,Glob,Grep" \
+  --output-format json \
+  --json-schema ACCEPTANCE_OUTLINE_SCHEMA \
+  --no-session-persistence \
+  "Read the sprint and workflow. Return the minimum acceptance outline. Do not edit files or run commands."
+```
+
+After steward approval, start a separate authoring invocation with the approved outline
+included in the prompt:
+
+```console
+env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
+  claude -p \
+  --safe-mode \
+  --strict-mcp-config \
+  --mcp-config '{"mcpServers":{}}' \
   --model opus \
   --effort high \
   --permission-mode acceptEdits \
+  --tools "Read,Glob,Grep,Edit,Write,Bash" \
   --allowedTools "Read,Glob,Grep,Edit,Write,Bash(cargo test *),Bash(git diff *),Bash(git status *)" \
-  --output-format json \
-  --no-session-persistence \
-  "Author only the frozen acceptance tests and gate described in docs/NEXT-SPRINT.md. Do not implement production behavior."
+  --output-format stream-json \
+  "Implement only the approved acceptance outline. Produce the first durable red test before expanding the suite. Do not modify production code."
 ```
 
-Do not use `--dangerously-skip-permissions`. For a read-only critique, use plan mode
-and a read-only tool allowlist. When structured handoff automation is enabled, pass a
-reviewed JSON Schema through `--json-schema`.
+The steward interrupts authoring if the outline invocation does not return a usable
+structured result, or if the edit stage runs for 15 minutes without a durable red test
+and reviewable diff. A compiler or gate already making observable progress may finish;
+open-ended search does not extend the checkpoint. If the subscription allocation is
+exhausted, retain durable files and resume after reset rather than switching to API
+credits implicitly.
+
+`--safe-mode` disables project customizations while preserving Claude subscription
+authentication. The strict empty MCP configuration and explicit tool list keep the
+session scoped. Pass every required file and instruction explicitly. Verify the init
+event reports `claude-opus-5`, no unintended MCP servers, and only the allowed built-in
+tools; the `opus` alias alone is not evidence. Do not use
+`--dangerously-skip-permissions`.
 
 ### Antigravity implementation agent
 
@@ -237,6 +332,14 @@ agy -p \
   "Implement only docs/NEXT-SPRINT.md against the frozen acceptance commit. Do not edit the sprint contract, acceptance tests, fixtures, sprint gate, or shared proof harness. Stop after the checkpoint handoff."
 ```
 
+Before allowing edits, request a read-only implementation outline containing the
+expected production paths, invariants, smallest proposed change, and focused test
+commands. The steward rejects scope outside the sprint or frozen boundary. During the
+edit stage, require a reviewable production diff before broad test execution. If
+non-interactive mode cannot obtain its scoped permissions, use an interactive session
+inside the already isolated worktree; do not widen filesystem access or redirect the
+agent to a different checkout.
+
 `agy` starts a local helper and writes logs beneath its Antigravity configuration
 directory. In a managed outer sandbox it may require explicit permission for those
 operations and its localhost listener. Never compensate by disabling repository or
@@ -245,6 +348,11 @@ agent safety controls globally.
 For both tools, prompts should identify the exact sprint document, base and acceptance
 commits, allowed paths, forbidden paths, required gate, and stop condition. Store the
 prompt text or its SHA-256 with the handoff when reproducibility matters.
+
+The implementation agent runs focused sprint tests while editing. It does not run the
+canonical gate or aggregate repository check unless the steward explicitly delegates
+those final-review duties. This keeps implementation feedback fast and leaves one
+authoritative clean-revision gate and aggregate run to the steward.
 
 ## 8. Sprint lifecycle
 
@@ -257,24 +365,31 @@ researcher value. If it cannot be stated as one claim, split it.
 
 Write `docs/NEXT-SPRINT.md`. Resolve ambiguity before test or implementation work.
 
-### Step 3: author acceptance
+### Step 3: approve the acceptance outline
+
+Run the read-only acceptance author. Confirm that its proposed evidence level,
+fixtures, oracle, mutations, and expected red defect are the minimum needed for the
+claim. Narrow the sprint or outline before authorizing edits.
+
+### Step 4: author acceptance
 
 The independent test author creates public-boundary tests, fixtures, oracle code,
-mutation probes, and the gate. The steward reviews their epistemic strength, runs the
-expected red result, and freezes the acceptance commit.
+mutation probes, and the gate. The first checkpoint is a durable red test and diff.
+The steward reviews epistemic strength, runs the expected red result, and freezes the
+acceptance commit.
 
-### Step 4: implement
+### Step 5: implement
 
 The implementation agent changes production code and ordinary unit tests only. It
 runs narrow tests while iterating and stops at the sprint checkpoint.
 
-### Step 5: produce candidate evidence
+### Step 6: produce candidate evidence
 
 The steward reviews the diff for scope and frozen-file changes. After correcting any
 approved issues, create one clean candidate commit and run the canonical gate into a
 fresh artifact directory. Run `scripts/check.sh` separately.
 
-### Step 6: accept or return
+### Step 7: accept or return
 
 Acceptance requires all of:
 
@@ -289,10 +404,19 @@ Acceptance requires all of:
 If rejected, return a bounded defect list against the same sprint. Do not expand the
 sprint or review unrelated downstream work.
 
-### Step 7: advance
+### Step 8: advance
 
 After acceptance, update `ROADMAP.md`, replace `docs/NEXT-SPRINT.md` with the next
 contract, and begin again from the newly accepted revision.
+
+Record a short process retrospective at every accepted sprint: what created evidence,
+what created delay, where an agent or permission boundary failed, and whether the
+claim was correctly sized. Apply a workflow change only when the lesson generalizes
+beyond that sprint. A formal workflow review is mandatory after every three accepted
+sprints, or immediately after repeated failure, unexpected billing/authentication,
+acceptance-test overgrowth, or a gate that permits a known defect. The maintained
+workflow describes the resulting present process; retrospective history belongs in
+the pull request, commit, or changelog.
 
 ## 9. Handoff format
 
