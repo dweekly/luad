@@ -49,7 +49,7 @@ capability changes; and target promotion are outside this patch.
 
 ## Verification and stop condition
 
-The implementation agent runs only:
+The implementation agent stops after a reviewable diff. The steward runs only:
 
 ```console
 cargo build -p luad-cli --bin luad

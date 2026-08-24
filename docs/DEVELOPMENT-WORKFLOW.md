@@ -39,9 +39,9 @@ another model:
 - **Patch lane** is the default for a localized correction with no new schema, command,
   fixture, capability claim, or target promotion. Expected production scope is at most
   about 100 changed lines in one subsystem. It uses one worktree, one branch, one pull
-  request, one Gemini implementation turn, one controller review, focused tests, and
-  one final CI aggregate run. It does not use a separate acceptance branch or Opus
-  author by default.
+  request, one edit-only Gemini implementation turn, one controller review with
+  focused tests, and one final CI aggregate run. It does not use a separate acceptance
+  branch or Opus author by default.
 - **Semantic lane** covers a new enumerable opcode family, public record, analysis
   primitive, or cross-component invariant. It may use independent acceptance authorship,
   frozen acceptance and implementation commits, a sprint gate, and model-diverse review.
@@ -429,13 +429,16 @@ separate model planning turn is unnecessary. The JSON
 result is the authority for per-turn duration and input, output, thinking, and cache
 tokens; the log is diagnostic evidence, not the primary metrics interface. The steward
 rejects scope outside the sprint or frozen boundary. During the
-edit stage, require a reviewable production diff before broad test execution. If
-non-interactive mode cannot obtain its scoped permissions, use an interactive session
-through the matching wrapper stage inside the already isolated worktree; do not widen
-filesystem access or redirect the agent to a different checkout. Trust only the worktree. Deny attempts to inspect a
-home directory or another checkout, restate the absolute worktree root, and approve
-only the exact focused test command. The implementation agent never receives blanket
-permission to run commands.
+edit stage, require a reviewable production diff before test execution. Routine
+non-interactive implementation turns are edit-only; the wrapper prepends that policy
+so the steward, not Gemini, runs formatters, compilers, tests, gates, and Git commands.
+A terminal-command denial after a durable edit does not justify another model turn;
+inspect the worktree and perform verification as steward. Use an interactive session
+through the matching wrapper stage only when a concrete compiler-led implementation
+loop is necessary. Keep it inside the isolated worktree and manually review each exact
+command. Do not widen filesystem access or redirect the agent to a different checkout.
+Trust only the worktree, and deny attempts to inspect a home directory or another
+checkout. The implementation agent never receives blanket command permission.
 
 `agy` starts a local helper and writes logs beneath its Antigravity configuration
 directory. In a managed outer sandbox it may require explicit permission for those
@@ -465,24 +468,26 @@ scripts/agents/agy-gemini.sh interactive-resume CONVERSATION_ID PROMPT_FILE
 
 The wrappers pin model variant, authentication, sandbox, workspace grant, permission
 mode, and output defaults. Antigravity receives the highest available Gemini 3.7 Flash
-reasoning variant, `gemini-3.7-flash-high`. That model does not accept a separate `--effort`
-argument. `scripts/agents/agy-gemini.sh config` reports the High model variant and
-mandatory worktree/sandbox controls without starting inference.
+reasoning variant, `gemini-3.7-flash-high`. That model does not accept a separate
+`--effort` argument. `scripts/agents/agy-gemini.sh config` reports the High model
+variant, mandatory worktree/sandbox controls, edit-only execution, and steward-owned
+verification without starting inference.
 The wrappers fail closed instead of silently falling back from Claude subscription
-authentication to Console credentials. The Antigravity wrapper records prompt identity,
-wall time, and its log path at session exit. Provider flags change in the wrapper and
-this document together; sprint controllers do not reconstruct them from memory.
+authentication to Console credentials. The Antigravity wrapper records both source and
+effective prompt identities, wall time, and its log path at session exit. Provider
+flags change in the wrapper and this document together; sprint controllers do not
+reconstruct them from memory.
 
 When an invocation is interrupted or reaches a time limit during an edit, inspect the
 worktree before retrying: an in-flight tool call may have completed. Resume only after
 checking the semantic checkpoint, changed paths, and diff. More context or budget does
 not repair a blocked filesystem read, permission denial, or over-broad prompt.
 
-In the patch lane, the implementation agent runs the single focused command named by
-the contract. In semantic and qualification lanes, the steward runs focused tests after
-implementation checkpoints. The implementation agent does not run canonical gates or
-aggregate repository checks. This keeps feedback bounded and leaves authoritative
-clean-revision evidence to the steward or CI.
+The steward runs focused tests after every implementation checkpoint. The
+implementation agent does not run formatters, compilers, tests, gates, aggregate
+checks, or Git commands in routine non-interactive turns. This keeps feedback bounded,
+removes recurring command permission setup, and leaves authoritative clean-revision
+evidence to the steward or CI.
 
 Canonical gates run serially unless each invocation has an isolated Cargo target,
 temporary executable path, and artifact directory. A clean-worktree requirement does
@@ -496,11 +501,11 @@ For a patch-lane sprint, the lifecycle is:
 
 1. The steward writes the compact contract and creates one clean worktree and branch.
 2. Gemini 3.7 Flash High at effort High receives only the contract and relevant file
-   ranges, states a short plan, writes the regression and implementation, runs the one
-   focused command, and stops.
-3. The steward reviews the algorithm, scope, and regression. One bounded correction is
-   available; Opus is consulted only when the expected semantics remain genuinely
-   ambiguous.
+   ranges, states a short plan, writes the regression and implementation, and stops at
+   a reviewable diff without running commands.
+3. The steward runs the focused commands and reviews the algorithm, scope, regression,
+   and resulting diagnostics. One bounded correction is available; Opus is consulted
+   only when the expected semantics remain genuinely ambiguous.
 4. The steward commits, pushes one pull request, and lets CI run the aggregate suite.
    A local aggregate run is required only when CI is unavailable or the patch affects
    CI itself. A semantic gate runs once if the active contract names one.
