@@ -11,6 +11,8 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Validation
 
+- Lua 5.1 `FORPREP` and `FORLOOP` now validate their fixed four-register windows
+  against the owning prototype's stack bound and report exact instruction provenance.
 - Lua 5.1 `MOVE` and `GETUPVAL` closure-binding descriptors now validate capture
   sources against the executing parent's register and upvalue bounds, with public
   owner, descriptor, companion, typed-source, and physical-offset evidence.
