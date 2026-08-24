@@ -698,11 +698,12 @@ pub fn disassemble_instruction_lua51(
             });
             let child_idx = raw.bx as usize;
             let child_path = proto.path.child(child_idx);
+            let child_id = StableId::proto(child_path);
+            comment = Some(child_id.to_string());
             let resolved = Some(ResolvedFact::Prototype {
                 index: child_idx,
-                id: StableId::proto(child_path),
+                id: child_id,
             });
-            comment = Some(format!("proto:{}", child_idx));
             operands.push(DisassembledOperand {
                 name: "Bx".to_string(),
                 kind: OperandKind::ImmediateUnsigned {
