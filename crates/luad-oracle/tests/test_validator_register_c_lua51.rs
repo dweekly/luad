@@ -1,11 +1,17 @@
 //! Independent public acceptance for the Lua 5.1 fixed-role register-`C` authority.
 //!
-//! This module is the first authoring checkpoint of the sprint and holds one dimension
-//! only: a physical `C` field that the VM never dereferences as a stack slot carries no
-//! `L51-REG-003`, however large that field's encoded value is. The remaining dimensions
-//! of the contract - the `CONCAT` boundary, bit-8 `CONCAT.C`, disassembly typing, mode
-//! invariance and recursion, and the conditional `RK` rows - are deliberately absent
-//! until the steward authorizes suite expansion.
+//! This module holds acceptance slice A of the sprint, four dimensions:
+//!
+//! - no physical `C` field that the authority declines to class as a fixed direct
+//!   register carries `L51-REG-003`, however large its nine-bit value is;
+//! - the authority table itself is exact, proved by a pure comparator that rejects the
+//!   killer mutations of that authority;
+//! - the `CONCAT.C` register bound is exact at `maxstacksize`, with a frozen diagnostic
+//!   identity;
+//! - bit 8 of `CONCAT.C` is a register overflow, never an `RK` constant.
+//!
+//! Public typing of `C` operands, mode invariance across selections, recursive
+//! prototypes, and the all-fixture sweep are slice B and are deliberately absent.
 //!
 //! The 38-row authority below is a test-local transcription of PUC-Rio Lua 5.1.5
 //! `lopcodes.h`, `lopcodes.c` and `lvm.c`: a row is `FixedRegister` only where the VM
@@ -89,6 +95,25 @@ impl CRole {
     /// by `maxstacksize` and reported under `L51-REG-003` when it is not.
     fn checked_as_register(self) -> bool {
         matches!(self, CRole::FixedRegister)
+    }
+
+    /// Why this role is outside the fixed-role register claim. `ConditionalRk` is stated
+    /// carefully: a `K`-clear `RK` slot *is* dereferenced as a register by the VM, but its
+    /// meaning depends on bit 8, so `RK` authority owns it and this sprint does not.
+    fn why_not_fixed(self) -> &'static str {
+        match self {
+            CRole::FixedRegister => "is the fixed direct register C",
+            CRole::ConditionalRk => {
+                "is an RK slot whose meaning depends on bit 8, so it lies outside the \
+                 fixed-role register claim in either encoding"
+            }
+            CRole::Boolean => "is a control flag the VM compares, never an index",
+            CRole::Count => "encodes a result or variable count, never an index",
+            CRole::SizeHint => "is an encoded table size hint, never an index",
+            CRole::ListBlockIndex => "is a list block index into the table being filled",
+            CRole::Unused => "is never read by this opcode's VM arm",
+            CRole::NoCField => "is not a physical C field at all",
+        }
     }
 }
 
@@ -184,69 +209,176 @@ const CATEGORIES: [(CRole, &[&str]); 8] = [
     ),
 ];
 
-/// Proves the authority is exact before any of it is used as evidence: 38 rows, one per
-/// official opcode number in order, no duplicate name, and a category partition that
-/// agrees with the rows in both directions.
-fn audit_authority() {
-    assert_eq!(
-        OFFICIAL_C_ROLES.len(),
-        OPCODE_COUNT,
-        "the authority states every stock Lua 5.1.5 opcode"
-    );
+// ---------------------------------------------------------------------------
+// The pure comparator over a claimed authority
+// ---------------------------------------------------------------------------
 
-    for (index, entry) in OFFICIAL_C_ROLES.iter().enumerate() {
-        assert_eq!(
-            usize::from(entry.op),
-            index,
-            "{} sits at its official opcode number",
-            entry.name
-        );
-        for other in &OFFICIAL_C_ROLES[index + 1..] {
-            assert_ne!(entry.name, other.name, "no opcode is stated twice");
-            assert_ne!(entry.op, other.op, "no opcode number is stated twice");
-        }
-    }
+/// A typed reason the comparator refuses a claimed register-`C` authority.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CReject {
+    /// The claimed table does not state every official opcode exactly once.
+    WrongRowCount { claimed: usize },
+    /// A row names an opcode outside the official enumeration.
+    UnknownOpcode { op: u8 },
+    /// A row does not sit at its official opcode number.
+    OutOfOrderRow { op: u8, index: usize },
+    /// An official opcode has more than one row.
+    DuplicateRow { op: u8, name: &'static str },
+    /// An official opcode has no row.
+    MissingRow { op: u8, name: &'static str },
+    /// A row's mnemonic does not match the official enumeration.
+    NameChanged {
+        op: u8,
+        claimed: &'static str,
+        official: &'static str,
+    },
+    /// A row's role differs from the official role.
+    RoleChanged {
+        op: u8,
+        name: &'static str,
+        claimed: CRole,
+        official: CRole,
+    },
+    /// A row claims `FixedRegister` for a `C` field that is not one.
+    NonRegisterMarkedFixed {
+        op: u8,
+        name: &'static str,
+        official: CRole,
+    },
+    /// A row's role disagrees with the category statement of the same authority.
+    CategoryMismatch {
+        name: &'static str,
+        claimed: CRole,
+        category: CRole,
+    },
+    /// A row is named by no category at all.
+    Uncategorised { name: &'static str },
+}
 
-    // Every category names rows that exist and claims their role.
-    let mut covered: Vec<&str> = Vec::new();
-    for (role, names) in CATEGORIES {
-        for name in names {
-            let entry = OFFICIAL_C_ROLES
-                .iter()
-                .find(|entry| entry.name == *name)
-                .unwrap_or_else(|| panic!("category {role:?} names an unknown opcode {name}"));
-            assert_eq!(
-                entry.role, role,
-                "{name} is categorised as {role:?} and must carry that role in the table"
-            );
-            assert!(
-                !covered.contains(name),
-                "{name} appears in more than one category"
-            );
-            covered.push(name);
-        }
-    }
-    assert_eq!(
-        covered.len(),
-        OPCODE_COUNT,
-        "the categories partition all {OPCODE_COUNT} opcodes: covered={covered:?}"
-    );
-    // And every row is named by exactly one category, so neither statement can drift.
-    for entry in OFFICIAL_C_ROLES.iter() {
-        assert!(
-            covered.contains(&entry.name),
-            "{} is stated in the table but named by no category",
-            entry.name
-        );
-    }
+/// The expectation side: the frozen row statement. Never mutated.
+fn official_row(op: u8) -> Option<&'static CRow> {
+    OFFICIAL_C_ROLES.iter().find(|entry| entry.op == op)
+}
 
-    let fixed: Vec<&str> = OFFICIAL_C_ROLES
+/// The expectation side: the frozen category statement. Never mutated.
+fn category_of(name: &str) -> Option<CRole> {
+    CATEGORIES
         .iter()
+        .find(|(_, names)| names.contains(&name))
+        .map(|(role, _)| *role)
+}
+
+/// The comparator. Pure: it reads a claimed table and reports every way that table
+/// disagrees with the frozen expectation, panicking at nothing and mutating nothing. The
+/// positive case and every killer mutation are judged by this one function.
+fn audit(rows: &[CRow]) -> Vec<CReject> {
+    let mut rejects = Vec::new();
+    if rows.len() != OPCODE_COUNT {
+        rejects.push(CReject::WrongRowCount {
+            claimed: rows.len(),
+        });
+    }
+
+    let mut seen = [0_u8; OPCODE_COUNT];
+    for (index, claimed) in rows.iter().enumerate() {
+        let Some(official) = official_row(claimed.op) else {
+            rejects.push(CReject::UnknownOpcode { op: claimed.op });
+            continue;
+        };
+        if usize::from(claimed.op) != index {
+            rejects.push(CReject::OutOfOrderRow {
+                op: claimed.op,
+                index,
+            });
+        }
+        seen[usize::from(official.op)] += 1;
+        if seen[usize::from(official.op)] > 1 {
+            rejects.push(CReject::DuplicateRow {
+                op: official.op,
+                name: official.name,
+            });
+        }
+        if claimed.name != official.name {
+            rejects.push(CReject::NameChanged {
+                op: official.op,
+                claimed: claimed.name,
+                official: official.name,
+            });
+        }
+        if claimed.role != official.role {
+            rejects.push(if claimed.role.checked_as_register() {
+                CReject::NonRegisterMarkedFixed {
+                    op: official.op,
+                    name: official.name,
+                    official: official.role,
+                }
+            } else {
+                CReject::RoleChanged {
+                    op: official.op,
+                    name: official.name,
+                    claimed: claimed.role,
+                    official: official.role,
+                }
+            });
+        }
+        match category_of(claimed.name) {
+            None => rejects.push(CReject::Uncategorised { name: claimed.name }),
+            Some(category) if category != claimed.role => {
+                rejects.push(CReject::CategoryMismatch {
+                    name: claimed.name,
+                    claimed: claimed.role,
+                    category,
+                });
+            }
+            Some(_) => {}
+        }
+    }
+
+    for official in OFFICIAL_C_ROLES.iter() {
+        if seen[usize::from(official.op)] == 0 {
+            rejects.push(CReject::MissingRow {
+                op: official.op,
+                name: official.name,
+            });
+        }
+    }
+
+    rejects
+}
+
+/// The opcodes a claimed table declares to be fixed direct registers.
+fn fixed_register_names(rows: &[CRow]) -> Vec<&'static str> {
+    rows.iter()
         .filter(|entry| entry.role.checked_as_register())
         .map(|entry| entry.name)
+        .collect()
+}
+
+/// Proves the authority is exact before any of it is used as evidence: it audits clean
+/// against its own frozen statements, its categories partition the enumeration exactly
+/// once, and `CONCAT` is the only fixed direct register `C`.
+fn audit_authority() {
+    let rejects = audit(&OFFICIAL_C_ROLES);
+    assert!(
+        rejects.is_empty(),
+        "the authority must audit clean against its own frozen statements: {rejects:?}"
+    );
+
+    let mut named: Vec<&str> = CATEGORIES
+        .iter()
+        .flat_map(|(_, names)| names.iter().copied())
         .collect();
+    let stated = named.len();
+    named.sort_unstable();
+    named.dedup();
     assert_eq!(
-        fixed,
+        (stated, named.len()),
+        (OPCODE_COUNT, OPCODE_COUNT),
+        "the categories must partition all {OPCODE_COUNT} opcodes exactly once"
+    );
+
+    assert_eq!(
+        fixed_register_names(&OFFICIAL_C_ROLES),
         vec!["CONCAT"],
         "CONCAT is the only opcode whose C is unconditionally a direct register"
     );
@@ -619,13 +751,19 @@ fn assert_word_reached_disasm(case: &Derived, proto: &RootProto, op: u8, path: &
 // The checkpoint
 // ---------------------------------------------------------------------------
 
-/// The representative rows this checkpoint drives: one size hint, one count, one unused
-/// field. Each is driven at a `C` well above `maxstacksize` and inside nine bits.
-const DRIVEN: [(u8, CRole); 3] = [
-    (10, CRole::SizeHint), // NEWTABLE.C: encoded hash-size hint
-    (33, CRole::Count),    // TFORLOOP.C: loop-variable count
-    (29, CRole::Unused),   // TAILCALL.C: never read by the VM arm
-];
+/// Every row this sweep drives: each `iABC` opcode whose `C` the authority does not class
+/// as a fixed direct register. That is all twelve `ConditionalRk` rows plus every boolean,
+/// count, size hint, list block index and unused field.
+///
+/// `NoCField` rows are excluded on purpose: bits 14..=22 of an `iABx` or `iAsBx` word are
+/// part of `Bx` or `sBx`, so there is no physical `C` there to mutate and no in-frame
+/// baseline of "the same word with a smaller `C`" to compare against.
+fn driven_rows() -> Vec<&'static CRow> {
+    OFFICIAL_C_ROLES
+        .iter()
+        .filter(|entry| !matches!(entry.role, CRole::FixedRegister | CRole::NoCField))
+        .collect()
+}
 
 /// The opcode whose `C` the authority does class as a direct register, used only as the
 /// positive control that `L51-REG-003` is observable through this harness at all.
@@ -671,18 +809,38 @@ fn test_high_non_register_c_fields_report_no_register_c_findings() {
         );
     }
 
-    // The cases. Each is one word differing from its own in-frame control in nothing but
+    // The sweep is the authority's own non-fixed `iABC` rows, so it cannot silently shrink
+    // to a hand-picked few, and it cannot grow to include a row the authority calls a
+    // fixed register.
+    let driven = driven_rows();
+    assert_eq!(
+        driven.len(),
+        OPCODE_COUNT - 1 - 7,
+        "every iABC row except CONCAT is driven; only the 7 NoCField rows are excluded: \
+         driven={:?}",
+        driven.iter().map(|entry| entry.name).collect::<Vec<_>>()
+    );
+    for role in [
+        CRole::ConditionalRk,
+        CRole::Boolean,
+        CRole::Count,
+        CRole::SizeHint,
+        CRole::ListBlockIndex,
+        CRole::Unused,
+    ] {
+        assert!(
+            driven.iter().any(|entry| entry.role == role),
+            "the sweep must drive at least one {role:?} row"
+        );
+    }
+
+    // The cases. Each is one word differing from its own in-frame baseline in nothing but
     // the nine physical `C` bits.
     let mut false_positives: Vec<String> = Vec::new();
-    for (op, expected_role) in DRIVEN {
-        let name = name_of(op);
-        assert_eq!(
-            role_of(op),
-            expected_role,
-            "{name}.C is driven as the role the authority states"
-        );
+    for entry in driven.iter() {
+        let (op, name, expected_role) = (entry.op, entry.name, entry.role);
         assert!(
-            !role_of(op).checked_as_register(),
+            !expected_role.checked_as_register(),
             "{name}.C lies outside the fixed-role register claim"
         );
 
@@ -731,9 +889,10 @@ fn test_high_non_register_c_fields_report_no_register_c_findings() {
             let observed = findings(&case_doc, REG_C_CODE);
             if !observed.is_empty() {
                 false_positives.push(format!(
-                    "{name}.C is a {expected_role:?} field, not a direct register, yet C={HIGH_C} \
-                     produced {} {REG_C_CODE} finding(s) under {mode:?}\n  {}\n  findings={:?}\n  \
-                     all codes in document={:?}",
+                    "{name}.C {}, so the fixed-role authority does not class it as a direct \
+                     register, yet C={HIGH_C} produced {} {REG_C_CODE} finding(s) under \
+                     {mode:?}\n  {}\n  findings={:?}\n  all codes in document={:?}",
+                    expected_role.why_not_fixed(),
                     observed.len(),
                     case.evidence,
                     observed
@@ -751,10 +910,383 @@ fn test_high_non_register_c_fields_report_no_register_c_findings() {
 
     assert!(
         false_positives.is_empty(),
-        "a physical C field that the VM never dereferences as a register must not produce \
-         {REG_C_CODE} at any nine-bit value; {} case/mode combination(s) of {} did:\n\n{}",
+        "a physical C field that the fixed-role authority does not class as a direct \
+         register must not produce {REG_C_CODE} at any nine-bit value, whether the VM \
+         ignores it, reads it as a scalar, or resolves it through RK; {} case/mode \
+         combination(s) of {} did:\n\n{}",
         false_positives.len(),
-        DRIVEN.len() * MODES.len(),
+        driven.len() * MODES.len(),
         false_positives.join("\n\n")
     );
+}
+
+// ---------------------------------------------------------------------------
+// The authority, judged by the comparator
+// ---------------------------------------------------------------------------
+
+/// The opcodes whose *`B`* field the Lua 5.1.5 VM dereferences as a fixed register. Stated
+/// here only so that a `C` authority produced by reusing the `B` classifier can be
+/// rejected by name; nothing else in this module reads it.
+const B_FIXED_REGISTER: [&str; 9] = [
+    "MOVE", "LOADNIL", "GETTABLE", "SELF", "UNM", "NOT", "LEN", "CONCAT", "TESTSET",
+];
+
+/// Every killer mutation edits a fresh clone of the authority. The expectation the
+/// comparator reads - the `OFFICIAL_C_ROLES` and `CATEGORIES` consts - is never touched,
+/// so no mutation can move the expected and the observed statement together.
+fn rows_with(edit: impl FnOnce(&mut Vec<CRow>)) -> Vec<CRow> {
+    let mut rows = OFFICIAL_C_ROLES.to_vec();
+    edit(&mut rows);
+    rows
+}
+
+/// Judges one killer with the same comparator that judged the clean table.
+fn assert_killed(label: &str, rows: &[CRow], expected: &[CReject]) {
+    let rejects = audit(rows);
+    for reason in expected {
+        assert!(
+            rejects.contains(reason),
+            "the comparator must reject this killer mutation: {label}\n\
+             expected={reason:?}\nrejects={rejects:?}"
+        );
+    }
+}
+
+#[test]
+fn test_lua51_c_role_table_is_exact_and_rejects_killer_mutations() {
+    // Positive case: the authority audits clean, so every rejection below is caused by the
+    // mutation and not by a comparator that refuses everything.
+    let clean = audit(&OFFICIAL_C_ROLES);
+    assert!(
+        clean.is_empty(),
+        "the official table must audit clean: {clean:?}"
+    );
+    audit_authority();
+
+    // Killer: the one fixed-register row is dropped, which is how an authority silently
+    // stops claiming anything at all.
+    assert_killed(
+        "CONCAT row omitted",
+        &rows_with(|rows| rows.retain(|entry| entry.name != "CONCAT")),
+        &[
+            CReject::MissingRow {
+                op: 21,
+                name: "CONCAT",
+            },
+            CReject::WrongRowCount { claimed: 37 },
+        ],
+    );
+
+    // Killer: a false fixed register, one row at a time. These are the three most
+    // plausible: `MOVE.C` is unread, `GETTABLE.C` is an RK slot, `NEWTABLE.C` is a hint.
+    for (op, name, official) in [
+        (0_u8, "MOVE", CRole::Unused),
+        (6, "GETTABLE", CRole::ConditionalRk),
+        (10, "NEWTABLE", CRole::SizeHint),
+    ] {
+        assert_killed(
+            &format!("{name}.C falsely marked as a fixed register"),
+            &rows_with(|rows| rows[usize::from(op)].role = CRole::FixedRegister),
+            &[CReject::NonRegisterMarkedFixed { op, name, official }],
+        );
+    }
+
+    // Killer: the register-`B` authority transplanted wholesale onto `C`. `CONCAT` is a
+    // fixed register in both fields, so a suite that reused the `B` classifier would still
+    // pass a CONCAT-only check; the eight other `B` registers are what give it away.
+    let b_substituted = rows_with(|rows| {
+        for entry in rows.iter_mut() {
+            entry.role = if B_FIXED_REGISTER.contains(&entry.name) {
+                CRole::FixedRegister
+            } else if entry.role.checked_as_register() {
+                CRole::Unused
+            } else {
+                entry.role
+            };
+        }
+    });
+    assert_eq!(
+        fixed_register_names(&b_substituted).len(),
+        B_FIXED_REGISTER.len(),
+        "the transplant really did install the B authority's nine fixed registers"
+    );
+    let transplanted: Vec<CReject> = [
+        (0_u8, "MOVE", CRole::Unused),
+        (3, "LOADNIL", CRole::Unused),
+        (6, "GETTABLE", CRole::ConditionalRk),
+        (11, "SELF", CRole::ConditionalRk),
+        (18, "UNM", CRole::Unused),
+        (19, "NOT", CRole::Unused),
+        (20, "LEN", CRole::Unused),
+        (27, "TESTSET", CRole::Boolean),
+    ]
+    .into_iter()
+    .map(|(op, name, official)| CReject::NonRegisterMarkedFixed { op, name, official })
+    .collect();
+    assert_killed(
+        "the register-B authority substituted for the register-C authority",
+        &b_substituted,
+        &transplanted,
+    );
+
+    // Killer: a duplicated row.
+    assert_killed(
+        "MOVE stated twice",
+        &rows_with(|rows| rows.push(row(0, "MOVE", CRole::Unused))),
+        &[CReject::DuplicateRow {
+            op: 0,
+            name: "MOVE",
+        }],
+    );
+
+    // Killer: a missing row that is not the fixed-register one.
+    assert_killed(
+        "VARARG row missing",
+        &rows_with(|rows| rows.retain(|entry| entry.name != "VARARG")),
+        &[CReject::MissingRow {
+            op: 37,
+            name: "VARARG",
+        }],
+    );
+
+    // Killer: a renamed opcode.
+    assert_killed(
+        "GETUPVAL renamed",
+        &rows_with(|rows| rows[4].name = "GETUPVALUE"),
+        &[
+            CReject::NameChanged {
+                op: 4,
+                claimed: "GETUPVALUE",
+                official: "GETUPVAL",
+            },
+            CReject::Uncategorised { name: "GETUPVALUE" },
+        ],
+    );
+
+    // Killer: a plausible but wrong category. `SETLIST.C` is a block index, not a count,
+    // and the category statement is what catches the difference.
+    assert_killed(
+        "SETLIST.C recategorised as a count",
+        &rows_with(|rows| rows[34].role = CRole::Count),
+        &[
+            CReject::CategoryMismatch {
+                name: "SETLIST",
+                claimed: CRole::Count,
+                category: CRole::ListBlockIndex,
+            },
+            CReject::RoleChanged {
+                op: 34,
+                name: "SETLIST",
+                claimed: CRole::Count,
+                official: CRole::ListBlockIndex,
+            },
+        ],
+    );
+
+    // The expectation never moved while the killers ran: the authority still audits clean
+    // and still claims exactly one fixed direct register.
+    assert!(
+        audit(&OFFICIAL_C_ROLES).is_empty(),
+        "no mutation may reach the frozen expectation: {:?}",
+        audit(&OFFICIAL_C_ROLES)
+    );
+    assert_eq!(fixed_register_names(&OFFICIAL_C_ROLES), vec!["CONCAT"]);
+}
+
+// ---------------------------------------------------------------------------
+// The one fixed direct register `C`
+// ---------------------------------------------------------------------------
+
+/// Owned by the constant contract. This sprint proves only that a register overflow is
+/// never reported as one of these.
+const CONST_C_CODE: &str = "L51-CONST-005";
+/// The disassembler's out-of-bounds `RK` constant diagnostic, likewise not this sprint's,
+/// and likewise never a substitute for a register overflow.
+const DISASM_RK_CODE: &str = "L51-DISASM-002";
+/// The `RK` marker bit of a nine-bit operand.
+const BIT_EIGHT: u16 = 0x100;
+
+/// One `L51-REG-003` finding reduced to the evidence this sprint freezes.
+type RegCTuple = (String, usize, usize, String, String);
+
+/// Every register-`C` finding in one document, as frozen tuples.
+fn reg_c_tuples(doc: &MachineDocument<ValidationResponse>) -> Vec<RegCTuple> {
+    findings(doc, REG_C_CODE)
+        .iter()
+        .map(|diagnostic| {
+            let source = diagnostic
+                .source
+                .as_ref()
+                .expect("a register finding carries its source word");
+            (
+                diagnostic.target.to_string(),
+                source.byte_offset,
+                source.byte_length,
+                source.raw_hex.clone(),
+                diagnostic.message.clone(),
+            )
+        })
+        .collect()
+}
+
+/// The single finding a `CONCAT` whose `C` is out of frame must carry.
+fn expected_tuple(proto: &RootProto, word: u32, c: u16) -> RegCTuple {
+    (
+        format!("proto:{}:pc:{}", proto.path, proto.pc),
+        proto.byte_offset,
+        4,
+        hex::encode(word.to_le_bytes()),
+        format!(
+            "Register C ({c}) exceeds maxstacksize ({}) at PC {}",
+            proto.maxstacksize, proto.pc
+        ),
+    )
+}
+
+/// Every diagnostic code appearing anywhere in a document, located by key so no assertion
+/// depends on where the boundary chooses to attach it.
+fn codes_in(value: &Json) -> Vec<String> {
+    fn walk(value: &Json, out: &mut Vec<String>) {
+        match value {
+            Json::Object(map) => {
+                if let Some(Json::String(code)) = map.get("code") {
+                    out.push(code.clone());
+                }
+                map.values().for_each(|nested| walk(nested, out));
+            }
+            Json::Array(items) => items.iter().for_each(|item| walk(item, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    walk(value, &mut out);
+    out
+}
+
+#[test]
+fn test_concat_register_c_boundary_is_exact_at_maxstacksize() {
+    audit_authority();
+    assert_eq!(
+        role_of(OP_CONCAT),
+        CRole::FixedRegister,
+        "CONCAT.C is the register whose bound this test fixes"
+    );
+
+    let (base, base_hash, proto) = pinned_base();
+    let file = NamedTempFile::new().expect("temporary chunk");
+    let path = file.path();
+    let maxstacksize = u16::from(proto.maxstacksize);
+    assert!(
+        maxstacksize >= 2,
+        "the base prototype must have a register file to straddle: maxstacksize={maxstacksize}"
+    );
+
+    // `maxstacksize - 1` is the last slot the frame has and `maxstacksize` the first it does
+    // not, so the two neighbours straddle the bound in one derived chunk each.
+    for (c, flagged) in [(maxstacksize - 1, false), (maxstacksize, true)] {
+        // `A` and `B` are held at register 0, which every prototype has, so `C` is the only
+        // operand that can be at fault.
+        let word = iabc(OP_CONCAT, 0, 0, c);
+        assert_eq!(field_c(word), c, "the encoded word carries the driven C");
+        let case = derive(
+            &base,
+            &base_hash,
+            &proto,
+            word,
+            &format!("boundary: CONCAT A=0 B=0 C={c} against maxstacksize={maxstacksize}"),
+        );
+        assert_word_reached_disasm(&case, &proto, OP_CONCAT, path);
+
+        for mode in MODES {
+            let doc = validate_bytes(&case.bytes, mode, path);
+            let expected: Vec<RegCTuple> = flagged
+                .then(|| expected_tuple(&proto, word, c))
+                .into_iter()
+                .collect();
+            assert_eq!(
+                reg_c_tuples(&doc),
+                expected,
+                "CONCAT.C at {c} must carry exactly the frozen {REG_C_CODE} evidence for \
+                 maxstacksize {maxstacksize} ({mode:?})\n{}\ncodes={:?}",
+                case.evidence,
+                all_codes(&doc)
+            );
+
+            // `A` and `B` were held in frame, so no register-A or register-B finding can be
+            // standing in for the register-C claim.
+            for code in ["L51-REG-001", "L51-REG-002"] {
+                assert!(
+                    findings(&doc, code).is_empty(),
+                    "A and B are register 0, so {code} must not fire ({mode:?})\n{}\ncodes={:?}",
+                    case.evidence,
+                    all_codes(&doc)
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn test_concat_c_bit_eight_is_a_register_overflow_not_a_constant() {
+    audit_authority();
+
+    let (base, base_hash, proto) = pinned_base();
+    let file = NamedTempFile::new().expect("temporary chunk");
+    let path = file.path();
+    let maxstacksize = u16::from(proto.maxstacksize);
+
+    // 256 is bit 8 alone; 511 is bit 8 with every other C bit set. `CONCAT.C` is a fixed
+    // register, so neither value has an RK meaning: both are simply registers the frame
+    // does not have.
+    for c in [BIT_EIGHT, 0x1ff] {
+        assert_ne!(c & BIT_EIGHT, 0, "the probe sets the RK marker bit");
+        assert!(c > maxstacksize, "the probe is out of frame");
+        let word = iabc(OP_CONCAT, 0, 0, c);
+        assert_eq!(
+            field_c(word),
+            c,
+            "all nine C bits survive encoding, including bit 8"
+        );
+        let case = derive(
+            &base,
+            &base_hash,
+            &proto,
+            word,
+            &format!("bit 8: CONCAT A=0 B=0 C={c} against maxstacksize={maxstacksize}"),
+        );
+        assert_word_reached_disasm(&case, &proto, OP_CONCAT, path);
+
+        // The disassembly of the same word must not raise an RK constant diagnostic either:
+        // there is no RK operand here to resolve.
+        let document = disasm_bytes(&case.bytes, path);
+        let disasm_codes = codes_in(&document);
+        assert!(
+            !disasm_codes.iter().any(|code| code == DISASM_RK_CODE),
+            "CONCAT.C is not an RK operand, so bit 8 must not raise {DISASM_RK_CODE}\n{}\n\
+             codes={disasm_codes:?}",
+            case.evidence
+        );
+
+        for mode in MODES {
+            let doc = validate_bytes(&case.bytes, mode, path);
+            assert_eq!(
+                reg_c_tuples(&doc),
+                vec![expected_tuple(&proto, word, c)],
+                "bit 8 of a fixed-register C is part of the register index, so C={c} must \
+                 carry exactly one {REG_C_CODE} naming the full nine-bit value \
+                 ({mode:?})\n{}\ncodes={:?}",
+                case.evidence,
+                all_codes(&doc)
+            );
+            for code in [CONST_C_CODE, DISASM_RK_CODE] {
+                assert!(
+                    findings(&doc, code).is_empty(),
+                    "a fixed-register C overflow must never be reported as {code} \
+                     ({mode:?})\n{}\ncodes={:?}",
+                    case.evidence,
+                    all_codes(&doc)
+                );
+            }
+        }
+    }
 }
