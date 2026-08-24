@@ -172,31 +172,23 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
             diags.push(diag);
         }
 
+        // Register bounds validation (field B)
+        if !is_binding_descriptor && op.b_is_fixed_register() && raw.b as usize >= max_reg {
+            let diag = Diagnostic::error(
+                "L51-REG-002",
+                DiagnosticCategory::Instruction,
+                inst.id.clone(),
+                format!(
+                    "Register B ({}) exceeds maxstacksize ({}) at PC {pc}",
+                    raw.b, max_reg
+                ),
+            )
+            .with_source(inst.source.clone());
+            diags.push(diag);
+        }
+
         // RK operand and register bounds validation
         if op.mode() == OpMode51::IABC {
-            if !raw.is_b_k()
-                && raw.b as usize >= max_reg
-                && op != crate::opcodes::Opcode51::VarArg
-                && op != crate::opcodes::Opcode51::Test
-                && op != crate::opcodes::Opcode51::LoadBool
-                && op != crate::opcodes::Opcode51::Call
-                && op != crate::opcodes::Opcode51::TailCall
-                && op != crate::opcodes::Opcode51::Return
-                && op != crate::opcodes::Opcode51::GetUpval
-                && op != crate::opcodes::Opcode51::SetUpval
-            {
-                let diag = Diagnostic::error(
-                    "L51-REG-002",
-                    DiagnosticCategory::Instruction,
-                    inst.id.clone(),
-                    format!(
-                        "Register B ({}) exceeds maxstacksize ({}) at PC {pc}",
-                        raw.b, max_reg
-                    ),
-                )
-                .with_source(inst.source.clone());
-                diags.push(diag);
-            }
             if !raw.is_c_k()
                 && raw.c as usize >= max_reg
                 && op != crate::opcodes::Opcode51::SetList
@@ -219,6 +211,7 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
                 diags.push(diag);
             }
             if raw.is_b_k()
+                && !op.b_is_fixed_register()
                 && op != crate::opcodes::Opcode51::GetUpval
                 && op != crate::opcodes::Opcode51::SetUpval
             {
@@ -542,5 +535,115 @@ mod tests {
             !diags.iter().any(|d| d.code == "L51-REG-001"),
             "binding descriptors must not report L51-REG-001: {diags:?}"
         );
+        assert!(
+            !diags.iter().any(|d| d.code == "L51-REG-002"),
+            "binding descriptors must not report L51-REG-002: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn test_validator_register_b_fixed_and_deferred_rk() {
+        let fixed_b_ops = [
+            Opcode51::Move,
+            Opcode51::LoadNil,
+            Opcode51::GetTable,
+            Opcode51::SelfOp,
+            Opcode51::Unm,
+            Opcode51::Not,
+            Opcode51::Len,
+            Opcode51::Concat,
+            Opcode51::TestSet,
+        ];
+
+        // maxstacksize = 2: B=1 is valid, B=2 is invalid (L51-REG-002), B=256 reports L51-REG-002 and no L51-CONST-004
+        for op in fixed_b_ops {
+            let inst_valid = RawInstruction51::encode_iabc(op, 0, 1, 0);
+            let proto_valid = make_test_proto(vec![inst_valid], 0, 0);
+            let chunk_valid = make_test_chunk(proto_valid);
+            let (v_valid, d_valid) = validate_chunk_lua51(&chunk_valid);
+            assert_eq!(
+                v_valid,
+                Verdict::ValidForParser,
+                "{:?} with B=1 must be ValidForParser",
+                op
+            );
+            assert!(
+                d_valid.is_empty(),
+                "{:?} with B=1 must produce no diagnostics, got: {:?}",
+                op,
+                d_valid
+            );
+
+            let inst_invalid = RawInstruction51::encode_iabc(op, 0, 2, 0);
+            let proto_invalid = make_test_proto(vec![inst_invalid], 0, 0);
+            let chunk_invalid = make_test_chunk(proto_invalid);
+            let (v_invalid, d_invalid) = validate_chunk_lua51(&chunk_invalid);
+            assert_eq!(v_invalid, Verdict::Invalid);
+            let reg_b_invalid: Vec<_> = d_invalid
+                .iter()
+                .filter(|d| d.code == "L51-REG-002")
+                .collect();
+            assert_eq!(
+                reg_b_invalid.len(),
+                1,
+                "{:?} with B=2 must report L51-REG-002",
+                op
+            );
+            assert_eq!(
+                reg_b_invalid[0].message,
+                "Register B (2) exceeds maxstacksize (2) at PC 0"
+            );
+
+            let inst_bit8 = RawInstruction51::encode_iabc(op, 0, 256, 0);
+            let proto_bit8 = make_test_proto(vec![inst_bit8], 0, 0);
+            let chunk_bit8 = make_test_chunk(proto_bit8);
+            let (v_bit8, d_bit8) = validate_chunk_lua51(&chunk_bit8);
+            assert_eq!(v_bit8, Verdict::Invalid);
+            let reg_b_bit8: Vec<_> = d_bit8.iter().filter(|d| d.code == "L51-REG-002").collect();
+            assert_eq!(
+                reg_b_bit8.len(),
+                1,
+                "{:?} with B=256 must report exactly one L51-REG-002",
+                op
+            );
+            assert_eq!(
+                reg_b_bit8[0].message,
+                "Register B (256) exceeds maxstacksize (2) at PC 0"
+            );
+            assert!(
+                !d_bit8.iter().any(|d| d.code == "L51-CONST-004"),
+                "{:?} with B=256 must not report L51-CONST-004",
+                op
+            );
+            assert_eq!(
+                d_bit8.len(),
+                1,
+                "{:?} with B=256 must produce only L51-REG-002",
+                op
+            );
+        }
+
+        // NEWTABLE with high legal B (array size hint = 255) must not report L51-REG-002
+        let newtable = RawInstruction51::encode_iabc(Opcode51::NewTable, 0, 255, 0);
+        let proto_nt = make_test_proto(vec![newtable], 0, 0);
+        let chunk_nt = make_test_chunk(proto_nt);
+        let (_, d_nt) = validate_chunk_lua51(&chunk_nt);
+        assert!(
+            !d_nt.iter().any(|d| d.code == "L51-REG-002"),
+            "NEWTABLE.B must not report L51-REG-002"
+        );
+
+        // Deferred RK opcodes (e.g. ADD, SETTABLE, EQ) with B=2 (no RK bit) must not report L51-REG-002
+        for op in [Opcode51::Add, Opcode51::SetTable, Opcode51::Eq] {
+            let inst_rk = RawInstruction51::encode_iabc(op, 0, 2, 0);
+            let proto_rk = make_test_proto(vec![inst_rk], 0, 0);
+            let chunk_rk = make_test_chunk(proto_rk);
+            let (_, d_rk) = validate_chunk_lua51(&chunk_rk);
+            assert!(
+                !d_rk.iter().any(|d| d.code == "L51-REG-002"),
+                "Deferred RK opcode {:?} must not report L51-REG-002",
+                op
+            );
+        }
     }
 }
