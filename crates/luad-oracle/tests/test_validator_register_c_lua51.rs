@@ -990,9 +990,9 @@ fn assert_word_reached_disasm(case: &Derived, proto: &RootProto, op: u8, path: &
 // The checkpoint
 // ---------------------------------------------------------------------------
 
-/// Every row this sweep drives: each `iABC` opcode whose `C` the authority does not class
-/// as a fixed direct register. That is all twelve `ConditionalRk` rows plus every boolean,
-/// count, size hint, list block index and unused field.
+/// Every row this sweep drives: each `iABC` opcode whose `C` the authority classes as
+/// neither a fixed direct register nor a conditional RK operand. Conditional RK operands
+/// have their own bit-8-selected register/constant contract.
 ///
 /// `NoCField` rows are excluded on purpose: bits 14..=22 of an `iABx` or `iAsBx` word are
 /// part of `Bx` or `sBx`, so there is no physical `C` there to mutate and no in-frame
@@ -1000,7 +1000,12 @@ fn assert_word_reached_disasm(case: &Derived, proto: &RootProto, op: u8, path: &
 fn driven_rows() -> Vec<&'static CRow> {
     OFFICIAL_C_ROLES
         .iter()
-        .filter(|entry| !matches!(entry.role, CRole::FixedRegister | CRole::NoCField))
+        .filter(|entry| {
+            !matches!(
+                entry.role,
+                CRole::FixedRegister | CRole::ConditionalRk | CRole::NoCField
+            )
+        })
         .collect()
 }
 
@@ -1048,19 +1053,18 @@ fn test_high_non_register_c_fields_report_no_register_c_findings() {
         );
     }
 
-    // The sweep is the authority's own non-fixed `iABC` rows, so it cannot silently shrink
-    // to a hand-picked few, and it cannot grow to include a row the authority calls a
-    // fixed register.
+    // The sweep is the authority's own non-register, non-RK `iABC` rows, so it cannot
+    // silently shrink to a hand-picked few or overlap the conditional RK contract.
     let driven = driven_rows();
     assert_eq!(
         driven.len(),
-        OPCODE_COUNT - 1 - 7,
-        "every iABC row except CONCAT is driven; only the 7 NoCField rows are excluded: \
+        OPCODE_COUNT - 1 - 12 - 7,
+        "every scalar/ignored iABC row is driven; CONCAT, the 12 ConditionalRk rows, and \
+         the 7 NoCField rows are excluded: \
          driven={:?}",
         driven.iter().map(|entry| entry.name).collect::<Vec<_>>()
     );
     for role in [
-        CRole::ConditionalRk,
         CRole::Boolean,
         CRole::Count,
         CRole::SizeHint,
@@ -1149,9 +1153,9 @@ fn test_high_non_register_c_fields_report_no_register_c_findings() {
 
     assert!(
         false_positives.is_empty(),
-        "a physical C field that the fixed-role authority does not class as a direct \
-         register must not produce {REG_C_CODE} at any nine-bit value, whether the VM \
-         ignores it, reads it as a scalar, or resolves it through RK; {} case/mode \
+        "a physical C field that is neither a direct register nor a conditional RK operand \
+         must not produce {REG_C_CODE} at any nine-bit value, whether the VM ignores it or \
+         reads it as a scalar; {} case/mode \
          combination(s) of {} did:\n\n{}",
         false_positives.len(),
         driven.len() * MODES.len(),
