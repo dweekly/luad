@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-validator-rk-c-lua51",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_validator_rk_c_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_lua51_rk_c_authority_is_exact_and_rejects_killer_mutations",
+    "test_public_disasm_types_rk_c_by_bit_eight_with_resolved_constants",
+    "test_rk_c_constant_domain_is_bounded_by_the_owning_constant_table",
+    "test_rk_c_register_domain_is_bounded_by_maxstacksize"
+  ],
+  "required_compiler_version": "Lua 5.1.5",
+  "required_compiler_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
+  "required_fixtures": [
+    {
+      "path": "tests/fixtures/precompiled/lua51/control_flow.luac",
+      "sha256": "d7e98a66c1ec34cde480a49c20aa5f070d2113294dd60b81100a1cf6d15ebe40"
+    }
+  ],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-public-disasm-lua51",
+    "gate-validator-reference-operands-lua51",
+    "gate-validator-register-c-lua51"
+  ],
+  "allowed_capability_mutations": []
+}
