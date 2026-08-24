@@ -12,8 +12,8 @@ and `luad validate` agree on the bit-selected domain:
 - bit 8 set means a constant-table index that must be inside the owning prototype's
   constant table.
 
-No fixed-register, scalar, boolean, count, size-hint, unused, or combined-format `C`
-field acquires RK validation or an RK fact.
+This sprint proves the root-prototype RK distinction. Recursive ownership and public
+non-RK exclusion each retain a separate qualification boundary.
 
 ## Researcher value
 
@@ -36,6 +36,10 @@ an invalid register reference to enter later analysis.
 ## Non-goals
 
 - RK authority for field `B`;
+- recursive child-prototype RK bounds;
+- public validator exclusion sweeps for non-RK `C` roles;
+- automatic/explicit selection and strict/permissive equivalence beyond the existing
+  machine-contract gates;
 - fixed-register authority for `A`, `B`, or `C`;
 - implicit register spans or register provenance;
 - closure capture-source bounds;
@@ -74,18 +78,12 @@ Zero-length constant tables use index `0` as the first invalid selected constant
 Register bounds use the raw bit-8-clear index; constant bounds use the low eight-bit
 index. Diagnostics retain the owning prototype/instruction identity and source word.
 
-Automatic stock selection and explicit `--dialect lua5.1` must produce deterministic,
-schema-valid, semantically identical JSON and identical validation findings in strict
-and permissive modes. Recursive child prototypes use their own `maxstacksize` and
-constant table rather than the parent's bounds.
-
-Unmodified maintained Lua 5.1 fixtures remain free of new diagnostics. A control sweep
-sets high legal `C` values on every non-RK role and proves that neither
-`L51-REG-003` nor `L51-CONST-005` is emitted because of that field.
+The public CLI must preserve the selected domain, resolved fact, owning root-prototype
+identity, exact instruction, source word, and diagnostic location for every boundary.
 
 ## Independent acceptance
 
-Acceptance fits in one module with no more than six named tests and one compact
+Acceptance fits in one module with exactly four named tests and one compact
 table-driven oracle. It must prove:
 
 - every official opcode occurs exactly once and the exact 12-opcode RK-`C` set is
@@ -95,11 +93,9 @@ table-driven oracle. It must prove:
   facts for valid selected constants;
 - invalid selected constants remain represented as selected constants and produce the
   exact constant diagnostic, never a register diagnostic;
-- recursive prototypes, automatic/explicit selection, strict/permissive validation,
-  live schemas, determinism, and maintained fixtures agree;
-- mutations that add or remove an RK opcode, swap the selected domain, use parent
-  bounds for a child, alter either boundary, remove a resolved fact, or change
-  diagnostic identity are rejected by the same positive comparator.
+- mutations that add or remove an RK opcode, swap the selected domain, alter either
+  boundary, remove a resolved fact, or change diagnostic identity are rejected by the
+  same positive comparator.
 
 The first authoring checkpoint is one durable red test showing that a bit-8-clear
 RK-`C` register at `maxstacksize` currently fails to produce `L51-REG-003`. The steward
@@ -133,5 +129,6 @@ ignored, skipped, filtered, or missing tests; one steward-run `bash scripts/chec
 reviewed pull requests merged in dependency order; and clean local `main` identical to
 `origin/main`.
 
-Do not begin RK-`B`, closure capture-source, implicit-span, diagnostic-catalog, target
-promotion, provenance, or later-dialect work until this sprint satisfies that handoff.
+Do not begin recursive RK-`C` ownership, non-RK `C` exclusion, RK-`B`, closure
+capture-source, implicit-span, diagnostic-catalog, target promotion, provenance, or
+later-dialect work until this sprint satisfies that handoff.
