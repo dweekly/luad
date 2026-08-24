@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Build exact official Lua compiler releases with verified SHA-256 checksums used by the differential oracle.
 
-DEST_DIR="/tmp/lua-tools/bin"
+DEST_DIR="${LUAD_COMPILER_DIR:-/tmp/lua-tools/bin}"
 mkdir -p "${DEST_DIR}"
 BUILD_DIR="$(mktemp -d)"
 
@@ -50,9 +50,10 @@ build_lua() {
     tar -xzf "${tarball}"
     cd "lua-${version}"
 
-    if ! make all -j4; then
-        make generic -j4
-    fi
+    # The generic target builds luac without optional platform libraries such
+    # as readline. Lua's top-level makefiles require an explicit target; in
+    # Lua 5.1, `all` only prints the target-selection instructions.
+    make generic -j4
 
     test -x "src/luac"
     cp "src/luac" "${DEST_DIR}/${bin_name}"
@@ -93,4 +94,3 @@ build_lua "5.5.1" "lua-5.5.1.tar.gz" "https://www.lua.org/ftp/lua-5.5.1.tar.gz" 
 
 echo "=== Completed official Lua compilers setup ==="
 ls -la "${DEST_DIR}"
-
