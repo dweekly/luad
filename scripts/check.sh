@@ -7,6 +7,15 @@ cd "${repo_dir}"
 echo "==> formatting"
 cargo fmt --all -- --check
 
+echo "==> agent wrapper configuration"
+bash -n scripts/agents/agy-gemini.sh scripts/agents/claude-opus.sh
+actual_agy_config=$(scripts/agents/agy-gemini.sh config)
+expected_agy_config=$'model=gemini-3.7-flash-high\neffort=high'
+if [[ "$actual_agy_config" != "$expected_agy_config" ]]; then
+  echo "unexpected Antigravity model or effort configuration" >&2
+  exit 1
+fi
+
 echo "==> clippy"
 cargo clippy --workspace --all-targets -- -D warnings
 

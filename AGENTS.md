@@ -2,24 +2,22 @@
 
 This repository analyzes potentially hostile Lua bytecode. Correctness, evidence, and bounded behavior take priority over feature velocity.
 
-## Required reading
+## Required context
 
-Before modifying correctness-sensitive code, read:
+Read `docs/NEXT-SPRINT.md` and the exact production and test paths named by the task.
+For a patch-lane task, the steward's prompt supplies the relevant repository invariants;
+do not reread the full documentation set unless the change crosses one of its boundaries.
 
-1. `docs/DEVELOPMENT-WORKFLOW.md`
-2. `ROADMAP.md`
-3. `docs/NEXT-SPRINT.md`
-4. `docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`
-5. `ARCHITECTURE.md`
-6. `docs/MACHINE-INTERFACE.md`
-7. `CONTRIBUTING.md`
+For semantic or qualification work, also read `docs/DEVELOPMENT-WORKFLOW.md`,
+`ROADMAP.md`, and the relevant architecture, machine-interface, firmware-requirement,
+contributor, or release sections identified by the sprint contract.
 
 ## Current priority
 
-Implement only the claim in `docs/NEXT-SPRINT.md` against its frozen acceptance
-boundary. `ROADMAP.md` supplies direction but does not authorize adjacent work. Stop
-at the sprint checkpoint and do not add dialects, decompiler features, persistent
-state, or inference-heavy analysis unless the active sprint explicitly owns them.
+Implement only the claim in `docs/NEXT-SPRINT.md` against its stated evidence boundary.
+`ROADMAP.md` supplies direction but does not authorize adjacent work. Stop at the sprint
+checkpoint and do not add dialects, decompiler features, persistent state, or
+inference-heavy analysis unless the active sprint explicitly owns them.
 
 ## Repository rules
 
@@ -41,10 +39,12 @@ state, or inference-heavy analysis unless the active sprint explicitly owns them
 
 ## Verification
 
-Run the narrowest relevant test while iterating. In the separated sprint workflow,
+Run the narrowest relevant test while iterating. In semantic and qualification lanes,
 the implementation agent stops at its candidate checkpoint; the steward runs the
 named gate from the active sprint and the aggregate check from the clean candidate.
-For work outside that separated workflow, run:
+In the patch lane, the implementation agent runs only the focused command named by the
+sprint; the steward reviews the diff and relies on one final CI aggregate run. For work
+outside these lanes, run:
 
 ```console
 bash scripts/check.sh

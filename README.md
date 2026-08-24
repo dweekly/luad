@@ -28,7 +28,7 @@ delete the document in the same change and update this index.
 | Document | Purpose | Fresh as of | Revalidate or delete when |
 |---|---|---:|---|
 | [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-08-24 | Public scope, support status, setup, primary commands, or the documentation set changes. |
-| [`AGENTS.md`](AGENTS.md) | Binding repository instructions and safety constraints for coding agents. | 2026-08-23 | Development workflow, proof policy, current priority, or repository invariants change. |
+| [`AGENTS.md`](AGENTS.md) | Binding repository instructions and safety constraints for coding agents. | 2026-08-24 | Development workflow, proof policy, current priority, or repository invariants change. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-23 | Crates, ownership boundaries, core representations, or evidence layers change. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of unreleased and released user-visible changes. | 2026-08-24 | Every user-visible change or release; never use it as a forward plan. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor setup, test taxonomy, fixture provenance, and definition of done. | 2026-08-23 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
