@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-validator-reference-operands-lua51",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_validator_reference_operands_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_authority_and_fixture_hashes_are_pinned",
+    "test_closure_first_out_of_range_child_has_exact_diagnostic",
+    "test_comparison_boolean_domain_is_exact_for_eq_lt_and_le",
+    "test_getupval_first_out_of_range_index_has_exact_diagnostic",
+    "test_killer_bound_mutations_are_rejected_by_positive_comparator",
+    "test_killer_diagnostic_identity_mutations_are_rejected",
+    "test_killer_independent_decode_mutation_is_rejected",
+    "test_pinned_public_controls_have_no_reference_operand_diagnostics",
+    "test_public_disasm_uses_non_register_reference_operand_kinds",
+    "test_setupval_first_out_of_range_index_has_exact_diagnostic",
+    "test_strict_permissive_text_schema_and_determinism",
+    "test_valid_upvalue_at_maxstack_is_not_a_register_for_get_and_set"
+  ],
+  "required_compiler_version": "Lua 5.1.5",
+  "required_compiler_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
+  "required_fixtures": [
+    {
+      "path": "tests/fixtures/precompiled/lua51/hello.luac",
+      "sha256": "d64567d2d41ff584b86602f98fff5906f58f101f6faf98598f3662bac6e96a4f"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua51/control_flow.luac",
+      "sha256": "d7e98a66c1ec34cde480a49c20aa5f070d2113294dd60b81100a1cf6d15ebe40"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua51/closures.luac",
+      "sha256": "62c4438b660880fa546cbe377d1f40113d2efc25aefc40df227979276efa756e"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua51_32bit/hello.luac",
+      "sha256": "e3b4aecb3e5669ff3636603d38583acead47336d870377685716ed6dd32e4fb4"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua51_lnum32/hello.luac",
+      "sha256": "8376be37ec3042d3b0a87aa39db7d7396fb54ae390abe346d885e1527d23e353"
+    }
+  ],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-public-disasm-lua51",
+    "gate-validation-null-hypothesis"
+  ],
+  "allowed_capability_mutations": []
+}
