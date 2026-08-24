@@ -11,6 +11,7 @@ echo "==> clippy"
 cargo clippy --workspace --all-targets -- -D warnings
 
 echo "==> tests"
+cargo build -p luad-cli --bin luad
 cargo test --workspace
 
 echo "==> rustdoc"
