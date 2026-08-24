@@ -25,9 +25,8 @@ comment, text rendering, and xref. Direct register fields, implicit register spa
 non-register scalar fields need independently proved domain rules before target
 qualification.
 
-Qualification advances through separately accepted slices for fixed-role register `C`,
-conditional RK operands,
-closure-capture source bounds, implicit register spans, and public diagnostic
+Qualification advances through separately accepted slices for conditional RK
+operands, closure-capture source bounds, implicit register spans, and public diagnostic
 discoverability. Each slice owns one field or semantic distinction and one canonical
 gate.
 

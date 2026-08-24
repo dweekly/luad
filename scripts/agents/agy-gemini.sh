@@ -6,13 +6,15 @@ usage() {
 Usage:
   scripts/agents/agy-gemini.sh plan PROMPT_FILE
   scripts/agents/agy-gemini.sh implement PROMPT_FILE
+  scripts/agents/agy-gemini.sh resume-plan CONVERSATION_ID PROMPT_FILE
   scripts/agents/agy-gemini.sh resume CONVERSATION_ID PROMPT_FILE
 
-Starts a scoped interactive Antigravity session in the current worktree using
-Gemini 3.7 Flash High. The sandbox remains enabled and permission prompts remain
-active. Trust only the isolated sprint worktree and approve only commands named
-by the sprint prompt. Wall time and the Antigravity log path are printed when the
-session exits. Set LUAD_AGY_LOG_FILE to choose the log location.
+Runs one structured Antigravity turn in the current worktree using Gemini 3.7
+Flash High. Each result is JSON containing the conversation ID, duration, and
+token usage. Pass that ID to `resume` so later checkpoints retain the same
+conversation. The sandbox remains enabled. Wall time, prompt hash, and the
+Antigravity log path are printed to stderr when the turn exits. Set
+LUAD_AGY_LOG_FILE to choose the log location.
 EOF
 }
 
@@ -32,7 +34,7 @@ case "$stage" in
     prompt_file=${2:-}
     conversation_args=()
     ;;
-  resume)
+  resume-plan|resume)
     conversation_id=${2:-}
     prompt_file=${3:-}
     if [[ ! "$conversation_id" =~ ^[a-zA-Z0-9-]+$ ]]; then
@@ -78,4 +80,5 @@ agy "${conversation_args[@]}" \
   --mode "$mode" \
   --sandbox \
   --log-file "$log_file" \
-  --prompt-interactive "$prompt"
+  --print "$prompt" \
+  --output-format json

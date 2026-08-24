@@ -12,6 +12,10 @@ All notable changes will be documented here. The project has not yet made a prod
 ### Validation
 
 - Lua 5.1 validation and public disassembly now use an exhaustive VM-derived authority
+  for fixed direct-register field `C`; `CONCAT.C` observes exact stack bounds, while
+  booleans, counts, size hints, unused fields, and conditional RK operands remain
+  distinct.
+- Lua 5.1 validation and public disassembly now use an exhaustive VM-derived authority
   for fixed direct-register field `B`, exclude scalar/count/unused and closure-binding
   fields, and avoid misclassifying bit 8 of a direct register as an RK constant.
 - Lua 5.1 disassembly and validation now use the executed VM role of field `A` across
@@ -35,6 +39,9 @@ All notable changes will be documented here. The project has not yet made a prod
 - Refined agent orchestration with provider preflight, staged acceptance outlines,
   proportional evidence levels, subscription-aware usage checkpoints, and
   steward-owned final verification.
+- Added persistent Opus and Gemini session wrappers with structured timing/token
+  telemetry, shell-free acceptance authorship, and scoped interactive fallback when
+  Antigravity print mode cannot acquire repository permissions.
 - Added repository-owned provider wrappers, curated context packets, ranged reads,
   semantic edit checkpoints, post-interrupt diff inspection, aggregate per-model
   sprint accounting, and mandatory remote preservation.

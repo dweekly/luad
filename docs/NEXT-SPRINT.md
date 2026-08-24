@@ -1,145 +1,126 @@
-# Active sprint: Lua 5.1 fixed-role register `C`
+# Active sprint: Lua 5.1 conditional RK operand `C`
 
 Status: acceptance contract. No downstream roadmap work begins before this sprint is
 accepted or explicitly respecified.
 
 ## Claim
 
-For every stock Lua 5.1 opcode, `luad disasm` identifies an ordinary instruction's
-encoded `C` field as a register exactly when the VM unconditionally uses `C` as a
-direct register, and `luad validate` emits `L51-REG-003` exactly when that register
-index is outside `0..maxstacksize`.
+For each stock Lua 5.1 opcode whose encoded `C` field is an RK operand, `luad disasm`
+and `luad validate` agree on the bit-selected domain:
 
-Boolean flags, result counts, table-size hints, list block indices, unused fields, and
-combined `Bx` or `sBx` fields do not acquire a fixed-register `C` fact or diagnostic.
-RK operands retain their conditional register-or-constant meaning and remain outside
-this fixed-role claim.
+- bit 8 clear means a register index that must be inside `0..maxstacksize`;
+- bit 8 set means a constant-table index that must be inside the owning prototype's
+  constant table.
+
+No fixed-register, scalar, boolean, count, size-hint, unused, or combined-format `C`
+field acquires RK validation or an RK fact.
 
 ## Researcher value
 
-A human or agent can treat `C`-register facts and `L51-REG-003` as exact without
-mistaking legitimate embedded-firmware counts, flags, or size hints for impossible
-registers. `CONCAT` range endpoints become trustworthy while adjacent scalar fields
-remain free of false validation findings.
+A human or agent can trust every conditional `C` operand as either a bounded register
+or a resolved constant without reimplementing Lua's `BITRK` rule. Corrupt bytecode
+fails at the owning instruction with a domain-specific diagnostic instead of allowing
+an invalid register reference to enter later analysis.
 
 ## Starting evidence
 
-- The accepted behavior baseline is revision
-  `305a14ae128f47e96bdabc65fd4fabb540a371dc`.
-- Required prerequisite gates are `gate-proof-harness`,
-  `gate-public-disasm-lua51`, `gate-closures-lua51`,
-  `gate-validator-reference-operands-lua51`, `gate-validator-register-a-lua51`, and
-  `gate-validator-register-b-lua51`.
+- The accepted behavior baseline is the clean `main` revision containing the
+  `gate-validator-register-c-lua51` result.
+- Required prerequisite gates are `gate-proof-harness`, `gate-public-disasm-lua51`,
+  `gate-validator-reference-operands-lua51`, and
+  `gate-validator-register-c-lua51`.
 - The required compiler is PUC-Rio Lua 5.1.5, reported as `Lua 5.1.5`, with SHA-256
   `eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239`.
 - Lua 5.1 remains experimental; this sprint does not promote a target.
 
 ## Non-goals
 
-- conditional RK authority or constant bounds for `C`;
-- implicit interiors of `CONCAT` or any other register span;
-- register authority for `A` or `B`;
+- RK authority for field `B`;
+- fixed-register authority for `A`, `B`, or `C`;
+- implicit register spans or register provenance;
 - closure capture-source bounds;
-- argument, result, iterator, loop-working-set, vararg, or open-top spans;
-- new domains for counts, booleans, size hints, constants, upvalues, prototypes, or
-  jumps;
-- effects, provenance, sink analysis, decompilation, persistent research state,
-  diagnostic-catalog publication, dialect promotion, or vendor opcode recovery.
+- new constant encodings, constant preview policy, or global/prototype resolution;
+- effects, sinks, taint, decompilation, persistent research state, dialect promotion,
+  or vendor opcode recovery.
 
-## Official `C`-field matrix
+## Exact opcode authority
 
 Acceptance owns an independent 38-row `(opcode -> C role)` table derived from executed
-PUC-Rio Lua 5.1.5 VM semantics. The official opcode-mode table is a cross-check, not a
-substitute for observing whether the VM reads the field.
-
-The only fixed direct-register `C` opcode is:
-
-```text
-CONCAT
-```
-
-The conditional RK `C` opcodes are:
+PUC-Rio Lua 5.1.5 VM semantics. Exactly these opcodes have conditional RK field `C`:
 
 ```text
 GETTABLE SETTABLE SELF ADD SUB MUL DIV MOD POW EQ LT LE
 ```
 
-All other opcodes classify `C` as a boolean, count, size hint, list block index,
-unused field, or part of a combined `Bx`/`sBx` encoding. In particular:
-
-- `LOADBOOL.C`, `TEST.C`, and `TESTSET.C` are control booleans;
-- `NEWTABLE.C` is a hash-size hint;
-- `CALL.C` and `TFORLOOP.C` are result counts or count encodings;
-- `SETLIST.C` is a list block index;
-- `TAILCALL.C` and the physical `C` bits of instructions that do not consume `C` are
-  unused.
-
-For `CONCAT`, `C` is valid exactly when its unsigned value is less than
-`maxstacksize`. It is the inclusive end register of a range; this sprint validates and
-publishes the encoded endpoint without inferring the range interior.
+The production opcode-role authority and the independent acceptance table must agree
+on that set but may not call each other. `CONCAT.C` remains a fixed direct register;
+`LOADBOOL.C`, `TEST.C`, and `TESTSET.C` remain booleans; `NEWTABLE.C` remains a size
+hint; `CALL.C` and `TFORLOOP.C` remain result counts; `SETLIST.C` remains a list block
+index; all other physical `C` bits retain their defined non-RK or unused role.
 
 ## Public behavior
 
-The fixture matrix is:
+For every RK-`C` opcode, acceptance constructs equivalent instructions at these exact
+boundaries:
 
-| Fixture | SHA-256 | Purpose |
+| Encoding | Expected public meaning | Expected validation |
 |---|---|---|
-| `tests/fixtures/precompiled/lua51/hello.luac` | `d64567d2d41ff584b86602f98fff5906f58f101f6faf98598f3662bac6e96a4f` | Simple automatic/explicit selection and scalar controls. |
-| `tests/fixtures/precompiled/lua51/control_flow.luac` | `d7e98a66c1ec34cde480a49c20aa5f070d2113294dd60b81100a1cf6d15ebe40` | Boolean, count, RK, loop, and unused-field controls. |
-| `tests/fixtures/precompiled/lua51/closures.luac` | `62c4438b660880fa546cbe377d1f40113d2efc25aefc40df227979276efa756e` | Recursive prototype traversal and combined-format controls. |
+| `C = maxstacksize - 1` | typed register | clean for the `C` operand |
+| `C = maxstacksize` | typed register | exactly one `L51-REG-003` for field `C` |
+| `C = BITRK | (constants.len() - 1)` | typed and resolved constant | clean for the `C` operand |
+| `C = BITRK | constants.len()` | selected constant index | exactly one `L51-CONST-005` for field `C` |
 
-For each unmodified fixture, automatic stock selection and explicit
-`--dialect lua5.1` produce schema-valid, deterministic, semantically identical JSON
-with exit code `0` and empty stderr.
+Zero-length constant tables use index `0` as the first invalid selected constant.
+Register bounds use the raw bit-8-clear index; constant bounds use the low eight-bit
+index. Diagnostics retain the owning prototype/instruction identity and source word.
 
-For a test-local `CONCAT` whose `C == maxstacksize - 1`, validation remains clean. At
-`C == maxstacksize`, strict and permissive validation exit `1` and emit exactly one
-`L51-REG-003` tied to the owning instruction ID and source word. Setting bit 8 on
-`CONCAT.C` remains a register overflow and must not produce an RK-constant diagnostic.
+Automatic stock selection and explicit `--dialect lua5.1` must produce deterministic,
+schema-valid, semantically identical JSON and identical validation findings in strict
+and permissive modes. Recursive child prototypes use their own `maxstacksize` and
+constant table rather than the parent's bounds.
 
-High legal values for `NEWTABLE.C`, `SETLIST.C`, count fields, booleans, and unused
-fields produce no `L51-REG-003`.
+Unmodified maintained Lua 5.1 fixtures remain free of new diagnostics. A control sweep
+sets high legal `C` values on every non-RK role and proves that neither
+`L51-REG-003` nor `L51-CONST-005` is emitted because of that field.
 
-## Independent authority and acceptance
-
-The acceptance table is transcribed from PUC-Rio Lua 5.1.5 `lopcodes.h`, `lopcodes.c`,
-and `lvm.c`, using the source hashes pinned by the public Lua 5.1 evidence. It may not
-call production opcode-role, disassembly, validation, effects, or closure-binding
-helpers.
+## Independent acceptance
 
 Acceptance fits in one module with no more than six named tests and one compact
 table-driven oracle. It must prove:
 
-- every official opcode occurs exactly once with one `C` role;
-- live disassembly types `CONCAT.C` as `register` and no scalar, boolean, count,
-  unused, RK, or combined-format `C` as a fixed register;
-- the exact `maxstacksize - 1` / `maxstacksize` boundary and diagnostic identity;
-- bit-8 `CONCAT.C` produces only the register diagnostic;
-- recursive prototypes, strict/permissive validation, automatic/explicit selection,
-  live schemas, and all three fixtures agree;
-- mutations that omit `CONCAT`, add any false fixed-register row, alter the boundary,
-  change diagnostic identity, remove recursion, or make public forms disagree are
-  rejected by the same positive comparator.
+- every official opcode occurs exactly once and the exact 12-opcode RK-`C` set is
+  non-vacuous;
+- all four register/constant boundaries above hold for every RK-`C` opcode;
+- public disassembly emits register kinds for bit-8-clear values and resolved constant
+  facts for valid selected constants;
+- invalid selected constants remain represented as selected constants and produce the
+  exact constant diagnostic, never a register diagnostic;
+- recursive prototypes, automatic/explicit selection, strict/permissive validation,
+  live schemas, determinism, and maintained fixtures agree;
+- mutations that add or remove an RK opcode, swap the selected domain, use parent
+  bounds for a child, alter either boundary, remove a resolved fact, or change
+  diagnostic identity are rejected by the same positive comparator.
 
-The first authoring checkpoint is one durable red test demonstrating a current false
-`L51-REG-003` on a legal scalar, count, or unused `C` field. The steward verifies that
-red defect and the independent table before authorizing suite expansion.
+The first authoring checkpoint is one durable red test showing that a bit-8-clear
+RK-`C` register at `maxstacksize` currently fails to produce `L51-REG-003`. The steward
+verifies the red defect and independent opcode table before authorizing suite
+expansion.
 
 ## Canonical gate and boundaries
 
 The sprint owns exactly:
 
 ```console
-bash scripts/gates/gate-validator-register-c-lua51.sh ARTIFACT_DIR
+bash scripts/gates/gate-validator-rk-c-lua51.sh ARTIFACT_DIR
 ```
 
-with specification `tests/gates/gate-validator-register-c-lua51.json`. The gate pins
-the compiler, fixtures, exact acceptance tests, prerequisite closure, clean revision,
-and zero ignored, skipped, filtered, missing, or substituted evidence.
+with specification `tests/gates/gate-validator-rk-c-lua51.json`. The gate pins the
+compiler, fixtures, exact acceptance tests, prerequisite closure, clean revision, and
+zero ignored, skipped, filtered, missing, or substituted evidence.
 
 The acceptance author may change only its sprint module, independent table and minimal
 test helpers, gate specification, and gate wrapper. The implementation agent may
-change Lua 5.1 dialect-owned fixed-`C` facts and validation plus ordinary unit tests.
+change Lua 5.1 dialect-owned RK-`C` role facts and validation plus ordinary unit tests.
 Neither role may change maintained fixtures, schemas, capabilities, shared proof
 machinery, prerequisite gates, or this contract.
 
@@ -152,5 +133,5 @@ ignored, skipped, filtered, or missing tests; one steward-run `bash scripts/chec
 reviewed pull requests merged in dependency order; and clean local `main` identical to
 `origin/main`.
 
-Do not begin RK, closure capture-source, implicit-span, diagnostic-catalog, target
+Do not begin RK-`B`, closure capture-source, implicit-span, diagnostic-catalog, target
 promotion, provenance, or later-dialect work until this sprint satisfies that handoff.

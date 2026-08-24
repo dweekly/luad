@@ -20,8 +20,17 @@ Before cutting any release:
 6. Run the maintained fuzz corpus and configured time-bounded fuzz jobs.
 7. Review `luad capabilities --format json --evidence` against actual gate results.
 8. Ensure README support status is generated from or identical to the evidence manifest.
-9. Update `CHANGELOG.md`, version metadata, schemas when necessary, and this release procedure.
-10. Build release artifacts on each supported target and smoke-test their CLI and schemas.
+9. Exercise the release candidate through an independent real-customer reverse-engineering
+   workflow against representative target firmware. Convert reproducible correctness
+   defects into minimized redistributable fixtures and passing gates before release.
+10. Update `CHANGELOG.md`, version metadata, schemas when necessary, and this release procedure.
+11. Build release artifacts on each supported target and smoke-test their CLI and schemas.
+
+The real-customer checkpoint evaluates whether the public CLI composes into actual
+research work. It does not authorize shipping private firmware, embedding researcher
+judgment in `luad`, or replacing deterministic public evidence with an anecdotal run.
+Usability feedback may inform the next roadmap; a correctness defect in a claimed
+surface blocks release until independently reproducible.
 
 ## Evidence bundle
 

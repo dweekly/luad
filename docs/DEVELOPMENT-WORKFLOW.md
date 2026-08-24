@@ -292,27 +292,29 @@ Use a staged invocation. The read-only outline stage is deliberately inexpensive
 has no edit or shell tools:
 
 ```console
-scripts/agents/claude-opus.sh acceptance-start /tmp/sprint-outline-prompt.txt SPRINT_TEST
+scripts/agents/claude-opus.sh acceptance-start /tmp/sprint-outline-prompt.txt
 ```
 
 After steward approval, start a separate authoring invocation with the approved outline
 included in the prompt:
 
 ```console
-scripts/agents/claude-opus.sh acceptance-resume SESSION_ID /tmp/sprint-author-prompt.txt SPRINT_TEST
+scripts/agents/claude-opus.sh acceptance-resume SESSION_ID /tmp/sprint-author-prompt.txt
 ```
 
-`--allowedTools` preapproves matching uses; it is not an exclusive allowlist while the
-permission mode can still ask for approval. `dontAsk` makes every unmatched request
-fail closed. Prefer a shell-free
-authoring invocation with `Read,Glob,Grep,Edit,Write`; add `Bash` only after the exact
-focused test command is known. Broad patterns such as `Bash(cargo test *)` are not an
-acceptable substitute for an exact command.
+`--allowedTools` uses prefix matching and preapproves matching uses; it is not an
+exclusive allowlist while the permission mode can still ask for approval. Shell
+operators can therefore extend an apparently narrow `Bash(command)` prefix. Acceptance
+authoring is always shell-free: `--tools` exposes only `Read,Glob,Grep,Edit,Write`, and
+`dontAsk` makes every unmatched request fail closed. The steward runs focused tests and
+gates outside the model session.
 
 The steward interrupts authoring if the outline invocation does not return a usable
-structured result, or if the edit stage runs for 15 minutes without a durable red test
-and reviewable diff. A compiler or gate already making observable progress may finish;
-open-ended search does not extend the checkpoint. If the subscription allocation is
+structured result, or if an atomic edit stage spends five minutes without producing a
+durable checkpoint or reviewable edit. A compiler or gate already making observable
+progress may finish; open-ended search or pre-write deliberation does not extend the
+checkpoint. Split an interrupted turn into smaller resumable edits rather than raising
+its time allowance. If the subscription allocation is
 exhausted, retain durable files and resume after reset rather than switching to API
 credits implicitly.
 
@@ -323,8 +325,11 @@ and allowed paths; resume a large session only when preserving its context is wo
 reloading it.
 
 The wrapper removes Console credentials, verifies `claude.ai` authentication, pins the
-current `opus` alias at high effort, disables slash commands and connected MCP servers,
-and constrains preapproved tools. Pass every required file and instruction explicitly.
+current `opus` alias at high effort, uses safe mode and a 1M autocompaction target,
+disables slash commands and connected MCP servers, and constrains both the available
+and preapproved tools. It emits streaming NDJSON, a detailed debug-log path, prompt
+hash, and wall time so the steward can distinguish provider latency, model reasoning,
+tool reads, permission denial, and an in-progress edit. Pass every required file and instruction explicitly.
 Verify the init event resolves the expected canonical Opus model; the alias alone is
 not evidence. Do not use
 `--dangerously-skip-permissions`.
@@ -347,11 +352,18 @@ Representative invocations from the implementation worktree:
 ```console
 scripts/agents/agy-gemini.sh plan /tmp/sprint-plan-prompt.txt
 scripts/agents/agy-gemini.sh implement /tmp/sprint-implementation-prompt.txt
+scripts/agents/agy-gemini.sh resume-plan CONVERSATION_ID /tmp/sprint-plan-correction-prompt.txt
+scripts/agents/agy-gemini.sh resume CONVERSATION_ID /tmp/sprint-correction-prompt.txt
 ```
 
 Before allowing edits, request a read-only implementation outline containing the
 expected production paths, invariants, smallest proposed change, and focused test
-commands. The steward rejects scope outside the sprint or frozen boundary. During the
+commands. Start one conversation with `plan`, obtain its ID from the structured JSON,
+and use `resume-plan` for any read-only refinement, then `resume` for the implementation
+and any single bounded correction. The JSON
+result is the authority for per-turn duration and input, output, thinking, and cache
+tokens; the log is diagnostic evidence, not the primary metrics interface. The steward
+rejects scope outside the sprint or frozen boundary. During the
 edit stage, require a reviewable production diff before broad test execution. If
 non-interactive mode cannot obtain its scoped permissions, use an interactive session
 inside the already isolated worktree; do not widen filesystem access or redirect the
@@ -373,10 +385,11 @@ Repository-owned wrappers are the canonical provider interface:
 
 ```console
 scripts/agents/claude-opus.sh review-fresh PROMPT_FILE
-scripts/agents/claude-opus.sh acceptance-start PROMPT_FILE SPRINT_TEST_MODULE
-scripts/agents/claude-opus.sh acceptance-resume SESSION_ID PROMPT_FILE SPRINT_TEST_MODULE
+scripts/agents/claude-opus.sh acceptance-start PROMPT_FILE
+scripts/agents/claude-opus.sh acceptance-resume SESSION_ID PROMPT_FILE
 scripts/agents/agy-gemini.sh plan PROMPT_FILE
 scripts/agents/agy-gemini.sh implement PROMPT_FILE
+scripts/agents/agy-gemini.sh resume-plan CONVERSATION_ID PROMPT_FILE
 scripts/agents/agy-gemini.sh resume CONVERSATION_ID PROMPT_FILE
 ```
 
@@ -391,9 +404,10 @@ worktree before retrying: an in-flight tool call may have completed. Resume only
 checking the semantic checkpoint, changed paths, and diff. More context or budget does
 not repair a blocked filesystem read, permission denial, or over-broad prompt.
 
-The implementation agent runs one focused sprint test while editing. It does not run
-the canonical gate or aggregate repository check. This keeps implementation feedback
-fast and leaves one authoritative clean-revision gate and aggregate run to the steward.
+The steward runs focused sprint tests after implementation checkpoints. The
+implementation agent does not run the canonical gate or aggregate repository check.
+This keeps implementation feedback bounded and leaves one authoritative
+clean-revision gate and aggregate run to the steward.
 
 ## 8. Sprint lifecycle
 
@@ -457,6 +471,14 @@ authorization.
 
 After acceptance, update `ROADMAP.md`, replace `docs/NEXT-SPRINT.md` with the next
 contract, and begin again from the newly accepted revision.
+
+When the remaining roadmap exit outcomes form a release candidate, pause sprint
+selection for an independent real-customer workflow against representative firmware.
+The customer agent receives the candidate CLI and its normal research objective, not
+the internal acceptance implementation. Reproducible correctness defects become
+minimized fixtures and gated roadmap work before release; usability requests are
+ranked against the product boundary and may remain external composition work. Private
+firmware evidence supplements but never replaces redistributable release gates.
 
 Record a short process retrospective at every accepted sprint: what created evidence,
 what created delay, where an agent or permission boundary failed, and whether the
