@@ -11,6 +11,9 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Validation
 
+- Lua 5.1 nested-prototype RK validation now has public owner-isolation evidence for
+  register and constant forms of both conditional operands, including stable child
+  identities, physical offsets, and unresolved out-of-range machine facts.
 - Lua 5.1 conditional RK field `B` now selects register or constant validation by bit 8
   across its exact ten-opcode VM-derived set, with public register, constant, and
   non-RK scalar boundary evidence.
