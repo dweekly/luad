@@ -14,21 +14,21 @@ Usage:
   scripts/agents/agy-gemini.sh interactive-resume-plan CONVERSATION_ID PROMPT_FILE
   scripts/agents/agy-gemini.sh interactive-resume CONVERSATION_ID PROMPT_FILE
 
-Runs one structured Antigravity turn in the current worktree using Gemini 3.7
-Flash High with reasoning effort High. Each result is JSON containing the
-conversation ID, duration, and token usage. Pass that ID to `resume` so later
-checkpoints retain the same conversation. The sandbox remains enabled. Wall time,
-prompt hash, and the Antigravity log path are printed to stderr when the turn exits.
-Set LUAD_AGY_LOG_FILE to choose the log location.
+Runs one Antigravity turn in the current worktree using the Gemini 3.7 Flash High
+model variant. Non-interactive results are JSON containing the conversation ID,
+duration, and token usage. Pass that ID to `resume` so later checkpoints retain the
+same conversation. The sandbox remains enabled. Wall time, prompt hash, and the
+Antigravity log path are printed to stderr when the turn exits. Set LUAD_AGY_LOG_FILE
+to choose the log location.
 
-The interactive stages preserve the same model, effort, mode, sandbox, and conversation
+The interactive stages preserve the same model variant, mode, sandbox, and conversation
 rules while allowing narrowly reviewed file permissions when print mode fails closed.
-`config` prints the pinned model and effort without starting a model turn.
+`config` prints the pinned model and reasoning source without starting a model turn.
 EOF
 }
 
 model=gemini-3.7-flash-high
-effort=high
+reasoning=high-model-variant
 
 if [[ ${1:-} == "--help" || ${1:-} == "-h" ]]; then
   usage
@@ -36,7 +36,7 @@ if [[ ${1:-} == "--help" || ${1:-} == "-h" ]]; then
 fi
 
 if [[ ${1:-} == "config" ]]; then
-  printf 'model=%s\neffort=%s\n' "$model" "$effort"
+  printf 'model=%s\nreasoning=%s\n' "$model" "$reasoning"
   exit 0
 fi
 
@@ -100,7 +100,6 @@ trap finish EXIT
 common=(
   "${conversation_args[@]}"
   --model "$model"
-  --effort "$effort"
   --mode "$mode"
   --sandbox
   --log-file "$log_file"

@@ -47,13 +47,12 @@ All notable changes will be documented here. The project has not yet made a prod
   steward-owned final verification.
 - Added patch, semantic, and qualification delivery lanes so localized corrections use
   one implementation turn, one branch, bounded tests, and one CI aggregate run.
-- Pinned Antigravity to both `gemini-3.7-flash-high` and its explicit highest reasoning
-  setting, `--effort high`, with a repository check for configuration drift.
+- Pinned Antigravity to the `gemini-3.7-flash-high` High reasoning model variant, without
+  the unsupported separate `--effort` argument, and added a configuration drift check.
 - Added persistent Opus and Gemini session wrappers with structured timing/token
   telemetry, shell-free acceptance authorship, and scoped interactive fallback when
   Antigravity print mode cannot acquire repository permissions.
-- Added named interactive Antigravity wrapper stages and select its High model variant
-  without passing the CLI's unsupported separate effort flag.
+- Added named interactive Antigravity wrapper stages for scoped permission fallback.
 - Added repository-owned provider wrappers, curated context packets, ranged reads,
   semantic edit checkpoints, post-interrupt diff inspection, aggregate per-model
   sprint accounting, and mandatory remote preservation.

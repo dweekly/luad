@@ -120,8 +120,8 @@ may add production code and ordinary unit tests, but it may not modify or bypass
 
 If the contract is inconsistent or the acceptance test is defective, the agent stops
 and submits a narrowly explained change request. It does not silently redefine the
-claim. The default implementation role uses Antigravity with
-`gemini-3.7-flash-high`, high effort, and an isolated worktree.
+claim. The default implementation role uses Antigravity with the
+`gemini-3.7-flash-high` High reasoning model variant and an isolated worktree.
 
 ### Acceptance reviewer
 
@@ -452,9 +452,10 @@ scripts/agents/agy-gemini.sh interactive-resume CONVERSATION_ID PROMPT_FILE
 ```
 
 The wrappers pin model variant, authentication, sandbox, permission mode, and output
-defaults. Antigravity receives both the highest available Gemini 3.7 Flash variant,
-`gemini-3.7-flash-high`, and the CLI's highest reasoning setting, `--effort high`.
-`scripts/agents/agy-gemini.sh config` prints both pins without starting inference.
+defaults. Antigravity receives the highest available Gemini 3.7 Flash reasoning
+variant, `gemini-3.7-flash-high`. That model does not accept a separate `--effort`
+argument. `scripts/agents/agy-gemini.sh config` reports the High model variant as the
+reasoning source without starting inference.
 The wrappers fail closed instead of silently falling back from Claude subscription
 authentication to Console credentials. The Antigravity wrapper records prompt identity,
 wall time, and its log path at session exit. Provider flags change in the wrapper and
