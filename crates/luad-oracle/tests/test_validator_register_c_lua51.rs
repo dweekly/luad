@@ -1,6 +1,6 @@
 //! Independent public acceptance for the Lua 5.1 fixed-role register-`C` authority.
 //!
-//! This module holds acceptance slice A of the sprint, four dimensions:
+//! This module holds six acceptance dimensions:
 //!
 //! - no physical `C` field that the authority declines to class as a fixed direct
 //!   register carries `L51-REG-003`, however large its nine-bit value is;
@@ -8,26 +8,29 @@
 //!   killer mutations of that authority;
 //! - the `CONCAT.C` register bound is exact at `maxstacksize`, with a frozen diagnostic
 //!   identity;
-//! - bit 8 of `CONCAT.C` is a register overflow, never an `RK` constant.
-//!
-//! Public typing of `C` operands, mode invariance across selections, recursive
-//! prototypes, and the all-fixture sweep are slice B and are deliberately absent.
+//! - bit 8 of `CONCAT.C` is a register overflow, never an `RK` constant;
+//! - the public disassembly types `C` as a fixed direct register for exactly the
+//!   authority's fixed-register rows, with the `RK` rows deferred to `RK` authority;
+//! - register-`C` findings are mode-invariant, schema-valid, and reach a genuinely nested
+//!   prototype.
 //!
 //! The 38-row authority below is a test-local transcription of PUC-Rio Lua 5.1.5
 //! `lopcodes.h`, `lopcodes.c` and `lvm.c`: a row is `FixedRegister` only where the VM
-//! arm unconditionally uses `C` as a direct register index. So is the chunk reader and
-//! the instruction encoder. Nothing here calls luad's Lua 5.1 opcode, disassembly, or
-//! validation helpers, and the reader decodes only the root prototype prologue - the
-//! tail of the chunk is never interpreted.
+//! arm unconditionally uses `C` as a direct register index. So are the chunk readers and
+//! the instruction encoders, which follow the `lundump.c` layout. Nothing here calls
+//! luad's Lua 5.1 opcode, disassembly, or validation helpers; in particular the nested
+//! prototype of the recursive case is located by this module's own reader, never by
+//! asking the boundary under test where its prototypes are.
 //!
 //! Terminology: the driven values below are not called "legal non-registers". They are
 //! values of a `C` field that lies outside the fixed-role register claim, so the sprint
 //! makes no statement about whether some other contract bounds them.
 //!
-//! Derivation note: every case is one single-word replacement of the pinned
-//! `control_flow` fixture at the root prototype's PC 0, and records its full provenance
-//! (base hash, prototype path, PC, byte offset, original word, changed `C`, changed
-//! word, result hash).
+//! Derivation note: every case is one single-word replacement of a pinned fixture -
+//! `control_flow` at the root prototype's PC 0, and `closures` at one ordinary
+//! instruction of its deepest prototype - and records its full provenance (base hash,
+//! prototype path, PC, byte offset, original word, changed `C`, changed word, result
+//! hash).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -41,11 +44,29 @@ use tempfile::NamedTempFile;
 /// A machine document read structurally, so no assertion depends on envelope field names.
 type Json = serde_json::Value;
 
-/// The pinned sprint fixture every derived chunk is built from.
+/// The pinned sprint fixture the single-word derivations are built from.
 const CONTROL_FLOW: (&str, &str) = (
     "tests/fixtures/precompiled/lua51/control_flow.luac",
     "d7e98a66c1ec34cde480a49c20aa5f070d2113294dd60b81100a1cf6d15ebe40",
 );
+
+/// The other two pinned Lua 5.1 fixtures of the sprint. `closures.luac` is the one whose
+/// prototype tree is deep enough to carry a genuinely nested target.
+const HELLO: (&str, &str) = (
+    "tests/fixtures/precompiled/lua51/hello.luac",
+    "d64567d2d41ff584b86602f98fff5906f58f101f6faf98598f3662bac6e96a4f",
+);
+const CLOSURES: (&str, &str) = (
+    "tests/fixtures/precompiled/lua51/closures.luac",
+    "62c4438b660880fa546cbe377d1f40113d2efc25aefc40df227979276efa756e",
+);
+
+/// Every pinned fixture, in the order the mode sweep drives them.
+const PINNED_FIXTURES: [(&str, (&str, &str)); 3] = [
+    ("hello", HELLO),
+    ("control_flow", CONTROL_FLOW),
+    ("closures", CLOSURES),
+];
 
 /// Total number of stock Lua 5.1.5 opcodes.
 const OPCODE_COUNT: usize = 38;
@@ -415,17 +436,25 @@ struct RootProto {
     word: u32,
 }
 
-/// Reads the root prototype prologue and its first instruction word. Only the fields the
-/// derived cases need are decoded.
-fn read_root_proto(bytes: &[u8]) -> RootProto {
+/// The widths this chunk encodes its integers, sizes and numbers with, taken from the
+/// twelve-byte PUC-Rio header. Shared by both readers below.
+fn chunk_header(bytes: &[u8]) -> (usize, usize, usize) {
     assert_eq!(&bytes[0..4], b"\x1bLua", "PUC chunk signature");
     assert_eq!(bytes[4], 0x51, "Lua 5.1 version byte");
     assert_eq!(bytes[6], 1, "little-endian fixture");
     assert_eq!(bytes[9], 4, "32-bit instruction words");
     let sizeof_int = bytes[7] as usize;
     let sizeof_sizet = bytes[8] as usize;
+    let sizeof_number = bytes[10] as usize;
     assert_eq!(sizeof_int, 4, "stock 64-bit layout");
     assert_eq!(sizeof_sizet, 8, "stock 64-bit layout");
+    (sizeof_int, sizeof_sizet, sizeof_number)
+}
+
+/// Reads the root prototype prologue and its first instruction word. Only the fields the
+/// derived cases need are decoded.
+fn read_root_proto(bytes: &[u8]) -> RootProto {
+    let (sizeof_int, sizeof_sizet, _) = chunk_header(bytes);
 
     let uint = |pos: usize, width: usize| -> usize {
         let mut value = 0_u64;
@@ -459,6 +488,157 @@ fn read_root_proto(bytes: &[u8]) -> RootProto {
     }
 }
 
+/// One prototype located by the test-local reader, named by the `0`-rooted,
+/// `/`-separated path the boundary uses for prototypes.
+#[derive(Clone, Debug)]
+struct ProtoView {
+    path: String,
+    maxstacksize: u8,
+    code_offset: usize,
+    words: Vec<u32>,
+}
+
+impl ProtoView {
+    /// Where in the chunk the word for one PC of this prototype lives.
+    fn offset_of(&self, pc: usize) -> usize {
+        self.code_offset + 4 * pc
+    }
+}
+
+/// A cursor over a Lua 5.1.5 chunk, transcribed from the PUC-Rio `lundump.c` layout:
+/// source, line bounds, three counters, `maxstacksize`, code, constants, nested
+/// prototypes, then debug. It exists so this suite can find a nested prototype without
+/// asking the implementation under test where one is.
+struct ChunkReader<'a> {
+    bytes: &'a [u8],
+    pos: usize,
+    sizeof_int: usize,
+    sizeof_sizet: usize,
+    sizeof_number: usize,
+}
+
+impl ChunkReader<'_> {
+    fn uint(&mut self, width: usize) -> usize {
+        assert!(
+            self.pos + width <= self.bytes.len(),
+            "a {width}-byte field at {} lies inside the chunk",
+            self.pos
+        );
+        let mut value = 0_u64;
+        for index in 0..width {
+            value |= u64::from(self.bytes[self.pos + index]) << (index * 8);
+        }
+        self.pos += width;
+        value as usize
+    }
+
+    fn byte(&mut self) -> u8 {
+        let value = self.bytes[self.pos];
+        self.pos += 1;
+        value
+    }
+
+    fn skip(&mut self, count: usize) {
+        self.pos += count;
+        assert!(
+            self.pos <= self.bytes.len(),
+            "skipping {count} bytes stays inside the chunk"
+        );
+    }
+
+    fn string(&mut self) {
+        let width = self.sizeof_sizet;
+        let len = self.uint(width);
+        self.skip(len);
+    }
+
+    /// Reads one function block and, recursively, every function nested inside it.
+    fn function(&mut self, path: String, out: &mut Vec<ProtoView>) {
+        self.string(); // source
+        let ints = 2 * self.sizeof_int;
+        self.skip(ints); // linedefined, lastlinedefined
+        self.skip(3); // nups, numparams, is_vararg
+        let maxstacksize = self.byte();
+
+        let width = self.sizeof_int;
+        let count = self.uint(width);
+        let code_offset = self.pos;
+        assert!(
+            code_offset + 4 * count <= self.bytes.len(),
+            "the code array of {path} lies inside the chunk"
+        );
+        let words = (0..count)
+            .map(|index| {
+                let at = code_offset + 4 * index;
+                u32::from_le_bytes(self.bytes[at..at + 4].try_into().expect("instruction word"))
+            })
+            .collect();
+        self.pos = code_offset + 4 * count;
+
+        let constants = self.uint(width);
+        for _ in 0..constants {
+            match self.byte() {
+                0 => {} // nil carries no payload
+                1 => self.skip(1),
+                3 => {
+                    let number = self.sizeof_number;
+                    self.skip(number);
+                }
+                4 => self.string(),
+                other => panic!(
+                    "unknown constant tag {other} in {path} at byte {}",
+                    self.pos
+                ),
+            }
+        }
+
+        out.push(ProtoView {
+            path: path.clone(),
+            maxstacksize,
+            code_offset,
+            words,
+        });
+
+        let protos = self.uint(width);
+        for index in 0..protos {
+            self.function(format!("{path}/{index}"), out);
+        }
+
+        // Debug: line info, local variables, upvalue names.
+        let lineinfo = self.uint(width);
+        self.skip(lineinfo * width);
+        let locvars = self.uint(width);
+        for _ in 0..locvars {
+            self.string();
+            self.skip(2 * width);
+        }
+        let upvalues = self.uint(width);
+        for _ in 0..upvalues {
+            self.string();
+        }
+    }
+}
+
+/// Every prototype in a chunk, in pre-order, read without any help from luad.
+fn read_chunk(bytes: &[u8]) -> Vec<ProtoView> {
+    let (sizeof_int, sizeof_sizet, sizeof_number) = chunk_header(bytes);
+    let mut reader = ChunkReader {
+        bytes,
+        pos: 12,
+        sizeof_int,
+        sizeof_sizet,
+        sizeof_number,
+    };
+    let mut out = Vec::new();
+    reader.function("0".to_string(), &mut out);
+    assert_eq!(
+        reader.pos,
+        bytes.len(),
+        "the reader must consume the chunk exactly, or its prototype offsets are guesses"
+    );
+    out
+}
+
 fn opcode(word: u32) -> u8 {
     (word & 0x3f) as u8
 }
@@ -469,6 +649,17 @@ fn field_c(word: u32) -> u16 {
 
 fn iabc(op: u8, a: u8, b: u16, c: u16) -> u32 {
     u32::from(op) | (u32::from(a) << 6) | (u32::from(c) << 14) | (u32::from(b) << 23)
+}
+
+/// The `iABx` layout: `Bx` occupies bits 14..=31, so its low nine bits are exactly where an
+/// `iABC` word keeps `C`.
+fn iabx(op: u8, a: u8, bx: u32) -> u32 {
+    u32::from(op) | (u32::from(a) << 6) | ((bx & 0x3ffff) << 14)
+}
+
+/// The `iAsBx` layout: a signed displacement biased by 131071.
+fn iasbx(op: u8, a: u8, sbx: i32) -> u32 {
+    iabx(op, a, (sbx + 131_071) as u32)
 }
 
 /// One probe word: `op` with the `C` under test, and `A`/`B` controls chosen so `C` is the
@@ -534,6 +725,31 @@ enum Mode {
 /// Both reporting modes, in the order the sweep drives them.
 const MODES: [Mode; 2] = [Mode::Permissive, Mode::Strict];
 
+/// How the boundary is told which dialect a chunk is written in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Selection {
+    /// No `--dialect`: the CLI identifies the chunk itself.
+    Automatic,
+    /// `--dialect lua5.1`, naming the dialect the fixtures are compiled for.
+    Explicit,
+}
+
+/// Every selection/mode combination, in the order the sweeps drive them.
+const MODE_MATRIX: [(Selection, Mode); 4] = [
+    (Selection::Automatic, Mode::Permissive),
+    (Selection::Automatic, Mode::Strict),
+    (Selection::Explicit, Mode::Permissive),
+    (Selection::Explicit, Mode::Strict),
+];
+
+/// One observation of a public machine boundary: exit status, stderr, and stdout that has
+/// already satisfied the live schema for that command.
+struct Run {
+    status: Option<i32>,
+    stderr: String,
+    stdout: Vec<u8>,
+}
+
 /// The live JSON Schema the CLI publishes for one machine boundary, compiled once.
 fn schema_validator(command: &str) -> &'static jsonschema::Validator {
     static VALIDATE: OnceLock<jsonschema::Validator> = OnceLock::new();
@@ -560,29 +776,26 @@ fn schema_validator(command: &str) -> &'static jsonschema::Validator {
     })
 }
 
-/// Runs one public machine boundary over an in-memory chunk under one reporting mode and
-/// returns stdout, having required the live schema to accept the document. A document that
-/// has drifted from the published contract cannot be read as evidence for anything.
-fn run_bytes(command: &str, bytes: &[u8], mode: Mode, path: &Path) -> Vec<u8> {
+/// Runs one public machine boundary over an in-memory chunk under one selection/mode
+/// combination, having required the live schema to accept the document. A document that has
+/// drifted from the published contract cannot be read as evidence for anything.
+fn run_public(command: &str, bytes: &[u8], selection: Selection, mode: Mode, path: &Path) -> Run {
     std::fs::write(path, bytes).expect("write derived chunk");
-    let mut args = vec![
-        command,
-        path.to_str().expect("UTF-8 path"),
-        "--dialect",
-        "lua5.1",
-        "--format",
-        "json",
-    ];
+    let mut args = vec![command, path.to_str().expect("UTF-8 path")];
+    if selection == Selection::Explicit {
+        args.extend(["--dialect", "lua5.1"]);
+    }
+    args.extend(["--format", "json"]);
     if mode == Mode::Strict {
         args.push("--strict");
     }
     let output = Command::new(luad_bin())
         .args(&args)
         .output()
-        .unwrap_or_else(|error| panic!("run public {command} CLI {mode:?}: {error}"));
+        .unwrap_or_else(|error| panic!("run public {command} CLI {selection:?}/{mode:?}: {error}"));
     let document: Json = serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
         panic!(
-            "{command} stdout is not JSON ({mode:?}): {error}\nstdout={}\nstderr={}",
+            "{command} stdout is not JSON ({selection:?}/{mode:?}): {error}\nstdout={}\nstderr={}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         )
@@ -593,9 +806,20 @@ fn run_bytes(command: &str, bytes: &[u8], mode: Mode, path: &Path) -> Vec<u8> {
         .collect();
     assert!(
         errors.is_empty(),
-        "the live {command} schema must accept the document ({mode:?}): {errors:#?}"
+        "the live {command} schema must accept the document \
+         ({selection:?}/{mode:?}): {errors:#?}"
     );
-    output.stdout
+    Run {
+        status: output.status.code(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        stdout: output.stdout,
+    }
+}
+
+/// Runs one public machine boundary under explicit `lua5.1` selection and returns stdout.
+/// Exit status and stderr are the mode-invariance test's business, not this one's.
+fn run_bytes(command: &str, bytes: &[u8], mode: Mode, path: &Path) -> Vec<u8> {
+    run_public(command, bytes, Selection::Explicit, mode, path).stdout
 }
 
 /// Runs the public `validate` boundary over an in-memory chunk.
@@ -666,10 +890,9 @@ fn derive(base: &[u8], base_hash: &str, proto: &RootProto, word: u32, note: &str
     }
 }
 
-/// Reads the pinned base fixture, pins its hash, and decodes the root prologue facts every
-/// derived case is built from.
-fn pinned_base() -> (Vec<u8>, String, RootProto) {
-    let relative = CONTROL_FLOW.0;
+/// Reads a pinned fixture and refuses to hand back bytes that do not hash to its pin. The
+/// sprint pins content, so the file is looked for under both the crate and workspace roots.
+fn load_pinned((relative, expected): (&str, &str)) -> Vec<u8> {
     let candidates = [
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative),
         root().join(relative),
@@ -678,13 +901,20 @@ fn pinned_base() -> (Vec<u8>, String, RootProto) {
         .iter()
         .find(|candidate| candidate.exists())
         .unwrap_or_else(|| panic!("pinned fixture {relative} must exist: tried {candidates:?}"));
-    let base = std::fs::read(path).unwrap_or_else(|error| panic!("read {relative}: {error}"));
-    let base_hash = sha256(&base);
+    let bytes = std::fs::read(path).unwrap_or_else(|error| panic!("read {relative}: {error}"));
     assert_eq!(
-        base_hash, CONTROL_FLOW.1,
+        sha256(&bytes),
+        expected,
         "pinned fixture {relative} must hash to its recorded SHA-256"
     );
+    bytes
+}
 
+/// Reads the pinned base fixture, pins its hash, and decodes the root prologue facts every
+/// derived case is built from.
+fn pinned_base() -> (Vec<u8>, String, RootProto) {
+    let base = load_pinned(CONTROL_FLOW);
+    let base_hash = sha256(&base);
     let proto = read_root_proto(&base);
     assert!(
         usize::from(opcode(proto.word)) < OPCODE_COUNT,
@@ -700,16 +930,17 @@ fn pinned_base() -> (Vec<u8>, String, RootProto) {
     (base, base_hash, proto)
 }
 
-/// Proves the derived word really reached public disassembly as the instruction at the
-/// recorded PC, so an absent finding cannot be an artefact of a chunk the boundary never
-/// decoded the way this test believes it did.
-fn assert_word_reached_disasm(case: &Derived, proto: &RootProto, op: u8, path: &Path) {
-    let document = disasm_bytes(&case.bytes, path);
-    let mut instructions: Vec<&Json> = Vec::new();
+/// Whether a value is a disassembled instruction, judged by its own shape.
+fn is_instruction(value: &Json) -> bool {
+    value.get("opcode_num").is_some() && value.get("encoded_operands").is_some()
+}
+
+/// Every instruction object anywhere in a disassembly document, located by shape.
+fn instructions_in(document: &Json) -> Vec<&Json> {
     fn walk<'a>(value: &'a Json, out: &mut Vec<&'a Json>) {
         match value {
             Json::Object(map) => {
-                if value.get("opcode_num").is_some() && value.get("encoded_operands").is_some() {
+                if is_instruction(value) {
                     out.push(value);
                 }
                 map.values().for_each(|nested| walk(nested, out));
@@ -718,17 +949,25 @@ fn assert_word_reached_disasm(case: &Derived, proto: &RootProto, op: u8, path: &
             _ => {}
         }
     }
-    walk(&document, &mut instructions);
+    let mut out = Vec::new();
+    walk(document, &mut out);
+    out
+}
 
-    let instruction = instructions
-        .iter()
-        .find(|instruction| instruction["pc"].as_u64() == Some(proto.pc as u64))
-        .unwrap_or_else(|| {
-            panic!(
-                "the disassembly must list PC {}\n{}",
-                proto.pc, case.evidence
-            )
-        });
+/// The instruction a disassembly lists at one PC of the root prototype.
+fn instruction_at<'a>(document: &'a Json, pc: usize, evidence: &str) -> &'a Json {
+    instructions_in(document)
+        .into_iter()
+        .find(|instruction| instruction["pc"].as_u64() == Some(pc as u64))
+        .unwrap_or_else(|| panic!("the disassembly must list PC {pc}\n{evidence}"))
+}
+
+/// Proves the derived word really reached public disassembly as the instruction at the
+/// recorded PC, so an absent finding cannot be an artefact of a chunk the boundary never
+/// decoded the way this test believes it did.
+fn assert_word_reached_disasm(case: &Derived, proto: &RootProto, op: u8, path: &Path) {
+    let document = disasm_bytes(&case.bytes, path);
+    let instruction = instruction_at(&document, proto.pc, &case.evidence);
     assert_eq!(
         (
             instruction["opcode_num"].as_u64(),
@@ -1129,17 +1368,36 @@ fn reg_c_tuples(doc: &MachineDocument<ValidationResponse>) -> Vec<RegCTuple> {
         .collect()
 }
 
-/// The single finding a `CONCAT` whose `C` is out of frame must carry.
-fn expected_tuple(proto: &RootProto, word: u32, c: u16) -> RegCTuple {
+/// The single finding a `CONCAT` whose `C` is out of frame must carry, for any prototype in
+/// any chunk.
+fn reg_c_tuple(
+    path: &str,
+    pc: usize,
+    byte_offset: usize,
+    word: u32,
+    maxstacksize: u8,
+) -> RegCTuple {
     (
-        format!("proto:{}:pc:{}", proto.path, proto.pc),
-        proto.byte_offset,
+        format!("proto:{path}:pc:{pc}"),
+        byte_offset,
         4,
         hex::encode(word.to_le_bytes()),
         format!(
-            "Register C ({c}) exceeds maxstacksize ({}) at PC {}",
-            proto.maxstacksize, proto.pc
+            "Register C ({}) exceeds maxstacksize ({maxstacksize}) at PC {pc}",
+            field_c(word)
         ),
+    )
+}
+
+/// The same finding for the root prototype the single-word derivations edit.
+fn expected_tuple(proto: &RootProto, word: u32, c: u16) -> RegCTuple {
+    assert_eq!(field_c(word), c, "the frozen tuple names the encoded C");
+    reg_c_tuple(
+        &proto.path,
+        proto.pc,
+        proto.byte_offset,
+        word,
+        proto.maxstacksize,
     )
 }
 
@@ -1289,4 +1547,457 @@ fn test_concat_c_bit_eight_is_a_register_overflow_not_a_constant() {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// How the public disassembler types `C`
+// ---------------------------------------------------------------------------
+
+/// Register 0 exists in every prototype, so this probe value is legal for all 38 rows and
+/// the operand's typed kind is the only thing that varies.
+const PROBE_C: u16 = 0;
+
+/// The typed `C` operand of one disassembled instruction, if the disassembler publishes one.
+fn typed_c(instruction: &Json) -> Option<&Json> {
+    instruction["operands"]
+        .as_array()?
+        .iter()
+        .find(|operand| operand["name"].as_str() == Some("C"))
+}
+
+/// Whether one published operand is typed as a register.
+fn is_register_operand(operand: &Json) -> bool {
+    operand["kind"]["kind"].as_str() == Some("register")
+}
+
+/// One word per authority row, encoded here in whichever layout that row's format requires
+/// and never by asking luad how to build it.
+///
+/// The `NoCField` rows are given the largest displacement or index that keeps bits 14..=22
+/// full: a jump of zero encodes `sBx` as `0x1ffff`, whose low nine bits are `0x1ff`, and the
+/// `iABx` rows are driven at `Bx = 0x1ff`. A disassembler that read those bits as a `C`
+/// operand would therefore be caught rather than flattered by these probes.
+fn row_probe(entry: &CRow, proto: &RootProto) -> u32 {
+    match (entry.role, entry.op) {
+        (CRole::NoCField, 22 | 31 | 32) => iasbx(entry.op, 0, 0),
+        (CRole::NoCField, _) => iabx(entry.op, 0, 0x1ff),
+        _ => probe(entry.op, PROBE_C, proto),
+    }
+}
+
+#[test]
+fn test_public_disasm_types_register_c_against_the_authority_table() {
+    audit_authority();
+
+    let (base, base_hash, proto) = pinned_base();
+    let file = NamedTempFile::new().expect("temporary chunk");
+    let path = file.path();
+
+    let mut typed: Vec<(&'static str, bool)> = Vec::new();
+    let mut deferred: Vec<&'static str> = Vec::new();
+    for entry in OFFICIAL_C_ROLES.iter() {
+        let word = row_probe(entry, &proto);
+        let case = derive(
+            &base,
+            &base_hash,
+            &proto,
+            word,
+            &format!("disasm probe: {} ({:?})", entry.name, entry.role),
+        );
+        // The live disasm schema accepts this document, or `run_bytes` has already failed.
+        let document = disasm_bytes(&case.bytes, path);
+        let instruction = instruction_at(&document, proto.pc, &case.evidence);
+        assert_eq!(
+            (
+                instruction["opcode_num"].as_u64(),
+                instruction["mnemonic"].as_str(),
+                instruction["raw_word"].as_u64(),
+            ),
+            (
+                Some(u64::from(entry.op)),
+                Some(entry.name),
+                Some(u64::from(word)),
+            ),
+            "the probe must disassemble as {} at PC {}\n{}",
+            entry.name,
+            proto.pc,
+            case.evidence
+        );
+
+        let operand = typed_c(instruction);
+        typed.push((entry.name, operand.is_some_and(is_register_operand)));
+
+        match entry.role {
+            // The claim: this row's C is a direct register, at the probe's index.
+            CRole::FixedRegister => {
+                let operand = operand.unwrap_or_else(|| {
+                    panic!(
+                        "{} must publish a C operand\n{}\ninstruction={instruction}",
+                        entry.name, case.evidence
+                    )
+                });
+                assert_eq!(
+                    (
+                        operand["kind"]["kind"].as_str(),
+                        operand["kind"]["index"].as_u64()
+                    ),
+                    (Some("register"), Some(u64::from(PROBE_C))),
+                    "{}.C must be typed as register {PROBE_C}\n{}\noperand={operand}",
+                    entry.name,
+                    case.evidence
+                );
+            }
+            // An RK slot with bit 8 clear legitimately resolves to a register-valued
+            // operand. Which encoding it is belongs to RK authority, so this row is
+            // recorded as deferred and claimed neither way.
+            CRole::ConditionalRk => deferred.push(entry.name),
+            // Bits 14..=22 belong to Bx or sBx here, so there is no C operand to publish.
+            CRole::NoCField => assert!(
+                operand.is_none(),
+                "{} has no C field, so the disassembler must publish no operand named C\n{}\n\
+                 instruction={instruction}",
+                entry.name,
+                case.evidence
+            ),
+            // A scalar C is published, and is published as a scalar.
+            CRole::Boolean | CRole::Count | CRole::SizeHint | CRole::ListBlockIndex => {
+                let operand = operand.unwrap_or_else(|| {
+                    panic!(
+                        "{} reads C as a {:?}, so it must publish that operand\n{}\n\
+                         instruction={instruction}",
+                        entry.name, entry.role, case.evidence
+                    )
+                });
+                assert!(
+                    !is_register_operand(operand),
+                    "{}.C {}, so it must not be typed as a register\n{}\noperand={operand}",
+                    entry.name,
+                    entry.role.why_not_fixed(),
+                    case.evidence
+                );
+            }
+            // An unread C may be published as a scalar or omitted entirely; either is
+            // consistent with the opcode contract. It may never be typed as a register.
+            CRole::Unused => {
+                if let Some(operand) = operand {
+                    assert!(
+                        !is_register_operand(operand),
+                        "{}.C {}, so it must not be typed as a register\n{}\noperand={operand}",
+                        entry.name,
+                        entry.role.why_not_fixed(),
+                        case.evidence
+                    );
+                }
+            }
+        }
+    }
+
+    // The deferred set is exactly the authority's RK rows, so no row can be quietly parked
+    // there to escape the comparison below.
+    let claimed_rk: Vec<&str> = OFFICIAL_C_ROLES
+        .iter()
+        .filter(|entry| entry.role == CRole::ConditionalRk)
+        .map(|entry| entry.name)
+        .collect();
+    assert_eq!(
+        deferred, claimed_rk,
+        "only the twelve RK rows may be deferred to RK authority"
+    );
+
+    let observed: Vec<&str> = typed
+        .iter()
+        .filter(|(name, is_register)| *is_register && !deferred.contains(name))
+        .map(|(name, _)| *name)
+        .collect();
+    assert_eq!(
+        observed,
+        fixed_register_names(&OFFICIAL_C_ROLES),
+        "the public disassembler must type C as a fixed direct register for exactly the \
+         authority's fixed-register rows; {claimed_rk:?} stay deferred\ntyped={typed:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mode invariance, live schemas, and recursion
+// ---------------------------------------------------------------------------
+
+/// The semantic content of one validation document: what the boundary decided and every
+/// finding it reported. Nothing here names the file the boundary read, so two runs of the
+/// same chunk under different selections are comparable.
+type Semantics = (
+    String,
+    Vec<(String, String, String, Option<(usize, usize, String)>)>,
+);
+
+fn validation_semantics(doc: &MachineDocument<ValidationResponse>) -> Semantics {
+    let reported = doc
+        .data
+        .diagnostics
+        .iter()
+        .map(|diagnostic| {
+            (
+                diagnostic.code.clone(),
+                diagnostic.target.to_string(),
+                diagnostic.message.clone(),
+                diagnostic.source.as_ref().map(|source| {
+                    (
+                        source.byte_offset,
+                        source.byte_length,
+                        source.raw_hex.clone(),
+                    )
+                }),
+            )
+        })
+        .collect();
+    (format!("{:?}", doc.data.verdict), reported)
+}
+
+/// Runs the public `validate` boundary once and returns the whole observation.
+fn observe(bytes: &[u8], selection: Selection, mode: Mode, path: &Path) -> Run {
+    run_public("validate", bytes, selection, mode, path)
+}
+
+fn document_of(run: &Run) -> MachineDocument<ValidationResponse> {
+    serde_json::from_slice(&run.stdout).expect("validate stdout is a machine document")
+}
+
+/// The deepest prototype the test-local reader found, and inside it one ordinary
+/// instruction that is safe to overwrite: not the prototype's first word, not its final
+/// return, and never a `MOVE` or `GETUPVAL`, which are the only two opcodes a closure
+/// binding descriptor can be. `CLOSURE` itself is skipped so no descriptor is orphaned.
+fn nested_target(protos: &[ProtoView]) -> (&ProtoView, usize) {
+    let depth = protos
+        .iter()
+        .map(|proto| proto.path.matches('/').count())
+        .max()
+        .expect("the chunk declares at least the root prototype");
+    assert!(
+        depth >= 2,
+        "the recursive case needs a prototype nested at least two levels deep: paths={:?}",
+        protos.iter().map(|proto| &proto.path).collect::<Vec<_>>()
+    );
+    let target = protos
+        .iter()
+        .find(|proto| proto.path.matches('/').count() == depth)
+        .expect("a prototype at the deepest level exists");
+    assert!(
+        target.maxstacksize >= 1,
+        "the nested prototype must declare a register file: {} maxstacksize={}",
+        target.path,
+        target.maxstacksize
+    );
+    let pc = (1..target.words.len().saturating_sub(1))
+        .find(|pc| {
+            let op = opcode(target.words[*pc]);
+            usize::from(op) < OPCODE_COUNT && !matches!(op, 0 | 4 | 36)
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "the nested prototype {} must carry an ordinary instruction to overwrite: \
+                 words={:?}",
+                target.path, target.words
+            )
+        });
+    (target, pc)
+}
+
+#[test]
+fn test_register_c_findings_are_mode_invariant_schema_valid_and_recursive() {
+    audit_authority();
+    let file = NamedTempFile::new().expect("temporary chunk");
+    let path = file.path();
+
+    // Every pinned fixture, untouched, under every selection and mode. Each document has
+    // satisfied the live validate schema by the time it is read.
+    for (name, pin) in PINNED_FIXTURES {
+        let clean = load_pinned(pin);
+        let mut semantics: Vec<(Selection, Mode, Semantics)> = Vec::new();
+        for (selection, mode) in MODE_MATRIX {
+            let run = observe(&clean, selection, mode, path);
+            assert_eq!(
+                (run.status, run.stderr.as_str()),
+                (Some(0), ""),
+                "unmodified {name} must be accepted quietly under {selection:?}/{mode:?}"
+            );
+            let doc = document_of(&run);
+            assert!(
+                findings(&doc, REG_C_CODE).is_empty(),
+                "unmodified {name} must carry no {REG_C_CODE} under {selection:?}/{mode:?}: \
+                 codes={:?}",
+                all_codes(&doc)
+            );
+            semantics.push((selection, mode, validation_semantics(&doc)));
+        }
+
+        // Nothing may be missing from the sweep, so the equality below cannot be satisfied
+        // by a short, reordered, or repeated list of observations.
+        assert_eq!(
+            semantics
+                .iter()
+                .map(|(selection, mode, _)| (*selection, *mode))
+                .collect::<Vec<_>>(),
+            MODE_MATRIX.to_vec(),
+            "every selection/mode combination must be observed for unmodified {name}, in order"
+        );
+
+        // Selection decides how a chunk reaches luad and strictness decides how loudly it
+        // reports, but neither may change what luad decided or what it found. Verdict and
+        // complete diagnostic tuples must be identical across all four combinations.
+        let (_, _, first) = &semantics[0];
+        for (selection, mode, other) in &semantics[1..] {
+            assert_eq!(
+                other, first,
+                "unmodified {name} must produce identical semantic validation data under \
+                 {selection:?}/{mode:?} and under {:?}/{:?}",
+                semantics[0].0, semantics[0].1
+            );
+        }
+
+        // The same fixture through the public disassembler, under both selections. Each
+        // document has satisfied the live disasm schema inside the runner before it is read.
+        let expected_instructions: usize = read_chunk(&clean)
+            .iter()
+            .map(|proto| proto.words.len())
+            .sum();
+        let mut disassembled: Vec<(Vec<Json>, Vec<String>)> = Vec::new();
+        for selection in [Selection::Automatic, Selection::Explicit] {
+            let run = run_public("disasm", &clean, selection, Mode::Permissive, path);
+            assert_eq!(
+                (run.status, run.stderr.as_str()),
+                (Some(0), ""),
+                "unmodified {name} must disassemble quietly under {selection:?}/permissive"
+            );
+            let document: Json =
+                serde_json::from_slice(&run.stdout).expect("disasm stdout is JSON");
+            let instructions: Vec<Json> = instructions_in(&document).into_iter().cloned().collect();
+            // Every word this module's own reader counted, across every prototype of the
+            // chunk, must be published. Two equally empty or equally truncated documents
+            // therefore cannot satisfy the comparison below.
+            assert_eq!(
+                instructions.len(),
+                expected_instructions,
+                "unmodified {name} must publish every instruction the test-local reader \
+                 counted ({selection:?})"
+            );
+            disassembled.push((instructions, codes_in(&document)));
+        }
+        assert_eq!(
+            disassembled[0], disassembled[1],
+            "unmodified {name} must disassemble to identical semantic data - every \
+             instruction record and every diagnostic code - under automatic and explicit \
+             selection"
+        );
+    }
+
+    // The recursive case. The nested prototype and the word to overwrite are found by this
+    // module's own chunk reader, so the boundary is never asked where its prototypes are.
+    let base = load_pinned(CLOSURES);
+    let base_hash = sha256(&base);
+    let protos = read_chunk(&base);
+    let (target_proto, pc) = nested_target(&protos);
+    let byte_offset = target_proto.offset_of(pc);
+    let original = target_proto.words[pc];
+    assert_eq!(
+        &base[byte_offset..byte_offset + 4],
+        &original.to_le_bytes()[..],
+        "the reader's offset {byte_offset} must locate the word it reported"
+    );
+    assert!(
+        target_proto.path.contains('/'),
+        "the target must not be the root prototype: {}",
+        target_proto.path
+    );
+
+    // Only this one word changes, and it changes to a CONCAT whose A and B are register 0 -
+    // in frame for any prototype - and whose C is the first slot this nested prototype does
+    // not have.
+    let c = u16::from(target_proto.maxstacksize);
+    let changed = iabc(OP_CONCAT, 0, 0, c);
+    assert_eq!(field_c(changed), c, "the changed word carries the driven C");
+    assert_ne!(
+        changed, original,
+        "the derivation must change the word at {byte_offset}"
+    );
+    let mut bytes = base.clone();
+    bytes[byte_offset..byte_offset + 4].copy_from_slice(&changed.to_le_bytes());
+    let evidence = format!(
+        "recursive: base={base_hash} proto={} pc={pc} byte_offset={byte_offset} \
+         original_word={original:#010x} changed_c={c} changed_word={changed:#010x} \
+         maxstacksize={} result={}",
+        target_proto.path,
+        target_proto.maxstacksize,
+        sha256(&bytes)
+    );
+
+    // The mutation reaches exactly that nested instruction, and the boundary agrees with
+    // the reader about where in the chunk it lives.
+    let document = disasm_bytes(&bytes, path);
+    let matched: Vec<&Json> = instructions_in(&document)
+        .into_iter()
+        .filter(|instruction| instruction["raw_word"].as_u64() == Some(u64::from(changed)))
+        .collect();
+    assert_eq!(
+        matched.len(),
+        1,
+        "exactly one disassembled instruction may carry the changed word\n{evidence}"
+    );
+    assert_eq!(
+        (
+            matched[0]["pc"].as_u64(),
+            matched[0]["opcode_num"].as_u64(),
+            matched[0]["mnemonic"].as_str(),
+        ),
+        (Some(pc as u64), Some(u64::from(OP_CONCAT)), Some("CONCAT")),
+        "the changed word must reach public disassembly as the CONCAT at PC {pc} of {}\n\
+         {evidence}\ninstruction={}",
+        target_proto.path,
+        matched[0]
+    );
+
+    // Every selection and mode must reject the chunk quietly and report the same single
+    // finding, tied to the nested prototype's stable instruction ID and source word.
+    let expected = vec![reg_c_tuple(
+        &target_proto.path,
+        pc,
+        byte_offset,
+        changed,
+        target_proto.maxstacksize,
+    )];
+    let mut observed: Vec<(Selection, Mode, Vec<RegCTuple>)> = Vec::new();
+    for (selection, mode) in MODE_MATRIX {
+        let run = observe(&bytes, selection, mode, path);
+        assert_eq!(
+            (run.status, run.stderr.as_str()),
+            (Some(1), ""),
+            "a nested register-C overflow must be rejected quietly under \
+             {selection:?}/{mode:?}\n{evidence}"
+        );
+        let doc = document_of(&run);
+        assert_eq!(
+            reg_c_tuples(&doc),
+            expected,
+            "{selection:?}/{mode:?} must report exactly one {REG_C_CODE} naming the nested \
+             prototype {}, its byte offset, its source word, the full C value and that \
+             prototype's maxstacksize\n{evidence}\ncodes={:?}",
+            target_proto.path,
+            all_codes(&doc)
+        );
+        observed.push((selection, mode, reg_c_tuples(&doc)));
+    }
+    let first = &observed[0];
+    for other in &observed[1..] {
+        assert_eq!(
+            other.2, first.2,
+            "{:?}/{:?} and {:?}/{:?} must not diverge\n{evidence}",
+            first.0, first.1, other.0, other.1
+        );
+    }
+    assert_eq!(
+        observed
+            .iter()
+            .map(|(selection, mode, _)| (*selection, *mode))
+            .collect::<Vec<_>>(),
+        MODE_MATRIX.to_vec(),
+        "every selection/mode combination must be observed, in order\n{evidence}"
+    );
 }
