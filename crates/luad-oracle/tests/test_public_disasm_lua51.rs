@@ -334,11 +334,15 @@ fn test_lua51_text_disassembly_renders_closure_binding_golden_lines() {
     assert!(
         stdout.contains("; proto:0 (source: @tests/fixtures/closures.lua, lines 0-0, stack: 6)")
     );
-    assert!(stdout.contains("0  CLOSURE      R(0) Proto(0) ; proto:0"));
-    assert!(stdout.contains("3  CLOSURE      R(2) Proto(0) ; proto:0"));
+    assert!(stdout.contains("0  CLOSURE      R(0) Proto(0) ; proto:0/0"));
+    assert!(stdout.contains("3  CLOSURE      R(2) Proto(0) ; proto:0/0/0"));
+    assert!(stdout.contains("6  CLOSURE      R(1) Proto(0) ; proto:0/0/0/0"));
     assert!(stdout.contains("4  |->          upvalue[0] <- parent R(1)"));
     assert!(stdout.contains("7  |->          upvalue[0] <- parent upvalue[0]"));
     assert!(stdout.contains("upvalue[0] = count (instack=0, idx=0, kind=0)"));
+    assert!(!stdout
+        .lines()
+        .any(|line| { line.contains(" CLOSURE ") && line.ends_with("Proto(0) ; proto:0") }));
     assert!(!stdout.contains("MOVE 0 1 0"));
 }
 

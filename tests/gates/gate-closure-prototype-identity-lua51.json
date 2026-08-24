@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-closure-prototype-identity-lua51",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_closure_prototype_identity_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_authority_fixture_and_independent_recursive_paths_pinned",
+    "test_auto_explicit_schemas_determinism_and_no_closure_control",
+    "test_killer_channel_and_xref_disagreement_rejected",
+    "test_killer_flattened_and_owner_path_mutations_rejected",
+    "test_killer_omission_decode_and_reordering_rejected",
+    "test_public_closure_identity_agrees_across_json_text_and_xrefs"
+  ],
+  "required_compiler_version": "Lua 5.1.5",
+  "required_compiler_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
+  "required_fixtures": [
+    {
+      "path": "tests/fixtures/precompiled/lua51/closures.luac",
+      "sha256": "62c4438b660880fa546cbe377d1f40113d2efc25aefc40df227979276efa756e"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua51/hello.luac",
+      "sha256": "d64567d2d41ff584b86602f98fff5906f58f101f6faf98598f3662bac6e96a4f"
+    }
+  ],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-public-disasm-lua51",
+    "gate-validator-reference-operands-lua51"
+  ],
+  "allowed_capability_mutations": []
+}
