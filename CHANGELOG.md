@@ -4,6 +4,13 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+### Validation
+
+- Lua 5.1 validation now applies upvalue, child-prototype, and comparison-boolean
+  domains to their encoded fields without treating those values as registers.
+- Lua 5.1 validation returns deterministic, de-duplicated diagnostics when the same
+  decoded chunk is validated more than once.
+
 ### Machine interface
 
 - Added `export --max-facts-per-file` with deterministic per-input fact truncation,

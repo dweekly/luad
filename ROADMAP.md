@@ -20,6 +20,11 @@ roles so raw bitfields cannot acquire inconsistent meanings across consumers. Ev
 public diagnostic needs discoverable semantics, severity, category, and a useful next
 action.
 
+Prototype references must retain their owning prototype path in every structured fact,
+comment, text rendering, and xref. Direct register fields, implicit register spans, and
+non-register scalar fields need independently proved domain rules before target
+qualification.
+
 Exit outcome: valid compiler-produced fixtures have no unjustified diagnostics,
 targeted corruptions produce exact documented diagnostics, and every emitted code is
 present in the public catalog.
@@ -50,7 +55,9 @@ persist names, hypotheses, and cross-session findings while `luad` remains state
 
 Exit outcome: representative reverse-engineering workflows are expressible through
 documented CLI composition without adding decompiler judgment, sink classification,
-or project state to `luad`.
+or project state to `luad`. Query gates prove that changing a predicate operand changes
+the result set, and bounded register-provenance facts remain eligible only when they can
+be expressed without inferred names, security labels, or persistent project state.
 
 ## 5. Additional dialect qualification
 
