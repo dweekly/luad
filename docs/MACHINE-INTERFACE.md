@@ -245,6 +245,19 @@ null interpretation; read-failure diagnostics carry null identity and interpreta
 Consumers may discard or interleave control records without losing fact attribution.
 `export_start.schema_version` identifies the stream contract.
 
+Each requested input produces exactly one terminal `file_end` status: `succeeded` for a
+complete recognized chunk, `skipped` for readable source or unsupported/malformed
+formats, and `failed` for an unreadable input. Duplicate paths are processed per
+occurrence. Every non-success is path-qualified in both its records and stderr.
+`export_end` is the completeness marker and reports `files_processed`,
+`files_succeeded`, `files_skipped`, and `files_failed`, where processed equals the sum of
+the three outcomes. Its absence means the stream is incomplete.
+
+Default process status is zero when at least one input succeeds. `--strict` exits
+nonzero when any input is skipped or failed, after emitting the complete framed stream.
+Zero successful inputs are always nonzero. Stderr ends with a deterministic summary in
+the form `N exported, N skipped, N failed`; stdout remains JSONL only.
+
 ### `compile`
 
 The command is visible but intentionally unsupported and exits with code 4. It must not be used to execute untrusted source.

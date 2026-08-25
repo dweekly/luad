@@ -6,6 +6,7 @@ usage() {
 Usage:
   scripts/agents/agy-gemini.sh config
   scripts/agents/agy-gemini.sh access
+  scripts/agents/agy-gemini.sh propose PROMPT_FILE
   scripts/agents/agy-gemini.sh plan PROMPT_FILE
   scripts/agents/agy-gemini.sh implement PROMPT_FILE
   scripts/agents/agy-gemini.sh resume-plan CONVERSATION_ID PROMPT_FILE
@@ -22,10 +23,11 @@ same conversation. The sandbox remains enabled. Wall time, source/effective prom
 hashes, and the Antigravity log path are printed to stderr when the turn exits. Set
 LUAD_AGY_LOG_FILE to choose the log location.
 
-The interactive stages preserve the same model variant, mode, sandbox, and conversation
-rules while allowing narrowly reviewed file or command permissions when a compiler-led
-turn is explicitly required. Routine non-interactive implementation stages prepend an
-edit-only policy; the steward runs verification outside the model session.
+The `propose` stage is a no-tools turn over a self-contained prompt; the steward applies
+useful edits. Interactive stages preserve the same model variant, mode, sandbox, and
+conversation rules while allowing narrowly reviewed file or command permissions when a
+compiler-led turn is explicitly required. Routine non-interactive implementation stages
+prepend an edit-only policy; the steward runs verification outside the model session.
 `config` prints the pinned model, reasoning source, workspace controls, execution, and
 verification owner without starting a model turn. `access` prints Antigravity's
 effective configuration and permission records for review without starting a model
@@ -67,7 +69,7 @@ fi
 
 stage=${1:-}
 case "$stage" in
-  plan|implement|interactive-plan|interactive-implement)
+  propose|plan|implement|interactive-plan|interactive-implement)
     prompt_file=${2:-}
     conversation_args=()
     ;;
@@ -110,6 +112,12 @@ if [[ "$mode" == "accept-edits" && "$interactive" == false ]]; then
   prompt="${edit_only_policy}${prompt}"
 fi
 
+if [[ "$stage" == "propose" ]]; then
+  proposal_policy=$'No-tools proposal policy: use only the supplied prompt. Do not read or edit files, run commands, browse, delegate, or claim repository access. '
+  proposal_policy+=$'Return a concise proposed patch or exact edit recipe for steward review. Treat missing context as an explicit assumption.\n\n'
+  prompt="${proposal_policy}${prompt}"
+fi
+
 started_at=$(date +%s)
 log_file=${LUAD_AGY_LOG_FILE:-/tmp/luad-agy-${started_at}.log}
 prompt_file_sha256=$(shasum -a 256 "$prompt_file" | awk '{print $1}')
@@ -130,6 +138,7 @@ common=(
   "${conversation_args[@]}"
   --add-dir "$worktree_root"
   --model "$model"
+  --effort high
   --mode "$mode"
   --sandbox
   --log-file "$log_file"

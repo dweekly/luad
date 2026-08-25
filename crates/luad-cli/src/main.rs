@@ -39,52 +39,71 @@ use luad_core::Dialect;
 use luad_dialect_lua54::Lua54Dialect;
 
 fn read_input_bytes(file_path: &str) -> Result<Vec<u8>, ExitCode> {
+    read_input_bytes_with_reporting(file_path, true)
+}
+
+fn read_input_bytes_with_reporting(
+    file_path: &str,
+    report_errors: bool,
+) -> Result<Vec<u8>, ExitCode> {
     let max_bytes = ResourceLimits::default().max_input_bytes;
 
     if file_path == "-" {
         let mut buffer = Vec::new();
         let mut reader = io::stdin().take((max_bytes + 1) as u64);
         reader.read_to_end(&mut buffer).map_err(|e| {
-            eprintln!("{}: Failed to read from stdin: {e}", "error".red().bold());
+            if report_errors {
+                eprintln!("{}: Failed to read from stdin: {e}", "error".red().bold());
+            }
             ExitCode::IoError
         })?;
         if buffer.len() > max_bytes {
-            eprintln!(
-                "{}: Stdin input exceeds safety limit of {max_bytes} bytes",
-                "error".red().bold()
-            );
+            if report_errors {
+                eprintln!(
+                    "{}: Stdin input exceeds safety limit of {max_bytes} bytes",
+                    "error".red().bold()
+                );
+            }
             return Err(ExitCode::LimitExceeded);
         }
         Ok(buffer)
     } else {
         let path = Path::new(file_path);
         if !path.exists() {
-            eprintln!("{}: File not found: '{}'", "error".red().bold(), file_path);
+            if report_errors {
+                eprintln!("{}: File not found: '{}'", "error".red().bold(), file_path);
+            }
             return Err(ExitCode::IoError);
         }
         let metadata = fs::metadata(path).map_err(|e| {
-            eprintln!(
-                "{}: Failed to inspect metadata for '{}': {e}",
-                "error".red().bold(),
-                file_path
-            );
+            if report_errors {
+                eprintln!(
+                    "{}: Failed to inspect metadata for '{}': {e}",
+                    "error".red().bold(),
+                    file_path
+                );
+            }
             ExitCode::IoError
         })?;
         if metadata.len() > max_bytes as u64 {
-            eprintln!(
-                "{}: File '{}' size ({} bytes) exceeds safety limit of {max_bytes} bytes",
-                "error".red().bold(),
-                file_path,
-                metadata.len()
-            );
+            if report_errors {
+                eprintln!(
+                    "{}: File '{}' size ({} bytes) exceeds safety limit of {max_bytes} bytes",
+                    "error".red().bold(),
+                    file_path,
+                    metadata.len()
+                );
+            }
             return Err(ExitCode::LimitExceeded);
         }
         fs::read(path).map_err(|e| {
-            eprintln!(
-                "{}: Failed to read file '{}': {e}",
-                "error".red().bold(),
-                file_path
-            );
+            if report_errors {
+                eprintln!(
+                    "{}: Failed to read file '{}': {e}",
+                    "error".red().bold(),
+                    file_path
+                );
+            }
             ExitCode::IoError
         })
     }
@@ -104,6 +123,24 @@ fn parse_chunk(
     ),
     ExitCode,
 > {
+    parse_chunk_with_reporting(file_path, bytes, strict, dialect_override, true)
+}
+
+fn parse_chunk_with_reporting(
+    file_path: &str,
+    bytes: &[u8],
+    strict: bool,
+    dialect_override: Option<&str>,
+    report_errors: bool,
+) -> Result<
+    (
+        Chunk,
+        InputIdentity,
+        AnalysisConfiguration,
+        ResolvedInterpretation,
+    ),
+    ExitCode,
+> {
     let mode = if strict {
         ParseMode::Strict
     } else {
@@ -112,12 +149,14 @@ fn parse_chunk(
 
     let limits = ResourceLimits::default();
     if bytes.len() > limits.max_input_bytes {
-        eprintln!(
-            "{}: Input size ({} bytes) exceeds safety limit of {} bytes",
-            "error".red().bold(),
-            bytes.len(),
-            limits.max_input_bytes
-        );
+        if report_errors {
+            eprintln!(
+                "{}: Input size ({} bytes) exceeds safety limit of {} bytes",
+                "error".red().bold(),
+                bytes.len(),
+                limits.max_input_bytes
+            );
+        }
         return Err(ExitCode::LimitExceeded);
     }
 
@@ -158,17 +197,21 @@ fn parse_chunk(
             "lua5.1-stock32" => &lua51_stock32,
             "lua5.1-lnum32" => &lua51_lnum,
             "lua5.1-lnum" => {
-                eprintln!(
+                if report_errors {
+                    eprintln!(
                         "{}: Ambiguous dialect 'lua5.1-lnum'. Please specify exact profile '--dialect lua5.1-lnum32'",
                         "error".red().bold()
                     );
+                }
                 return Err(ExitCode::UsageError);
             }
             other => {
-                eprintln!(
-                    "{}: Dialect '{other}' is not yet supported in this build",
-                    "error".red().bold()
-                );
+                if report_errors {
+                    eprintln!(
+                        "{}: Dialect '{other}' is not yet supported in this build",
+                        "error".red().bold()
+                    );
+                }
                 return Err(ExitCode::UnsupportedFormat);
             }
         };
@@ -186,10 +229,12 @@ fn parse_chunk(
     } else if lua51.detect(bytes).is_some() {
         (&lua51, SelectionMode::Detected)
     } else {
-        eprintln!(
-            "{}: Unknown or unsupported bytecode format (header did not match known dialects)",
-            "error".red().bold()
-        );
+        if report_errors {
+            eprintln!(
+                "{}: Unknown or unsupported bytecode format (header did not match known dialects)",
+                "error".red().bold()
+            );
+        }
         return Err(ExitCode::UnsupportedFormat);
     };
 
@@ -219,12 +264,14 @@ fn parse_chunk(
             Ok((chunk, input_identity, analysis_config, interpretation))
         }
         Err(diag) => {
-            eprintln!(
-                "{}: Parsing failed at offset {}: {}",
-                "error".red().bold(),
-                diag.source.as_ref().map(|s| s.byte_offset).unwrap_or(0),
-                diag.message
-            );
+            if report_errors {
+                eprintln!(
+                    "{}: Parsing failed at offset {}: {}",
+                    "error".red().bold(),
+                    diag.source.as_ref().map(|s| s.byte_offset).unwrap_or(0),
+                    diag.message
+                );
+            }
             Err(ExitCode::InvalidInput)
         }
     }
@@ -1560,6 +1607,7 @@ enum ExportRecord {
     ExportEnd {
         files_processed: usize,
         files_succeeded: usize,
+        files_skipped: usize,
         files_failed: usize,
         total_instructions: usize,
     },
@@ -1726,8 +1774,8 @@ fn handle_export(args: ExportArgs) {
         ExitCode::UsageError.exit();
     }
 
-    let mut any_failed = false;
     let mut succeeded_count = 0;
+    let mut skipped_count = 0;
     let mut failed_count = 0;
     let mut total_instructions = 0;
 
@@ -1743,10 +1791,9 @@ fn handle_export(args: ExportArgs) {
     );
 
     for path_str in &file_paths {
-        let bytes = match read_input_bytes(path_str) {
+        let bytes = match read_input_bytes_with_reporting(path_str, false) {
             Ok(b) => b,
             Err(_) => {
-                any_failed = true;
                 failed_count += 1;
                 let start_rec = FileStartRecord {
                     record_type: "file_start".to_string(),
@@ -1780,16 +1827,22 @@ fn handle_export(args: ExportArgs) {
                     available_fact_count: 0,
                 };
                 println!("{}", serde_json::to_string(&end_rec).unwrap_or_default());
+                eprintln!("error: {path_str}: failed to read input file");
                 continue;
             }
         };
 
-        let parse_res = parse_chunk(path_str, &bytes, args.strict, args.dialect.as_deref());
+        let parse_res = parse_chunk_with_reporting(
+            path_str,
+            &bytes,
+            args.strict,
+            args.dialect.as_deref(),
+            false,
+        );
         let (chunk, identity, _config, interp) = match parse_res {
             Ok(c) => c,
-            Err(_) => {
-                any_failed = true;
-                failed_count += 1;
+            Err(parse_code) => {
+                skipped_count += 1;
                 let sha256 = hex::encode(sha2::Sha256::digest(&bytes));
                 let start_rec = FileStartRecord {
                     record_type: "file_start".to_string(),
@@ -1814,6 +1867,15 @@ fn handle_export(args: ExportArgs) {
                         msg.clone(),
                     );
                     (diag, msg)
+                } else if parse_code == ExitCode::UnsupportedFormat {
+                    let msg = format!("Unknown or unsupported bytecode format: '{path_str}'");
+                    let diag = Diagnostic::error(
+                        "PARSE-UNKNOWN-001",
+                        DiagnosticCategory::Parse,
+                        StableId::Chunk,
+                        msg.clone(),
+                    );
+                    (diag, msg)
                 } else {
                     let msg = format!("Failed to parse Lua bytecode chunk '{path_str}'");
                     let diag = Diagnostic::error(
@@ -1823,6 +1885,11 @@ fn handle_export(args: ExportArgs) {
                         msg.clone(),
                     );
                     (diag, msg)
+                };
+                let stderr_reason = match diag.code.as_str() {
+                    "PARSE-SOURCE-001" => "plain Lua source text is unsupported",
+                    "PARSE-UNKNOWN-001" => "unknown or unsupported bytecode format",
+                    _ => "failed to parse Lua bytecode chunk",
                 };
                 let parse_identity = InputIdentity {
                     path: path_str.clone(),
@@ -1838,8 +1905,8 @@ fn handle_export(args: ExportArgs) {
                 let end_rec = FileEndRecord {
                     record_type: "file_end".to_string(),
                     path: path_str.clone(),
-                    status: "failed".to_string(),
-                    error: Some(msg),
+                    status: "skipped".to_string(),
+                    error: Some(msg.clone()),
                     instruction_count: 0,
                     diagnostic_count: 1,
                     is_truncated: false,
@@ -1847,6 +1914,7 @@ fn handle_export(args: ExportArgs) {
                     available_fact_count: 0,
                 };
                 println!("{}", serde_json::to_string(&end_rec).unwrap_or_default());
+                eprintln!("error: {path_str}: {stderr_reason}");
                 continue;
             }
         };
@@ -1986,13 +2054,16 @@ fn handle_export(args: ExportArgs) {
             record_type: "export_end".to_string(),
             files_processed: file_paths.len(),
             files_succeeded: succeeded_count,
+            files_skipped: skipped_count,
             files_failed: failed_count,
             total_instructions,
         })
         .unwrap_or_default()
     );
 
-    if any_failed {
+    eprintln!("{succeeded_count} exported, {skipped_count} skipped, {failed_count} failed");
+
+    if succeeded_count == 0 || (args.strict && (skipped_count > 0 || failed_count > 0)) {
         ExitCode::InvalidInput.exit();
     } else {
         ExitCode::Success.exit();

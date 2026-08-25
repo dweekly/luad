@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 
 use serde_json::{json, Value};
 
-const PINNED_CODES: [&str; 108] = [
+const PINNED_CODES: [&str; 109] = [
     "CORE-LIMIT-001",
     "CORE-LIMIT-002",
     "CORE-OVERFLOW-001",
@@ -116,6 +116,7 @@ const PINNED_CODES: [&str; 108] = [
     "L55-VARINT-001",
     "PARSE-001",
     "PARSE-SOURCE-001",
+    "PARSE-UNKNOWN-001",
 ];
 
 const CONTRIBUTOR_FILES: [&str; 19] = [
@@ -680,7 +681,7 @@ fn test_catalog_code_set_matches_independent_production_inventory() {
 fn test_production_emitters_use_literal_diagnostic_codes() {
     let (_, metadata, _, violations) = source_inventory();
     assert!(violations.is_empty(), "source violations: {violations:?}");
-    assert_eq!(metadata.len(), 108);
+    assert_eq!(metadata.len(), PINNED_CODES.len());
     for (code, emitted) in metadata {
         assert_eq!(emitted.len(), 1, "{code} has inconsistent metadata");
         let actual = emitted.iter().next().unwrap();
@@ -696,8 +697,11 @@ fn test_catalog_descriptors_are_unique_sorted_complete_and_actionable() {
     let (_, document) = catalog(None);
     assert!(PINNED_CODES.windows(2).all(|pair| pair[0] < pair[1]));
     assert_eq!(document["schema_version"].as_u64(), Some(1));
-    assert_eq!(document["diagnostic_count"].as_u64(), Some(108));
-    assert_eq!(descriptors(&document).len(), 108);
+    assert_eq!(
+        document["diagnostic_count"].as_u64(),
+        Some(PINNED_CODES.len() as u64)
+    );
+    assert_eq!(descriptors(&document).len(), PINNED_CODES.len());
     assert!(compare_catalog(&PINNED_CODES, descriptors(&document)).is_ok());
 
     let required_fields: BTreeSet<_> = [
@@ -862,8 +866,12 @@ fn test_public_text_list_and_lookup_golden() {
     let text = String::from_utf8(list.stdout).unwrap();
     assert!(text.starts_with("CORE-LIMIT-001 ["));
     assert!(text.contains("\nPARSE-SOURCE-001 ["));
-    assert_eq!(text.matches("\n  Semantics: ").count(), 108);
-    assert_eq!(text.matches("\n  Next action: ").count(), 108);
+    assert!(text.contains("\nPARSE-UNKNOWN-001 ["));
+    assert_eq!(text.matches("\n  Semantics: ").count(), PINNED_CODES.len());
+    assert_eq!(
+        text.matches("\n  Next action: ").count(),
+        PINNED_CODES.len()
+    );
     assert!(!text.contains("\u{1b}["));
 
     let blocks = text_blocks(&text);
