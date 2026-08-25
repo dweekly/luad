@@ -60,6 +60,9 @@ pub enum Commands {
     /// Describe commands, dialects, features, limits, and schemas.
     Capabilities(CapabilitiesArgs),
 
+    /// Browse or query the public diagnostic code catalog.
+    Diagnostics(DiagnosticsArgs),
+
     /// Print a selected JSON Schema.
     Schema(SchemaArgs),
 
@@ -294,6 +297,16 @@ pub struct CapabilitiesArgs {
     /// Include full proof and evidence manifest.
     #[arg(long)]
     pub evidence: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct DiagnosticsArgs {
+    /// Optional diagnostic code to lookup (e.g. 'L51-REG-SPAN-001').
+    pub code: Option<String>,
+
+    /// Output format (text or json).
+    #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
 }
 
 #[derive(Args, Debug)]

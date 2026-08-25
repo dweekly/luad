@@ -14,8 +14,9 @@ mod exit_codes;
 mod render;
 
 use args::{
-    CapabilitiesArgs, CfgArgs, Cli, Commands, CompletionsArgs, DiffArgs, DisasmArgs, ExplainArgs,
-    ExportArgs, InspectArgs, OutputFormat, QueryArgs, SchemaArgs, ValidateArgs, XrefsArgs,
+    CapabilitiesArgs, CfgArgs, Cli, Commands, CompletionsArgs, DiagnosticsArgs, DiffArgs,
+    DisasmArgs, ExplainArgs, ExportArgs, InspectArgs, OutputFormat, QueryArgs, SchemaArgs,
+    ValidateArgs, XrefsArgs,
 };
 use exit_codes::ExitCode;
 use luad_analysis::{
@@ -255,6 +256,7 @@ fn main() {
         Commands::Disasm(args) => handle_disasm(args),
         Commands::Validate(args) => handle_validate(args),
         Commands::Capabilities(args) => handle_capabilities(args),
+        Commands::Diagnostics(args) => handle_diagnostics(args),
         Commands::Schema(args) => handle_schema(args),
         Commands::Completions(args) => handle_completions(args),
         Commands::Cfg(args) => handle_cfg(args),
@@ -558,6 +560,38 @@ fn handle_capabilities(args: CapabilitiesArgs) {
     ExitCode::Success.exit();
 }
 
+fn handle_diagnostics(args: DiagnosticsArgs) {
+    if matches!(args.format, OutputFormat::Jsonl | OutputFormat::Dot) {
+        ExitCode::UsageError.exit();
+    }
+
+    let descriptors = match args.code {
+        Some(code) => match luad_core::lookup_diagnostic(&code) {
+            Some(desc) => vec![desc],
+            None => {
+                eprintln!("error: Unknown diagnostic code '{code}'");
+                ExitCode::UsageError.exit();
+            }
+        },
+        None => luad_core::list_diagnostics(),
+    };
+
+    match args.format {
+        OutputFormat::Text => {
+            render::render_diagnostic_descriptors(&descriptors);
+        }
+        OutputFormat::Json => {
+            let response = luad_core::build_catalog_response(descriptors);
+            render::print_json(&response);
+        }
+        _ => {
+            ExitCode::UsageError.exit();
+        }
+    }
+
+    ExitCode::Success.exit();
+}
+
 fn handle_schema(args: SchemaArgs) {
     if args.schema_version != 1 {
         eprintln!(
@@ -577,6 +611,13 @@ fn handle_schema(args: SchemaArgs) {
         }
         "diagnostic" => {
             let schema = schema_for!(Diagnostic);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            );
+        }
+        "diagnostics" => {
+            let schema = schema_for!(luad_core::DiagnosticCatalogResponse);
             println!(
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
@@ -647,7 +688,7 @@ fn handle_schema(args: SchemaArgs) {
         }
         other => {
             eprintln!(
-                "{}: Unknown schema '{other}'. Supported: chunk, disasm, validate, diagnostic, instruction, cfg, xrefs, query, analysis, diff, capabilities, manifest",
+                "{}: Unknown schema '{other}'. Supported: chunk, disasm, validate, diagnostic, diagnostics, instruction, cfg, xrefs, query, analysis, diff, capabilities, manifest",
                 "error".red()
             );
             ExitCode::UsageError.exit();
@@ -1445,23 +1486,25 @@ fn handle_export(args: ExportArgs) {
                             .iter()
                             .take(256)
                             .all(|&b| b.is_ascii() || b.is_ascii_whitespace()));
-                let (code, msg) = if is_source {
-                    (
+                let (diag, msg) = if is_source {
+                    let msg = format!("Plain Lua source text is unsupported for bytecode export; compile with luac first: '{path_str}'");
+                    let diag = Diagnostic::error(
                         "PARSE-SOURCE-001",
-                        format!("Plain Lua source text is unsupported for bytecode export; compile with luac first: '{path_str}'"),
-                    )
+                        DiagnosticCategory::Parse,
+                        StableId::Chunk,
+                        msg.clone(),
+                    );
+                    (diag, msg)
                 } else {
-                    (
+                    let msg = format!("Failed to parse Lua bytecode chunk '{path_str}'");
+                    let diag = Diagnostic::error(
                         "PARSE-001",
-                        format!("Failed to parse Lua bytecode chunk '{path_str}'"),
-                    )
+                        DiagnosticCategory::Parse,
+                        StableId::Chunk,
+                        msg.clone(),
+                    );
+                    (diag, msg)
                 };
-                let diag = Diagnostic::error(
-                    code,
-                    DiagnosticCategory::Parse,
-                    StableId::Chunk,
-                    msg.clone(),
-                );
                 let diag_rec = JsonlDataRecord {
                     record_type: "diagnostic".to_string(),
                     data: diag,

@@ -720,3 +720,31 @@ pub fn render_diff(diff: &luad_analysis::ChunkDiff) {
         }
     }
 }
+
+/// Render a single diagnostic descriptor in standard 3-line format.
+pub fn render_diagnostic_descriptor(desc: &luad_core::DiagnosticDescriptor) {
+    let severity = match desc.severity {
+        Severity::Info => "info",
+        Severity::Warning => "warning",
+        Severity::Error => "error",
+    };
+    let category = match desc.category {
+        luad_core::DiagnosticCategory::Parse => "parse",
+        luad_core::DiagnosticCategory::Structure => "structure",
+        luad_core::DiagnosticCategory::Instruction => "instruction",
+        luad_core::DiagnosticCategory::ControlFlow => "control-flow",
+        luad_core::DiagnosticCategory::DebugMetadata => "debug-metadata",
+        luad_core::DiagnosticCategory::Analysis => "analysis",
+    };
+    print!(
+        "{} [{}/{}]\n  Semantics: {}\n  Next action: {}\n",
+        desc.code, severity, category, desc.semantics, desc.suggested_action
+    );
+}
+
+/// Render a slice of diagnostic descriptors in standard 3-line format.
+pub fn render_diagnostic_descriptors(descriptors: &[luad_core::DiagnosticDescriptor]) {
+    for desc in descriptors {
+        render_diagnostic_descriptor(desc);
+    }
+}

@@ -1,0 +1,854 @@
+//! Complete canonical catalog of all production diagnostic codes.
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+use crate::diagnostic::{DiagnosticCategory, Severity};
+
+/// A descriptor representing a diagnostic code in the catalog.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[schemars(title = "DiagnosticDescriptor")]
+pub struct DiagnosticDescriptor {
+    /// Unique stable diagnostic code.
+    pub code: String,
+    /// Diagnostic severity level.
+    pub severity: Severity,
+    /// Category of diagnostic check.
+    pub category: DiagnosticCategory,
+    /// Human-readable explanation of the condition reported by this code.
+    pub semantics: String,
+    /// Concrete suggested next action for researcher or external agent.
+    pub suggested_action: String,
+}
+
+/// Top-level response container for the public diagnostic catalog.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct DiagnosticCatalogResponse {
+    /// Catalog schema major version.
+    pub schema_version: u32,
+    /// Version of the luad tool.
+    pub tool_version: String,
+    /// Total number of diagnostic descriptors in this response.
+    pub diagnostic_count: usize,
+    /// List of diagnostic descriptors.
+    pub diagnostics: Vec<DiagnosticDescriptor>,
+}
+
+/// Static entry representation for the diagnostic authority table.
+#[derive(Debug, Clone, Copy)]
+pub struct StaticDiagnosticDescriptor {
+    pub code: &'static str,
+    pub severity: Severity,
+    pub category: DiagnosticCategory,
+    pub semantics: &'static str,
+    pub suggested_action: &'static str,
+}
+
+impl DiagnosticDescriptor {
+    /// Construct a descriptor from a static entry.
+    #[must_use]
+    pub fn from_static(entry: &StaticDiagnosticDescriptor) -> Self {
+        Self {
+            code: entry.code.to_string(),
+            severity: entry.severity,
+            category: entry.category,
+            semantics: entry.semantics.to_string(),
+            suggested_action: entry.suggested_action.to_string(),
+        }
+    }
+}
+
+/// Static authority table of all 108 production-emittable diagnostic codes in bytewise ascending order.
+pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
+    StaticDiagnosticDescriptor {
+        code: "CORE-LIMIT-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Prototype nesting depth exceeds the reader safety limit.",
+        suggested_action: "Increase max nesting depth limit or inspect chunk for malicious recursive nesting.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "CORE-LIMIT-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Total prototype count exceeds the reader safety limit.",
+        suggested_action: "Increase max total prototypes limit or inspect chunk for excessive prototype definitions.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "CORE-OVERFLOW-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Integer overflow occurred while calculating byte slice bounds during binary reading.",
+        suggested_action: "Inspect the requested read length and binary offset for arithmetic overflow.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "CORE-SLICE-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Invalid cursor range requested when creating a byte slice from reader buffer.",
+        suggested_action: "Verify that start cursor does not exceed current cursor position or buffer capacity.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "CORE-TRUNC-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Input ended before the requested byte range could be read.",
+        suggested_action: "Verify that the chunk is complete and was extracted without truncation.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "IO-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Failed to read bytecode input file from the specified filesystem path.",
+        suggested_action: "Check file existence, file permissions, and path accessibility.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-BOOL-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.1 comparison instruction field A contains a value outside the boolean domain 0 or 1.",
+        suggested_action: "Verify that field A of the comparison instruction is strictly 0 or 1.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-CHUNK-001",
+        severity: Severity::Warning,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.1 bytecode chunk contains unparsed trailing bytes after the root prototype.",
+        suggested_action: "Inspect trailing bytes for concatenated chunks, signature padding, or file corruption.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-CLOSURE-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.1 CLOSURE instruction lacks required follow-up pseudo-instructions for upvalue bindings.",
+        suggested_action: "Ensure each upvalue capture in the child prototype is followed by a MOVE or GETUPVAL instruction.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-CLOSURE-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Instruction following Lua 5.1 CLOSURE is neither MOVE nor GETUPVAL as required for upvalue binding.",
+        suggested_action: "Verify the opcode sequence immediately succeeding the CLOSURE instruction.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-CODE-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Instruction count declared in Lua 5.1 prototype exceeds configured safety limits.",
+        suggested_action: "Check instruction vector size or raise max instructions limit for large prototypes.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-CONST-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Lua 5.1 prototype declared an excessive constant count or encountered an invalid constant tag byte.",
+        suggested_action: "Verify constant count against safety limits and check constant tag validity.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-CONST-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Constant tag 9 encountered in Lua 5.1 chunk requires explicit LNUM32 profile selection.",
+        suggested_action: "Decode using dialect profile 'lua5.1-lnum32' to enable 32-bit integer constant extensions.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-CONST-003",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.1 LOADK, GETGLOBAL, or SETGLOBAL instruction references a constant index out of bounds.",
+        suggested_action: "Verify that Bx constant index references a defined constant in the prototype table.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-CONST-004",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.1 RK operand in field B references a constant index out of bounds.",
+        suggested_action: "Ensure RK operand B constant index does not exceed prototype constant count.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-CONST-005",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.1 RK operand in field C references a constant index out of bounds.",
+        suggested_action: "Ensure RK operand C constant index does not exceed prototype constant count.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-DISASM-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.1 instruction disassembly encountered an unrecognized opcode value.",
+        suggested_action: "Check bytecode against standard Lua 5.1 opcode mapping or vendor modifications.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-DISASM-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.1 disassembly failed to resolve an operand constant due to out-of-bounds index.",
+        suggested_action: "Verify that the prototype constant table contains all referenced constant indices.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-HEADER-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Invalid binary signature in Lua 5.1 header; expected magic bytes '\\x1bLua'.",
+        suggested_action: "Verify that input begins with the standard Lua binary signature.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-HEADER-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Version byte in chunk header does not match Lua 5.1 (0x51).",
+        suggested_action: "Select the dialect matching the chunk's declared version byte.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-HEADER-003",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Lua 5.1 chunk layout parameters (type sizes, endianness, integral flag) failed validation.",
+        suggested_action: "Check integer sizes, float format, endianness byte, and dialect profile options.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-JMP-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::ControlFlow,
+        semantics: "Lua 5.1 jump instruction destination PC is outside the prototype instruction vector.",
+        suggested_action: "Verify jump offset sBx and ensure target PC falls within the valid instruction range.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-OP-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.1 instruction contains an invalid or undefined opcode number.",
+        suggested_action: "Check dialect version or decompilation flags for modified opcode mappings.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-PROTO-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Child prototype count declared in Lua 5.1 prototype exceeds configured safety limit.",
+        suggested_action: "Inspect sub-prototype count or increase max total prototypes limit.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-PROTO-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.1 CLOSURE instruction field Bx references an out-of-bounds child prototype index.",
+        suggested_action: "Verify that Bx corresponds to a valid child prototype index in the parent prototype.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-REG-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.1 instruction register operand A exceeds prototype maxstacksize limit.",
+        suggested_action: "Check that register index A is strictly less than the prototype maxstacksize.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-REG-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.1 instruction register operand B exceeds prototype maxstacksize limit.",
+        suggested_action: "Check that register index B is strictly less than the prototype maxstacksize.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-REG-003",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.1 instruction register operand C exceeds prototype maxstacksize limit.",
+        suggested_action: "Check that register index C is strictly less than the prototype maxstacksize.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-REG-SPAN-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "A statically bounded instruction register window reaches beyond the owning prototype's maxstacksize.",
+        suggested_action: "Inspect the instruction counts and owning prototype stack bound.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-STACK-001",
+        severity: Severity::Warning,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.1 prototype declares an unusually large maxstacksize exceeding typical limits.",
+        suggested_action: "Inspect prototype frame allocation for potential stack exhaustion or corruption.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-UPVAL-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.1 GETUPVAL or SETUPVAL instruction references an upvalue index out of bounds.",
+        suggested_action: "Verify that operand B refers to an upvalue within the prototype's declared upvalue list.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L52-CHUNK-001",
+        severity: Severity::Warning,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.2 bytecode chunk contains unparsed trailing bytes after the root prototype.",
+        suggested_action: "Inspect trailing bytes for extra payloads or file truncation boundaries.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L52-CODE-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Instruction count declared in Lua 5.2 prototype exceeds configured safety limits.",
+        suggested_action: "Check instruction vector length or raise max instructions per prototype limit.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L52-CONST-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Lua 5.2 prototype declared an excessive constant count or encountered an invalid constant tag.",
+        suggested_action: "Verify constant count against safety limits and ensure constant tags match Lua 5.2 spec.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L52-HEADER-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Invalid binary signature in Lua 5.2 header; expected magic bytes '\\x1bLua'.",
+        suggested_action: "Verify that the input begins with the standard 4-byte Lua signature.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L52-HEADER-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Version byte in chunk header does not match Lua 5.2 (0x52).",
+        suggested_action: "Select the dialect matching the chunk's declared version byte.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L52-HEADER-003",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.2 chunk header contains a corrupted LUAC_TAIL conversion-detection marker.",
+        suggested_action: "Check file for line-ending conversions or corrupted header control characters.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L52-JMP-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::ControlFlow,
+        semantics: "Lua 5.2 jump instruction destination PC is outside the prototype instruction vector.",
+        suggested_action: "Verify jump offset sBx and ensure target PC falls within the valid instruction range.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L52-OP-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.2 instruction contains an invalid or unrecognized opcode number.",
+        suggested_action: "Check dialect version or decompilation flags for non-standard Lua 5.2 opcodes.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L52-PROTO-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Child prototype count declared in Lua 5.2 prototype exceeds configured safety limit.",
+        suggested_action: "Inspect sub-prototype count or increase max total prototypes limit.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L52-STACK-001",
+        severity: Severity::Warning,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.2 prototype declares an unusually large maxstacksize exceeding typical limits.",
+        suggested_action: "Inspect prototype frame allocation for potential stack overflow or corruption.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L52-UPVAL-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Upvalue count declared in Lua 5.2 prototype exceeds configured safety limit.",
+        suggested_action: "Verify upvalue count against configured limits or check chunk consistency.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-CHUNK-001",
+        severity: Severity::Warning,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.3 bytecode chunk contains unparsed trailing bytes after the root prototype.",
+        suggested_action: "Inspect trailing bytes for extra payloads or file truncation boundaries.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-CODE-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Instruction count declared in Lua 5.3 prototype exceeds configured safety limits.",
+        suggested_action: "Check instruction vector length or raise max instructions per prototype limit.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-CONST-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Lua 5.3 prototype encountered an invalid or unrecognized constant tag byte.",
+        suggested_action: "Verify constant tag value against standard Lua 5.3 constant representations.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-CONST-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Constant count declared in Lua 5.3 prototype exceeds configured safety limits.",
+        suggested_action: "Check constant count against resource limits or inspect for chunk corruption.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-HEADER-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Invalid binary signature in Lua 5.3 header; expected magic bytes '\\x1bLua'.",
+        suggested_action: "Ensure file is an uncorrupted Lua 5.3 bytecode chunk starting with '\\x1bLua'.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-HEADER-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Version byte in chunk header does not match Lua 5.3 (0x53).",
+        suggested_action: "Parse with matching dialect decoder corresponding to declared version byte.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-HEADER-003",
+        severity: Severity::Warning,
+        category: DiagnosticCategory::Structure,
+        semantics: "Non-standard format byte encountered in Lua 5.3 header; expected stock format 0.",
+        suggested_action: "Verify whether chunk uses a custom compiler or dialect extension.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-HEADER-004",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.3 chunk header contains a corrupted LUAC_DATA conversion-detection marker.",
+        suggested_action: "Check file for line-ending conversions or corrupted header control characters.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-HEADER-005",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.3 header specifies an unsupported sizeof(int); expected 4 bytes.",
+        suggested_action: "Ensure the bytecode chunk was built for a target architecture with 4-byte integers.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-HEADER-006",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.3 header specifies an unsupported sizeof(size_t); expected 4 or 8 bytes.",
+        suggested_action: "Verify that target architecture size_t width is either 32-bit or 64-bit.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-HEADER-007",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.3 header specifies an unsupported Instruction size; expected 4 bytes.",
+        suggested_action: "Verify that instruction width is 4 bytes as required by the Lua 5.3 standard.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-HEADER-008",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.3 header specifies an unsupported lua_Integer size; expected 4 or 8 bytes.",
+        suggested_action: "Verify that lua_Integer width matches supported 32-bit or 64-bit configurations.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-HEADER-009",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.3 header specifies an unsupported lua_Number size; expected 4 or 8 bytes.",
+        suggested_action: "Verify that lua_Number width matches supported float or double configurations.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-HEADER-010",
+        severity: Severity::Warning,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.3 header LUAC_INT test integer does not match expected endianness pattern 0x5678.",
+        suggested_action: "Check chunk byte order or decode with appropriate endianness configuration.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-JMP-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::ControlFlow,
+        semantics: "Lua 5.3 jump instruction destination PC is outside the prototype instruction vector.",
+        suggested_action: "Verify jump offset sBx and ensure target PC falls within the valid instruction range.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-OP-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.3 instruction contains an invalid or unrecognized opcode number.",
+        suggested_action: "Check dialect version or decompilation flags for non-standard Lua 5.3 opcodes.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-PROTO-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Child prototype count declared in Lua 5.3 prototype exceeds configured safety limit.",
+        suggested_action: "Inspect sub-prototype count or increase max total prototypes limit.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-STACK-001",
+        severity: Severity::Warning,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.3 prototype declares an unusually large maxstacksize exceeding typical limits.",
+        suggested_action: "Inspect prototype frame allocation for potential stack overflow or corruption.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-UPVAL-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Upvalue count declared in Lua 5.3 prototype exceeds configured safety limit.",
+        suggested_action: "Verify upvalue count against configured limits or check chunk consistency.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-CHUNK-001",
+        severity: Severity::Warning,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.4 bytecode chunk contains unparsed trailing bytes after the root prototype.",
+        suggested_action: "Inspect trailing bytes for extra payloads or file truncation boundaries.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-CODE-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Instruction count declared in Lua 5.4 prototype exceeds configured safety limits.",
+        suggested_action: "Check instruction vector length or raise max instructions per prototype limit.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-CONST-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Constant count declared in Lua 5.4 prototype exceeds configured safety limits.",
+        suggested_action: "Check constant count against resource limits or inspect for chunk corruption.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-CONST-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Lua 5.4 prototype encountered an unrecognized constant tag byte.",
+        suggested_action: "Verify constant tag value against standard Lua 5.4 constant representations.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-HEADER-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Invalid binary signature in Lua 5.4 header; expected magic bytes '\\x1bLua'.",
+        suggested_action: "Verify that input is a valid compiled Lua binary chunk starting with '\\x1bLua'.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-HEADER-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Version byte in chunk header does not match Lua 5.4 (0x54).",
+        suggested_action: "Use appropriate dialect or inspect chunk with auto-detection.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-HEADER-003",
+        severity: Severity::Warning,
+        category: DiagnosticCategory::Structure,
+        semantics: "Non-standard format byte in Lua 5.4 header; expected stock format 0.",
+        suggested_action: "Verify whether chunk uses a custom compiler or vendor format.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-HEADER-004",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.4 chunk header contains a corrupted LUAC_DATA conversion-detection marker.",
+        suggested_action: "Check file for line-ending conversions or corrupted header control characters.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-HEADER-005",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.4 header specifies an unsupported instruction size; expected 4 bytes.",
+        suggested_action: "Verify that instruction width is 4 bytes as required by standard Lua 5.4.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-HEADER-006",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.4 header specifies an unsupported lua_Integer size; expected 8 bytes.",
+        suggested_action: "Ensure the bytecode chunk was built for standard 64-bit integer width.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-HEADER-007",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.4 header specifies an unsupported lua_Number size; expected 8 bytes.",
+        suggested_action: "Ensure the bytecode chunk was built for standard 64-bit floating-point width.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-HEADER-008",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.4 header LUAC_INT test integer does not match expected value 0x5678.",
+        suggested_action: "Check chunk byte order or investigate endianness corruption.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-HEADER-009",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.4 header LUAC_NUM test float does not match expected value 370.5.",
+        suggested_action: "Check floating-point format or endianness consistency in chunk header.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-INVALID-OPCODE",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "A Lua 5.4 instruction word contains an opcode not recognized by the dialect table.",
+        suggested_action: "Confirm the selected dialect and inspect the raw word for corruption or vendor changes.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-OOB-CONSTANT",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.4 instruction references a constant index exceeding prototype constant table size.",
+        suggested_action: "Inspect instruction operand index against prototype constant table bounds.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-OOB-PROTO",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.4 CLOSURE instruction references a child prototype index out of bounds.",
+        suggested_action: "Verify CLOSURE operand Bx against prototype child prototypes array length.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-PROTO-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Child prototype count declared in Lua 5.4 prototype exceeds configured safety limit.",
+        suggested_action: "Inspect sub-prototype count or increase max total prototypes limit.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-SIZE-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Varint-encoded size value in Lua 5.4 chunk exceeds host pointer address space width.",
+        suggested_action: "Verify that string or table sizes in chunk do not exceed host memory limits.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-STR-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Lua 5.4 string content length exceeds the configured maximum string byte limit.",
+        suggested_action: "Check string length field in chunk or increase reader max string bytes limit.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-UPVAL-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Upvalue count declared in Lua 5.4 prototype exceeds configured safety limit.",
+        suggested_action: "Verify upvalue count against configured limits or check chunk consistency.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-VAL-CONST-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.4 LOADK instruction references a constant index exceeding constant table bounds.",
+        suggested_action: "Ensure that LOADK operand Bx references an existing constant in the table.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-VAL-HEADER-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.4 chunk validation failed: instruction size must be exactly 4 bytes.",
+        suggested_action: "Ensure the bytecode chunk conforms to standard 4-byte instruction width.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-VAL-HEADER-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.4 chunk validation failed: lua_Integer size must be exactly 8 bytes.",
+        suggested_action: "Ensure the bytecode chunk was compiled with standard 8-byte integer width.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-VAL-HEADER-003",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.4 chunk validation failed: lua_Number size must be exactly 8 bytes.",
+        suggested_action: "Ensure the bytecode chunk was compiled with standard 8-byte float width.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-VAL-JUMP-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::ControlFlow,
+        semantics: "Lua 5.4 jump destination PC targets an instruction index outside the code vector.",
+        suggested_action: "Verify jump offset sJ and ensure target PC falls within the valid instruction range.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-VAL-OPCODE-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.4 instruction contains an invalid or unrecognized opcode number during validation.",
+        suggested_action: "Check dialect version or decompilation flags for non-standard Lua 5.4 opcodes.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-VAL-PROTO-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.4 CLOSURE instruction references a sub-prototype index exceeding table bounds.",
+        suggested_action: "Verify CLOSURE operand Bx against prototype sub-prototypes array length.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-VAL-REG-001",
+        severity: Severity::Warning,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.4 instruction target register exceeds declared prototype maxstacksize.",
+        suggested_action: "Verify register operand A against the prototype maxstacksize allocation.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-VAL-UPVAL-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.4 GETUPVAL or SETUPVAL instruction references an upvalue index out of bounds.",
+        suggested_action: "Verify that operand B references a declared upvalue within prototype bounds.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-VAL-UPVAL-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.4 GETTABUP or SETTABUP instruction references an upvalue index out of bounds.",
+        suggested_action: "Verify that table upvalue operand references a valid upvalue in the prototype.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L54-VARINT-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Lua 5.4 variable-length integer decoding encountered arithmetic overflow.",
+        suggested_action: "Inspect varint byte sequence for malformed 7-bit continuation encoding.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-CHUNK-001",
+        severity: Severity::Warning,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.5 bytecode chunk contains unparsed trailing bytes after the root prototype.",
+        suggested_action: "Inspect trailing bytes for extra payloads or file truncation boundaries.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-CODE-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Instruction count declared in Lua 5.5 prototype exceeds configured safety limits.",
+        suggested_action: "Check instruction vector length or raise max instructions per prototype limit.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-CONST-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Lua 5.5 prototype declared an excessive constant count or encountered an invalid constant tag.",
+        suggested_action: "Verify constant count against safety limits and ensure constant tags match Lua 5.5 spec.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-HEADER-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Invalid binary signature in Lua 5.5 header; expected magic bytes '\\x1bLua'.",
+        suggested_action: "Ensure file is an uncorrupted Lua 5.5 bytecode chunk starting with '\\x1bLua'.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-HEADER-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Version byte in chunk header does not match Lua 5.5 (0x55).",
+        suggested_action: "Parse with matching dialect decoder corresponding to declared version byte.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-HEADER-003",
+        severity: Severity::Warning,
+        category: DiagnosticCategory::Structure,
+        semantics: "Non-standard format byte encountered in Lua 5.5 header; expected stock format 0.",
+        suggested_action: "Verify whether chunk uses a custom compiler or dialect extension.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-HEADER-004",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.5 chunk header contains a corrupted LUAC_DATA conversion-detection marker.",
+        suggested_action: "Check file for line-ending conversions or corrupted header control characters.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-JMP-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::ControlFlow,
+        semantics: "Lua 5.5 jump instruction destination PC is outside the prototype instruction vector.",
+        suggested_action: "Verify jump offset sJ and ensure target PC falls within the valid instruction range.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-OP-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.5 instruction contains an invalid or unrecognized opcode number.",
+        suggested_action: "Check dialect version or decompilation flags for non-standard Lua 5.5 opcodes.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-PROTO-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Child prototype count declared in Lua 5.5 prototype exceeds configured safety limit.",
+        suggested_action: "Inspect sub-prototype count or increase max total prototypes limit.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-STACK-001",
+        severity: Severity::Warning,
+        category: DiagnosticCategory::Structure,
+        semantics: "Lua 5.5 prototype declares an unusually large maxstacksize exceeding typical limits.",
+        suggested_action: "Inspect prototype frame allocation for potential stack overflow or corruption.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-STR-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Lua 5.5 string loader referenced an invalid index in the string reuse table.",
+        suggested_action: "Verify that string reuse table index refers to a previously defined string.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-UPVAL-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Upvalue count declared in Lua 5.5 prototype exceeds configured safety limit.",
+        suggested_action: "Verify upvalue count against configured limits or check chunk consistency.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-VARINT-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Lua 5.5 variable-length integer decoding encountered arithmetic overflow.",
+        suggested_action: "Inspect varint byte sequence for malformed continuation bit encoding.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "PARSE-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Failed to parse input file as valid Lua bytecode across supported dialects.",
+        suggested_action: "Verify that the input file is an uncorrupted compiled Lua bytecode chunk.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "PARSE-SOURCE-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "The input is plain Lua source rather than compiled bytecode accepted by this command.",
+        suggested_action: "Compile trusted source explicitly or provide a compiled Lua chunk.",
+    },
+];
+
+/// Return all diagnostic descriptors in ascending bytewise order.
+#[must_use]
+pub fn list_diagnostics() -> Vec<DiagnosticDescriptor> {
+    DIAGNOSTIC_ENTRIES
+        .iter()
+        .map(DiagnosticDescriptor::from_static)
+        .collect()
+}
+
+/// Look up a diagnostic descriptor by its exact code using binary search.
+#[must_use]
+pub fn lookup_diagnostic(code: &str) -> Option<DiagnosticDescriptor> {
+    DIAGNOSTIC_ENTRIES
+        .binary_search_by_key(&code, |entry| entry.code)
+        .ok()
+        .map(|idx| DiagnosticDescriptor::from_static(&DIAGNOSTIC_ENTRIES[idx]))
+}
+
+/// Construct a `DiagnosticCatalogResponse` for a given list of descriptors.
+#[must_use]
+pub fn build_catalog_response(diagnostics: Vec<DiagnosticDescriptor>) -> DiagnosticCatalogResponse {
+    DiagnosticCatalogResponse {
+        schema_version: 1,
+        tool_version: env!("CARGO_PKG_VERSION").to_string(),
+        diagnostic_count: diagnostics.len(),
+        diagnostics,
+    }
+}
+
+/// Retrieve the complete diagnostic catalog response.
+#[must_use]
+pub fn get_diagnostic_catalog() -> DiagnosticCatalogResponse {
+    build_catalog_response(list_diagnostics())
+}
