@@ -21,6 +21,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 echo "==> tests"
 cargo build -p luad-cli --bin luad
+export CARGO_BIN_EXE_luad="${repo_dir}/target/debug/luad"
 cargo test --workspace
 
 echo "==> rustdoc"
