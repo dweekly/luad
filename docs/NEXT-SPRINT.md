@@ -1,162 +1,113 @@
-# Active sprint: public diagnostic catalog
+# Active sprint: exact Lua 5.1.5 stock64 release qualification
 
-Lane: machine contract. Target: one frozen acceptance commit, one implementation
-commit, and one canonical gate.
+Lane: exact-target qualification. Target: one frozen acceptance commit, one
+implementation commit, and one canonical release gate.
 
-## Claim and researcher value
+## Claim and user value
 
-Every diagnostic code that `luad` can emit from production code is discoverable
-without supplying a bytecode artifact. Human researchers and external agents can
-deterministically retrieve the code's severity, category, semantics, and suggested
-next action through a self-documenting CLI and a versioned JSON Schema.
+A release manifest can qualify the exact target tuple Lua 5.1.5, stock numeric
+profile, little-endian 64-bit `size_t` layout for public parsing, disassembly, and
+validation. The manifest is the only authority that may move this target from
+experimental to supported. It must not promote 32-bit `size_t`, LNUM32, another Lua
+patch release, another host architecture, or an analysis surface outside this sprint.
 
-The catalog is descriptive product metadata. It does not classify vulnerabilities,
-interpret a research target, retain project state, or make diagnostic emission depend
-on a network service or session.
+This target gives users one reproducible supported baseline while embedded 32-bit and
+LNUM32 profiles retain independent qualification boundaries.
 
-## Public command and schema
+## Exact target
 
-Add this public command:
+The sprint pins:
 
-```console
-luad diagnostics [CODE] --format text|json
-```
+- dialect release: `Lua 5.1.5`;
+- compiler archive:
+  `https://www.lua.org/ftp/lua-5.1.5.tar.gz`;
+- compiler archive SHA-256:
+  `2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333`;
+- compiler binary SHA-256:
+  `eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239`;
+- profile: `lua5.1`;
+- layout:
+  `int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0`;
+- public surfaces: `inspect`, `disasm`, and `validate`;
+- fixture matrix: debug and stripped forms of `hello`, `control_flow`,
+  `closures`, `tables`, and `numerics`.
 
-With no `CODE`, the command emits the complete catalog in ascending bytewise code
-order. With an exact `CODE`, it emits the same response shape containing exactly one
-descriptor. An unknown, partial, or case-folded code is a usage error with nonzero
-exit status and must never return a successful empty result.
+Every binary and source hash comes from the canonical fixture provenance manifest.
+The compiler is mandatory; absence or hash mismatch is a hard failure.
 
-JSON uses a top-level `DiagnosticCatalogResponse` containing:
+## Public and release contract
 
-- `schema_version`, fixed to major `1`;
-- `tool_version`;
-- `diagnostic_count`, equal to the array length;
-- `diagnostics`, an ordered array of `DiagnosticDescriptor` records.
+Acceptance invokes every claimed public surface through the live CLI under automatic
+and explicit dialect selection. JSON output validates against the live schema, text
+output is deterministic, and validation returns no diagnostics for the complete
+fixture matrix.
 
-Each descriptor contains exactly these required facts:
+The release manifest records the exact dialect release, profile, layout, compiler,
+fixture hashes, source revision, dirty state, platform, architecture, prerequisite gate
+results, and capability mutations. Promotion applies only when all evidence comes from
+one clean revision and every prerequisite result matches its frozen GateSpec hash.
 
-- `code`;
-- `severity`;
-- `category`;
-- `semantics`, explaining what condition the code reports;
-- `suggested_action`, giving a concrete next step to the caller.
-
-The response has no artificial input identity or dialect interpretation because the
-catalog does not analyze an input artifact. `luad schema diagnostics` publishes its
-JSON Schema. `luad schema diagnostic` continues to describe an emitted diagnostic
-instance.
-
-Text output is deterministic and bounded. Every row begins with the exact code,
-severity, and category, followed by its semantics and suggested action. Exact lookup
-uses the same renderer as list output.
-
-## Catalog authority and completeness
-
-`luad-core` owns the descriptor type, the canonical catalog, exact lookup, sorting,
-and uniqueness validation. The CLI only selects and renders catalog records.
-
-The frozen source inventory contains 108 production-emittable codes, including the
-three Lua 5.4 disassembly codes without numeric suffixes. Acceptance independently
-walks production Rust sources under `crates/`, excluding test paths and the catalog
-module at `crates/luad-core/src/diagnostic_catalog.rs`, and extracts
-diagnostic-emission literals. It proves exact set
-equality with the public live catalog.
-
-Production calls to `Diagnostic::error` and `Diagnostic::warning`, plus direct
-`Diagnostic` records, must use a string literal at the emission site. A bound,
-computed, or concatenated emission code
-is rejected by acceptance because it cannot be proven catalog-complete. Adding,
-removing, or renaming a production emission therefore requires the catalog and its
-public evidence to change together.
-
-Every descriptor must have a unique nonempty code, a nonempty specific semantics
-sentence, and a nonempty actionable next step. The catalog contains no aliases,
-wildcards, family-only placeholders, or entries that production cannot emit.
+`luad capabilities --format json --evidence` may report the exact stock64 target as
+supported only when presented with or built from the verified release evidence defined
+by this sprint. The base string `lua5.1` must not imply support for other layouts or
+vendor profiles.
 
 ## Independent acceptance
 
-The frozen acceptance module is
-`crates/luad-oracle/tests/test_diagnostic_catalog.rs`. It contains exactly these
-non-skipping tests:
+The acceptance module will prove:
 
-- `test_catalog_code_set_matches_independent_production_inventory`;
-- `test_production_emitters_use_literal_diagnostic_codes`;
-- `test_catalog_descriptors_are_unique_sorted_complete_and_actionable`;
-- `test_public_json_list_and_lookup_are_schema_valid_deterministic`;
-- `test_public_text_list_and_lookup_golden`;
-- `test_unknown_code_fails_closed`;
-- `test_catalog_comparator_rejects_killer_mutations`;
-- `test_existing_diagnostic_instance_schema_remains_compatible`.
+- exact three-way public disassembly agreement across all ten fixtures;
+- zero-diagnostic public validation across all ten fixtures;
+- deterministic, schema-valid `inspect`, `disasm`, and `validate` responses;
+- exact target identity in the release manifest;
+- rejection of a dirty revision, stale commit, compiler substitution, fixture
+  substitution, omitted prerequisite, failed prerequisite, profile substitution,
+  layout substitution, Lua 5.4 evidence, and an unclaimed capability mutation;
+- rejection of attempts to use the stock64 manifest for the 32-bit or LNUM32 targets;
+- capability status remains experimental when the verified manifest is absent.
 
-The comparator must reject at least these mutations: omitted production code, extra
-catalog-only code, duplicate code, reordered records, wrong severity, wrong category,
-blank semantics, blank suggested action, successful empty unknown lookup, nonliteral
-emitter code, and a schema that omits a required descriptor field.
+Comparator killer probes mutate one fact at a time and must demonstrate rejection.
+No test may skip because an authority, compiler, fixture, schema, or gate artifact is
+missing.
 
-Representative exact metadata is pinned for core truncation, Lua 5.1 register spans,
-Lua 5.4 invalid opcodes, and unsupported plain Lua source. The complete code set is
-pinned independently of production discovery so deleting an emitter and its catalog
-entry together cannot silently shrink the contract.
+## Gate boundary
 
-The canonical gate is `gate-diagnostic-catalog`, comprising:
+The canonical gate will be `gate-release-lua51-stock64`. Its prerequisite closure
+must include the Area 1 validator-and-diagnostic gate plus the exact parser, profile
+selection, public disassembly, closure, resolved-constant, machine-contract, and proof
+harness gates required by the three claimed public surfaces.
 
-- `tests/gates/gate-diagnostic-catalog.json`;
-- `scripts/gates/gate-diagnostic-catalog.sh`;
-- the exact eight tests above;
-- `gate-proof-harness`, `gate-machine-contract`,
-  `gate-validation-null-hypothesis`, and
-  `gate-validator-count-spans-lua51` as prerequisites.
+The gate emits a tamper-evident proof package containing the frozen GateSpec, GateResult,
+release manifest, stdout/stderr hashes, compiler identity, fixture hashes, git revision,
+dirty flag, platform, architecture, and adversarial rejection report.
 
-A missing test, code, descriptor field, schema check, mutation rejection, or public CLI
-probe is a hard failure. The gate executes without network access, skipped tests, or
-private corpora.
+No capability mutation is allowed before the release manifest verifies. The release
+gate alone owns the narrowly scoped stock64 promotion.
 
 ## Allowed scope
 
-Acceptance author:
+Acceptance work may add one Lua 5.1 stock64 release test module. Steward work may add
+the gate spec and script, update the active sprint and documentation freshness index,
+and pin the exact prerequisite graph. Implementation work may change release-manifest
+assembly, capability evidence ingestion, and the smallest public metadata surface
+needed for the exact target.
 
-- `crates/luad-oracle/tests/test_diagnostic_catalog.rs`.
-
-Steward-owned paths:
-
-- `tests/gates/gate-diagnostic-catalog.json`;
-- `scripts/gates/gate-diagnostic-catalog.sh`;
-- `docs/NEXT-SPRINT.md`;
-- the documentation index freshness entry.
-
-Implementation agent:
-
-- a new catalog module in `crates/luad-core/src/`;
-- `crates/luad-core/src/lib.rs` and `crates/luad-core/src/diagnostic.rs` when needed
-  for public catalog types;
-- `crates/luad-cli/src/args.rs`;
-- `crates/luad-cli/src/main.rs`;
-- CLI render modules used by the new command;
-- `docs/MACHINE-INTERFACE.md`, `README.md`, and `CHANGELOG.md` for the public command
-  contract and user-visible change.
-
-The implementation may use a static descriptor table and a small lookup function. It
-may not alter when diagnostics are emitted, change existing diagnostic instance
-schemas, rewrite dialect parsers or validators, add persistent state, or add runtime
-catalog loading.
+The sprint may not change parsing, instruction semantics, validator rules, schemas
+unrelated to release evidence, other dialects, the LNUM32 profile, the 32-bit
+`size_t` layout, analysis algorithms, or persistent state.
 
 ## Verification and stop condition
 
-Freeze acceptance only after the inventory, comparator, and CLI probes are live and
-the focused module fails solely because the public catalog and literal-emitter
-normalization are absent. The steward then
-runs:
+Acceptance requires:
 
 ```console
-cargo build -p luad-cli --bin luad
-cargo test -p luad-oracle --test test_diagnostic_catalog
-bash scripts/gates/gate-diagnostic-catalog.sh /tmp/luad-gate-diagnostic-catalog
+cargo test -p luad-oracle --test test_release_lua51_stock64
+bash scripts/gates/gate-release-lua51-stock64.sh /tmp/luad-gate-release-lua51-stock64
 bash scripts/check.sh
 ```
 
-Acceptance requires a clean candidate revision, zero skipped or ignored tests, a
-tamper-evident gate artifact, unchanged frozen acceptance and gate files during
-implementation, exact public/source code-set equality, and successful schema
-validation. After merge and remote verification, replace this document with the Area
-1 closure sprint and remove the temporary branches and worktrees.
+The accepted revision is clean, all required tests execute with zero failures and zero
+ignored tests, the official compiler and all fixture hashes match, every killer
+mutation is rejected, the proof package verifies, CI is green, and local `main`
+matches `origin/main`. Work on another target or roadmap capability begins only
+after this checkpoint is merged and preserved remotely.

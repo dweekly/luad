@@ -13,39 +13,7 @@ classification in the executable.
 Every capability remains experimental until an exact target release closes over its
 public-boundary evidence. Product growth follows the sequence below.
 
-## 1. Validator authority and diagnostic discoverability
-
-Validation, disassembly, and analysis need one dialect-owned understanding of operand
-roles so raw bitfields cannot acquire inconsistent meanings across consumers. Every
-public diagnostic needs discoverable semantics, severity, category, and a useful next
-action.
-
-Prototype references must retain their owning prototype path in every structured fact,
-comment, text rendering, and xref. Remaining operand qualification must preserve the
-same owner isolation while proving implicit register spans.
-
-Qualification advances through separately accepted slices for remaining variable-width
-register spans and public diagnostic discoverability. Each slice owns one field or
-semantic distinction and one canonical gate.
-
-Operand-role slices derive their authority from executed Lua 5.1 VM semantics, with
-the official opcode-mode table serving as a mechanically checked input rather than an
-unexamined authority. Contextually ignored fields and declared roles that the VM does
-not read must be named in the acceptance oracle. Unsigned size hints and counts such
-as `NEWTABLE.C`, `SETLIST.C`, and `TFORLOOP.C` must never
-acquire register diagnostics.
-
-Prototype-identity acceptance compares every referenced child path across disassembly,
-queries, xrefs, and export. A surface may not render a raw child index as a top-level
-prototype path.
-
-Exit outcome: valid compiler-produced fixtures have no unjustified diagnostics,
-targeted corruptions produce exact documented diagnostics, and every emitted code is
-present in the public catalog. Acceptance also exercises manifest-pinned,
-redistributable embedded-firmware cases that contain operand values and prototype
-depths absent from small compiler fixtures.
-
-## 2. Exact Lua 5.1 target qualification
+## 1. Exact Lua 5.1 target qualification
 
 Stock Lua 5.1 layouts and the supported LNUM32 profile need separate promotion
 boundaries. Each target must identify its compiler or vendor authority, profile,
@@ -59,7 +27,7 @@ corpora may supplement this evidence but cannot be the only promotion proof.
 Exit outcome: a release manifest promotes one exact Lua 5.1 profile/layout target at
 a time. Evidence for one target cannot substitute for another.
 
-## 3. Stable machine consumption
+## 2. Stable machine consumption
 
 Human and AI callers need schema-versioned JSON and JSONL with deterministic ordering,
 bounded strings, stable interpretation-scoped identifiers, and explicit compatibility
@@ -68,7 +36,7 @@ rules. Schema evolution must preserve discoverability and reject incompatible ma
 Exit outcome: every advertised response and stream record validates at the live CLI
 boundary, and consumers can negotiate or reject schema versions without prose parsing.
 
-## 4. Composable research facts
+## 3. Composable research facts
 
 Researchers need direct factual primitives for constants, globals, calls, prototypes,
 captures, control flow, and artifact comparison. External tools should be able to
@@ -80,7 +48,7 @@ or project state to `luad`. Query gates prove that changing a predicate operand 
 the result set, and bounded register-provenance facts remain eligible only when they can
 be expressed without inferred names, security labels, or persistent project state.
 
-## 5. Additional dialect qualification
+## 4. Additional dialect qualification
 
 Lua 5.2, 5.3, 5.5, LuaJIT, and vendor profiles advance independently. Parser presence
 does not imply semantic, analysis, or release support.
@@ -97,10 +65,9 @@ machine-contract, and promotion discipline used by qualified Lua targets.
 ## Dependency order
 
 ```text
-validator and diagnostic authority
-  -> exact Lua 5.1 target qualification
-       -> stable machine consumption
-            -> composable research facts
+exact Lua 5.1 target qualification
+  -> stable machine consumption
+       -> composable research facts
 
 additional dialect qualification depends on the relevant machine, validator,
 and exact-target evidence boundaries.
