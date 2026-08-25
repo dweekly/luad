@@ -1,10 +1,16 @@
-//! Analysis engine for CFG, Dominators, Xrefs, Query, and Chunk Diffing.
+//! Analysis engine for CFG, Dominators, Xrefs, Query, Chunk Diffing, and Callee Resolution.
 
+pub mod callees;
 pub mod cfg;
 pub mod diff;
 pub mod query;
 pub mod xrefs;
 
+pub use callees::{
+    analyze_callees, analyze_chunk_callees, CalleeAnalysis, CalleeFact, CalleeResolution,
+    CalleeUnresolvedReason, CaptureEnvironment, CaptureValue, ChunkCalleeAnalysis,
+    SymbolicPathBasis,
+};
 pub use cfg::{BasicBlock, CfgEdge, CfgEdgeKind, ControlFlowGraph};
 pub use diff::{diff_chunks, ChunkDiff, InstructionDiff, ProtoDiff};
 pub use query::{

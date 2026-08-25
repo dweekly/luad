@@ -154,6 +154,9 @@ fn lift_instruction_51(
             writes.push(EffectTarget::Register { index: raw.a });
             let val = raw.b != 0;
             explanation = if raw.c != 0 {
+                implicit_effects.push(ImplicitEffect::ConditionalSkip {
+                    skip_target_pc: pc + 2,
+                });
                 format!(
                     "Load boolean {} into R({}) and skip next instruction",
                     val, raw.a
@@ -492,6 +495,9 @@ fn lift_instruction_51(
             writes.push(EffectTarget::RegisterRange {
                 start: raw.a + 3,
                 end: raw.a + 2 + raw.c as u8,
+            });
+            implicit_effects.push(ImplicitEffect::ConditionalSkip {
+                skip_target_pc: pc + 2,
             });
             explanation = format!("Generic for-loop call iterator in R({})", raw.a);
             citations.push("lua-5.1.5:src/lvm.c:1370".to_string());

@@ -473,6 +473,7 @@ luad inspect       Identify and summarize a chunk
 luad disasm        Produce a faithful instruction and metadata listing
 luad validate      Validate format and VM invariants
 luad cfg           List or export control-flow graphs
+luad callees       Resolve symbolic labels for every call instruction
 luad xrefs         Query references to and from an artifact
 luad explain       Explain a field, prototype, instruction, block, or diagnostic
 luad query         Run a bounded structured query
@@ -509,6 +510,9 @@ luad validate sample.luac --strict --format json
 
 # Export a prototype CFG
 luad cfg sample.luac --proto 'proto:0/2' --format dot
+
+# Enumerate resolved and unresolved symbolic callees
+luad callees sample.luac --format jsonl
 
 # Find all uses of a constant or writes to an upvalue
 luad xrefs sample.luac --to 'proto:0:k:7'

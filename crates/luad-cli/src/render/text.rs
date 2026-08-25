@@ -455,6 +455,48 @@ pub fn render_capabilities(manifest: &luad_core::CapabilityManifest, evidence: b
     }
 }
 
+/// Render one line per call with an explicit resolution or unresolved reason.
+pub fn render_callees(analysis: &luad_analysis::ChunkCalleeAnalysis) {
+    for prototype in &analysis.prototypes {
+        for fact in &prototype.calls {
+            let resolution = match &fact.resolution {
+                luad_analysis::CalleeResolution::ResolvedPath {
+                    basis,
+                    segments,
+                    evidence,
+                } => format!(
+                    "{:?}:{} [{}]",
+                    basis,
+                    segments.join("."),
+                    evidence
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                luad_analysis::CalleeResolution::ResolvedPrototype {
+                    prototype,
+                    evidence,
+                } => format!(
+                    "proto:{prototype} [{}]",
+                    evidence
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                luad_analysis::CalleeResolution::Unresolved { reason } => {
+                    format!("unresolved:{reason:?}")
+                }
+            };
+            println!(
+                "{} {:<8} R({}) {}",
+                fact.call_id, fact.call_kind, fact.callee_register, resolution
+            );
+        }
+    }
+}
+
 /// Render instruction explanation with provenance, disassembly facts, and source citations.
 pub fn render_explain_instruction(
     inst: &luad_core::SemanticInstruction,

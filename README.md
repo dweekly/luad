@@ -15,6 +15,9 @@ read surface is qualified against reproducible macOS and Linux compiler authorit
 the target remains experimental until a release evidence bundle promotes it.
 Streaming facts carry their own artifact and interpretation identity for stateless
 firmware-tree ingestion.
+Lua 5.1 calls expose bounded symbolic global/module labels, direct closure identities,
+stable instruction evidence, and explicit unresolved reasons through `callees` and
+recursive export.
 
 All stock-Lua dialects remain **experimental** unless an exact release artifact
 for the current revision and profile says otherwise. Internal library gates do not
@@ -43,7 +46,7 @@ delete the document in the same change and update this index.
 | [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-08-25 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-23 | Support policy, reporting channel, trust boundary, or threat model changes. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-guided, evidence-gated planning, proportional role separation, sprint lifecycle, and agent orchestration. | 2026-08-25 | Planning artifacts, customer checkpoints, agent roles, gate policy, or supported orchestration interfaces change. |
-| [`ROADMAP.md`](ROADMAP.md) | Customer-led path from exact embedded-target authority through composable factual analysis and stable release. | 2026-08-25 | Product priorities, dependencies, customer evidence, qualification order, or exclusions change. |
+| [`ROADMAP.md`](ROADMAP.md) | Customer-led path through composable factual analysis and stable release. | 2026-08-25 | Product priorities, dependencies, customer evidence, qualification order, or exclusions change. |
 | [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | The sole active sprint contract for one measurable, independently gated unit of work. | 2026-08-25 | The sprint is accepted, respecified, or replaced; delete obsolete sprint content rather than retaining history. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-25 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-25 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
@@ -124,6 +127,7 @@ luad disasm chunk.luac --raw --debug-info --effects
 luad validate chunk.luac --strict
 luad explain chunk.luac 'proto:0:pc:3'
 luad cfg chunk.luac --proto 'proto:0' --format dot
+luad callees chunk.luac --format jsonl
 luad xrefs chunk.luac --to 'proto:0:upvalue:0' --format json
 luad query chunk.luac --where 'opcode == "CALL"' --format json
 luad diff old.luac new.luac --semantic --format json

@@ -1,0 +1,48 @@
+{
+  "schema_version": 2,
+  "gate_id": "gate-symbolic-callees-lua51",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_symbolic_callees_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_callee_killer_mutations_do_not_match_recomputed_facts",
+    "test_callee_resolution_fixture_histogram_is_pinned",
+    "test_callee_resolution_proves_paths_joins_and_multihop_captures",
+    "test_callees_schema_capability_and_lnum_profile_are_public",
+    "test_every_physical_call_has_exactly_one_fact",
+    "test_export_emits_self_identifying_callee_facts",
+    "test_lua51_skip_opcodes_are_cfg_edges_for_callee_analysis",
+    "test_public_callees_json_jsonl_and_text_agree"
+  ],
+  "required_compiler_version": "Lua 5.1.5",
+  "required_compiler_sha256": {
+    "linux-x86_64": "e2ba74327f3a4662689b9e58909b410af8635add51a35b951021d0b1d90c6000",
+    "macos-aarch64": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239"
+  },
+  "required_fixtures": [
+    {
+      "path": "tests/fixtures/callees.lua",
+      "sha256": "22e3e344c0cca21221083a34c362c6a213604a654254ea8ce52e0eafa51994a1"
+    },
+    {
+      "path": "tests/fixtures/lua51_cfg_skips.lua",
+      "sha256": "9911ffc21ec683a86c7b927773842013aab2cd5a2762fee9e6dae10daf8a4f82"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua51_lnum32/hello.luac",
+      "sha256": "8376be37ec3042d3b0a87aa39db7d7396fb54ae390abe346d885e1527d23e353"
+    }
+  ],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness"
+  ],
+  "allowed_capability_mutations": []
+}

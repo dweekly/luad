@@ -14,9 +14,9 @@ mod exit_codes;
 mod render;
 
 use args::{
-    CapabilitiesArgs, CfgArgs, Cli, Commands, CompletionsArgs, DiagnosticsArgs, DiffArgs,
-    DisasmArgs, ExplainArgs, ExportArgs, InspectArgs, OutputFormat, QueryArgs, SchemaArgs,
-    ValidateArgs, XrefsArgs,
+    CalleesArgs, CapabilitiesArgs, CfgArgs, Cli, Commands, CompletionsArgs, DiagnosticsArgs,
+    DiffArgs, DisasmArgs, ExplainArgs, ExportArgs, InspectArgs, OutputFormat, QueryArgs,
+    SchemaArgs, ValidateArgs, XrefsArgs,
 };
 use exit_codes::ExitCode;
 use luad_analysis::{
@@ -260,6 +260,7 @@ fn main() {
         Commands::Schema(args) => handle_schema(args),
         Commands::Completions(args) => handle_completions(args),
         Commands::Cfg(args) => handle_cfg(args),
+        Commands::Callees(args) => handle_callees(args),
         Commands::Xrefs(args) => handle_xrefs(args),
         Commands::Explain(args) => handle_explain(args),
         Commands::Query(args) => handle_query(args),
@@ -650,6 +651,13 @@ fn handle_schema(args: SchemaArgs) {
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
             );
         }
+        "callees" => {
+            let schema = schema_for!(MachineDocument<luad_analysis::ChunkCalleeAnalysis>);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            );
+        }
         "xrefs" => {
             let schema = schema_for!(MachineDocument<XrefResponse>);
             println!(
@@ -701,7 +709,7 @@ fn handle_schema(args: SchemaArgs) {
         }
         other => {
             eprintln!(
-                "{}: Unknown schema '{other}'. Supported: chunk, disasm, validate, diagnostic, diagnostics, instruction, cfg, xrefs, query, analysis, diff, capabilities, manifest",
+                "{}: Unknown schema '{other}'. Supported: chunk, disasm, validate, diagnostic, diagnostics, instruction, cfg, callees, xrefs, query, analysis, diff, capabilities, manifest, export",
                 "error".red()
             );
             ExitCode::UsageError.exit();
@@ -879,6 +887,90 @@ fn handle_cfg(args: CfgArgs) {
         OutputFormat::Dot => print!("{}", cfg.to_dot()),
     }
 
+    ExitCode::Success.exit();
+}
+
+fn handle_callees(args: CalleesArgs) {
+    let bytes = match read_input_bytes(&args.file) {
+        Ok(bytes) => bytes,
+        Err(code) => code.exit(),
+    };
+    let (chunk, identity, config, interp) =
+        match parse_chunk(&args.file, &bytes, false, args.dialect.as_deref()) {
+            Ok(parsed) => parsed,
+            Err(code) => code.exit(),
+        };
+    if !chunk.dialect.starts_with("lua5.1") {
+        eprintln!(
+            "{}: Symbolic callee analysis currently requires a Lua 5.1 profile",
+            "error".red()
+        );
+        ExitCode::UnsupportedFormat.exit();
+    }
+    if let Err(diags) = validate_for_analysis(&chunk) {
+        eprintln!(
+            "{}: Analysis refused: chunk failed validation checks",
+            "error".red()
+        );
+        for diagnostic in diags {
+            if diagnostic.severity == Severity::Error {
+                eprintln!("  - [{}] {}", diagnostic.code, diagnostic.message);
+            }
+        }
+        ExitCode::InvalidInput.exit();
+    }
+
+    let analysis = luad_analysis::analyze_chunk_callees(&chunk);
+    let total_calls: usize = analysis
+        .prototypes
+        .iter()
+        .map(|prototype| prototype.calls.len())
+        .sum();
+    match args.format {
+        OutputFormat::Text => render::render_callees(&analysis),
+        OutputFormat::Json => render::print_json(&wrap_document(
+            identity,
+            interp,
+            config,
+            analysis,
+            chunk.diagnostics.clone(),
+        )),
+        OutputFormat::Jsonl => {
+            let metadata = JsonlMetadataRecord {
+                record_type: "metadata".to_string(),
+                schema_version: JSONL_SCHEMA_VERSION,
+                tool_version: env!("CARGO_PKG_VERSION").to_string(),
+                input_identity: identity.clone(),
+                interpretation: interp.clone(),
+                analysis_configuration: config,
+            };
+            println!("{}", serde_json::to_string(&metadata).unwrap_or_default());
+            let context = JsonlRecordContext::successful(identity, interp);
+            for fact in analysis
+                .prototypes
+                .iter()
+                .flat_map(|prototype| &prototype.calls)
+            {
+                let record = JsonlDataRecord {
+                    record_type: "callee".to_string(),
+                    context: context.clone(),
+                    data: fact,
+                };
+                println!("{}", serde_json::to_string(&record).unwrap_or_default());
+            }
+            let summary = JsonlSummaryRecord {
+                record_type: "summary".to_string(),
+                total_records: total_calls,
+                diagnostic_count: chunk.diagnostics.len(),
+                is_truncated: false,
+            };
+            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+        }
+        OutputFormat::Dot => {
+            eprintln!("{}: DOT format not applicable to callees", "error".red());
+            ExitCode::UsageError.exit();
+        }
+    }
     ExitCode::Success.exit();
 }
 
@@ -1254,6 +1346,10 @@ enum ExportRecord {
         context: JsonlRecordContext,
         data: luad_analysis::XrefEntry,
     },
+    Callee {
+        context: JsonlRecordContext,
+        data: luad_analysis::CalleeFact,
+    },
     Diagnostic {
         context: JsonlRecordContext,
         data: luad_core::Diagnostic,
@@ -1577,8 +1673,23 @@ fn handle_export(args: ExportArgs) {
 
         let disasm = get_disasm_proto(&chunk.dialect, &chunk.main_proto);
         let xref_index = XrefIndex::build(&chunk);
-        let available_fact_count =
-            count_available_facts_proto_tree(&chunk.main_proto, &disasm) + xref_index.entries.len();
+        let callee_analysis = chunk
+            .dialect
+            .starts_with("lua5.1")
+            .then(|| luad_analysis::analyze_chunk_callees(&chunk));
+        let available_callee_count = callee_analysis
+            .as_ref()
+            .map(|analysis| {
+                analysis
+                    .prototypes
+                    .iter()
+                    .map(|prototype| prototype.calls.len())
+                    .sum::<usize>()
+            })
+            .unwrap_or(0);
+        let available_fact_count = count_available_facts_proto_tree(&chunk.main_proto, &disasm)
+            + xref_index.entries.len()
+            + available_callee_count;
 
         let context = JsonlRecordContext::successful(identity.clone(), interp);
         let mut emitter = FactEmitter::new(context.clone(), args.max_facts_per_file);
@@ -1587,6 +1698,16 @@ fn handle_export(args: ExportArgs) {
         for entry in &xref_index.entries {
             if !emitter.emit_fact("xref", entry) {
                 break;
+            }
+        }
+
+        if let Some(analysis) = &callee_analysis {
+            'callees: for prototype in &analysis.prototypes {
+                for fact in &prototype.calls {
+                    if !emitter.emit_fact("callee", fact) {
+                        break 'callees;
+                    }
+                }
             }
         }
 

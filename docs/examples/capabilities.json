@@ -21,14 +21,16 @@
       "features": [
         "lossless parse (experimental)",
         "disasm",
-        "validate"
+        "validate",
+        "symbolic callees (experimental)"
       ],
       "status": "experimental",
       "required_gates": [
         "gate-layout-lua51-stock",
         "gate-profile-lua51-lnum",
         "gate-closures-lua51",
-        "gate-resolved-constants-lua51"
+        "gate-resolved-constants-lua51",
+        "gate-symbolic-callees-lua51"
       ],
       "completed_gates": [],
       "evidence": []

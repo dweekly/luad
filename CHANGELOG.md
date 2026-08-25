@@ -57,6 +57,12 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Machine interface
 
+- Added `callees` text/JSON/JSONL output and recursive `callee` export facts with one
+  tagged resolution per Lua 5.1 call, symbolic label/prototype evidence, and typed
+  unresolved reasons.
+- Added CFG-safe register propagation for literal globals, constant table paths,
+  exact literal `require` labels, aliases, direct closures, and conservative multi-hop
+  upvalue captures.
 - JSONL facts now carry required per-record input and interpretation context, including
   honest partial context on parse and read failures; streaming schemas use major 2.
 - Capability output now exposes the diagnostic-catalog command, schema, and formats.
@@ -70,6 +76,8 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Documentation
 
+- Added a tool-free, self-contained Opus design-review lane for bounded architecture
+  critiques without repository traversal.
 - Routine Antigravity implementation turns are now structurally edit-only, with
   focused and aggregate verification owned by the steward and interactive command
   approval reserved for explicit compiler-led exceptions.

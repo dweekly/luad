@@ -1,74 +1,85 @@
-# Active sprint: self-identifying JSONL facts
+# Active sprint: bounded Lua 5.1 call-argument origins
 
-Lane: machine contract. Target: make every streamed fact independently attributable
-without requiring hidden file-boundary state.
+Lane: semantic analysis. Target: emit one auditable, cycle-free origin expression for
+every statically bounded call argument without turning dependency into taint policy.
 
 ## Claim and researcher value
 
-Every JSONL data record emitted by `inspect`, `disasm`, `cfg`, `xrefs`, `query`, `diff`,
-and recursive `export` will carry the input identity and resolved interpretation needed
-to join or audit that record in isolation. A consumer may interleave, filter, shard, or
-persist fact lines without retaining the preceding metadata or `file_start` record.
+For every Lua 5.1 `CALL` and `TAILCALL` with a fixed argument window, each argument will
+carry an eagerly captured expression describing where its value came from. Researchers
+will be able to distinguish literal-only values, parameter/upvalue-dependent
+concatenations, Lua arithmetic including the LuCI `%` formatting idiom, fields, call
+results, and explicit analysis cutoffs.
 
-This directly supports firmware-tree workflows where many chunks, profiles, and errors
-share one stream and an AI agent or relational loader consumes individual records.
+This supplies bytecode provenance, not a security verdict. `luad` will not label a value
+tainted, sanitized, attacker-controlled, safe, or exploitable.
 
 ## Contract
 
-A single reusable record context will contain:
+The analysis will consume parsed prototypes, shared semantic instructions, CFG facts,
+and the established conservative closure environments. It will not decode raw words or
+reclassify callees.
 
-- the input path, SHA-256, and byte length when an input artifact was read;
-- the resolved base dialect, patch/oracle version, profile, validated layout, and
-  selection mode when interpretation succeeded;
-- an explicit absence of unavailable identity or interpretation fields on failed-input
-  diagnostics rather than invented hashes or profiles.
+The expression union will cover literal constants, fixed parameters, upvalues, global
+and constant-key fields, call results, concatenations, unary operations, binary
+operations, and typed unknown reasons. `MOD` will remain a binary operation with its
+literal format operand and other origins visible; the fact will not assert that every
+runtime `MOD` performs formatting.
 
-Every `JsonlDataRecord<T>` will require this context. Export fact records—prototype,
-instruction, constant, upvalue, xref, and diagnostic—will use the same generic shape as
-single-file JSONL commands. Control records may retain their present framing fields,
-but no fact may depend on them for attribution.
+Operands will be cloned from the pre-instruction register state before any destination
+write. This is mandatory for self-aliasing instructions such as `CONCAT A A C` and
+arithmetic whose destination overlaps a source. Fixed expression depth, node-count,
+register-window, and transfer budgets will produce distinct cutoff reasons.
 
-The schema major will advance because the new context is required. Canonical schemas,
-examples, and recipes will show consumers how to select `.context.input_identity.path`,
-`.context.input_identity.sha256`, and `.context.interpretation.profile` directly from
-any fact line.
+CFG joins will retain structurally identical expressions and union their stable evidence;
+different incoming expressions become an explicit conflict rather than an invented
+merge. Fixed call-result windows become indexed `call-result` expressions. Open argument
+or result windows remain explicit unknowns. Closure-binding descriptors do not execute.
+
+The CLI will expose `origins` in text, JSON, and self-identifying JSONL. Recursive export
+will emit the same call-argument origin facts for Lua 5.1 artifacts.
 
 ## Acceptance matrix
 
-One table-driven machine-contract suite will exercise every JSONL-producing command and
-every export fact variant. It will prove:
+A single compiler-shaped matrix will cover literal strings/numbers/booleans/nil,
+parameters, upvalues across three levels, globals, constant and dynamic fields, fixed
+call results, `MOVE`, `CONCAT`, all Lua 5.1 unary and binary opcodes, and especially
+`MOD`. It will combine these with same-block aliases, identical/conflicting branches,
+loops, overwritten ranges, open calls/varargs, unreachable calls, and expression limits.
 
-- schema validation and deterministic output;
-- exact path/hash/length agreement with the source bytes;
-- exact interpretation agreement with the corresponding metadata or `file_start`;
-- mixed stock Lua 5.1 and LNUM32 export records retain distinct local contexts after
-  arbitrary fact-line interleaving;
-- deleting metadata and control records leaves every successful fact attributable;
-- failed reads and parse failures produce honest diagnostic context;
-- removing, swapping, or mutating a fact context is rejected by the comparator or schema.
+The matrix will assert eager self-alias handling for `CONCAT`, distinguish a
+constant-only concatenation from a parameter-dependent one, and retain the format
+literal plus argument origins for `%`. Every fixed argument slot will have exactly one
+fact. Open argument windows will produce one explicit call-level unresolved record.
 
-The same matrix will add structured capability discovery for the `diagnostics` command
-and `diagnostics` schema so an agent can find the catalog without reading prose. It will
-not redesign the complete command catalog.
+Killer controls will replace a parameter-dependent subtree with a constant, create a
+self-cycle, drop a concatenation operand, reinterpret `MOD` as formatting, leak one CFG
+predecessor through a conflict, erase cutoff reasons, and omit one argument fact. The
+public fixture will pin expression-shape and unresolved-reason histograms. A corpus survey
+will report usefulness separately from acceptance.
+
+Redistributable source fixtures will be compiled by the exact Lua 5.1 authorities. A
+separate corpus survey may measure usefulness and unresolved-reason distribution, but it
+will never decide correctness or gate acceptance.
 
 ## Allowed production paths
 
-- `crates/luad-core/src/envelope.rs`
-- `crates/luad-core/src/capabilities.rs`
-- JSONL construction in `crates/luad-cli/src/main.rs`
-- text capability rendering only as needed for the same discovery fact
-- canonical schemas, machine examples, recipes, tests, gate specs, and `CHANGELOG.md`
+- `crates/luad-analysis/src/origins.rs` and minimal shared callee-analysis helpers
+- command parsing and rendering in `crates/luad-cli`
+- recursive export and public capability/schema discovery
+- redistributable fixtures, focused oracle tests, one gate spec and runner
+- indexed machine-interface, recipe, status, and changelog documentation
 
 ## Non-goals
 
-This sprint does not add persistent session state, symbolic callees, value origins,
-prototype content hashes, a dedicated constant-search command, support-tier promotion,
-or a general plugin/command registry. It does not remove JSONL framing records or change
-ordinary JSON document envelopes.
+This sprint does not classify sinks, infer attacker control, prove sanitization, resolve
+dynamic table keys, perform points-to analysis, build a call graph, add SSA, structure
+source code, add persistent state, or promote a support tier. It does not claim that
+`MOD` is formatting or promise a corpus coverage percentage.
 
 ## Verification and stop condition
 
-Acceptance requires the focused machine-contract matrix, adversarial context mutations,
-the canonical machine-contract and batch-export gates, aggregate repository checks,
-green pull-request CI, and a clean merged revision with local `main` equal to
-`origin/main`.
+Acceptance requires the focused origin matrix and killer controls, canonical machine and
+batch-export regression gates, aggregate repository checks, green pull-request CI, and a
+clean merged revision with local `main` equal to `origin/main`. The sprint stops rather
+than collapsing `unknown`, `computed`, and `analysis stopped` into one category.
