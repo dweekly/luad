@@ -1,52 +1,86 @@
-# Active sprint: owner-relative Lua 5.1 query prototype identity
+# Active sprint: exact LNUM32 surface qualification
 
-Lane: patch. Target: one silent factual error in query summaries.
+Lane: qualification. Target: prove one exact embedded Lua target without changing its
+experimental capability tier.
 
 ## Claim and researcher value
 
-For every Lua 5.1 `CLOSURE`, `luad query` will name the same owner-relative child
-prototype as disassembly, xrefs, export, and the typed prototype operand. A query result
-must not format the local `Bx` child index as a root prototype path.
+For the OpenWrt-derived Lua 5.1.5 LNUM32 target with layout
+`int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4`, every maintained public read
+surface will select and report the same interpretation, and release evidence assembly
+will reject prerequisites from any other profile or layout.
 
-This prevents a researcher or agent from following a plausible identifier to a real but
-unrelated function.
+This sprint closes the public interpretation boundary needed by firmware researchers.
+It deliberately leaves support-tier promotion for the following sprint, where the tier
+can be derived from a verified exact-target evidence bundle.
 
-## Affected boundary and regression
+## Acceptance matrix
 
-The affected public boundary is the instruction `summary` returned by `luad query` for
-Lua 5.1 closure instructions. The focused regression uses the maintained nested-closure
-fixture and independently derives each child path from the owning instruction ID plus
-the encoded local child index. It compares every `proto:` reference reported by query
-with the typed disassembly fact and xref target at the same physical instruction.
+One public authority matrix covers the debug and stripped fixtures through:
 
-The expected failing case includes at least two nesting levels and repeated local child
-index zero, where `proto:0/0`, `proto:0/0/0`, and `proto:0/0/0/0` must remain distinct.
+- detected and explicit `inspect`;
+- JSON and text `disasm` with three-way agreement against the independent decoder and
+  the pinned OpenWrt-derived compiler listing;
+- `validate` with zero diagnostics on valid fixtures;
+- `query` with an owner-qualified result and an actually applied predicate operand;
+- recursive JSONL `export`, including mixed stock/LNUM inputs with per-file profile
+  selection and no interpretation bleed;
+- symmetric explicit-profile substitution failures for LNUM-as-stock and stock-as-LNUM.
 
-## Allowed paths
+The compiler comparison is mandatory. The gate runner supplies the authenticated
+compiler path to the test process after checking the platform-specific compiler hash.
+Absence of the compiler, an unlisted platform, an incorrect binary, or an unapplied
+comparison fails the gate; no environment-conditional success path is permitted.
 
-- `crates/luad-dialect-lua51/src/lifter.rs`
-- `crates/luad-oracle/tests/test_closure_prototype_identity_lua51.rs`
-- `CHANGELOG.md`
+Release-manifest assembly and verification bind Lua 5.1 prerequisites to exact target
+identity. A prerequisite that declares a different concrete profile or layout cannot
+satisfy an LNUM32 release. Profile-neutral gates remain eligible only when explicitly
+listed by the exact-target release gate. Prefix matching is not evidence of target
+compatibility.
 
-The implementation must derive the summary from the existing typed owner-relative
-prototype operand or equivalent prototype-path fact. It must not add a second chunk-tree
-walk, parser, schema field, command, or analysis pass.
+The Lua 5.1 opcode/validator authority documents and tests that `OP_TEST` and closure
+binding descriptors do not validate their encoded `A` field as an executed register
+operand.
+
+## Required gate changes
+
+- `gate-authority-lua51-openwrt-lnum32` pins `Lua 5.1.5 (double int32)` and the exact
+  compiler SHA-256 for every maintained CI platform.
+- The authority gate names every test in the acceptance matrix and carries the frozen
+  fixture hashes already authenticated by `AUTHORITY.json`.
+- Release-manifest negative controls substitute a stock Lua 5.1 profile/layout and an
+  unrelated Lua 5.1-prefixed profile; both must be rejected.
+- Existing proof-harness, machine-contract, profile, public-disassembly, CLI-selection,
+  diagnostics, validator, and prototype-identity gates remain prerequisites rather than
+  being reimplemented here.
+
+## Allowed production paths
+
+- `crates/luad-oracle/src/gate_runner.rs`
+- Lua 5.1 opcode or validator authority documentation only where needed for the
+  executed-role exception
+- the minimum gate-runner environment plumbing needed to expose the verified compiler
+  path to the named test process
+
+Tests, gate specs, gate scripts, schemas, and `CHANGELOG.md` may change as required by
+the matrix. Parser, disassembler, query, export, and capability production semantics are
+out of scope unless a red public-boundary test demonstrates a target-specific defect.
 
 ## Non-goals
 
-This sprint does not change parsing, encoded operands, stable IDs, xrefs, export,
-non-closure summaries, other dialects, target support status, or schema versions. It
-does not include opcode-authority documentation, capability discovery, symbolic callee
-resolution, or value provenance.
+This sprint does not add a supported target record, load a release evidence bundle,
+change the capabilities schema, promote base `lua5.1`, add symbolic callee or origin
+analysis, ingest a private firmware corpus, or treat a public corpus as an oracle.
 
 ## Verification and stop condition
 
-Focused verification:
+Acceptance requires:
 
-```console
-cargo test -p luad-oracle --test test_closure_prototype_identity_lua51 -- --nocapture
-```
+1. focused red tests for exact profile/layout substitution and mandatory compiler use;
+2. the complete authority surface matrix passing with zero skipped or conditional tests;
+3. the named prerequisite gates and aggregate repository checks passing;
+4. green pull-request CI on every maintained platform;
+5. a clean merged revision with local `main` equal to `origin/main`.
 
-Acceptance requires the focused regression, a production diff within the patch lane,
-green pull-request CI, a clean merged revision, and local `main` equal to `origin/main`.
-No target-promotion work begins inside this sprint.
+The next sprint may promote only `lua5.1-lnum32`, and only from evidence produced by
+this qualified revision.

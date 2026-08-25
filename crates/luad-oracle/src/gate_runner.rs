@@ -190,9 +190,20 @@ pub enum GateRunnerError {
         gate_id: String,
         target_dialect: String,
     },
+    #[error("Prerequisite profile mismatch: gate '{gate_id}' requires profile '{required_profile}' which does not equal release target profile '{target_profile}'")]
+    PrerequisiteProfileMismatch {
+        gate_id: String,
+        required_profile: String,
+        target_profile: String,
+    },
     #[error("Missing target profile or layout for dialect '{target_dialect}': profile={profile:?}, layout={layout:?}")]
     MissingTargetProfileOrLayout {
         target_dialect: String,
+        profile: Option<String>,
+        layout: Option<String>,
+    },
+    #[error("Noncanonical target profile and layout pair: profile={profile:?}, layout={layout:?}")]
+    NoncanonicalTargetProfileOrLayout {
         profile: Option<String>,
         layout: Option<String>,
     },
@@ -335,6 +346,12 @@ pub fn execute_gate_spec(
     let mut list_cmd = Command::new(prog);
     list_cmd.args(&list_args);
     list_cmd.current_dir(workspace_root);
+    if let Some(ref cp) = comp_path_str {
+        list_cmd.env("LUAD_GATE_COMPILER_PATH", cp);
+    } else {
+        list_cmd.env_remove("LUAD_GATE_COMPILER_PATH");
+    }
+    list_cmd.env_remove("LUAD_LNUM32_LUAC");
 
     let list_output = list_cmd.output().map_err(|e| {
         GateRunnerError::Io(format!(
@@ -367,6 +384,12 @@ pub fn execute_gate_spec(
     let mut cmd = Command::new(prog);
     cmd.args(args);
     cmd.current_dir(workspace_root);
+    if let Some(ref cp) = comp_path_str {
+        cmd.env("LUAD_GATE_COMPILER_PATH", cp);
+    } else {
+        cmd.env_remove("LUAD_GATE_COMPILER_PATH");
+    }
+    cmd.env_remove("LUAD_LNUM32_LUAC");
 
     let output = cmd.output().map_err(|e| {
         GateRunnerError::Io(format!(
@@ -714,6 +737,61 @@ pub fn verify_gate_result(
     Ok(())
 }
 
+fn is_canonical_lua51_pair(profile: &str, layout: &str) -> bool {
+    match profile {
+        "lua5.1-lnum32" => layout == "int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4",
+        "lua5.1-stock32" => layout == "int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=0",
+        "lua5.1" | "lua5.1-stock64" => {
+            layout == "int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0"
+        }
+        _ => false,
+    }
+}
+
+fn verify_prerequisite_target_compatibility(
+    target_dialect: &str,
+    target_profile: Option<&str>,
+    spec: &GateSpec,
+) -> Result<(), GateRunnerError> {
+    if target_dialect.starts_with("lua5.1") {
+        if spec
+            .required_compiler_version
+            .as_ref()
+            .is_some_and(|version| !version.contains("5.1"))
+            || spec.gate_id.contains("lua54")
+            || spec.gate_id.contains("lua52")
+            || spec.gate_id.contains("lua53")
+            || spec.gate_id.contains("lua55")
+        {
+            return Err(GateRunnerError::PrerequisiteDialectMismatch {
+                gate_id: spec.gate_id.clone(),
+                target_dialect: target_dialect.to_string(),
+            });
+        }
+        if let Some(required_profile) = &spec.required_profile {
+            let target_profile = target_profile.unwrap_or_default();
+            if required_profile != target_profile {
+                return Err(GateRunnerError::PrerequisiteProfileMismatch {
+                    gate_id: spec.gate_id.clone(),
+                    required_profile: required_profile.clone(),
+                    target_profile: target_profile.to_string(),
+                });
+            }
+        }
+    } else if target_dialect.starts_with("lua5.4")
+        && (spec.gate_id.contains("lua51")
+            || spec.gate_id.contains("lua52")
+            || spec.gate_id.contains("lua53")
+            || spec.gate_id.contains("lua55"))
+    {
+        return Err(GateRunnerError::PrerequisiteDialectMismatch {
+            gate_id: spec.gate_id.clone(),
+            target_dialect: target_dialect.to_string(),
+        });
+    }
+    Ok(())
+}
+
 fn validate_gate_spec_schema(spec: &GateSpec) -> Result<(), GateRunnerError> {
     let invalid = match spec.schema_version {
         1 => matches!(
@@ -783,58 +861,27 @@ pub fn assemble_release_manifest(
         return Err(GateRunnerError::DirtyPromotionArtifact);
     }
 
-    if target_dialect.starts_with("lua5.1") && (target_profile.is_none() || target_layout.is_none())
-    {
-        return Err(GateRunnerError::MissingTargetProfileOrLayout {
-            target_dialect: target_dialect.to_string(),
-            profile: target_profile.map(String::from),
-            layout: target_layout.map(String::from),
-        });
+    if target_dialect.starts_with("lua5.1") {
+        let (Some(prof), Some(layout)) = (target_profile, target_layout) else {
+            return Err(GateRunnerError::MissingTargetProfileOrLayout {
+                target_dialect: target_dialect.to_string(),
+                profile: target_profile.map(String::from),
+                layout: target_layout.map(String::from),
+            });
+        };
+        if !is_canonical_lua51_pair(prof, layout) {
+            return Err(GateRunnerError::NoncanonicalTargetProfileOrLayout {
+                profile: target_profile.map(String::from),
+                layout: target_layout.map(String::from),
+            });
+        }
     }
 
     let mut refs = Vec::new();
     for (result, spec) in prerequisite_results {
         verify_gate_result(result, spec, Some(git_commit), true)?;
 
-        // Validate dialect compatibility of prerequisite gates
-        if target_dialect.starts_with("lua5.1") {
-            if let Some(req_ver) = &spec.required_compiler_version {
-                if !req_ver.contains("5.1") {
-                    return Err(GateRunnerError::PrerequisiteDialectMismatch {
-                        gate_id: spec.gate_id.clone(),
-                        target_dialect: target_dialect.to_string(),
-                    });
-                }
-            }
-            if let Some(req_prof) = &spec.required_profile {
-                if !req_prof.starts_with("lua5.1") {
-                    return Err(GateRunnerError::PrerequisiteDialectMismatch {
-                        gate_id: spec.gate_id.clone(),
-                        target_dialect: target_dialect.to_string(),
-                    });
-                }
-            }
-            if spec.gate_id.contains("lua54")
-                || spec.gate_id.contains("lua52")
-                || spec.gate_id.contains("lua53")
-                || spec.gate_id.contains("lua55")
-            {
-                return Err(GateRunnerError::PrerequisiteDialectMismatch {
-                    gate_id: spec.gate_id.clone(),
-                    target_dialect: target_dialect.to_string(),
-                });
-            }
-        } else if target_dialect.starts_with("lua5.4")
-            && (spec.gate_id.contains("lua51")
-                || spec.gate_id.contains("lua52")
-                || spec.gate_id.contains("lua53")
-                || spec.gate_id.contains("lua55"))
-        {
-            return Err(GateRunnerError::PrerequisiteDialectMismatch {
-                gate_id: spec.gate_id.clone(),
-                target_dialect: target_dialect.to_string(),
-            });
-        }
+        verify_prerequisite_target_compatibility(target_dialect, target_profile, spec)?;
 
         refs.push(PrerequisiteResultRef {
             gate_id: result.gate_id.clone(),
@@ -873,14 +920,22 @@ pub fn verify_release_manifest(
         ));
     }
 
-    if manifest.target_dialect.starts_with("lua5.1")
-        && (manifest.target_profile.is_none() || manifest.target_layout.is_none())
-    {
-        return Err(GateRunnerError::MissingTargetProfileOrLayout {
-            target_dialect: manifest.target_dialect.clone(),
-            profile: manifest.target_profile.clone(),
-            layout: manifest.target_layout.clone(),
-        });
+    if manifest.target_dialect.starts_with("lua5.1") {
+        let (Some(ref prof), Some(ref layout)) =
+            (&manifest.target_profile, &manifest.target_layout)
+        else {
+            return Err(GateRunnerError::MissingTargetProfileOrLayout {
+                target_dialect: manifest.target_dialect.clone(),
+                profile: manifest.target_profile.clone(),
+                layout: manifest.target_layout.clone(),
+            });
+        };
+        if !is_canonical_lua51_pair(prof, layout) {
+            return Err(GateRunnerError::NoncanonicalTargetProfileOrLayout {
+                profile: manifest.target_profile.clone(),
+                layout: manifest.target_layout.clone(),
+            });
+        }
     }
 
     if manifest.git_commit != expected_commit {
@@ -907,6 +962,11 @@ pub fn verify_release_manifest(
 
     for (result, spec) in results_and_specs {
         verify_gate_result(result, spec, Some(expected_commit), true)?;
+        verify_prerequisite_target_compatibility(
+            &manifest.target_dialect,
+            manifest.target_profile.as_deref(),
+            spec,
+        )?;
 
         let prereq_ref = manifest
             .prerequisite_results

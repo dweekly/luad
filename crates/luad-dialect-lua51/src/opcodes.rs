@@ -184,7 +184,12 @@ impl Opcode51 {
         }
     }
 
-    /// Returns `true` if field `A` is used as a direct register bounded by `maxstacksize`.
+    /// Returns `true` when executed semantics use `A` as a direct register.
+    ///
+    /// This is intentionally independent of the opcode mode's set-`A` flag: `TEST`
+    /// reads `R(A)`, while comparison opcodes use `A` as a boolean. A `MOVE` or
+    /// `GETUPVAL` word serving as a closure-binding descriptor is excluded by its
+    /// contextual instruction role before register validation.
     #[must_use]
     pub const fn a_is_register(self) -> bool {
         !matches!(self, Self::Jmp | Self::Eq | Self::Lt | Self::Le)
