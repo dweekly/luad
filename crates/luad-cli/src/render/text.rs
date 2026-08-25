@@ -497,6 +497,98 @@ pub fn render_callees(analysis: &luad_analysis::ChunkCalleeAnalysis) {
     }
 }
 
+/// Render bounded call-argument origin expressions.
+pub fn render_origins(analysis: &luad_analysis::ChunkOriginAnalysis) {
+    for prototype in &analysis.prototypes {
+        for fact in &prototype.calls {
+            println!(
+                "{} {:<8} R({})",
+                fact.call_id, fact.call_kind, fact.callee_register
+            );
+            match &fact.argument_window {
+                luad_analysis::CallArgumentWindow::Fixed { arguments } => {
+                    for argument in arguments {
+                        println!(
+                            "  arg[{}] R({}) <- {}",
+                            argument.argument_index,
+                            argument.register,
+                            format_origin_expression(&argument.origin)
+                        );
+                    }
+                }
+                luad_analysis::CallArgumentWindow::Open { reason } => {
+                    println!("  arguments <- open:{reason:?}");
+                }
+            }
+        }
+    }
+}
+
+fn format_origin_expression(expression: &luad_analysis::OriginExpression) -> String {
+    use luad_analysis::{OriginExpressionKind, OriginLiteral};
+
+    fn literal(value: &OriginLiteral) -> String {
+        match value {
+            OriginLiteral::Nil => "nil".to_string(),
+            OriginLiteral::Boolean { value } => value.to_string(),
+            OriginLiteral::Integer { value, .. } => value.to_string(),
+            OriginLiteral::Float { raw_hex, .. } => format!("float({raw_hex})"),
+            OriginLiteral::String { value } => format!("\"{}\"", value.display),
+        }
+    }
+
+    match &expression.kind {
+        OriginExpressionKind::Literal { value, .. } => literal(value),
+        OriginExpressionKind::Parameter { owner, index } => {
+            format!("proto:{owner}:parameter[{index}]")
+        }
+        OriginExpressionKind::Upvalue { owner, index, .. } => {
+            format!("proto:{owner}:upvalue:{index}")
+        }
+        OriginExpressionKind::Global { name } => format!("global({})", name.display),
+        OriginExpressionKind::Field { base, key, .. } => {
+            format!(
+                "field({}, {})",
+                format_origin_expression(base),
+                literal(key)
+            )
+        }
+        OriginExpressionKind::CallResult {
+            call_id,
+            result_index,
+        } => format!("call-result({call_id}, {result_index})"),
+        OriginExpressionKind::Concat { parts } => format!(
+            "CONCAT({})",
+            parts
+                .iter()
+                .map(format_origin_expression)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        OriginExpressionKind::Table { entries } => format!(
+            "table({})",
+            entries
+                .iter()
+                .map(format_origin_expression)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        OriginExpressionKind::Unary { operator, operand } => {
+            format!("{operator}({})", format_origin_expression(operand))
+        }
+        OriginExpressionKind::Binary {
+            operator,
+            left,
+            right,
+        } => format!(
+            "{operator}({}, {})",
+            format_origin_expression(left),
+            format_origin_expression(right)
+        ),
+        OriginExpressionKind::Unknown { reason } => format!("unknown:{reason:?}"),
+    }
+}
+
 /// Render instruction explanation with provenance, disassembly facts, and source citations.
 pub fn render_explain_instruction(
     inst: &luad_core::SemanticInstruction,

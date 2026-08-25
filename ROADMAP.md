@@ -22,34 +22,24 @@ an exact release, profile, layout, public surface, and evidence manifest.
 
 ## Delivery sequence
 
-### 1. Expose bounded argument and value origins
-
-Call arguments and selected registers will link to a cycle-safe value-expression graph.
-The matrix will cover constants, parameters, upvalues, fields, call results,
-concatenations, computations, unknowns, and explicit cutoffs. Operands are captured at
-the writing instruction so self-aliasing operations such as `CONCAT A A C` remain sound.
-
-Lua 5.1 `MOD` will preserve string-format provenance used by LuCI (`"fmt" % {args}`)
-without claiming that every runtime `MOD` is formatting. Constant-only `CONCAT` and
-format expressions remain distinguishable from parameter-dependent expressions.
-
-Exit outcome: an external investigator can audit each origin edge, distinguish
-constant-only expressions from dependent computations, and tell “computed” from “the
-analysis stopped.”
-
-### 2. Publish provable call relations and prototype content identity
+### 1. Publish provable call relations
 
 Cross-prototype call edges will be emitted only where closure construction, the value
 stored at that exact instruction, lookup, and invocation establish one target. The
 matrix will cover global storage, closure/upvalue storage, ambiguity, and the
 off-by-one-sensitive sequence of adjacent closure writes.
 
+Exit outcome: callers can build a provable partial call graph and answer “who calls
+this” where bytecode-local construction and dataflow evidence establish one target.
+
+### 2. Add prototype content identity
+
 Each prototype will receive a versioned identity derived from documented normalized
 instructions, constants, captures, and child relationships. Artifact-local paths remain
 the navigation identity; content identities enable ordinary cross-firmware joins.
 
-Exit outcome: callers can build a provable partial call graph, answer “who calls this”
-where bytecode permits, and identify changed prototype bodies across firmware releases.
+Exit outcome: callers can identify unchanged and changed prototype bodies across
+firmware releases without treating content equality as source-level identity.
 
 ### 3. Close queries, recipes, and the stable release
 
@@ -79,15 +69,15 @@ remain external.
 ## Dependency order
 
 ```text
-bounded value origins
-  -> provable calls + content identity
+provable calls
+  -> content identity
        -> query/recipe closure + stable release evidence
 ```
 
 ## Customer checkpoints
 
-- After value origins and call relations: trace representative format/concatenation
-  arguments and caller relationships while leaving reachability and sink policy external.
+- After call relations: trace representative format/concatenation arguments and caller
+  relationships while leaving reachability and sink policy external.
 - Before release: investigate a different firmware version or objective without
   implementation guidance.
 

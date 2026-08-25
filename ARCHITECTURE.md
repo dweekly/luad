@@ -35,9 +35,16 @@ Each decoder must construct a validated, immutable `ChunkLayout` from the chunk 
 
 ### `luad-analysis`
 
-Consumes the shared model and semantic instructions to produce CFGs, dominators, xrefs, queries, and diffs. It must not reparse bytecode or silently select a default dialect.
+Consumes the shared model and semantic instructions to produce CFGs, dominators, xrefs,
+queries, diffs, symbolic callee facts, and call-argument origin expressions. It must not
+reparse bytecode or silently select a default dialect.
 
-Every analysis must state or enforce its preconditions. Invalid registers, jumps, stack references, or instruction modes can make analysis unavailable rather than merely less precise.
+Every analysis must state or enforce its preconditions. Invalid registers, jumps, stack
+references, or instruction modes can make analysis unavailable rather than merely less
+precise. Dataflow analyses are bounded and emit typed unresolved or unknown results when
+the evidence is ambiguous, unsupported, unreachable, or exceeds a declared resource
+limit. Provenance evidence uses stable instruction and object identifiers; it does not
+make security, reachability, or attacker-control judgments.
 
 ### `luad-cli`
 

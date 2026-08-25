@@ -214,6 +214,28 @@
           "$ref": "#/definitions/JsonlRecordContext"
         },
         "data": {
+          "$ref": "#/definitions/CallOriginFact"
+        },
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "origin"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "context",
+        "data",
+        "record_type"
+      ],
+      "properties": {
+        "context": {
+          "$ref": "#/definitions/JsonlRecordContext"
+        },
+        "data": {
           "$ref": "#/definitions/Diagnostic"
         },
         "record_type": {
@@ -320,6 +342,86 @@
     }
   ],
   "definitions": {
+    "CallArgumentWindow": {
+      "description": "The argument window represented by a call fact.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "arguments",
+            "kind"
+          ],
+          "properties": {
+            "arguments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/FixedArgumentOrigin"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "fixed"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "open"
+              ]
+            },
+            "reason": {
+              "$ref": "#/definitions/OriginUnknownReason"
+            }
+          }
+        }
+      ]
+    },
+    "CallOriginFact": {
+      "description": "Auditable origins for one physical `CALL` or `TAILCALL` instruction.",
+      "type": "object",
+      "required": [
+        "argument_window",
+        "call_id",
+        "call_kind",
+        "callee_register",
+        "pc",
+        "proto_path"
+      ],
+      "properties": {
+        "argument_window": {
+          "$ref": "#/definitions/CallArgumentWindow"
+        },
+        "call_id": {
+          "$ref": "#/definitions/StableId"
+        },
+        "call_kind": {
+          "type": "string"
+        },
+        "callee_register": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "pc": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "proto_path": {
+          "$ref": "#/definitions/ProtoPath"
+        }
+      }
+    },
     "CalleeFact": {
       "description": "One auditable callee result for a `CALL` or `TAILCALL` instruction.",
       "type": "object",
@@ -1130,6 +1232,30 @@
         }
       }
     },
+    "FixedArgumentOrigin": {
+      "description": "One fixed argument position and its pre-call origin.",
+      "type": "object",
+      "required": [
+        "argument_index",
+        "origin",
+        "register"
+      ],
+      "properties": {
+        "argument_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "origin": {
+          "$ref": "#/definitions/OriginExpression"
+        },
+        "register": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        }
+      }
+    },
     "InputIdentity": {
       "description": "Identity and provenance metadata for an analyzed input artifact.",
       "type": "object",
@@ -1318,6 +1444,414 @@
             }
           }
         }
+      ]
+    },
+    "OriginExpression": {
+      "description": "One eager, cycle-free value-expression node.",
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "constant_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/StableId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "literal"
+              ]
+            },
+            "value": {
+              "$ref": "#/definitions/OriginLiteral"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "index",
+            "kind",
+            "owner"
+          ],
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "parameter"
+              ]
+            },
+            "owner": {
+              "$ref": "#/definitions/ProtoPath"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "index",
+            "kind",
+            "owner"
+          ],
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "upvalue"
+              ]
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "owner": {
+              "$ref": "#/definitions/ProtoPath"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "name"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "global"
+              ]
+            },
+            "name": {
+              "$ref": "#/definitions/LuaString"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "base",
+            "key",
+            "kind"
+          ],
+          "properties": {
+            "base": {
+              "$ref": "#/definitions/OriginExpression"
+            },
+            "key": {
+              "$ref": "#/definitions/OriginLiteral"
+            },
+            "key_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/StableId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "field"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "call_id",
+            "kind",
+            "result_index"
+          ],
+          "properties": {
+            "call_id": {
+              "$ref": "#/definitions/StableId"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "call-result"
+              ]
+            },
+            "result_index": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0.0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "parts"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "concat"
+              ]
+            },
+            "parts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/OriginExpression"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "entries",
+            "kind"
+          ],
+          "properties": {
+            "entries": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/OriginExpression"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "table"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "operand",
+            "operator"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "unary"
+              ]
+            },
+            "operand": {
+              "$ref": "#/definitions/OriginExpression"
+            },
+            "operator": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "left",
+            "operator",
+            "right"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "binary"
+              ]
+            },
+            "left": {
+              "$ref": "#/definitions/OriginExpression"
+            },
+            "operator": {
+              "type": "string"
+            },
+            "right": {
+              "$ref": "#/definitions/OriginExpression"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "unknown"
+              ]
+            },
+            "reason": {
+              "$ref": "#/definitions/OriginUnknownReason"
+            }
+          }
+        }
+      ],
+      "required": [
+        "evidence"
+      ],
+      "properties": {
+        "evidence": {
+          "description": "Stable bytecode facts that establish this node.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StableId"
+          }
+        }
+      }
+    },
+    "OriginLiteral": {
+      "description": "A lossless literal suitable for structural equality in an origin graph.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "nil"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "boolean"
+              ]
+            },
+            "value": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "raw_hex",
+            "type",
+            "value"
+          ],
+          "properties": {
+            "raw_hex": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "integer"
+              ]
+            },
+            "value": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "is_inf",
+            "is_nan",
+            "raw_hex",
+            "type"
+          ],
+          "properties": {
+            "is_inf": {
+              "type": "boolean"
+            },
+            "is_nan": {
+              "type": "boolean"
+            },
+            "raw_hex": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "float"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "string"
+              ]
+            },
+            "value": {
+              "$ref": "#/definitions/LuaString"
+            }
+          }
+        }
+      ]
+    },
+    "OriginUnknownReason": {
+      "description": "Closed reasons why the analysis cannot describe a value expression.",
+      "type": "string",
+      "enum": [
+        "missing-definition",
+        "control-flow-conflict",
+        "dynamic-key",
+        "overwritten",
+        "open-argument-window",
+        "open-result-window",
+        "vararg-value",
+        "unsupported-value",
+        "unsupported-instruction",
+        "mutable-capture",
+        "ambiguous-capture",
+        "expression-depth-limit",
+        "expression-node-limit",
+        "register-window-limit",
+        "analysis-limit",
+        "unreachable"
       ]
     },
     "ProtoPath": {

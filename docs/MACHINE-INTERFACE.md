@@ -26,6 +26,7 @@ luad diagnostics --format json
 luad schema capabilities
 luad schema diagnostics
 luad schema callees
+luad schema origins
 luad schema export
 ```
 
@@ -39,6 +40,7 @@ Available schema names are:
 - `validate`
 - `cfg`
 - `callees`
+- `origins`
 - `xrefs`
 - `query`
 - `analysis`
@@ -168,6 +170,25 @@ unreachable calls, ambiguity, and analysis bounds are reported rather than omitt
 JSON uses the `callees` schema. JSONL emits self-identifying `callee` facts followed by
 a summary. Text is a human rendering of the same typed facts.
 
+### `origins`
+
+Emits one call-origin fact for every physical Lua 5.1 `CALL` and `TAILCALL`. A fixed
+argument window contains exactly one owner-qualified, evidence-linked expression for
+each argument register. A top-dependent argument window is represented explicitly and
+never guessed.
+
+Expressions preserve typed literals, parameters, safe closure captures, global and
+constant-key field lookups, fixed call results, eager concatenations, table-construction
+inputs, and Lua unary and binary operations. `MOD` remains an opcode fact with both
+operands; callers may recognize a string-format convention without `luad` asserting
+runtime formatting semantics. Conflicting control-flow definitions, dynamic keys,
+mutable or ambiguous captures, varargs, aliasing boundaries, unreachable code, and
+analysis limits remain distinct machine-visible reasons.
+
+Operands are captured before the writing instruction changes its destination, so an
+operation such as `CONCAT A A C` cannot recurse into its own result. JSON uses the
+`origins` schema. JSONL emits self-identifying `origin` facts followed by a summary.
+
 ## Required layout and diagnostic records
 
 Evidence-backed machine output must expose the selected dialect/profile and validated layout, including byte order, declared widths, number-integrality, and how the profile was selected. Vendor constant tags such as LNUM tag 9 must not be reported as stock Lua 5.1 support.
@@ -193,7 +214,7 @@ JSON format returns a top-level `DiagnosticCatalogResponse` (`schema_version`, `
 
 Batch exports firmware artifacts in streaming JSONL format.
 `--max-facts-per-file N` bounds the number of counted fact records (`prototype`,
-`instruction`, `constant`, `upvalue`, `xref`, `callee`) emitted per input file while
+`instruction`, `constant`, `upvalue`, `xref`, `callee`, `origin`) emitted per input file while
 preserving stream framing, diagnostics, and per-file truncation metadata.
 
 Every data record has a required `context` object. Successful facts carry

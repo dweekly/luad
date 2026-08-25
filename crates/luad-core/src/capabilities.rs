@@ -93,6 +93,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "disasm".to_string(),
                 "validate".to_string(),
                 "symbolic callees (experimental)".to_string(),
+                "call-argument origins (experimental)".to_string(),
             ],
             status: SupportTier::Experimental,
             required_gates: vec![
@@ -101,6 +102,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "gate-closures-lua51".to_string(),
                 "gate-resolved-constants-lua51".to_string(),
                 "gate-symbolic-callees-lua51".to_string(),
+                "gate-argument-origins-lua51".to_string(),
             ],
             completed_gates: vec![],
             evidence: vec![

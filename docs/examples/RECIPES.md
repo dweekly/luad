@@ -92,7 +92,38 @@ classification and attacker-control policy in the consuming research layer.
 
 ---
 
-## 5. Reconstructing a Multi-Hop Upvalue Binding Chain
+## 5. Inspecting Call-Argument Origins Without Embedding Sink Policy
+
+List symbolic callees beside their bounded argument-expression facts using the stable
+call instruction ID as the join key:
+
+```bash
+luad export firmware/*.lua --format jsonl | jq -c '
+  select(.record_type == "callee" or .record_type == "origin") |
+  {file: .context.input_identity.path,
+   call: .data.call_id,
+   fact: .record_type,
+   data: .data}'
+```
+
+Find bytecode expressions that use `MOD` and retain a literal format operand. This is a
+retrieval recipe, not a claim that the runtime operation necessarily formats a string:
+
+```bash
+luad origins firmware/controller.lua --format json | jq -c '
+  .data.prototypes[].calls[] |
+  . as $call |
+  .argument_window.arguments[]? |
+  select(.origin.kind == "binary" and .origin.operator == "MOD") |
+  {call: $call.call_id, argument_index, origin}'
+```
+
+`CONCAT` and `table` nodes retain their contributing expressions recursively.
+`unknown` nodes retain the reason analysis stopped or refused to invent a merge.
+
+---
+
+## 6. Reconstructing a Multi-Hop Upvalue Binding Chain
 
 Trace the capture of local variables and parent upvalues into nested closure upvalues across prototype boundaries:
 
@@ -110,7 +141,7 @@ Output:
 
 ---
 
-## 6. Indexing Batch Exports in an External Database (e.g. SQLite)
+## 7. Indexing Batch Exports in an External Database (e.g. SQLite)
 
 Stream fact records directly into an SQLite database for SQL-based graph queries:
 
@@ -134,7 +165,7 @@ luad export firmware/*.luac --format jsonl | jq -r '
 
 ---
 
-## 7. Comparing Exports from Two Firmware Trees Externally
+## 8. Comparing Exports from Two Firmware Trees Externally
 
 Compare instruction inventories and sha256 digests between two firmware builds:
 
@@ -146,7 +177,7 @@ diff -u \
 
 ---
 
-## 8. Pagination with Context-Bound Cursors
+## 9. Pagination with Context-Bound Cursors
 
 Run paginated queries and fetch consecutive chunks:
 
@@ -170,7 +201,7 @@ fi
 
 ---
 
-## 9. Validating Live Output Against Schemas
+## 10. Validating Live Output Against Schemas
 
 Validate live output against canonical JSON Schemas using standard validation tooling:
 
@@ -180,6 +211,9 @@ luad inspect sample.luac --format json | jsonschema -i - chunk.schema.json
 
 luad schema callees > callees.schema.json
 luad callees sample.luac --format json | jsonschema -i - callees.schema.json
+
+luad schema origins > origins.schema.json
+luad origins sample.luac --format json | jsonschema -i - origins.schema.json
 
 luad schema export > export.schema.json
 luad export sample.luac --format jsonl | while read -r record; do

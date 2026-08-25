@@ -57,6 +57,13 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Machine interface
 
+- Added `origins` text/JSON/JSONL output and recursive `origin` export facts with one
+  bounded expression per fixed Lua 5.1 call argument, explicit open windows, eager
+  alias-safe operands, owner-qualified parameters, conservative captures, and typed
+  analysis cutoffs.
+- Origin expressions preserve constant-only and parameter-dependent `CONCAT`, all Lua
+  5.1 unary and binary operations including unclassified `MOD`, table-construction
+  inputs, fixed call results, CFG conflicts, unreachable calls, and mutation boundaries.
 - Added `callees` text/JSON/JSONL output and recursive `callee` export facts with one
   tagged resolution per Lua 5.1 call, symbolic label/prototype evidence, and typed
   unresolved reasons.

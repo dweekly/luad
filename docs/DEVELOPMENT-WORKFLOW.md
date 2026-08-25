@@ -397,11 +397,18 @@ and allowed paths; resume a large session only when preserving its context is wo
 reloading it.
 
 The wrapper removes Console credentials, verifies `claude.ai` authentication, pins the
-current `opus` alias at high effort, uses safe mode and a 1M autocompaction target,
-disables slash commands and connected MCP servers, and constrains both the available
-and preapproved tools. It emits streaming NDJSON, a detailed debug-log path, prompt
-hash, and wall time so the steward can distinguish provider latency, model reasoning,
-tool reads, permission denial, and an in-progress edit. Pass every required file and instruction explicitly.
+current `opus` alias, uses safe mode and a 1M autocompaction target, disables slash
+commands and connected MCP servers, and constrains both the available and preapproved
+tools. Tool-free design and read-only review use medium effort with a 180-second
+wall-time ceiling; acceptance authoring uses high effort and is interrupted at the
+durable-checkpoint limit described above. The review ceiling is configurable through
+`LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS` but remains an explicit positive integer. The
+tool-free design wrapper explicitly forbids repository inspection, tool use, delegation,
+and invented implementation detail; missing context is reported as ambiguity. The
+wrapper emits streaming NDJSON, a detailed debug-log path, prompt hash, and wall time
+so the steward can distinguish provider latency, model reasoning, tool reads,
+permission denial, and an in-progress edit. Pass every required file and instruction
+explicitly.
 Verify the init event resolves the expected canonical Opus model; the alias alone is
 not evidence. Do not use
 `--dangerously-skip-permissions`.
