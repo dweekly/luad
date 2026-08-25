@@ -22,23 +22,7 @@ an exact release, profile, layout, public surface, and evidence manifest.
 
 ## Delivery sequence
 
-### 1. Measure and resolve symbolic callees
-
-A bounded design spike will first measure call-site resolution coverage at intra-block,
-strict-dominator, and closure-capture tiers, plus conflicts, loop mutations, dynamic
-keys, and alias boundaries. The production matrix will then cover literal globals and
-tables, `require`-labeled module paths, deterministic local aliases, and multi-hop
-upvalue bindings.
-
-Every `CALL` and `TAILCALL` will expose an evidence-linked path or a typed unresolved
-reason. Module labels describe their literal loader basis; they do not assert runtime
-object identity.
-
-Exit outcome: firmware consumers can enumerate trustworthy symbolic callees without
-building a second Lua register/closure resolver, while incomplete coverage is loud and
-measurable.
-
-### 2. Expose bounded argument and value origins
+### 1. Expose bounded argument and value origins
 
 Call arguments and selected registers will link to a cycle-safe value-expression graph.
 The matrix will cover constants, parameters, upvalues, fields, call results,
@@ -53,7 +37,7 @@ Exit outcome: an external investigator can audit each origin edge, distinguish
 constant-only expressions from dependent computations, and tell “computed” from “the
 analysis stopped.”
 
-### 3. Publish provable call relations and prototype content identity
+### 2. Publish provable call relations and prototype content identity
 
 Cross-prototype call edges will be emitted only where closure construction, the value
 stored at that exact instruction, lookup, and invocation establish one target. The
@@ -67,7 +51,7 @@ the navigation identity; content identities enable ordinary cross-firmware joins
 Exit outcome: callers can build a provable partial call graph, answer “who calls this”
 where bytecode permits, and identify changed prototype bodies across firmware releases.
 
-### 4. Close queries, recipes, and the stable release
+### 3. Close queries, recipes, and the stable release
 
 Queries will cover callee paths, unresolved reasons, origin shapes, call relations,
 interpretation identity, and prototype content identity. Every predicate applies its
@@ -85,7 +69,7 @@ become minimized public regressions.
 Exit outcome: a human or AI agent can complete the reference firmware workflows with
 the supported CLI and a thin external judgment layer.
 
-### 5. Qualify additional targets independently
+### 4. Qualify additional targets independently
 
 Stock Lua layouts, Lua 5.2, 5.3, 5.4, 5.5, LuaJIT, and vendor mappings advance one exact
 target at a time. Vendor qualification may consume a provenance-bound mapping recovered
@@ -95,16 +79,13 @@ remain external.
 ## Dependency order
 
 ```text
-measured symbolic callees
-  -> bounded value origins
-       -> provable calls + content identity
-            -> query/recipe closure + stable release evidence
+bounded value origins
+  -> provable calls + content identity
+       -> query/recipe closure + stable release evidence
 ```
 
 ## Customer checkpoints
 
-- After symbolic callees: repeat a corpus-wide call-site survey using only
-  public machine output and report resolution coverage.
 - After value origins and call relations: trace representative format/concatenation
   arguments and caller relationships while leaving reachability and sink policy external.
 - Before release: investigate a different firmware version or objective without
