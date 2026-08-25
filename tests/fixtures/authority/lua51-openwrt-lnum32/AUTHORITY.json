@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "authority_id": "lua51-openwrt-lnum32-1da2e82c",
+  "profile": "lua5.1-lnum32",
+  "layout": "int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4",
+  "upstream": {
+    "lua_archive": {
+      "url": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
+      "sha256": "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333"
+    },
+    "openwrt_repository": "https://github.com/openwrt/openwrt.git",
+    "openwrt_revision": "1da2e82c1182a3fd681da5760be96821213afadd",
+    "package_recipe": {
+      "path": "package/utils/lua/Makefile",
+      "sha256": "01bf9f41cb70ce42ce094d12d5b8866521ec4d63c443d0058ffa8fc7df6d2607"
+    },
+    "patches": [
+      {
+        "path": "package/utils/lua/patches/010-lua-5.1.3-lnum-full-260308.patch",
+        "sha256": "af9193b55e9cdc1b9b204726c906e22fcd463bce8ac3e2fdec1b969fa8399052"
+      },
+      {
+        "path": "package/utils/lua/patches/011-lnum-use-double.patch",
+        "sha256": "4284e1d30796b3d91878603b3e22ecb6c7232ba6ba7c7bca9eeb9d7263a4aec9"
+      },
+      {
+        "path": "package/utils/lua/patches/012-lnum-fix-ltle-relational-operators.patch",
+        "sha256": "44c4cb48b73cfdbb33f216ac2f5f2f40726a97c91394b90080cbb68932ff1256"
+      },
+      {
+        "path": "package/utils/lua/patches/015-lnum-ppc-compat.patch",
+        "sha256": "134db797bade3c114e94c14ef331b454a49aba33b9a5fcb20bc155d4de2fef28"
+      },
+      {
+        "path": "package/utils/lua/patches/020-shared_liblua.patch",
+        "sha256": "9c0c5191e84df74f35de7ce1c840e31c1a309857ef08c6f820746d2cc47c0b76"
+      },
+      {
+        "path": "package/utils/lua/patches/030-archindependent-bytecode.patch",
+        "sha256": "a4c0f33770e6d004e495d093b66ab6641596fe546fd608473e1f59916a07b37d"
+      },
+      {
+        "path": "package/utils/lua/patches/040-use-symbolic-functions.patch",
+        "sha256": "4224d931ba5d24fb33403f11ba6adbd30031fec3eb36380f1e632ec8b4b58f48"
+      },
+      {
+        "path": "package/utils/lua/patches/050-honor-cflags.patch",
+        "sha256": "e7bdccac83984a190308f9e5d02f201c72cb8703039033daa6c7bd6af716bdab"
+      },
+      {
+        "path": "package/utils/lua/patches/100-no_readline.patch",
+        "sha256": "cea568c36adc5d0605f8a6f503365e7441cbcb31b9f11a57d6530247b87c44d0"
+      },
+      {
+        "path": "package/utils/lua/patches/200-lua-path.patch",
+        "sha256": "6b15f745550372a3841b252563ebb76868008ec0750131918f9381f20707a634"
+      },
+      {
+        "path": "package/utils/lua/patches/300-opcode_performance.patch",
+        "sha256": "953527850509aa9970a4a58ece9c46747bf0e6733c61715e523e6e744b910729"
+      }
+    ]
+  },
+  "build": {
+    "host_requirement": "little-endian native C toolchain",
+    "clean_command": "make -C src clean",
+    "library_command": "make -C src a",
+    "compiler_command": "make -C src luac-host",
+    "compiler_version": "Lua 5.1.5  Copyright (C) 1994-2012 Lua.org, PUC-Rio (double int32)",
+    "reference_compiler_sha256": "5d09175860c339307da8a0c81338c7e6ef57dbe5fe0497774bc6ac3e1c256575"
+  },
+  "fixtures": [
+    {
+      "source": "tests/fixtures/authority/lua51-openwrt-lnum32/authority_lnum32.lua",
+      "source_sha256": "84862a976e997c6cbab296de0c02b096814ebe34978b55e0b42469f3a026133c",
+      "output": "tests/fixtures/authority/lua51-openwrt-lnum32/authority_lnum32.luac",
+      "output_sha256": "21b751768c37a930607c8a04e803206554887ef9b8a6f9c415a8cba6a8be4a3c",
+      "command": "${AUTHORITY_ROOT}/lua-5.1.5/src/luac-host -o tests/fixtures/authority/lua51-openwrt-lnum32/authority_lnum32.luac tests/fixtures/authority/lua51-openwrt-lnum32/authority_lnum32.lua",
+      "stripped": false
+    },
+    {
+      "source": "tests/fixtures/authority/lua51-openwrt-lnum32/authority_lnum32.lua",
+      "source_sha256": "84862a976e997c6cbab296de0c02b096814ebe34978b55e0b42469f3a026133c",
+      "output": "tests/fixtures/authority/lua51-openwrt-lnum32/authority_lnum32_stripped.luac",
+      "output_sha256": "3ad36ac1e1b7d94fbfa6f4171c8c1257b80e1813780e258ca139b0b1601e223d",
+      "command": "${AUTHORITY_ROOT}/lua-5.1.5/src/luac-host -s -o tests/fixtures/authority/lua51-openwrt-lnum32/authority_lnum32_stripped.luac tests/fixtures/authority/lua51-openwrt-lnum32/authority_lnum32.lua",
+      "stripped": true
+    }
+  ]
+}
