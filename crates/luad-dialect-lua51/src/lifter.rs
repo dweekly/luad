@@ -524,6 +524,7 @@ fn lift_instruction_51(
         }
         Opcode51::Closure => {
             let child_bx = raw.bx as usize;
+            let child_path = proto.path.child(child_bx);
             let nups = proto
                 .protos
                 .get(child_bx)
@@ -532,7 +533,7 @@ fn lift_instruction_51(
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Prototype {
                 index: child_bx,
-                path: proto.path.child(child_bx),
+                path: child_path.clone(),
             });
             writes.push(EffectTarget::Register { index: raw.a });
 
@@ -558,7 +559,7 @@ fn lift_instruction_51(
             }
 
             explanation = format!(
-                "Instantiate closure proto:{child_bx} into R({}) with {nups} upvalue capture(s)",
+                "Instantiate closure proto:{child_path} into R({}) with {nups} upvalue capture(s)",
                 raw.a
             );
             citations.push("lua-5.1.5:src/lvm.c:1400".to_string());

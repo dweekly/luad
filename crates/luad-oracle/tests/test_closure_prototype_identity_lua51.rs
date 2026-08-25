@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use luad_analysis::{XrefRelation, XrefResponse};
+use luad_analysis::{QueryResponse, XrefRelation, XrefResponse};
 use luad_core::envelope::MachineDocument;
 use luad_core::{DisassembledPrototype, ResolvedFact};
 use sha2::{Digest, Sha256};
@@ -603,4 +603,85 @@ fn test_killer_omission_decode_and_reordering_rejected() {
     let mut reordered = base;
     reordered.closures.swap(0, 1);
     expect_rejection(&expected, &reordered.closures, "owner");
+}
+
+#[test]
+fn test_public_query_closure_summary_names_owner_relative_child_path() {
+    let fixture = workspace().join(CLOSURES_FIXTURE.0);
+    let expected = independent_closures(&fixture);
+    assert_eq!(
+        expected
+            .iter()
+            .map(|c| c.child_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["proto:0/0", "proto:0/0/0", "proto:0/0/0/0"],
+        "fixture covers nested child prototypes"
+    );
+
+    let observed = capture_public(&fixture, true);
+    let path_string = fixture.to_str().expect("UTF-8 fixture path");
+    let query_out = run(&[
+        "query",
+        path_string,
+        "--where",
+        "mnemonic == 'CLOSURE'",
+        "--format",
+        "json",
+        "--dialect",
+        "lua5.1",
+    ]);
+    assert!(query_out.status.success(), "public JSON query failed");
+    assert!(query_out.stderr.is_empty(), "query stderr must be empty");
+    schema_valid("query.schema.json", &query_out.stdout);
+
+    let query_doc: MachineDocument<QueryResponse> =
+        serde_json::from_slice(&query_out.stdout).expect("typed query document");
+
+    assert_eq!(
+        query_doc.data.matches.len(),
+        expected.len(),
+        "query returned expected number of CLOSURE instructions"
+    );
+
+    for (index, ((expected_item, observed_closure), query_match)) in expected
+        .iter()
+        .zip(&observed.closures)
+        .zip(&query_doc.data.matches)
+        .enumerate()
+    {
+        assert_eq!(
+            query_match.id.to_string(),
+            expected_item.instruction_id,
+            "query match[{index}] instruction ID matches independent expectation"
+        );
+        assert_eq!(
+            query_match.id.to_string(),
+            observed_closure.instruction_id,
+            "query match[{index}] instruction ID matches disasm observation"
+        );
+
+        let proto_ref = query_match
+            .summary
+            .split_whitespace()
+            .find(|w| w.starts_with("proto:"))
+            .unwrap_or_else(|| {
+                panic!(
+                    "query match[{index}] summary missing proto: prefix: {}",
+                    query_match.summary
+                )
+            });
+
+        assert_eq!(
+            proto_ref, expected_item.child_id,
+            "query summary proto reference must match independent owner+Bx-derived child path"
+        );
+        assert_eq!(
+            proto_ref, observed_closure.resolved_id,
+            "query summary proto reference must match typed disassembly fact"
+        );
+        assert_eq!(
+            proto_ref, observed_closure.xref_target,
+            "query summary proto reference must match xref target"
+        );
+    }
 }

@@ -51,6 +51,9 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Machine interface
 
+- Lua 5.1 `CLOSURE` query summaries and semantic IR explanations now report the
+  owner-relative child prototype path instead of formatting the local `Bx` index as a
+  root prototype.
 - Added `diagnostics [CODE] --format text|json` command and `schema diagnostics`
   publishing the frozen 108-code canonical diagnostic catalog with static lookup.
 - Added `export --max-facts-per-file` with deterministic per-input fact truncation,
