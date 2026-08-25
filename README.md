@@ -36,9 +36,9 @@ delete the document in the same change and update this index.
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-23 | Support policy, reporting channel, trust boundary, or threat model changes. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Evidence-gated planning, role separation, sprint lifecycle, and agent orchestration. | 2026-08-24 | Planning artifacts, agent roles, gate policy, or supported orchestration interfaces change. |
 | [`ROADMAP.md`](ROADMAP.md) | High-level product capabilities, dependency order, exit outcomes, and persistent exclusions. | 2026-08-24 | Product priorities, dependencies, qualification order, or exclusions change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | The sole active sprint contract for one measurable, independently gated unit of work. | 2026-08-25 | The sprint is accepted, respecified, or replaced; delete obsolete sprint content rather than retaining history. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | The sole active sprint contract for one measurable, independently gated unit of work. | 2026-08-24 | The sprint is accepted, respecified, or replaced; delete obsolete sprint content rather than retaining history. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-23 | New corpus evidence changes the target profile or workflows, or all unique requirements move into the PRD. |
-| [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-23 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
+| [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-24 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
 | [`docs/RELEASING.md`](docs/RELEASING.md) | Release prerequisites, real-customer validation, evidence bundle, versioning, and publication policy. | 2026-08-24 | Release gates, customer-validation boundary, artifact channels, version policy, signing, or publication procedure changes. |
 | [`docs/examples/RECIPES.md`](docs/examples/RECIPES.md) | Practical command-line and composition recipes for consuming machine JSON and JSONL output. | 2026-08-23 | Machine interface envelopes, export records, or CLI subcommands change. |
 
@@ -120,6 +120,7 @@ luad xrefs chunk.luac --to 'proto:0:upvalue:0' --format json
 luad query chunk.luac --where 'opcode == "CALL"' --format json
 luad diff old.luac new.luac --semantic --format json
 luad export firmware/*.lua --format jsonl --max-facts-per-file 10000
+luad diagnostics L51-REG-SPAN-001
 ```
 
 The `compile` command is present in the CLI surface but intentionally returns an unsupported-format error; `luad` does not currently execute an external compiler through that command.
@@ -131,7 +132,9 @@ Discover the live command and schema surface instead of scraping human-readable 
 ```console
 luad --help
 luad capabilities --format json
+luad diagnostics --format json
 luad schema capabilities
+luad schema diagnostics
 luad schema chunk
 luad schema instruction
 ```

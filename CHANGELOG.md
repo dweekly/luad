@@ -46,6 +46,8 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Machine interface
 
+- Added `diagnostics [CODE] --format text|json` command and `schema diagnostics`
+  publishing the frozen 108-code canonical diagnostic catalog with static lookup.
 - Added `export --max-facts-per-file` with deterministic per-input fact truncation,
   unsuppressed control and diagnostic records, and explicit emitted/available counts.
 

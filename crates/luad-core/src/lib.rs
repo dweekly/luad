@@ -4,6 +4,7 @@
 
 pub mod capabilities;
 pub mod diagnostic;
+pub mod diagnostic_catalog;
 pub mod dialect;
 pub mod disasm;
 pub mod envelope;
@@ -19,6 +20,11 @@ pub use capabilities::{
 };
 
 pub use diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
+pub use diagnostic_catalog::{
+    build_catalog_response, get_diagnostic_catalog, list_diagnostics, lookup_diagnostic,
+    DiagnosticCatalogResponse, DiagnosticDescriptor, StaticDiagnosticDescriptor,
+    DIAGNOSTIC_ENTRIES,
+};
 pub use dialect::{DetectionResult, Dialect, ResolvedInterpretation, SelectionMode};
 pub use disasm::{
     DisassembledInstruction, DisassembledOperand, DisassembledPrototype, EncodedOperands,

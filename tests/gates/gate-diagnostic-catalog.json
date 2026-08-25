@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-diagnostic-catalog",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_diagnostic_catalog",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_catalog_code_set_matches_independent_production_inventory",
+    "test_catalog_comparator_rejects_killer_mutations",
+    "test_catalog_descriptors_are_unique_sorted_complete_and_actionable",
+    "test_existing_diagnostic_instance_schema_remains_compatible",
+    "test_production_emitters_use_literal_diagnostic_codes",
+    "test_public_json_list_and_lookup_are_schema_valid_deterministic",
+    "test_public_text_list_and_lookup_golden",
+    "test_unknown_code_fails_closed"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-machine-contract",
+    "gate-validation-null-hypothesis",
+    "gate-validator-count-spans-lua51"
+  ],
+  "allowed_capability_mutations": []
+}
