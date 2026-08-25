@@ -1653,6 +1653,26 @@ fn join_rows() -> Vec<Row> {
 fn flow_rows() -> Vec<Row> {
     vec![
         Row {
+            name: "nan-key-label-converges-through-loop",
+            root: ProtoSpec::root(
+                3,
+                vec![
+                    gettable(1, 0, 0),
+                    iabc(OP_CALL, 1, 1, 1),
+                    iasbx(OP_JMP, 0, -3),
+                ],
+                vec![KeyConst::number_bits(0x7ff8_0000_0000_0000)],
+            ),
+            expect: vec![(
+                call_id("0", 1),
+                Expected::label(
+                    LookupKind::GetTable,
+                    KeyConst::number_bits(0x7ff8_0000_0000_0000),
+                    ev(&[("0", 0)]),
+                ),
+            )],
+        },
+        Row {
             name: "move-alias-hops",
             root: ProtoSpec::root(
                 4,

@@ -260,7 +260,7 @@ fn run_dataflow(
         } else {
             meet_predecessors(block, &out_states, frame_size)
         };
-        if incoming != in_states[block_idx] {
+        if !register_states_equal(&incoming, &in_states[block_idx]) {
             in_states[block_idx] = incoming.clone();
         }
 
@@ -279,7 +279,7 @@ fn run_dataflow(
             break;
         }
 
-        if state != out_states[block_idx] {
+        if !register_states_equal(&state, &out_states[block_idx]) {
             out_states[block_idx] = state;
             for edge in &block.successors {
                 if cfg.blocks[edge.to_block].is_reachable && queued.insert(edge.to_block) {
@@ -391,6 +391,105 @@ fn keys_join(
         ) => s1.raw_bytes == s2.raw_bytes,
         _ => false,
     }
+}
+
+fn constant_values_equal_for_state(
+    left: &luad_core::model::ConstantValue,
+    right: &luad_core::model::ConstantValue,
+) -> bool {
+    match (left, right) {
+        (luad_core::model::ConstantValue::Nil, luad_core::model::ConstantValue::Nil) => true,
+        (
+            luad_core::model::ConstantValue::Boolean(left),
+            luad_core::model::ConstantValue::Boolean(right),
+        ) => left == right,
+        (
+            luad_core::model::ConstantValue::Integer {
+                val: left_val,
+                raw_hex: left_hex,
+            },
+            luad_core::model::ConstantValue::Integer {
+                val: right_val,
+                raw_hex: right_hex,
+            },
+        ) => left_val == right_val && left_hex == right_hex,
+        (
+            luad_core::model::ConstantValue::Float {
+                val: left_val,
+                raw_hex: left_hex,
+                is_nan: left_nan,
+                is_inf: left_inf,
+            },
+            luad_core::model::ConstantValue::Float {
+                val: right_val,
+                raw_hex: right_hex,
+                is_nan: right_nan,
+                is_inf: right_inf,
+            },
+        ) => {
+            left_val.to_bits() == right_val.to_bits()
+                && left_hex == right_hex
+                && left_nan == right_nan
+                && left_inf == right_inf
+        }
+        (
+            luad_core::model::ConstantValue::ShortString(left),
+            luad_core::model::ConstantValue::ShortString(right),
+        )
+        | (
+            luad_core::model::ConstantValue::LongString(left),
+            luad_core::model::ConstantValue::LongString(right),
+        ) => left == right,
+        _ => false,
+    }
+}
+
+fn value_kinds_equal_for_state(left: &ValueKind, right: &ValueKind) -> bool {
+    match (left, right) {
+        (
+            ValueKind::LookupLabel {
+                lookup_kind: left_kind,
+                key: left_key,
+            },
+            ValueKind::LookupLabel {
+                lookup_kind: right_kind,
+                key: right_key,
+            },
+        ) => left_kind == right_kind && constant_values_equal_for_state(left_key, right_key),
+        (
+            ValueKind::SymbolicPath {
+                basis: left_basis,
+                segments: left_segments,
+            },
+            ValueKind::SymbolicPath {
+                basis: right_basis,
+                segments: right_segments,
+            },
+        ) => left_basis == right_basis && left_segments == right_segments,
+        (ValueKind::LiteralString(left), ValueKind::LiteralString(right)) => left == right,
+        (ValueKind::Closure(left), ValueKind::Closure(right)) => left == right,
+        (ValueKind::NonClosure, ValueKind::NonClosure) => true,
+        _ => false,
+    }
+}
+
+fn flow_values_equal_for_state(left: &FlowValue, right: &FlowValue) -> bool {
+    match (left, right) {
+        (FlowValue::Bottom, FlowValue::Bottom) => true,
+        (FlowValue::Unknown(left), FlowValue::Unknown(right)) => left == right,
+        (FlowValue::Known(left), FlowValue::Known(right)) => {
+            left.evidence == right.evidence && value_kinds_equal_for_state(&left.kind, &right.kind)
+        }
+        _ => false,
+    }
+}
+
+fn register_states_equal(left: &RegisterState, right: &RegisterState) -> bool {
+    left.len() == right.len()
+        && left
+            .iter()
+            .zip(right)
+            .all(|(left, right)| flow_values_equal_for_state(left, right))
 }
 
 fn values_join(left: &ValueKind, right: &ValueKind) -> bool {
