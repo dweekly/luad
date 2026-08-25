@@ -27,6 +27,29 @@ argument origins, provable call relations, corpus search, and content identity.
 Vendor key material, credential hashes, and extracted secrets remain outside this
 repository. Examples use placeholders or safely bounded prefixes and hashes.
 
+## Current corpus sizing facts
+
+The current release-build export over the 260-file reference tree completes 252 bytecode
+files, explicitly skips eight source files, and emits one terminal result for every
+input. The 252 chunks contain 344,120 physical instructions, 6,058 prototypes, and
+38,862 physical `CALL` or `TAILCALL` sites.
+
+The present callee fact distribution is 22,946 resolved symbolic paths, 3,690 resolved
+prototype values, and 12,226 explicit unresolved results. Thus 68.5% of all calls have
+a symbolic-path or exact-prototype fact. `overwritten` accounts for 8,710 (71.2%) of the
+unresolved results. At least 1,825 of those calls are immediately preceded by a
+constant-key `SELF`, making receiver-independent lookup labels a concrete factual
+coverage opportunity rather than a reason to infer receiver identity.
+
+Argument-origin output contains 37,663 fixed and 1,199 open call windows. Call relations
+contain 5,138 exact prototype edges and 33,724 explicit unresolved outcomes; the low edge
+fraction is expected because symbolic lookup labels do not establish prototype identity.
+
+On the current macOS arm64 reference machine, a release build exporting all facts to a
+sink completes in 53.83 seconds with a 167,641,088-byte maximum resident set size. A
+materialized JSONL stream is approximately 731 MiB. This is an end-to-end sizing point,
+not the independent per-stage benchmark required by PERF-008 and not release evidence.
+
 ## Research outcome
 
 A researcher or agent must be able to move from an unknown firmware tree to exact,

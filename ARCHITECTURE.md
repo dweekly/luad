@@ -36,9 +36,9 @@ Each decoder must construct a validated, immutable `ChunkLayout` from the chunk 
 ### `luad-analysis`
 
 Consumes the shared model and semantic instructions to produce CFGs, dominators, xrefs,
-queries, diffs, symbolic callee facts, call-argument origin expressions, and
-caller-to-prototype relations. It must not reparse bytecode or silently select a default
-dialect.
+queries, diffs, symbolic callee facts, call-argument origin expressions,
+caller-to-prototype relations, and versioned prototype subtree identities. It must not
+reparse bytecode or silently select a default dialect.
 
 Every analysis must state or enforce its preconditions. Invalid registers, jumps, stack
 references, or instruction modes can make analysis unavailable rather than merely less
@@ -77,6 +77,11 @@ Important facts identify their source byte range and derivation. Cursor-length a
 ### Identity is interpretation-scoped
 
 A `StableId` is stable only within one exact artifact and selected parse interpretation. A portable reference must eventually include the artifact SHA-256, resolved dialect/vendor profile, validated layout, parse mode and relevant analysis configuration, and stable object ID. No cross-build equivalence is implied.
+
+Prototype subtree identities are a separate, versioned content-join key. Their canonical
+preimage excludes artifact and structural identity while committing to decoded Lua 5.1
+instruction content, exact constants, capture shape, and ordered child identities. They
+do not replace artifact-local paths and do not assert source or behavioral equivalence.
 
 ### Invalid states fail closed
 

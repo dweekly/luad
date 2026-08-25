@@ -95,6 +95,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "symbolic callees (experimental)".to_string(),
                 "call-argument origins (experimental)".to_string(),
                 "provable call relations (experimental)".to_string(),
+                "prototype subtree identity (experimental)".to_string(),
             ],
             status: SupportTier::Experimental,
             required_gates: vec![
@@ -105,6 +106,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "gate-symbolic-callees-lua51".to_string(),
                 "gate-argument-origins-lua51".to_string(),
                 "gate-call-relations-lua51".to_string(),
+                "gate-prototype-identity-lua51".to_string(),
             ],
             completed_gates: vec![],
             evidence: vec![

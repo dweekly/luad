@@ -1585,6 +1585,10 @@ enum ExportRecord {
         context: JsonlRecordContext,
         data: luad_analysis::CallRelationFact,
     },
+    PrototypeIdentity {
+        context: JsonlRecordContext,
+        data: luad_analysis::PrototypeIdentityFact,
+    },
     Origin {
         context: JsonlRecordContext,
         data: luad_analysis::CallOriginFact,
@@ -1678,6 +1682,7 @@ fn count_available_facts_proto_tree(proto: &Prototype, disasm: &DisassembledProt
 fn emit_export_proto_tree(
     proto: &Prototype,
     disasm: &DisassembledPrototype,
+    identities: &std::collections::BTreeMap<StableId, luad_analysis::PrototypeIdentityFact>,
     emitter: &mut FactEmitter,
 ) {
     if !emitter.should_emit() {
@@ -1702,6 +1707,12 @@ fn emit_export_proto_tree(
         return;
     }
 
+    if let Some(identity) = identities.get(&proto.id) {
+        if !emitter.emit_fact("prototype_identity", identity) {
+            return;
+        }
+    }
+
     for inst in &disasm.instructions {
         if !emitter.emit_instruction(inst) {
             return;
@@ -1724,7 +1735,7 @@ fn emit_export_proto_tree(
         if !emitter.should_emit() {
             return;
         }
-        emit_export_proto_tree(child, child_disasm, emitter);
+        emit_export_proto_tree(child, child_disasm, identities, emitter);
     }
 }
 
@@ -1932,6 +1943,60 @@ fn handle_export(args: ExportArgs) {
         );
 
         let disasm = get_disasm_proto(&chunk.dialect, &chunk.main_proto);
+        let prototype_identity_analysis = if chunk.dialect.starts_with("lua5.1") {
+            match luad_analysis::analyze_chunk_prototype_identities(&chunk) {
+                Ok(analysis) => Some(analysis),
+                Err(error) => {
+                    failed_count += 1;
+                    let diagnostic = Diagnostic::error(
+                        "INTERNAL-IDENTITY-001",
+                        DiagnosticCategory::Analysis,
+                        StableId::Chunk,
+                        error.to_string(),
+                    );
+                    let context = JsonlRecordContext::successful(identity.clone(), interp);
+                    println!(
+                        "{}",
+                        serde_json::to_string(&JsonlDataRecord {
+                            record_type: "diagnostic".to_string(),
+                            context,
+                            data: diagnostic,
+                        })
+                        .unwrap_or_default()
+                    );
+                    println!(
+                        "{}",
+                        serde_json::to_string(&FileEndRecord {
+                            record_type: "file_end".to_string(),
+                            path: identity.path.clone(),
+                            status: "failed".to_string(),
+                            error: Some(error.to_string()),
+                            instruction_count: 0,
+                            diagnostic_count: 1,
+                            is_truncated: false,
+                            emitted_fact_count: 0,
+                            available_fact_count: 0,
+                        })
+                        .unwrap_or_default()
+                    );
+                    eprintln!("error: {path_str}: prototype identity analysis failed");
+                    continue;
+                }
+            }
+        } else {
+            None
+        };
+        let prototype_identities = prototype_identity_analysis
+            .as_ref()
+            .map(|analysis| {
+                analysis
+                    .prototypes
+                    .iter()
+                    .cloned()
+                    .map(|fact| (fact.proto_id.clone(), fact))
+                    .collect::<std::collections::BTreeMap<_, _>>()
+            })
+            .unwrap_or_default();
         let xref_index = XrefIndex::build(&chunk);
         let callee_analysis = chunk
             .dialect
@@ -1979,11 +2044,17 @@ fn handle_export(args: ExportArgs) {
             + xref_index.entries.len()
             + available_callee_count
             + available_origin_count
-            + available_call_relation_count;
+            + available_call_relation_count
+            + prototype_identities.len();
 
         let context = JsonlRecordContext::successful(identity.clone(), interp);
         let mut emitter = FactEmitter::new(context.clone(), args.max_facts_per_file);
-        emit_export_proto_tree(&chunk.main_proto, &disasm, &mut emitter);
+        emit_export_proto_tree(
+            &chunk.main_proto,
+            &disasm,
+            &prototype_identities,
+            &mut emitter,
+        );
 
         for entry in &xref_index.entries {
             if !emitter.emit_fact("xref", entry) {

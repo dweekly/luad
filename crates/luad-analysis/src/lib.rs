@@ -5,6 +5,7 @@ pub mod callgraph;
 pub mod cfg;
 pub mod diff;
 pub mod origins;
+pub mod prototype_identity;
 pub mod query;
 pub mod xrefs;
 
@@ -23,6 +24,10 @@ pub use origins::{
     analyze_chunk_origins, CallArgumentWindow, CallOriginFact, ChunkOriginAnalysis,
     FixedArgumentOrigin, OriginAnalysis, OriginExpression, OriginExpressionKind, OriginLiteral,
     OriginUnknownReason,
+};
+pub use prototype_identity::{
+    analyze_chunk_prototype_identities, ChunkPrototypeIdentityAnalysis, PrototypeIdentityError,
+    PrototypeIdentityFact, PROTOTYPE_IDENTITY_SCHEME_V1,
 };
 pub use query::{
     execute_query, QueryError, QueryExpr, QueryField, QueryMatch, QueryOp, QueryResponse,

@@ -7,12 +7,13 @@ use std::sync::OnceLock;
 
 use serde_json::{json, Value};
 
-const PINNED_CODES: [&str; 109] = [
+const PINNED_CODES: [&str; 110] = [
     "CORE-LIMIT-001",
     "CORE-LIMIT-002",
     "CORE-OVERFLOW-001",
     "CORE-SLICE-001",
     "CORE-TRUNC-001",
+    "INTERNAL-IDENTITY-001",
     "IO-001",
     "L51-BOOL-001",
     "L51-CHUNK-001",
@@ -165,6 +166,8 @@ const CONTROL_FLOW_CODES: [&str; 5] = [
     "L54-VAL-JUMP-001",
     "L55-JMP-001",
 ];
+
+const ANALYSIS_CODES: [&str; 1] = ["INTERNAL-IDENTITY-001"];
 
 const STRUCTURE_CODES: [&str; 31] = [
     "IO-001",
@@ -388,7 +391,15 @@ fn quoted_after(source: &str, start: usize) -> Option<String> {
 
 fn is_code(value: &str) -> bool {
     [
-        "CORE-", "IO-", "L51-", "L52-", "L53-", "L54-", "L55-", "PARSE-",
+        "CORE-",
+        "INTERNAL-",
+        "IO-",
+        "L51-",
+        "L52-",
+        "L53-",
+        "L54-",
+        "L55-",
+        "PARSE-",
     ]
     .iter()
     .any(|prefix| value.starts_with(prefix))
@@ -513,7 +524,9 @@ fn expected_metadata(code: &str) -> (&'static str, &'static str) {
     } else {
         "error"
     };
-    let category = if CONTROL_FLOW_CODES.contains(&code) {
+    let category = if ANALYSIS_CODES.contains(&code) {
+        "analysis"
+    } else if CONTROL_FLOW_CODES.contains(&code) {
         "control-flow"
     } else if STRUCTURE_CODES.contains(&code) {
         "structure"

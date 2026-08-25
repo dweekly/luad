@@ -6,6 +6,8 @@ usage() {
 Usage:
   scripts/agents/claude-opus.sh design-review PROMPT_FILE
   scripts/agents/claude-opus.sh review-fresh PROMPT_FILE
+  scripts/agents/claude-opus.sh review-start PROMPT_FILE
+  scripts/agents/claude-opus.sh review-resume SESSION_ID PROMPT_FILE
   scripts/agents/claude-opus.sh acceptance-start PROMPT_FILE
   scripts/agents/claude-opus.sh acceptance-resume SESSION_ID PROMPT_FILE
 
@@ -14,10 +16,12 @@ credentials are removed from the child environment so they cannot silently
 override the subscription. Output is streaming Claude Code NDJSON; the final
 `result` event carries cumulative session usage. Set LUAD_CLAUDE_DEBUG_FILE to
 choose the detailed CLI debug log. Read-only review stages use medium effort and
-a 180-second wall-time ceiling by default; set LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS
+a 600-second wall-time ceiling by default; set LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS
 to a positive integer to change that ceiling.
 
 review-fresh       Independent read-only review with no persisted session.
+review-start       Start a persistent, bounded read-only review session.
+review-resume      Continue that review without repeating repository discovery.
 design-review      Critique a self-contained design without repository tools.
 acceptance-start   Start a persistent acceptance-author session.
 acceptance-resume  Inject a checkpoint into that same session.
@@ -41,6 +45,19 @@ case "$stage" in
   review-fresh)
     prompt_file=${2:-}
     session_args=(--no-session-persistence)
+    ;;
+  review-start)
+    prompt_file=${2:-}
+    session_args=()
+    ;;
+  review-resume)
+    session_id=${2:-}
+    prompt_file=${3:-}
+    if [[ ! "$session_id" =~ ^[a-zA-Z0-9-]+$ ]]; then
+      echo "invalid Claude session ID" >&2
+      exit 2
+    fi
+    session_args=(--resume "$session_id")
     ;;
   acceptance-start)
     prompt_file=${2:-}
@@ -112,7 +129,7 @@ common=(
 )
 clean_env=(env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL)
 
-review_timeout_seconds=${LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS:-180}
+review_timeout_seconds=${LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS:-600}
 if [[ ! "$review_timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
   echo "LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS must be a positive integer" >&2
   exit 2
@@ -137,7 +154,7 @@ case "$stage" in
       --tools "" \
       --permission-mode plan
     ;;
-  review-fresh)
+  review-fresh|review-start|review-resume)
     run_bounded_review "${session_args[@]}" \
       --tools "Read,Glob,Grep" \
       --permission-mode plan \

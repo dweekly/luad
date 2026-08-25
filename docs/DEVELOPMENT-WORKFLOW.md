@@ -399,7 +399,7 @@ reloading it.
 The wrapper removes Console credentials, verifies `claude.ai` authentication, pins the
 current `opus` alias, uses safe mode and a 1M autocompaction target, disables slash
 commands and connected MCP servers, and constrains both the available and preapproved
-tools. Tool-free design and read-only review use medium effort with a 180-second
+tools. Tool-free design and read-only review use medium effort with a 600-second
 wall-time ceiling; acceptance authoring uses high effort and is interrupted at the
 durable-checkpoint limit described above. The review ceiling is configurable through
 `LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS` but remains an explicit positive integer. The
@@ -413,11 +413,15 @@ Verify the init event resolves the expected canonical Opus model; the alias alon
 not evidence. Do not use
 `--dangerously-skip-permissions`.
 
-Independent review uses the same read-only wrapper and shell-free tools. An eight-turn
-ceiling is normally sufficient for one sprint contract,
-its frozen acceptance module, and the candidate production paths. Increase the review
+Independent review uses the same read-only wrapper and shell-free tools. One bounded
+review turn normally covers one sprint contract, its frozen acceptance module, and the
+candidate production paths. Increase the review
 surface only when the claim requires it; a large duplicated oracle is a reason to
 narrow acceptance, not automatically to allocate more reviewer context.
+Use `review-start` when the review might need a second bounded turn. If its wall-time
+ceiling expires after useful inspection, use `review-resume` with a short prompt that
+names the remaining question or requests the verdict; do not restart discovery in a
+fresh context. Use `review-fresh` for a deliberately single-turn independent pass.
 
 ### Antigravity implementation agent
 
@@ -488,6 +492,8 @@ Repository-owned wrappers are the canonical provider interface:
 
 ```console
 scripts/agents/claude-opus.sh review-fresh PROMPT_FILE
+scripts/agents/claude-opus.sh review-start PROMPT_FILE
+scripts/agents/claude-opus.sh review-resume SESSION_ID PROMPT_FILE
 scripts/agents/claude-opus.sh acceptance-start PROMPT_FILE
 scripts/agents/claude-opus.sh acceptance-resume SESSION_ID PROMPT_FILE
 scripts/agents/agy-gemini.sh access

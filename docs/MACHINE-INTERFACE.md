@@ -111,6 +111,92 @@ Every JSONL fact carries that context directly.
 
 Invalid or absent targets should fail closed. Report any command that silently falls back to another object.
 
+## Lua 5.1 prototype subtree identity
+
+Successful Lua 5.1 export emits one `prototype_identity` fact per prototype in
+structural preorder:
+
+```json
+{"proto_id":"proto:0/2","scheme":"luad-prototype-v1","digest":"sha256:<64 lowercase hex>"}
+```
+
+The digest commits to decoded subtree content, not source identity or behavioral
+equivalence. Equal v1 digests mean that the two records have equal v1 preimages. Unequal
+digests do not prove different runtime behavior. Artifact-local `proto_id` remains the
+navigation key.
+
+The v1 preimage starts with ASCII `luad-prototype-v1` and a zero byte. Integers use
+big-endian fixed widths; collection counts and byte-string lengths use `u64`. The tagged
+prototype record contains, in order: length-prefixed base dialect `lua5.1`, `numparams`,
+the exact Lua 5.1 vararg byte, `maxstacksize`, physical-PC-ordered typed disassembly
+records, ordered constants, upvalue count, and ordered tagged raw child digests. Each
+instruction contains its role, mnemonic, and ordered typed operands. Resolutions retain
+only owner-local indices, target PCs, or metamethod bytes. Lua 5.1 closure capture
+descriptors use the `closure_binding` role; synthesized generic upvalue descriptor fields
+are not encoded.
+
+The v1 role vocabulary is exactly `instruction` and `closure_binding`. The v1 base
+mnemonic vocabulary is exactly:
+
+```text
+MOVE LOADK LOADBOOL LOADNIL GETUPVAL GETGLOBAL GETTABLE SETGLOBAL
+SETUPVAL SETTABLE NEWTABLE SELF ADD SUB MUL DIV MOD POW UNM NOT LEN
+CONCAT JMP EQ LT LE TEST TESTSET CALL TAILCALL RETURN FORLOOP FORPREP
+TFORLOOP SETLIST CLOSE CLOSURE VARARG
+```
+
+An unknown six-bit opcode uses `OP_UNKNOWN_0xNN`, where `NN` is exactly two lowercase
+hexadecimal digits. A closure-binding record appends the exact ASCII suffix
+` (binding descriptor)` to its decoded base mnemonic. These strings are digest input,
+not display aliases; changing any spelling requires a new identity scheme.
+
+| Tag | Record or variant | Payload |
+|---:|---|---|
+| `0x01` | prototype | fixed ordered prototype fields |
+| `0x02` | instruction | role, mnemonic, operands |
+| `0x03` | operand | operand kind, resolution |
+| `0x04` | child digest | 32 raw SHA-256 bytes |
+| `0x10` | nil constant | none |
+| `0x11` | boolean constant | `u8` |
+| `0x12` | integer constant | length and exact chunk bytes |
+| `0x13` | float constant | length and exact chunk bytes |
+| `0x14` | short string | parsed payload bytes |
+| `0x15` | long string | parsed payload bytes |
+| `0x20` | register operand | `u8` index |
+| `0x21` | unsigned immediate | `u64` |
+| `0x22` | signed immediate | `i64` two's complement |
+| `0x23` | flag operand | `u8` |
+| `0x24` | raw operand | `u64` |
+| `0x30` | no resolution | none |
+| `0x31` | constant resolution | `u64` owner-local index |
+| `0x32` | upvalue resolution | `u8` owner-local index |
+| `0x33` | local resolution | `u64` owner-local index |
+| `0x34` | prototype resolution | `u64` owner-local index |
+| `0x35` | jump resolution | `u64` target PC |
+| `0x36` | metamethod resolution | length-prefixed name bytes |
+
+String payloads exclude Lua's serialized trailing zero because parsing has already
+removed it. Numeric variants and byte widths remain distinct; no value coercion occurs,
+so integer and float representations, signed zero, and NaN payloads remain different.
+The preimage excludes artifact identity, structural paths, stable IDs, source/debug
+metadata, byte offsets, raw words, display text, comments, diagnostics, and confidence.
+Any encoding or decoded-fact mapping change that alters the preimage requires a new
+scheme identifier; v1 never changes meaning.
+
+The complete normative vector below is an empty Lua 5.1 prototype with zero parameters,
+the exact vararg byte `0x00`, a maximum stack size of two, and no instructions,
+constants, upvalues, or children. The preimage is 68 bytes:
+
+```text
+6c7561642d70726f746f747970652d7631000100000000000000066c7561352e310000020000000000000000000000000000000000000000000000000000000000000000
+```
+
+Its identity is:
+
+```text
+sha256:b5568c02c95499f55261b286ab13e7f86b2beab5b113ee15c7d0d47dbecfea50
+```
+
 ## Commands
 
 ### `inspect`
@@ -221,7 +307,8 @@ remain experimental until an exact target release is promoted.
 
 ### `diagnostics`
 
-Discovers and queries the canonical catalog of all 108 production-emittable diagnostic codes without requiring an input artifact.
+Discovers and queries the canonical catalog of all production-emittable diagnostic codes
+without requiring an input artifact.
 
 ```console
 luad diagnostics [CODE] --format text|json
@@ -235,7 +322,8 @@ JSON format returns a top-level `DiagnosticCatalogResponse` (`schema_version`, `
 
 Batch exports firmware artifacts in streaming JSONL format.
 `--max-facts-per-file N` bounds the number of counted fact records (`prototype`,
-`instruction`, `constant`, `upvalue`, `xref`, `callee`, `origin`, `call_relation`)
+`instruction`, `constant`, `upvalue`, `prototype_identity`, `xref`, `callee`, `origin`,
+`call_relation`)
 emitted per input file while preserving stream framing, diagnostics, and per-file
 truncation metadata.
 
@@ -247,8 +335,9 @@ Consumers may discard or interleave control records without losing fact attribut
 
 Each requested input produces exactly one terminal `file_end` status: `succeeded` for a
 complete recognized chunk, `skipped` for readable source or unsupported/malformed
-formats, and `failed` for an unreadable input. Duplicate paths are processed per
-occurrence. Every non-success is path-qualified in both its records and stderr.
+formats, and `failed` when input or an internal required export analysis cannot
+complete. Duplicate paths are processed per occurrence. Every non-success is
+path-qualified in both its records and stderr.
 `export_end` is the completeness marker and reports `files_processed`,
 `files_succeeded`, `files_skipped`, and `files_failed`, where processed equals the sum of
 the three outcomes. Its absence means the stream is incomplete.

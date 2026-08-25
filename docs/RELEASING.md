@@ -26,17 +26,23 @@ Before cutting any release:
 6. Run the maintained fuzz corpus and configured time-bounded fuzz jobs.
 7. Review `luad capabilities --format json --evidence` against actual gate results.
 8. Ensure README support status is generated from or identical to the evidence manifest.
-9. Exercise the release candidate through an independent real-customer reverse-engineering
-   workflow against representative target firmware. Convert reproducible correctness
-   defects into minimized redistributable fixtures and passing gates before release.
-10. Update `CHANGELOG.md`, version metadata, schemas when necessary, and this release procedure.
-11. Build release artifacts on each supported target and smoke-test their CLI and schemas.
+9. Exercise the release candidate through an internal uncoached reverse-engineering
+   workflow using a different model family, a different firmware version or vendor, and
+   an objective authored independently of the implementation steward.
+10. Give a pre-release binary and public-firmware quickstart to at least one outside human
+    using different vendor firmware. Collect command history and friction without coaching;
+    self-play does not satisfy this checkpoint.
+11. Convert every reproducible correctness defect from either customer checkpoint into a
+    minimized redistributable fixture and passing gate before release.
+12. Update `CHANGELOG.md`, version metadata, schemas when necessary, and this release procedure.
+13. Build release artifacts on each supported target and smoke-test their CLI and schemas.
 
-The real-customer checkpoint evaluates whether the public CLI composes into actual
-research work. It does not authorize shipping private firmware, embedding researcher
-judgment in `luad`, or replacing deterministic public evidence with an anecdotal run.
-Usability feedback may inform the next roadmap; a correctness defect in a claimed
-surface blocks release until independently reproducible.
+The customer checkpoints evaluate whether the public CLI composes into actual research
+work and whether the steward's own assumptions transfer to a separate user and firmware
+family. They do not authorize shipping private firmware, embedding researcher judgment
+in `luad`, or replacing deterministic public evidence with an anecdotal run. Usability
+feedback may inform the next roadmap; a correctness defect in a claimed surface blocks
+release until independently reproducible.
 
 ## Evidence bundle
 

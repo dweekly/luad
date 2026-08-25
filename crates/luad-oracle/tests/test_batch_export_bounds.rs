@@ -1,6 +1,6 @@
 //! Frozen acceptance boundary for the per-file export fact-bounds claim.
 //!
-//! Contract: `docs/NEXT-SPRINT.md` ("Active sprint: per-file export fact bounds").
+//! Contract: `docs/MACHINE-INTERFACE.md` (`export` fact bounds).
 //! Canonical gate: `gate-batch-export-bounds`.
 //!
 //! Authority rules observed by this module:
@@ -39,8 +39,9 @@ const CONTROL_RECORD_TYPES: [&str; 5] = [
 ];
 
 /// Ordinary fact records counted against `--max-facts-per-file`.
-const COUNTED_FACT_RECORD_TYPES: [&str; 8] = [
+const COUNTED_FACT_RECORD_TYPES: [&str; 9] = [
     "prototype",
+    "prototype_identity",
     "instruction",
     "constant",
     "upvalue",
