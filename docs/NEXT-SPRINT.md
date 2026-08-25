@@ -1,111 +1,81 @@
-# Active sprint: provable Lua 5.1 call relations
+# Active sprint: trustworthy mixed-tree export outcomes
 
-Lane: semantic analysis. Target: expose an auditable partial call graph from unique
-bytecode-local closure identities without claiming runtime reachability.
+Lane: patch. Target: make recursive export safe to compose over firmware trees that mix
+supported bytecode, ordinary Lua source, unreadable paths, and unsupported formats.
 
 ## Claim and researcher value
 
-Every Lua 5.1 `CALL` and `TAILCALL` will carry one typed target-resolution result. When
-validated closure construction, deterministic value flow, storage, lookup, and
-invocation establish one child prototype, the result will link the caller instruction
-to that exact artifact-local prototype. Otherwise it will state why no unique relation
-is available.
+An export run that emits at least one complete successful file result will exit
+successfully by default, even when other inputs are skipped. Every skipped input will be
+named in machine records and stderr, and the final summary will state succeeded and
+skipped counts. A run that exports no input, encounters a stream or list I/O failure, or
+is invoked with `--strict` and any failed input will exit nonzero.
 
-Researchers will be able to ask which statically established call sites refer to a
-prototype without reconstructing register assignments or confusing symbolic names with
-prototype identity. The result is a bytecode-local relation, not a claim that the call
-executes, is reachable from an external entry point, or retains that target after
-unobserved runtime mutation.
+This lets researchers use `luad export --input-list ...` under `set -e` and
+`set -o pipefail` without treating expected plaintext files as a truncated corpus, while
+still making incomplete coverage explicit and auditable.
 
 ## Contract
 
-The analysis will consume the parsed prototype tree, shared semantic instructions, CFG
-facts, closure-binding records, and existing symbolic callee facts. It will not decode
-raw instruction words, infer source-language function names, or equate a symbolic path
-with a prototype unless storage evidence connects them.
+Default export classifies each requested input independently:
 
-Each physical call receives exactly one result from a tagged union:
+- `succeeded`: a complete per-file fact stream was emitted;
+- `skipped`: bytes were read but are not a supported bytecode interpretation, with a
+  typed diagnostic distinguishing plain Lua source from an unknown or malformed format;
+- `failed`: the input could not be read or the output stream could not be completed.
 
-- `resolved`, containing the exact caller instruction ID, callee prototype ID, a closed
-  resolution basis, and sorted stable evidence IDs;
-- `unresolved`, containing the caller instruction ID, a typed reason, and all evidence
-  available at the stopping boundary.
+Every per-file diagnostic and `file_end` carries the exact input path. Parse helpers used
+inside batch export will return errors to the batch coordinator without printing a
+pathless duplicate. Human stderr emits one path-qualified line per skipped or failed
+input and one deterministic terminal summary. JSONL stdout remains uncontaminated.
 
-The closed unresolved taxonomy will distinguish at least missing definitions,
-conflicting reaching definitions, multiple prototype stores for one symbolic location,
-dynamic keys, observed mutation, open value windows, unsupported instructions,
-unreachable calls, and declared analysis limits. The focused matrix will pin the
-store-related and control-flow reasons introduced by this claim; the symbolic-callee
-prerequisite gate pins the inherited stop reasons. A symbolic callee name without a
-unique closure store remains unresolved.
+The terminal `export_end` record will report requested, succeeded, skipped, and failed
+counts. Default exit status is zero only when at least one input succeeded and no fatal
+I/O or stream error occurred. `--strict` makes any skipped or failed input nonzero after
+the complete framed stream and summary are emitted. Zero successful inputs are always
+nonzero.
 
-The value domain will retain exact child-prototype identities through `CLOSURE`, `MOVE`,
-fixed register writes, and validated parent-to-child upvalue bindings. It will preserve
-the value present at a store instruction: a later `CLOSURE` reusing the same register
-cannot retroactively change an earlier literal `SETGLOBAL`. CFG joins retain one target
-only when every reachable predecessor agrees. Upvalue and table stores are separate
-claims outside this sprint.
-
-Global relations require one compatible closure store for the exact raw literal global
-name in the analyzed chunk. Multiple stores, dynamic environment access, or evidence of
-a non-closure value produce an explicit unresolved result. Direct and captured closure
-relations require an exact closure-binding chain and become unresolved when a shared
-capture can be mutated ambiguously.
-
-The CLI will expose `callgraph` in text, JSON, and self-identifying JSONL. Recursive
-export will emit the same relation facts. Xrefs will expose a `calls` relation from the
-call instruction to the child prototype for resolved records; unresolved calls remain
-discoverable through the callgraph facts rather than disappearing.
+Plain Lua source detection remains bounded and deterministic. Inputs that resemble Lua
+bytecode but do not match a supported interpretation retain a distinct diagnostic from
+plain source. This sprint does not claim to distinguish every malformed stock chunk from
+every vendor dialect.
 
 ## Acceptance matrix
 
-One redistributable compiler-shaped fixture will cover direct local closure calls,
-`MOVE` aliases, literal global store/load pairs, closure capture through three prototype
-levels, parent-upvalue capture, and `TAILCALL`. It will include same-target CFG joins,
-conflicting-target joins, observed capture mutation, overwritten values, missing global
-stores, multiple global stores, and non-closure global stores.
+One table-driven test matrix will cover:
 
-An adjacent-closure sequence will pin the store-time rule: two `CLOSURE` instructions
-reuse one register around intervening stores, and each later call must resolve to the
-prototype held at its own store PC. A separate global-collision case will prove that a
-name with multiple compatible stores is not guessed.
+- all-success, mixed bytecode/source, mixed bytecode/unknown-format, mixed
+  bytecode/missing-path, all-source, all-unknown, and all-missing input lists;
+- default and `--strict` exit status for each applicable row;
+- exact `file_start`, diagnostic, `file_end`, and `export_end` counts and statuses;
+- path presence in every structured and stderr failure report;
+- deterministic stdout and stderr across repeated runs;
+- valid JSONL framing through the terminal record for every non-stream-I/O case;
+- stdin and file-backed input lists, duplicate paths, and paths containing spaces.
 
-The matrix will assert one result per physical call, exact caller/callee owner paths,
-sorted evidence, resolved/unresolved histograms, agreement across text, JSON, JSONL,
-xrefs, and recursive export, and automatic plus explicit LNUM32 profile selection.
-
-Killer controls will swap adjacent prototype targets, drop a closure-binding hop, erase
-one conflicting predecessor, turn a multiple-store result into a unique relation, remove
-one physical call fact, invent a calls xref for an unresolved result, and mutate a stable
-evidence ID. Every mutation must be rejected against facts recomputed from the fixture
-rather than trusting the serialized result.
-
-A supplemental customer-corpus survey may report relation coverage and unresolved
-reason distribution. Those measurements guide later product choices and never decide
-correctness or gate acceptance.
+Killer controls will flip a mixed-run exit code, erase a failed path, merge skipped and
+failed counts, remove the terminal summary, classify source as unknown, and mark an
+all-skipped run successful. Each mutation must be rejected against the table-derived
+expectation.
 
 ## Allowed production paths
 
-- `crates/luad-analysis/src/callgraph.rs` and narrowly shared dataflow helpers
-- `XrefRelation` integration without re-decoding instructions
-- command parsing and rendering in `crates/luad-cli`
-- recursive export and public capability/schema discovery
-- redistributable fixtures, focused oracle tests, one gate spec and runner
-- indexed machine-interface, recipe, status, architecture, and changelog documentation
+- export argument parsing and coordination in `crates/luad-cli`
+- export envelope fields and generated schemas/examples
+- the existing batch-export test module and one focused gate
+- indexed machine-interface, recipe, status, PRD, roadmap, and changelog documentation
 
 ## Non-goals
 
-This sprint does not infer authentication, attacker control, sink severity, runtime
-reachability, dynamic dispatch, module-loading behavior, callback execution order, or
-whole-program side effects. It does not assign source names, add SSA, persist research
-state, compute content hashes, expand query grammar, propagate prototype identity through
-arbitrary call results or table aliases, or promote a support tier. A resolved relation
-is not proof that a call executes in any particular deployment.
+This sprint does not add directory discovery, globbing, source compilation, vendor
+dialect recovery, content identity, query predicates, security classification, or
+persistent state. It does not downgrade malformed recognized bytecode to success or hide
+any per-file diagnostic. It does not make a successful process status mean that every
+requested input was bytecode.
 
 ## Verification and stop condition
 
-Acceptance requires the call-relation matrix and killer controls, canonical xref,
-machine-interface, batch-export, and aggregate repository checks, green pull-request CI,
-and a clean merged revision with local `main` equal to `origin/main`. The sprint stops
-rather than converting a symbolic name, possible target, or corpus convention into a
-unique prototype relation.
+Acceptance requires the table and killer controls, canonical batch-export and
+machine-interface checks, aggregate repository checks, green pull-request CI, and a clean
+merged revision with local `main` equal to `origin/main`. The sprint stops rather than
+guessing whether an unsupported byte sequence is a vendor dialect.

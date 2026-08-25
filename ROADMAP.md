@@ -22,15 +22,15 @@ an exact release, profile, layout, public surface, and evidence manifest.
 
 ## Delivery sequence
 
-### 1. Publish provable call relations
+### 1. Make mixed-tree export operationally trustworthy
 
-Cross-prototype call edges will be emitted only where closure construction, the value
-stored at that exact instruction, lookup, and invocation establish one target. The
-matrix will cover global storage, closure/upvalue storage, ambiguity, and the
-off-by-one-sensitive sequence of adjacent closure writes.
+Batch export will distinguish usable partial corpus results from total failure. Every
+failed input will be attributable by path in structured records and human diagnostics,
+and the terminal summary plus exit status will let shell pipelines distinguish skipped
+non-bytecode inputs from an unusable or interrupted run.
 
-Exit outcome: callers can build a provable partial call graph and answer “who calls
-this” where bytecode-local construction and dataflow evidence establish one target.
+Exit outcome: callers can export ordinary mixed firmware trees under `set -e` while
+retaining exact skipped-input evidence and detecting runs that produced no usable facts.
 
 ### 2. Add prototype content identity
 
@@ -69,15 +69,16 @@ remain external.
 ## Dependency order
 
 ```text
-provable calls
+mixed-tree export trust
   -> content identity
        -> query/recipe closure + stable release evidence
 ```
 
 ## Customer checkpoints
 
-- After call relations: trace representative format/concatenation arguments and caller
-  relationships while leaving reachability and sink policy external.
+- After content identity: trace representative format/concatenation arguments, caller
+  relationships, and cross-version matches while leaving reachability and sink policy
+  external.
 - Before release: investigate a different firmware version or objective without
   implementation guidance.
 
