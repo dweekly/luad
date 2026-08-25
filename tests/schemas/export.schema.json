@@ -236,6 +236,28 @@
           "$ref": "#/definitions/JsonlRecordContext"
         },
         "data": {
+          "$ref": "#/definitions/PrototypeIdentityFact"
+        },
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "prototype_identity"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "context",
+        "data",
+        "record_type"
+      ],
+      "properties": {
+        "context": {
+          "$ref": "#/definitions/JsonlRecordContext"
+        },
+        "data": {
           "$ref": "#/definitions/CallOriginFact"
         },
         "record_type": {
@@ -2016,6 +2038,25 @@
     },
     "ProtoPath": {
       "type": "string"
+    },
+    "PrototypeIdentityFact": {
+      "type": "object",
+      "required": [
+        "digest",
+        "proto_id",
+        "scheme"
+      ],
+      "properties": {
+        "digest": {
+          "type": "string"
+        },
+        "proto_id": {
+          "$ref": "#/definitions/StableId"
+        },
+        "scheme": {
+          "type": "string"
+        }
+      }
     },
     "ResolvedFact": {
       "description": "Resolved semantic target or value attached to an operand.",

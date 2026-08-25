@@ -4,6 +4,11 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+- Added versioned `luad-prototype-v1` subtree-content identities to Lua 5.1 recursive
+  export, with a normative binary encoding, debug/path invariance, ordered child
+  commitment, exact constant bytes, public schema/capability discovery, and a dedicated
+  mutation-sensitive gate.
+
 - Qualified every maintained public read surface against the reproducible OpenWrt
   Lua 5.1.5 LNUM32 compiler and made the compiler comparison mandatory.
 - Release evidence now rejects noncanonical Lua 5.1 profile/layout pairs and

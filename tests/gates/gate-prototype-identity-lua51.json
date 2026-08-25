@@ -1,0 +1,55 @@
+{
+  "schema_version": 2,
+  "gate_id": "gate-prototype-identity-lua51",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_prototype_identity_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_child_propagation_order_and_twin_position_invariance",
+    "test_every_included_field_family_changes_identity",
+    "test_identity_golden_and_debug_invariance",
+    "test_identity_schema_capability_and_format_are_public",
+    "test_lnum_selection_agrees_and_other_dialects_emit_no_identity",
+    "test_recursive_export_matches_direct_analysis_and_count_closure"
+  ],
+  "required_compiler_version": "Lua 5.1.5",
+  "required_compiler_sha256": {
+    "linux-x86_64": "e2ba74327f3a4662689b9e58909b410af8635add51a35b951021d0b1d90c6000",
+    "macos-aarch64": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239"
+  },
+  "required_fixtures": [
+    {
+      "path": "tests/fixtures/precompiled/lua51/hello.luac",
+      "sha256": "d64567d2d41ff584b86602f98fff5906f58f101f6faf98598f3662bac6e96a4f"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua51/hello_stripped.luac",
+      "sha256": "bae8346d80cefddb52839e414c7f7f77436db2e2b2375909e4f18b385d14484f"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua51/closures.luac",
+      "sha256": "62c4438b660880fa546cbe377d1f40113d2efc25aefc40df227979276efa756e"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua51_lnum32/hello.luac",
+      "sha256": "8376be37ec3042d3b0a87aa39db7d7396fb54ae390abe346d885e1527d23e353"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua54/hello.luac",
+      "sha256": "a171c4c88ec40b1c871a57a888f66d7a93144e1d742f4071af286c9dc7b93575"
+    }
+  ],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-public-disasm-lua51"
+  ],
+  "allowed_capability_mutations": []
+}

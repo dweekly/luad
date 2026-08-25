@@ -58,7 +58,7 @@ impl DiagnosticDescriptor {
     }
 }
 
-/// Static authority table of all 108 production-emittable diagnostic codes in bytewise ascending order.
+/// Static authority table of all production-emittable diagnostic codes in bytewise ascending order.
 pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
     StaticDiagnosticDescriptor {
         code: "CORE-LIMIT-001",
@@ -94,6 +94,13 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         category: DiagnosticCategory::Parse,
         semantics: "Input ended before the requested byte range could be read.",
         suggested_action: "Verify that the chunk is complete and was extracted without truncation.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "INTERNAL-IDENTITY-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Analysis,
+        semantics: "Prototype content identity could not encode a parser-produced Lua 5.1 fact.",
+        suggested_action: "Preserve the input and report the diagnostic as an internal luad defect.",
     },
     StaticDiagnosticDescriptor {
         code: "IO-001",

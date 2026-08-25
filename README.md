@@ -24,6 +24,8 @@ when direct closure flow or one literal global store establishes a unique relati
 unresolved relations remain explicit. Batch export treats readable non-bytecode inputs
 as explicit skips, reports every input path, and returns default success when a mixed
 firmware tree produces at least one complete file result.
+Lua 5.1 prototype records also carry a versioned subtree-content identity for ordinary
+cross-firmware joins without conflating the digest with source or runtime identity.
 
 All stock-Lua dialects remain **experimental** unless an exact release artifact
 for the current revision and profile says otherwise. Internal library gates do not

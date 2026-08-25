@@ -203,15 +203,30 @@ luad export firmware/*.luac --format jsonl | jq -r '
 
 ---
 
-## 9. Comparing Exports from Two Firmware Trees Externally
+## 9. Joining Prototype Content Across Firmware Trees
 
-Compare instruction inventories and sha256 digests between two firmware builds:
+Create sorted content-identity inventories and join them with ordinary command-line
+tools. The path beside each digest is artifact-local evidence, not part of the digest:
 
 ```bash
-diff -u \
-  <(luad export firmware_v1/*.luac --format jsonl | jq -S 'select(.record_type == "instruction") | {id: .data.id, mnemonic: .data.mnemonic}') \
-  <(luad export firmware_v2/*.luac --format jsonl | jq -S 'select(.record_type == "instruction") | {id: .data.id, mnemonic: .data.mnemonic}')
+luad export firmware_v1/*.luac --format jsonl | jq -r '
+  select(.record_type == "prototype_identity") |
+  [.data.digest, .context.input_identity.path, .data.proto_id] | @tsv' |
+  sort > firmware_v1.prototypes.tsv
+
+luad export firmware_v2/*.luac --format jsonl | jq -r '
+  select(.record_type == "prototype_identity") |
+  [.data.digest, .context.input_identity.path, .data.proto_id] | @tsv' |
+  sort > firmware_v2.prototypes.tsv
+
+join -t $'\t' -1 1 -2 1 firmware_v1.prototypes.tsv firmware_v2.prototypes.tsv
 ```
+
+Equal `luad-prototype-v1` digests establish equal canonical content. A missing or changed
+digest is a triage signal only; it does not by itself prove a behavioral change.
+The scheme commits exact constant bytes and is intended for joins within the same Lua
+5.1 profile. Equivalent source compiled for stock and LNUM32 number layouts is not
+expected to produce equal digests.
 
 ---
 
