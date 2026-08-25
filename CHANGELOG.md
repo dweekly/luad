@@ -11,6 +11,8 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Validation
 
+- Lua 5.1 `TFORLOOP` now validates its count-dependent iterator/result register window
+  without misclassifying scalar field `C` as a direct register.
 - Lua 5.1 `SELF` now validates its implicit second destination register against the
   owning prototype's stack bound with exact public instruction provenance.
 - Lua 5.1 `FORPREP` and `FORLOOP` now validate their fixed four-register windows

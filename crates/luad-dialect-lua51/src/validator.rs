@@ -172,10 +172,11 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
             diags.push(diag);
         }
 
-        // SELF and numeric-for instructions use fixed register windows from R(A).
+        // SELF, numeric-for, and generic-for instructions use register windows from R(A).
         let span_end_delta = match op {
             crate::opcodes::Opcode51::SelfOp => Some(1),
             crate::opcodes::Opcode51::ForPrep | crate::opcodes::Opcode51::ForLoop => Some(3),
+            crate::opcodes::Opcode51::TForLoop => Some(2 + raw.c as usize),
             _ => None,
         };
         if let Some(end_delta) = span_end_delta {
