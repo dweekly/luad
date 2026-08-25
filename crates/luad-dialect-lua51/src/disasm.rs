@@ -159,6 +159,99 @@ pub fn disassemble_instruction_lua51(
         sj: 0,
     };
 
+    if let Lua51PhysicalRole::SetlistExtra { owner_pc } = role {
+        let operands = vec![DisassembledOperand {
+            name: "value".to_string(),
+            kind: OperandKind::Raw {
+                value: raw_word as u64,
+            },
+            display: format!("{raw_word} (0x{raw_word:08x})"),
+            resolved: None,
+        }];
+
+        return DisassembledInstruction {
+            id: inst_id,
+            pc,
+            raw_word,
+            raw_hex,
+            mnemonic: "setlist_extra".to_string(),
+            opcode_num: raw.opcode_num,
+            role: "setlist_extra".to_string(),
+            encoded_operands,
+            line,
+            operands,
+            jump_target: None,
+            companion_pc: Some(owner_pc),
+            metamethod: None,
+            comment: Some(format!("setlist_extra {raw_word} (0x{raw_word:08x})")),
+            confidence: Confidence::Fact,
+            source,
+            diagnostics: vec![],
+        };
+    }
+
+    if let Lua51PhysicalRole::ClosureBinding {
+        owner_pc,
+        upvalue_index,
+    } = role
+    {
+        let is_move = raw.opcode == Some(Opcode51::Move);
+        let role_str = "closure_binding".to_string();
+        let mnemonic = match raw.opcode {
+            Some(op) => format!("{} (binding descriptor)", op.name()),
+            None => format!("OP_UNKNOWN_0x{:02x} (binding descriptor)", raw.opcode_num),
+        };
+        let parent_desc = if is_move {
+            format!("parent R({})", raw.b)
+        } else {
+            format!("parent upvalue[{}]", raw.b)
+        };
+
+        let mut operands = Vec::new();
+        operands.push(DisassembledOperand {
+            name: "upvalue_index".to_string(),
+            kind: OperandKind::ImmediateUnsigned {
+                value: upvalue_index as u64,
+            },
+            display: format!("upvalue[{upvalue_index}]"),
+            resolved: None,
+        });
+        operands.push(DisassembledOperand {
+            name: "source".to_string(),
+            kind: if is_move {
+                OperandKind::Register { index: raw.b as u8 }
+            } else {
+                OperandKind::ImmediateUnsigned {
+                    value: raw.b as u64,
+                }
+            },
+            display: parent_desc.clone(),
+            resolved: None,
+        });
+
+        let comment = Some(format!("upvalue[{upvalue_index}] <- {parent_desc}"));
+
+        return DisassembledInstruction {
+            id: inst_id,
+            pc,
+            raw_word,
+            raw_hex,
+            mnemonic,
+            opcode_num: raw.opcode_num,
+            role: role_str,
+            encoded_operands,
+            line,
+            operands,
+            jump_target: None,
+            companion_pc: Some(owner_pc),
+            metamethod: None,
+            comment,
+            confidence: Confidence::Fact,
+            source,
+            diagnostics: vec![],
+        };
+    }
+
     let Some(op) = raw.opcode else {
         return DisassembledInstruction {
             id: inst_id.clone(),
@@ -248,96 +341,6 @@ pub fn disassemble_instruction_lua51(
             });
         }
     };
-
-    if let Lua51PhysicalRole::SetlistExtra { owner_pc } = role {
-        operands.push(DisassembledOperand {
-            name: "value".to_string(),
-            kind: OperandKind::Raw {
-                value: raw_word as u64,
-            },
-            display: format!("{raw_word} (0x{raw_word:08x})"),
-            resolved: None,
-        });
-
-        return DisassembledInstruction {
-            id: inst_id,
-            pc,
-            raw_word,
-            raw_hex,
-            mnemonic: "setlist_extra".to_string(),
-            opcode_num: raw.opcode_num,
-            role: "setlist_extra".to_string(),
-            encoded_operands,
-            line,
-            operands,
-            jump_target: None,
-            companion_pc: Some(owner_pc),
-            metamethod: None,
-            comment: Some(format!("setlist_extra {raw_word} (0x{raw_word:08x})")),
-            confidence: Confidence::Fact,
-            source,
-            diagnostics,
-        };
-    }
-
-    if let Lua51PhysicalRole::ClosureBinding {
-        owner_pc,
-        upvalue_index,
-    } = role
-    {
-        let is_move = op == Opcode51::Move;
-        let role_str = "closure_binding".to_string();
-        companion_pc = Some(owner_pc);
-
-        let parent_desc = if is_move {
-            format!("parent R({})", raw.b)
-        } else {
-            format!("parent upvalue[{}]", raw.b)
-        };
-
-        operands.push(DisassembledOperand {
-            name: "upvalue_index".to_string(),
-            kind: OperandKind::ImmediateUnsigned {
-                value: upvalue_index as u64,
-            },
-            display: format!("upvalue[{upvalue_index}]"),
-            resolved: None,
-        });
-        operands.push(DisassembledOperand {
-            name: "source".to_string(),
-            kind: if is_move {
-                OperandKind::Register { index: raw.b as u8 }
-            } else {
-                OperandKind::ImmediateUnsigned {
-                    value: raw.b as u64,
-                }
-            },
-            display: parent_desc.clone(),
-            resolved: None,
-        });
-
-        comment = Some(format!("upvalue[{upvalue_index}] <- {parent_desc}"));
-
-        return DisassembledInstruction {
-            id: inst_id,
-            pc,
-            raw_word,
-            raw_hex,
-            mnemonic: format!("{} (binding descriptor)", op.name()),
-            opcode_num: raw.opcode_num,
-            role: role_str,
-            encoded_operands,
-            line,
-            operands,
-            jump_target: None,
-            companion_pc,
-            metamethod: None,
-            comment,
-            confidence: Confidence::Fact,
-            source,
-            diagnostics,
-        };
-    }
 
     match op {
         Opcode51::Move => {

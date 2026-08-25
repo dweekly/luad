@@ -829,7 +829,7 @@ struct ExtraShape {
     word: u32,
 }
 
-const EXTRA_SHAPES: [ExtraShape; 6] = [
+const EXTRA_SHAPES: [ExtraShape; 7] = [
     ExtraShape {
         name: "call-shaped",
         resembles: "CALL",
@@ -859,6 +859,11 @@ const EXTRA_SHAPES: [ExtraShape; 6] = [
         name: "setlist-shaped",
         resembles: "SETLIST",
         word: iabc(OP_SETLIST, 0, 1, 0),
+    },
+    ExtraShape {
+        name: "unknown-opcode-shaped",
+        resembles: "UNKNOWN_0x3e",
+        word: 0x0000003e,
     },
 ];
 
@@ -2202,7 +2207,7 @@ fn preserved(callee: &str) -> CaptureVerdict {
 fn modelled_writes(word: u32) -> Option<Vec<u8>> {
     let a = field_a(word);
     match opcode_of(word) {
-        OP_MOVE | OP_GETUPVAL | OP_CLOSURE | OP_CALL => Some(vec![a]),
+        OP_MOVE | OP_GETUPVAL | OP_CLOSURE | OP_CALL | OP_SETLIST => Some(vec![a]),
         OP_LOADNIL => Some((a..=a.max(field_b(word) as u8)).collect()),
         OP_SETUPVAL | OP_RETURN => Some(Vec::new()),
         _ => None,
@@ -2242,7 +2247,7 @@ fn summarize_captures(
 ) {
     let child_nups = spec.child_nups();
     let map = enumerate_roles(&spec.code, &child_nups);
-    let mut child_cells: BTreeMap<usize, Vec<CellId>> = BTreeMap::new();
+    let mut child_cells: BTreeMap<usize, Vec<Vec<CellId>>> = BTreeMap::new();
     let mut register_closure: BTreeMap<u8, ProtoPathVec> = BTreeMap::new();
     let mut local_bindings: Vec<(usize, u8)> = Vec::new();
 
@@ -2295,7 +2300,7 @@ fn summarize_captures(
                         binder_is_local,
                     });
                 }
-                child_cells.insert(index, cells);
+                child_cells.entry(index).or_default().push(cells);
                 register_closure.insert(field_a(word), child_path.clone());
             }
             _ => {
@@ -2322,8 +2327,13 @@ fn summarize_captures(
     for (index, child) in spec.children.iter().enumerate() {
         let mut child_path = path.to_vec();
         child_path.push(index);
-        let cells = child_cells.get(&index).cloned().unwrap_or_default();
-        summarize_captures(child, &child_path, &cells, out);
+        let bindings = child_cells
+            .get(&index)
+            .cloned()
+            .unwrap_or_else(|| vec![Vec::new()]);
+        for cells in bindings {
+            summarize_captures(child, &child_path, &cells, out);
+        }
     }
 }
 
@@ -2812,6 +2822,57 @@ fn capture_rows() -> Vec<CaptureRow> {
             caller_pc: 1,
             capture_slot: None,
             verdict: preserved("proto:0/0"),
+        },
+        // A SETLIST payload resembling CLOSURE must not rebind child upvalues.
+        CaptureRow {
+            name: "setlist-payload-resembling-closure-does-not-rebind",
+            root: ProtoSpec::root(
+                10,
+                vec![
+                    iabx(OP_CLOSURE, 0, 0),
+                    iabx(OP_CLOSURE, 1, 1),
+                    iabc(OP_MOVE, 0, 0, 0),
+                    iabx(OP_CLOSURE, 2, 2),
+                    iabc(OP_MOVE, 0, 0, 0),
+                    iabc(OP_SETLIST, 1, 1, 0),
+                    iabx(OP_CLOSURE, 0, 2),
+                    iabc(OP_MOVE, 0, 9, 0),
+                    iabc(OP_RETURN, 0, 1, 0),
+                ],
+            )
+            .with_child(ProtoSpec::leaf_child(0))
+            .with_child(caller_child())
+            .with_child(mutator_child()),
+            caller_path: "proto:0/1",
+            caller_pc: 2,
+            capture_slot: Some(0),
+            verdict: CaptureVerdict::Mutable,
+        },
+        // One child prototype can be instantiated at more than one site. Its upvalue
+        // slot denotes every cell supplied by those sites, rather than whichever site
+        // happens to be visited last.
+        CaptureRow {
+            name: "repeated-child-prototype-unions-captured-cells",
+            root: ProtoSpec::root(
+                10,
+                vec![
+                    iabx(OP_CLOSURE, 0, 0),
+                    iabx(OP_CLOSURE, 1, 1),
+                    iabc(OP_MOVE, 0, 0, 0),
+                    iabx(OP_CLOSURE, 2, 2),
+                    iabc(OP_MOVE, 0, 0, 0),
+                    iabx(OP_CLOSURE, 3, 2),
+                    iabc(OP_MOVE, 0, 9, 0),
+                    iabc(OP_RETURN, 0, 1, 0),
+                ],
+            )
+            .with_child(ProtoSpec::leaf_child(0))
+            .with_child(caller_child())
+            .with_child(mutator_child()),
+            caller_path: "proto:0/1",
+            caller_pc: 2,
+            capture_slot: Some(0),
+            verdict: CaptureVerdict::Mutable,
         },
     ]
 }

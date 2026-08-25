@@ -52,6 +52,85 @@ fn lift_instruction_51(
     let raw_hex = inst.raw_hex.clone();
     let source = inst.source.clone();
 
+    if let Lua51PhysicalRole::SetlistExtra { owner_pc } = role {
+        return SemanticInstruction {
+            id,
+            pc,
+            raw_word,
+            raw_hex,
+            mnemonic: "setlist_extra".to_string(),
+            explanation: format!(
+                "Extra list-batch argument {raw_word} for SETLIST at PC {owner_pc}"
+            ),
+            operands: vec![TypedOperand::ExtraArg { value: raw_word }],
+            reads: vec![],
+            writes: vec![],
+            metamethod_fallbacks: vec![],
+            implicit_effects: vec![ImplicitEffect::CompanionPair {
+                companion_pc: owner_pc,
+                companion_role: "setlist_extra".to_string(),
+            }],
+            jump_target: None,
+            companion_pc: Some(owner_pc),
+            confidence: Confidence::Reviewed,
+            source_citations: vec!["lua-5.1.5:src/lvm.c:1390".to_string()],
+            source,
+        };
+    }
+
+    if let Lua51PhysicalRole::ClosureBinding {
+        owner_pc,
+        upvalue_index,
+    } = role
+    {
+        let is_move = raw.opcode == Some(Opcode51::Move);
+        let capture_kind = if is_move { "local register" } else { "upvalue" };
+        let mut desc_reads = Vec::new();
+        if is_move {
+            desc_reads.push(EffectTarget::Register { index: raw.b as u8 });
+        } else {
+            desc_reads.push(EffectTarget::Upvalue {
+                index: raw.b as u8,
+                name: None,
+            });
+        }
+        let mnemonic = match raw.opcode {
+            Some(op) => format!("{} (binding descriptor)", op.name()),
+            None => format!("UNKNOWN_0x{:02x} (binding descriptor)", raw.opcode_num),
+        };
+
+        return SemanticInstruction {
+            id,
+            pc,
+            raw_word,
+            raw_hex,
+            mnemonic,
+            explanation: format!(
+                "Closure-binding descriptor for closure at PC {owner_pc}: captures {capture_kind} {} into child upvalue {upvalue_index}",
+                raw.b
+            ),
+            operands: vec![
+                TypedOperand::Register { index: raw.b as u8 },
+                TypedOperand::Count {
+                    value: upvalue_index,
+                    is_variable: false,
+                },
+            ],
+            reads: desc_reads,
+            writes: vec![],
+            metamethod_fallbacks: vec![],
+            implicit_effects: vec![ImplicitEffect::CompanionPair {
+                companion_pc: owner_pc,
+                companion_role: "closure_binding".to_string(),
+            }],
+            jump_target: None,
+            companion_pc: Some(owner_pc),
+            confidence: Confidence::Reviewed,
+            source_citations: vec!["lua-5.1.5:src/lvm.c:1402".to_string()],
+            source,
+        };
+    }
+
     let Some(op) = raw.opcode else {
         return SemanticInstruction {
             id,
@@ -573,81 +652,6 @@ fn lift_instruction_51(
             explanation = format!("Load vararg into R({})", raw.a);
             citations.push("lua-5.1.5:src/lvm.c:1410".to_string());
         }
-    }
-
-    if let Lua51PhysicalRole::SetlistExtra { owner_pc } = role {
-        return SemanticInstruction {
-            id,
-            pc,
-            raw_word,
-            raw_hex,
-            mnemonic: "setlist_extra".to_string(),
-            explanation: format!(
-                "Extra list-batch argument {raw_word} for SETLIST at PC {owner_pc}"
-            ),
-            operands: vec![TypedOperand::ExtraArg { value: raw_word }],
-            reads: vec![],
-            writes: vec![],
-            metamethod_fallbacks: vec![],
-            implicit_effects: vec![ImplicitEffect::CompanionPair {
-                companion_pc: owner_pc,
-                companion_role: "setlist_extra".to_string(),
-            }],
-            jump_target: None,
-            companion_pc: Some(owner_pc),
-            confidence: Confidence::Reviewed,
-            source_citations: vec!["lua-5.1.5:src/lvm.c:1390".to_string()],
-            source,
-        };
-    }
-
-    if let Lua51PhysicalRole::ClosureBinding {
-        owner_pc,
-        upvalue_index,
-    } = role
-    {
-        let is_move = op == Opcode51::Move;
-        let capture_kind = if is_move { "local register" } else { "upvalue" };
-        let mut desc_reads = Vec::new();
-        if is_move {
-            desc_reads.push(EffectTarget::Register { index: raw.b as u8 });
-        } else {
-            desc_reads.push(EffectTarget::Upvalue {
-                index: raw.b as u8,
-                name: None,
-            });
-        }
-
-        return SemanticInstruction {
-            id,
-            pc,
-            raw_word,
-            raw_hex,
-            mnemonic: format!("{} (binding descriptor)", op.name()),
-            explanation: format!(
-                "Closure-binding descriptor for closure at PC {owner_pc}: captures {capture_kind} {} into child upvalue {upvalue_index}",
-                raw.b
-            ),
-            operands: vec![
-                TypedOperand::Register { index: raw.b as u8 },
-                TypedOperand::Count {
-                    value: upvalue_index,
-                    is_variable: false,
-                },
-            ],
-            reads: desc_reads,
-            writes: vec![],
-            metamethod_fallbacks: vec![],
-            implicit_effects: vec![ImplicitEffect::CompanionPair {
-                companion_pc: owner_pc,
-                companion_role: "closure_binding".to_string(),
-            }],
-            jump_target: None,
-            companion_pc: Some(owner_pc),
-            confidence: Confidence::Reviewed,
-            source_citations: vec!["lua-5.1.5:src/lvm.c:1402".to_string()],
-            source,
-        };
     }
 
     SemanticInstruction {

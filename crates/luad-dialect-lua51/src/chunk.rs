@@ -372,8 +372,13 @@ fn load_proto_51(
         upvalue_names.push(name);
     }
 
-    // Resolve upvalue capture bindings for child prototypes from parent instructions
+    // Resolve capture metadata only from executable closure owners and their claimed
+    // descriptors. Opcode-shaped companion data cannot rebind a child prototype.
+    let role_map = crate::roles::discover_roles_from_parts_lua51(&instructions, &protos);
     for (pc, inst) in instructions.iter().enumerate() {
+        if !role_map.is_executable(pc) {
+            continue;
+        }
         let raw = crate::opcodes::RawInstruction51::decode(inst.raw_word);
         if raw.opcode == Some(crate::opcodes::Opcode51::Closure) {
             let child_idx = raw.bx as usize;
@@ -381,7 +386,15 @@ fn load_proto_51(
                 let nups_child = child.upvalues.len();
                 for j in 0..nups_child {
                     let desc_pc = pc + 1 + j;
-                    if desc_pc < instructions.len() {
+                    if desc_pc < instructions.len()
+                        && matches!(
+                            role_map.get(desc_pc),
+                            crate::roles::Lua51PhysicalRole::ClosureBinding {
+                                owner_pc,
+                                upvalue_index,
+                            } if owner_pc == pc && upvalue_index == j
+                        )
+                    {
                         let desc_raw = crate::opcodes::RawInstruction51::decode(
                             instructions[desc_pc].raw_word,
                         );

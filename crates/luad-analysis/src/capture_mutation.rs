@@ -5,6 +5,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use luad_core::ir::EffectTarget;
 use luad_core::model::{Chunk, Prototype};
 use luad_core::ProtoPath;
+use luad_dialect_lua51::{discover_roles_lua51, Lua51PhysicalRole, Opcode51, RawInstruction51};
+
+type CanonicalCell = (ProtoPath, SharedCell);
 
 /// Identification of a shared variable cell in an owning prototype.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -20,8 +23,8 @@ pub enum SharedCell {
 pub struct CaptureMutationSummary {
     /// Set of shared cells that are mutated by any closure or instruction in the prototype tree.
     pub mutated_cells: BTreeSet<(ProtoPath, SharedCell)>,
-    /// Map from (prototype path, upvalue slot) to its canonical root shared cell (owner path, cell).
-    pub upvalue_to_cell: BTreeMap<(ProtoPath, u8), (ProtoPath, SharedCell)>,
+    /// Map from a prototype upvalue slot to every canonical shared cell that can feed it.
+    pub upvalue_to_cells: BTreeMap<(ProtoPath, u8), BTreeSet<CanonicalCell>>,
     /// Whether analysis budget was exhausted during summary construction.
     pub exhausted: bool,
 }
@@ -64,8 +67,8 @@ impl CaptureMutationSummary {
         if self.exhausted {
             return true;
         }
-        if let Some(cell) = self.upvalue_to_cell.get(&(child_path.clone(), slot)) {
-            self.mutated_cells.contains(cell)
+        if let Some(cells) = self.upvalue_to_cells.get(&(child_path.clone(), slot)) {
+            cells.iter().any(|cell| self.mutated_cells.contains(cell))
         } else {
             false
         }
@@ -85,8 +88,8 @@ impl CaptureMutationSummary {
         if self.exhausted {
             return true;
         }
-        if let Some(cell) = self.upvalue_to_cell.get(&(owner_path.clone(), slot)) {
-            self.mutated_cells.contains(cell)
+        if let Some(cells) = self.upvalue_to_cells.get(&(owner_path.clone(), slot)) {
+            cells.iter().any(|cell| self.mutated_cells.contains(cell))
         } else {
             self.mutated_cells
                 .contains(&(owner_path.clone(), SharedCell::Upvalue(slot)))
@@ -102,42 +105,75 @@ fn map_prototype_upvalues(
 ) {
     if path.depth() == 0 {
         for slot in 0..proto.upvalues.len() {
-            summary.upvalue_to_cell.insert(
+            summary.upvalue_to_cells.insert(
                 (path.clone(), slot as u8),
-                (path.clone(), SharedCell::Upvalue(slot as u8)),
+                [(path.clone(), SharedCell::Upvalue(slot as u8))]
+                    .into_iter()
+                    .collect(),
             );
         }
     }
 
-    for (child_idx, child) in proto.protos.iter().enumerate() {
+    let role_map = discover_roles_lua51(proto);
+    for (pc, instruction) in proto.instructions.iter().enumerate() {
+        if !role_map.is_executable(pc) {
+            continue;
+        }
+        let raw = RawInstruction51::decode(instruction.raw_word);
+        if raw.opcode != Some(Opcode51::Closure) {
+            continue;
+        }
+        let child_idx = raw.bx as usize;
+        let Some(child) = proto.protos.get(child_idx) else {
+            continue;
+        };
         let child_path = path.child(child_idx);
-        let nups = child.upvalues.len();
-        for slot in 0..nups {
+        for slot in 0..child.upvalues.len() {
             if *remaining_budget == 0 {
                 summary.exhausted = true;
                 return;
             }
             *remaining_budget -= 1;
 
-            let upval = &child.upvalues[slot];
-            if upval.instack == 1 {
-                summary.upvalue_to_cell.insert(
-                    (child_path.clone(), slot as u8),
-                    (path.clone(), SharedCell::Local(upval.idx)),
-                );
-            } else {
-                let parent_upval_slot = upval.idx;
-                let canonical_cell = summary
-                    .upvalue_to_cell
-                    .get(&(path.clone(), parent_upval_slot))
-                    .cloned()
-                    .unwrap_or_else(|| (path.clone(), SharedCell::Upvalue(parent_upval_slot)));
-                summary
-                    .upvalue_to_cell
-                    .insert((child_path.clone(), slot as u8), canonical_cell);
+            let desc_pc = pc + 1 + slot;
+            if !matches!(
+                role_map.get(desc_pc),
+                Lua51PhysicalRole::ClosureBinding {
+                    owner_pc,
+                    upvalue_index,
+                } if owner_pc == pc && upvalue_index == slot
+            ) {
+                continue;
             }
+            let Some(descriptor) = proto.instructions.get(desc_pc) else {
+                continue;
+            };
+            let desc_raw = RawInstruction51::decode(descriptor.raw_word);
+            let cells: BTreeSet<CanonicalCell> = match desc_raw.opcode {
+                Some(Opcode51::Move) => [(path.clone(), SharedCell::Local(desc_raw.b as u8))]
+                    .into_iter()
+                    .collect(),
+                Some(Opcode51::GetUpval) => summary
+                    .upvalue_to_cells
+                    .get(&(path.clone(), desc_raw.b as u8))
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        [(path.clone(), SharedCell::Upvalue(desc_raw.b as u8))]
+                            .into_iter()
+                            .collect()
+                    }),
+                _ => BTreeSet::new(),
+            };
+            summary
+                .upvalue_to_cells
+                .entry((child_path.clone(), slot as u8))
+                .or_default()
+                .extend(cells);
         }
+    }
 
+    for (child_idx, child) in proto.protos.iter().enumerate() {
+        let child_path = path.child(child_idx);
         map_prototype_upvalues(child, &child_path, summary, remaining_budget);
         if summary.exhausted {
             return;
@@ -170,12 +206,16 @@ fn collect_mutations_postorder(
     for inst in &instructions {
         for write in &inst.writes {
             if let EffectTarget::Upvalue { index, .. } = write {
-                let canonical_cell = summary
-                    .upvalue_to_cell
+                let canonical_cells = summary
+                    .upvalue_to_cells
                     .get(&(path.clone(), *index))
                     .cloned()
-                    .unwrap_or_else(|| (path.clone(), SharedCell::Upvalue(*index)));
-                summary.mutated_cells.insert(canonical_cell);
+                    .unwrap_or_else(|| {
+                        [(path.clone(), SharedCell::Upvalue(*index))]
+                            .into_iter()
+                            .collect()
+                    });
+                summary.mutated_cells.extend(canonical_cells);
             }
         }
     }

@@ -1,7 +1,7 @@
 //! Central authority for Lua 5.1 physical instruction roles.
 
 use crate::opcodes::{Opcode51, RawInstruction51};
-use luad_core::model::Prototype;
+use luad_core::model::{InstructionWord, Prototype};
 
 /// Physical role of an instruction word in a Lua 5.1 prototype.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,7 +89,17 @@ impl Lua51RoleMap {
 /// Performs a single ascending PC pass with first-unclaimed-owner precedence.
 /// Claimed companion words are never reconsidered as owners.
 pub fn discover_roles_lua51(proto: &Prototype) -> Lua51RoleMap {
-    let num_insts = proto.instructions.len();
+    discover_roles_from_parts_lua51(&proto.instructions, &proto.protos)
+}
+
+/// Discover physical roles from the code vector and child prototype table.
+///
+/// This form is available while a prototype is being assembled by the parser.
+pub(crate) fn discover_roles_from_parts_lua51(
+    instructions: &[InstructionWord],
+    child_protos: &[Prototype],
+) -> Lua51RoleMap {
+    let num_insts = instructions.len();
     let mut roles = vec![Lua51PhysicalRole::Instruction; num_insts];
     let mut faults = Vec::new();
 
@@ -98,11 +108,11 @@ pub fn discover_roles_lua51(proto: &Prototype) -> Lua51RoleMap {
             continue;
         }
 
-        let raw = RawInstruction51::decode(proto.instructions[pc].raw_word);
+        let raw = RawInstruction51::decode(instructions[pc].raw_word);
         match raw.opcode {
             Some(Opcode51::Closure) => {
                 let child_bx = raw.bx as usize;
-                if let Some(child) = proto.protos.get(child_bx) {
+                if let Some(child) = child_protos.get(child_bx) {
                     let nups = child.upvalues.len();
                     for (upvalue_index, offset) in (1..=nups).enumerate() {
                         let desc_pc = pc + offset;
