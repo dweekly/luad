@@ -162,6 +162,7 @@ pub struct ExportEndRecord {
     pub record_type: String,
     pub files_processed: usize,
     pub files_succeeded: usize,
+    pub files_skipped: usize,
     pub files_failed: usize,
     pub total_instructions: usize,
 }

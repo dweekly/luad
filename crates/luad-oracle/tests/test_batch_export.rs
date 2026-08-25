@@ -1,6 +1,7 @@
 //! Deterministic firmware-scale batch export tests (Gate W1 / gate-batch-export).
 
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::process::Command;
 
 use luad_core::envelope::{JsonlDataRecord, JSONL_SCHEMA_VERSION};
@@ -114,6 +115,30 @@ fn test_batch_export_jsonl_record_structure_and_discriminators() {
             "Line {i} missing record_type discriminator: '{line}'"
         );
     }
+
+    let inventory = lines
+        .iter()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .fold(BTreeMap::<String, usize>::new(), |mut counts, record| {
+            *counts
+                .entry(record["record_type"].as_str().unwrap().to_string())
+                .or_default() += 1;
+            counts
+        });
+    assert_eq!(
+        inventory,
+        BTreeMap::from([
+            ("constant".to_string(), 3),
+            ("export_end".to_string(), 1),
+            ("export_start".to_string(), 1),
+            ("file_end".to_string(), 1),
+            ("file_start".to_string(), 1),
+            ("instruction".to_string(), 10),
+            ("prototype".to_string(), 1),
+            ("upvalue".to_string(), 1),
+            ("xref".to_string(), 3),
+        ])
+    );
 }
 
 #[test]
@@ -135,11 +160,10 @@ fn test_batch_export_mixed_valid_and_failing_files() {
         .output()
         .expect("luad export failed");
 
-    // Aggregate exit must be nonzero when any file fails
-    assert_ne!(
+    assert_eq!(
         output.status.code(),
         Some(0),
-        "Batch export must exit nonzero when at least one input fails"
+        "A complete successful file makes the default mixed run usable"
     );
 
     let stdout_str = String::from_utf8_lossy(&output.stdout);
@@ -153,7 +177,15 @@ fn test_batch_export_mixed_valid_and_failing_files() {
     assert_eq!(last["record_type"], "export_end");
     assert_eq!(last["files_processed"], 2);
     assert_eq!(last["files_succeeded"], 1);
+    assert_eq!(last["files_skipped"], 0);
     assert_eq!(last["files_failed"], 1);
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        format!(
+            "error: {}: failed to read input file\n1 exported, 0 skipped, 1 failed\n",
+            non_existent.display()
+        )
+    );
 }
 
 #[test]
@@ -165,8 +197,10 @@ fn test_batch_export_input_list_file_and_stdin() {
     let f2 = root.join("tests/fixtures/precompiled/lua51/hello.luac");
 
     let temp_dir = tempfile::tempdir().unwrap();
+    let spaced = temp_dir.path().join("bytecode with spaces.luac");
+    std::fs::copy(&f1, &spaced).unwrap();
     let list_file = temp_dir.path().join("inputs.txt");
-    let list_content = format!("{}\n{}\n", f1.display(), f2.display());
+    let list_content = format!("{}\n{}\n{}\n", f1.display(), f2.display(), spaced.display());
     std::fs::write(&list_file, &list_content).unwrap();
 
     // 1. Test --input-list FILE
@@ -268,6 +302,9 @@ fn test_batch_export_plain_lua_source_produces_explicit_unsupported_diagnostic()
         has_source_diag,
         "Export of plain Lua source must emit PARSE-SOURCE-001 diagnostic record"
     );
+    let last: serde_json::Value = serde_json::from_str(lines.last().unwrap()).unwrap();
+    assert_eq!(last["files_skipped"], 1);
+    assert_eq!(last["files_failed"], 0);
 }
 
 #[test]
@@ -433,4 +470,133 @@ fn test_batch_export_failure_diagnostics_report_only_available_context() {
         .unwrap();
     assert!(read.context.input_identity.is_none());
     assert!(read.context.interpretation.is_none());
+}
+
+#[test]
+fn test_batch_export_outcome_matrix_is_total_and_path_qualified() {
+    struct Case {
+        name: &'static str,
+        inputs: Vec<String>,
+        strict: bool,
+        exit: i32,
+        counts: (usize, usize, usize, usize),
+        statuses: Vec<&'static str>,
+    }
+
+    let luad = get_luad_bin();
+    let root = luad_oracle::find_workspace_root();
+    let valid = root
+        .join("tests/fixtures/precompiled/lua51/hello.luac")
+        .to_string_lossy()
+        .into_owned();
+    let temp_dir = tempfile::tempdir().unwrap();
+    let source = temp_dir.path().join("plain source with spaces.lua");
+    let unknown = temp_dir.path().join("unknown format.bin");
+    let malformed = temp_dir.path().join("malformed chunk.luac");
+    let missing = temp_dir.path().join("missing input.luac");
+    std::fs::write(&source, "print('source')\n").unwrap();
+    std::fs::write(&unknown, [0_u8, 0xff, 0x10]).unwrap();
+    std::fs::write(&malformed, b"\x1bLua\x51").unwrap();
+
+    let non_successes = vec![
+        source.to_string_lossy().into_owned(),
+        unknown.to_string_lossy().into_owned(),
+        malformed.to_string_lossy().into_owned(),
+        missing.to_string_lossy().into_owned(),
+    ];
+    let mut mixed = vec![valid.clone()];
+    mixed.extend(non_successes.clone());
+
+    let cases = [
+        Case {
+            name: "mixed-default",
+            inputs: mixed.clone(),
+            strict: false,
+            exit: 0,
+            counts: (5, 1, 3, 1),
+            statuses: vec!["succeeded", "skipped", "skipped", "skipped", "failed"],
+        },
+        Case {
+            name: "mixed-strict",
+            inputs: mixed,
+            strict: true,
+            exit: 1,
+            counts: (5, 1, 3, 1),
+            statuses: vec!["succeeded", "skipped", "skipped", "skipped", "failed"],
+        },
+        Case {
+            name: "zero-success-default",
+            inputs: non_successes,
+            strict: false,
+            exit: 1,
+            counts: (4, 0, 3, 1),
+            statuses: vec!["skipped", "skipped", "skipped", "failed"],
+        },
+    ];
+
+    for case in cases {
+        let mut args = vec!["export".to_string()];
+        args.extend(case.inputs.clone());
+        args.extend(["--format".to_string(), "jsonl".to_string()]);
+        if case.strict {
+            args.push("--strict".to_string());
+        }
+        let output = Command::new(&luad)
+            .args(&args)
+            .output()
+            .unwrap_or_else(|error| panic!("{}: {error}", case.name));
+        assert_eq!(output.status.code(), Some(case.exit), "{}", case.name);
+
+        let records: Vec<serde_json::Value> = String::from_utf8(output.stdout)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        let terminal = records.last().expect("export_end");
+        assert_eq!(terminal["record_type"], "export_end", "{}", case.name);
+        let actual_counts = (
+            terminal["files_processed"].as_u64().unwrap() as usize,
+            terminal["files_succeeded"].as_u64().unwrap() as usize,
+            terminal["files_skipped"].as_u64().unwrap() as usize,
+            terminal["files_failed"].as_u64().unwrap() as usize,
+        );
+        assert_eq!(actual_counts, case.counts, "{}", case.name);
+        assert_eq!(
+            actual_counts.0,
+            actual_counts.1 + actual_counts.2 + actual_counts.3,
+            "{} count closure",
+            case.name
+        );
+
+        let file_ends: Vec<_> = records
+            .iter()
+            .filter(|record| record["record_type"] == "file_end")
+            .collect();
+        assert_eq!(file_ends.len(), case.inputs.len(), "{}", case.name);
+        for ((record, expected_path), expected_status) in
+            file_ends.iter().zip(&case.inputs).zip(&case.statuses)
+        {
+            assert_eq!(record["path"], *expected_path, "{}", case.name);
+            assert_eq!(record["status"], *expected_status, "{}", case.name);
+        }
+
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        for path in case.inputs.iter().skip(usize::from(case.counts.1 > 0)) {
+            assert!(stderr.contains(path), "{} missing path {path}", case.name);
+        }
+        assert!(stderr.ends_with(&format!(
+            "{} exported, {} skipped, {} failed\n",
+            case.counts.1, case.counts.2, case.counts.3
+        )));
+
+        let diagnostic_codes: Vec<_> = records
+            .iter()
+            .filter(|record| record["record_type"] == "diagnostic")
+            .filter_map(|record| record["data"]["code"].as_str())
+            .collect();
+        assert!(diagnostic_codes.contains(&"PARSE-SOURCE-001"));
+        assert!(diagnostic_codes.contains(&"PARSE-UNKNOWN-001"));
+        assert!(diagnostic_codes.contains(&"PARSE-001"));
+        assert!(diagnostic_codes.contains(&"IO-001"));
+    }
 }

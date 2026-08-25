@@ -20,6 +20,7 @@
     "test_batch_export_input_list_file_and_stdin",
     "test_batch_export_jsonl_record_structure_and_discriminators",
     "test_batch_export_mixed_valid_and_failing_files",
+    "test_batch_export_outcome_matrix_is_total_and_path_qualified",
     "test_batch_export_plain_lua_source_produces_explicit_unsupported_diagnostic"
   ],
   "required_compiler_version": null,

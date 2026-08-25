@@ -45,6 +45,20 @@ luad export firmware/*.lua --format jsonl --max-facts-per-file 10000 | jq -c '
   {path, status, is_truncated, emitted_fact_count, available_fact_count}'
 ```
 
+Mixed firmware trees commonly contain both compiled chunks and plain source. Default
+export status is successful when at least one input completes, while the terminal record
+keeps coverage explicit:
+
+```bash
+luad export --input-list firmware-lua-files.txt --format jsonl |
+  jq -c 'select(.record_type == "export_end") |
+    {files_processed, files_succeeded, files_skipped, files_failed}'
+```
+
+Use `--strict` when any skipped or unreadable input must fail the surrounding shell
+pipeline. In either mode, require a terminal `export_end`; its absence indicates an
+incomplete stream.
+
 ---
 
 ## 3. Finding Globals and Call Sites

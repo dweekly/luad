@@ -94,8 +94,8 @@ const GENERATED_MALFORMED_SHA256: &str =
 /// Diagnostic code the contract requires plain Lua source to retain under any bound.
 const SOURCE_DIAGNOSTIC_CODE: &str = "PARSE-SOURCE-001";
 
-/// Aggregate exit code when at least one input fails.
-const EXIT_AGGREGATE_FAILURE: i32 = 1;
+/// Default exit code for a mixed batch containing at least one successful input.
+const EXIT_MIXED_DEFAULT: i32 = 0;
 /// Usage/option error exit code.
 const EXIT_USAGE_ERROR: i32 = 2;
 
@@ -465,6 +465,7 @@ fn verify_bounded_stream(
     }
 
     let mut succeeded = 0u64;
+    let mut skipped = 0u64;
     let mut failed = 0u64;
 
     for (index, (block, want)) in stream.files.iter().zip(expected.iter()).enumerate() {
@@ -492,7 +493,9 @@ fn verify_bounded_stream(
         }
         match status.as_str() {
             "succeeded" => succeeded += 1,
-            _ => failed += 1,
+            "skipped" => skipped += 1,
+            "failed" => failed += 1,
+            other => return Err(format!("unknown file_end status '{other}'")),
         }
 
         let available = want.available_facts.len();
@@ -599,6 +602,12 @@ fn verify_bounded_stream(
     if files_succeeded != succeeded {
         return Err(format!(
             "export_end files_succeeded={files_succeeded}, stream framed {succeeded} succeeded inputs"
+        ));
+    }
+    let files_skipped = expect_u64(&stream.end, "files_skipped")?;
+    if files_skipped != skipped {
+        return Err(format!(
+            "export_end files_skipped={files_skipped}, stream framed {skipped} skipped inputs"
         ));
     }
     let files_failed = expect_u64(&stream.end, "files_failed")?;
@@ -890,7 +899,7 @@ fn test_zero_bound_preserves_framing_and_failure_diagnostics() {
     let files = full_matrix_batch(&generated);
     let baseline = observe_baseline(&files);
 
-    let stdout = bounded_stdout(&files, 0, EXIT_AGGREGATE_FAILURE);
+    let stdout = bounded_stdout(&files, 0, EXIT_MIXED_DEFAULT);
     assert_comparator_accepts(
         &stdout,
         Some(0),
@@ -923,33 +932,45 @@ fn test_zero_bound_preserves_framing_and_failure_diagnostics() {
         "Plain Lua source diagnostic must survive bound 0"
     );
 
-    for failing in [
+    for skipped in [&generated.malformed_path, &generated.source_path] {
+        let index = files
+            .iter()
+            .position(|path| path == skipped)
+            .expect("skipped input is in the batch");
+        assert_eq!(
+            baseline[index].status, "skipped",
+            "'{skipped}' must retain skipped status"
+        );
+    }
+    let missing_index = files
+        .iter()
+        .position(|path| path == &generated.missing_path)
+        .expect("missing input is in the batch");
+    assert_eq!(baseline[missing_index].status, "failed");
+
+    for non_success in [
         &generated.malformed_path,
         &generated.source_path,
         &generated.missing_path,
     ] {
         let index = files
             .iter()
-            .position(|path| path == failing)
-            .expect("failing input is in the batch");
-        assert_eq!(
-            baseline[index].status, "failed",
-            "'{failing}' must retain failed status"
-        );
+            .position(|path| path == non_success)
+            .expect("non-success input is in the batch");
         assert!(
             !stream.files[index].diagnostics.is_empty(),
-            "'{failing}' must retain at least one diagnostic record at bound 0"
+            "'{non_success}' must retain at least one diagnostic record at bound 0"
         );
         for diagnostic in &stream.files[index].diagnostics {
             assert_eq!(
                 diagnostic["data"]["severity"], "error",
-                "'{failing}' diagnostic must remain an error: {diagnostic}"
+                "'{non_success}' diagnostic must remain an error: {diagnostic}"
             );
             assert!(
                 diagnostic["data"]["code"]
                     .as_str()
                     .is_some_and(|code| !code.is_empty()),
-                "'{failing}' diagnostic must carry a stable code: {diagnostic}"
+                "'{non_success}' diagnostic must carry a stable code: {diagnostic}"
             );
         }
     }
@@ -962,7 +983,7 @@ fn test_later_inputs_receive_complete_framing_after_truncation_and_failure() {
     let baseline = observe_baseline(&files);
 
     let bound = 2usize;
-    let stdout = bounded_stdout(&files, bound, EXIT_AGGREGATE_FAILURE);
+    let stdout = bounded_stdout(&files, bound, EXIT_MIXED_DEFAULT);
     assert_comparator_accepts(
         &stdout,
         Some(bound),
@@ -1035,8 +1056,8 @@ fn test_repeated_bounded_invocations_are_byte_identical() {
     let baseline = observe_baseline(&files);
     let bound = 5usize;
 
-    let first = bounded_stdout(&files, bound, EXIT_AGGREGATE_FAILURE);
-    let second = bounded_stdout(&files, bound, EXIT_AGGREGATE_FAILURE);
+    let first = bounded_stdout(&files, bound, EXIT_MIXED_DEFAULT);
+    let second = bounded_stdout(&files, bound, EXIT_MIXED_DEFAULT);
 
     assert_comparator_accepts(&first, Some(bound), &baseline, "first bounded run");
     assert_comparator_accepts(&second, Some(bound), &baseline, "second bounded run");
@@ -1083,8 +1104,8 @@ fn test_omitted_bound_preserves_unbounded_fact_stream() {
     let output = run_export(&files, None);
     assert_eq!(
         output.status.code(),
-        Some(EXIT_AGGREGATE_FAILURE),
-        "Omitting the bound must preserve existing aggregate failure behavior.\nstderr:\n{}",
+        Some(EXIT_MIXED_DEFAULT),
+        "Omitting the bound must preserve default mixed-batch success.\nstderr:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     assert_comparator_accepts(&output.stdout, None, &baseline, "omitted bound");
@@ -1116,8 +1137,8 @@ fn test_stderr_diagnostics_never_contaminate_jsonl_stdout() {
     let output = run_export(&files, Some(&bound_text));
     assert_eq!(
         output.status.code(),
-        Some(EXIT_AGGREGATE_FAILURE),
-        "Mixed batch must retain aggregate failure.\nstderr:\n{}",
+        Some(EXIT_MIXED_DEFAULT),
+        "Mixed batch with usable results must retain default success.\nstderr:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
     assert_comparator_accepts(
@@ -1410,7 +1431,7 @@ fn test_killer_mutation_diagnostic_suppressed_at_zero_bound_rejected() {
     let generated = generated_inputs();
     let files = full_matrix_batch(&generated);
     let baseline = observe_baseline(&files);
-    let stdout = bounded_stdout(&files, 0, EXIT_AGGREGATE_FAILURE);
+    let stdout = bounded_stdout(&files, 0, EXIT_MIXED_DEFAULT);
     assert_comparator_accepts(
         &stdout,
         Some(0),

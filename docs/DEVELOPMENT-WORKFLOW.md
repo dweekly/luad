@@ -430,6 +430,7 @@ Representative invocations from the implementation worktree:
 
 ```console
 scripts/agents/agy-gemini.sh access
+scripts/agents/agy-gemini.sh propose /tmp/self-contained-patch-prompt.txt
 scripts/agents/agy-gemini.sh plan /tmp/sprint-plan-prompt.txt
 scripts/agents/agy-gemini.sh implement /tmp/sprint-implementation-prompt.txt
 scripts/agents/agy-gemini.sh resume-plan CONVERSATION_ID /tmp/sprint-plan-correction-prompt.txt
@@ -447,6 +448,11 @@ workspace grant, not a denylist: a trusted home directory or other broad ancesto
 Antigravity's persistent settings still grants a wider surface and must be removed or
 narrowed through `/permissions` or Antigravity configuration before delegation.
 Never use `--dangerously-skip-permissions` as a substitute for a scoped grant.
+
+When headless mode lacks a scoped read or edit grant, use `propose` with all required
+code ranges and contract details embedded in the prompt. That stage instructs Gemini to
+use no tools and return an edit recipe for steward application. Do not spend a second
+implementation turn rediscovering the same permission denial.
 
 For semantic and qualification work, request a read-only implementation outline
 containing the expected production paths, invariants, smallest proposed change, and
@@ -485,6 +491,7 @@ scripts/agents/claude-opus.sh review-fresh PROMPT_FILE
 scripts/agents/claude-opus.sh acceptance-start PROMPT_FILE
 scripts/agents/claude-opus.sh acceptance-resume SESSION_ID PROMPT_FILE
 scripts/agents/agy-gemini.sh access
+scripts/agents/agy-gemini.sh propose PROMPT_FILE
 scripts/agents/agy-gemini.sh plan PROMPT_FILE
 scripts/agents/agy-gemini.sh implement PROMPT_FILE
 scripts/agents/agy-gemini.sh resume-plan CONVERSATION_ID PROMPT_FILE
@@ -496,9 +503,8 @@ scripts/agents/agy-gemini.sh interactive-resume CONVERSATION_ID PROMPT_FILE
 ```
 
 The wrappers pin model variant, authentication, sandbox, workspace grant, permission
-mode, and output defaults. Antigravity receives the highest available Gemini 3.7 Flash
-reasoning variant, `gemini-3.7-flash-high`. That model does not accept a separate
-`--effort` argument. `scripts/agents/agy-gemini.sh config` reports the High model
+mode, and output defaults. Antigravity receives `gemini-3.7-flash-high` with explicit
+`--effort high`. `scripts/agents/agy-gemini.sh config` reports the High model
 variant, mandatory worktree/sandbox controls, edit-only execution, and steward-owned
 verification without starting inference.
 The wrappers fail closed instead of silently falling back from Claude subscription
@@ -548,8 +554,9 @@ For a patch-lane sprint, the lifecycle is:
 
 1. The steward writes the compact contract and creates one clean worktree and branch.
 2. Gemini 3.7 Flash High at effort High receives only the contract and relevant file
-   ranges, states a short plan, writes the regression and implementation, and stops at
-   a reviewable diff without running commands.
+   ranges. With verified scoped permissions it writes the regression and implementation;
+   otherwise `propose` returns the exact edit recipe for the steward to apply. It does
+   not run verification commands.
 3. The steward runs the focused commands and reviews the algorithm, scope, regression,
    and resulting diagnostics. One bounded correction is available; Opus is consulted
    only when the expected semantics remain genuinely ambiguous.

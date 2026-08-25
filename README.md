@@ -21,7 +21,9 @@ recursive export. Fixed call arguments expose bounded, owner-qualified value-exp
 origins through `origins`, including eager `CONCAT`, Lua `MOD`, and explicit cutoff
 reasons without sink or taint policy. `callgraph` links calls to exact child prototypes
 when direct closure flow or one literal global store establishes a unique relation;
-unresolved relations remain explicit.
+unresolved relations remain explicit. Batch export treats readable non-bytecode inputs
+as explicit skips, reports every input path, and returns default success when a mixed
+firmware tree produces at least one complete file result.
 
 All stock-Lua dialects remain **experimental** unless an exact release artifact
 for the current revision and profile says otherwise. Internal library gates do not

@@ -57,6 +57,12 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Machine interface
 
+- Batch export now distinguishes succeeded, skipped, and failed inputs, qualifies every
+  non-success with its path, closes terminal counts, and returns default success when a
+  mixed firmware tree yields at least one complete result; `--strict` retains all-or-none
+  process status.
+- Unknown input signatures now use the cataloged `PARSE-UNKNOWN-001` diagnostic instead
+  of sharing the malformed-bytecode code.
 - Added `callgraph` text/JSON/JSONL output, recursive `call_relation` export facts, and
   `calls` xrefs with one exact or explicitly unresolved caller-to-prototype result per
   Lua 5.1 call.

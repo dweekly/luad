@@ -816,6 +816,13 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         semantics: "The input is plain Lua source rather than compiled bytecode accepted by this command.",
         suggested_action: "Compile trusted source explicitly or provide a compiled Lua chunk.",
     },
+    StaticDiagnosticDescriptor {
+        code: "PARSE-UNKNOWN-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "The input header does not match a supported Lua bytecode interpretation.",
+        suggested_action: "Verify the input type or investigate whether it uses an unsupported vendor dialect.",
+    },
 ];
 
 /// Return all diagnostic descriptors in ascending bytewise order.

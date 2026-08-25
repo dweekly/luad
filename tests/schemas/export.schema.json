@@ -329,6 +329,7 @@
       "required": [
         "files_failed",
         "files_processed",
+        "files_skipped",
         "files_succeeded",
         "record_type",
         "total_instructions"
@@ -340,6 +341,11 @@
           "minimum": 0.0
         },
         "files_processed": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "files_skipped": {
           "type": "integer",
           "format": "uint",
           "minimum": 0.0

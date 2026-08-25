@@ -603,6 +603,7 @@ fn test_jsonl_streaming_batch_export_deterministic_and_recursive() {
     assert_eq!(end.record_type, "export_end");
     assert_eq!(end.files_processed, 2);
     assert_eq!(end.files_succeeded, 2);
+    assert_eq!(end.files_skipped, 0);
     assert_eq!(end.files_failed, 0);
     assert!(end.total_instructions > 0);
 
