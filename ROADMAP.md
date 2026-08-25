@@ -22,31 +22,7 @@ an exact release, profile, layout, public surface, and evidence manifest.
 
 ## Delivery sequence
 
-### 1. Eliminate silent prototype-identity disagreement
-
-Every child-prototype reference will retain its owning path in disassembly, query,
-xrefs, export, and explanations. A nested `CLOSURE` must never name a different real
-prototype merely because its local child index is formatted as a root path.
-
-Exit outcome: public surfaces agree on every prototype reference in a multi-level
-fixture, and query results cannot silently redirect a researcher to another function.
-
-### 2. Promote the exact embedded target
-
-The public authority will qualify `inspect`, `disasm`, `validate`, query, and batch
-selection over the exact LNUM32 profile and layout. Capability output will derive its
-support tier from the verified release manifest. Publicly downloadable firmware may
-provide a supplemental authenticated corpus job when its redistribution and extraction
-terms permit; public minimized fixtures and the independent authority remain the gate.
-
-The executed-role exception for Lua 5.1 `OP_TEST` and closure-binding descriptor `A`
-will be documented at the opcode/validator authority boundary so declared opcode modes
-cannot reintroduce false register diagnostics.
-
-Exit outcome: the exact firmware-relevant target has an honest release manifest,
-discoverable evidence, and a clean representative-firmware inventory run.
-
-### 3. Make firmware-tree streams self-identifying and discoverable
+### 1. Make firmware-tree streams self-identifying and discoverable
 
 All JSONL fact variants will carry or directly reference stable input and interpretation
 identity. Interleaved records will be joinable without a `file_start` state machine.
@@ -57,7 +33,7 @@ Exit outcome: an agent can stream a mixed firmware tree into relational or JSON 
 attribute every record to the correct full path and interpretation, and discover the
 diagnostic surface without prose parsing.
 
-### 4. Measure and resolve symbolic callees
+### 2. Measure and resolve symbolic callees
 
 A bounded design spike will first measure call-site resolution coverage at intra-block,
 strict-dominator, and closure-capture tiers, plus conflicts, loop mutations, dynamic
@@ -73,7 +49,7 @@ Exit outcome: firmware consumers can enumerate trustworthy symbolic callees with
 building a second Lua register/closure resolver, while incomplete coverage is loud and
 measurable.
 
-### 5. Expose bounded argument and value origins
+### 3. Expose bounded argument and value origins
 
 Call arguments and selected registers will link to a cycle-safe value-expression graph.
 The matrix will cover constants, parameters, upvalues, fields, call results,
@@ -88,7 +64,7 @@ Exit outcome: an external investigator can audit each origin edge, distinguish
 constant-only expressions from dependent computations, and tell “computed” from “the
 analysis stopped.”
 
-### 6. Publish provable call relations and prototype content identity
+### 4. Publish provable call relations and prototype content identity
 
 Cross-prototype call edges will be emitted only where closure construction, the value
 stored at that exact instruction, lookup, and invocation establish one target. The
@@ -102,7 +78,7 @@ the navigation identity; content identities enable ordinary cross-firmware joins
 Exit outcome: callers can build a provable partial call graph, answer “who calls this”
 where bytecode permits, and identify changed prototype bodies across firmware releases.
 
-### 7. Close queries, recipes, and the stable release
+### 5. Close queries, recipes, and the stable release
 
 Queries will cover callee paths, unresolved reasons, origin shapes, call relations,
 interpretation identity, and prototype content identity. Every predicate applies its
@@ -112,13 +88,15 @@ cross-version comparison. A dedicated constant-search verb is eligible only if i
 materially improves the tested export/query recipe without creating parallel semantics.
 
 The release candidate will freeze the schema major, publish exact target artifacts,
-and undergo an uncoached investigation against a different firmware version or
-objective. Reproducible correctness defects become minimized public regressions.
+derive the `lua5.1-lnum32` support tier from the verified release evidence bundle, and
+keep the base `lua5.1` dialect experimental. It will undergo an uncoached investigation
+against a different firmware version or objective. Reproducible correctness defects
+become minimized public regressions.
 
 Exit outcome: a human or AI agent can complete the reference firmware workflows with
 the supported CLI and a thin external judgment layer.
 
-### 8. Qualify additional targets independently
+### 6. Qualify additional targets independently
 
 Stock Lua layouts, Lua 5.2, 5.3, 5.4, 5.5, LuaJIT, and vendor mappings advance one exact
 target at a time. Vendor qualification may consume a provenance-bound mapping recovered
@@ -128,18 +106,15 @@ remain external.
 ## Dependency order
 
 ```text
-prototype identity correctness
-  -> exact LNUM32 target promotion
-       -> self-identifying streams
-            -> measured symbolic callees
-                 -> bounded value origins
-                      -> provable calls + content identity
-                           -> query/recipe closure + stable release
+self-identifying streams
+  -> measured symbolic callees
+       -> bounded value origins
+            -> provable calls + content identity
+                 -> query/recipe closure + stable release evidence
 ```
 
 ## Customer checkpoints
 
-- After target promotion: inventory and validate the complete Lua corpus.
 - After streams and symbolic callees: repeat a corpus-wide call-site survey using only
   public machine output and report resolution coverage.
 - After value origins and call relations: trace representative format/concatenation

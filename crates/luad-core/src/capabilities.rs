@@ -46,6 +46,17 @@ pub struct DialectCapability {
     pub evidence: Vec<String>,
 }
 
+/// Machine-discoverable entry point for the public diagnostic catalog.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct DiagnosticCatalogCapability {
+    /// CLI command that lists or looks up diagnostic descriptors.
+    pub command: String,
+    /// Schema name accepted by `luad schema`.
+    pub schema: String,
+    /// Output formats supported by the command.
+    pub formats: Vec<String>,
+}
+
 /// Global tool capability manifest serialized across text and JSON interfaces.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct CapabilityManifest {
@@ -63,6 +74,8 @@ pub struct CapabilityManifest {
     pub planned_dialects: Vec<String>,
     /// Full capabilities by dialect.
     pub dialects: Vec<DialectCapability>,
+    /// Public diagnostic-catalog discovery entry point.
+    pub diagnostic_catalog: DiagnosticCatalogCapability,
     /// Verification and evidence claims.
     pub evidence: Vec<String>,
 }
@@ -199,11 +212,16 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
     CapabilityManifest {
         tool_name: "luad".to_string(),
         tool_version: tool_version.to_string(),
-        schema_version: 1,
+        schema_version: 2,
         supported_dialects,
         experimental_dialects,
         planned_dialects,
         dialects,
+        diagnostic_catalog: DiagnosticCatalogCapability {
+            command: "diagnostics".to_string(),
+            schema: "diagnostics".to_string(),
+            formats: vec!["json".to_string(), "text".to_string()],
+        },
         evidence,
     }
 }

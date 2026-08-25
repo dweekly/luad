@@ -28,17 +28,12 @@ Output:
 Extract all string constants across a batch of precompiled files, capturing parent file and prototype structural path:
 
 ```bash
-luad export firmware/*.luac --format jsonl | jq -rn '
-  foreach inputs as $record (
-    null;
-    if $record.record_type == "file_start" then $record.path else . end;
-    if $record.record_type == "constant" and
-       ($record.data.value.value.display? != null)
-    then
-      "[\(.)][\($record.data.id | sub(":k:[0-9]+$"; ""))] " +
-      "\($record.data.id): \($record.data.value.value.display)"
-    else empty end
-  )'
+luad export firmware/*.luac --format jsonl | jq -r '
+  select(.record_type == "constant" and
+         (.data.value.value.display? != null)) |
+  "[\(.context.input_identity.path)]" +
+  "[\(.data.id | sub(":k:[0-9]+$"; ""))] " +
+  "\(.data.id): \(.data.value.value.display)"'
 ```
 
 For large or mixed corpora, cap counted facts independently for each input while
@@ -103,10 +98,9 @@ sqlite3 luad_index.db "
 
 # Ingest JSONL stream
 luad export firmware/*.luac --format jsonl | jq -r '
-  if .record_type == "file_start" then
-    "INSERT OR REPLACE INTO files VALUES (\x27" + .path + "\x27, \x27" + .sha256 + "\x27, " + (.byte_length|tostring) + ");"
-  elif .record_type == "instruction" then
-    "INSERT INTO instructions VALUES (\x27" + (.data.id | sub(":pc:[0-9]+$"; "")) + "\x27, " + (.data.pc|tostring) + ", \x27" + .data.mnemonic + "\x27, \x27" + .data.role + "\x27, \x27" + .data.raw_hex + "\x27);"
+  if .record_type == "instruction" then
+    "INSERT OR REPLACE INTO files VALUES (\x27" + .context.input_identity.path + "\x27, \x27" + .context.input_identity.sha256 + "\x27, " + (.context.input_identity.byte_length|tostring) + ");" +
+    " INSERT INTO instructions VALUES (\x27" + (.data.id | sub(":pc:[0-9]+$"; "")) + "\x27, " + (.data.pc|tostring) + ", \x27" + .data.mnemonic + "\x27, \x27" + .data.role + "\x27, \x27" + .data.raw_hex + "\x27);"
   elif .record_type == "xref" then
     "INSERT INTO xrefs VALUES (\x27" + (.data.source|tostring) + "\x27, \x27" + (.data.target|tostring) + "\x27, \x27" + .data.relation + "\x27);"
   else empty end' | sqlite3 luad_index.db
@@ -157,4 +151,9 @@ Validate live output against canonical JSON Schemas using standard validation to
 ```bash
 luad schema chunk > chunk.schema.json
 luad inspect sample.luac --format json | jsonschema -i - chunk.schema.json
+
+luad schema export > export.schema.json
+luad export sample.luac --format jsonl | while read -r record; do
+  printf '%s\n' "$record" | jsonschema -i - export.schema.json
+done
 ```

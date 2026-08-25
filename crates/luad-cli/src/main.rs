@@ -28,8 +28,8 @@ use luad_core::dialect::{ResolvedInterpretation, SelectionMode};
 use luad_core::disasm::DisassembledPrototype;
 use luad_core::envelope::{
     AnalysisConfiguration, ExportEndRecord, ExportStartRecord, FileEndRecord, FileStartRecord,
-    InputIdentity, JsonlDataRecord, JsonlMetadataRecord, JsonlSummaryRecord, MachineDocument,
-    ValidationResponse,
+    InputIdentity, JsonlDataRecord, JsonlMetadataRecord, JsonlRecordContext, JsonlSummaryRecord,
+    MachineDocument, ValidationResponse, JSONL_SCHEMA_VERSION,
 };
 use luad_core::id::{ProtoPath, StableId};
 use luad_core::limits::{ParseMode, ResourceLimits};
@@ -302,15 +302,17 @@ fn handle_inspect(args: InspectArgs) {
         OutputFormat::Jsonl => {
             let meta = JsonlMetadataRecord {
                 record_type: "metadata".to_string(),
-                schema_version: 1,
+                schema_version: JSONL_SCHEMA_VERSION,
                 tool_version: env!("CARGO_PKG_VERSION").to_string(),
-                input_identity: identity,
-                interpretation: interp,
+                input_identity: identity.clone(),
+                interpretation: interp.clone(),
                 analysis_configuration: config,
             };
             println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            let context = JsonlRecordContext::successful(identity, interp);
             let data_rec = JsonlDataRecord {
                 record_type: "chunk".to_string(),
+                context,
                 data: chunk.clone(),
             };
             println!("{}", serde_json::to_string(&data_rec).unwrap_or_default());
@@ -439,16 +441,18 @@ fn handle_disasm(args: DisasmArgs) {
         OutputFormat::Jsonl => {
             let meta = JsonlMetadataRecord {
                 record_type: "metadata".to_string(),
-                schema_version: 1,
+                schema_version: JSONL_SCHEMA_VERSION,
                 tool_version: env!("CARGO_PKG_VERSION").to_string(),
-                input_identity: identity,
-                interpretation: interp,
+                input_identity: identity.clone(),
+                interpretation: interp.clone(),
                 analysis_configuration: config,
             };
             println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            let context = JsonlRecordContext::successful(identity, interp);
             for inst in &disasm_proto.instructions {
                 let rec = JsonlDataRecord {
                     record_type: "instruction".to_string(),
+                    context: context.clone(),
                     data: inst.clone(),
                 };
                 println!("{}", serde_json::to_string(&rec).unwrap_or_default());
@@ -593,10 +597,19 @@ fn handle_diagnostics(args: DiagnosticsArgs) {
 }
 
 fn handle_schema(args: SchemaArgs) {
-    if args.schema_version != 1 {
+    let current_version = match args.name.as_str() {
+        "capabilities" | "manifest" | "export" => 2,
+        _ => 1,
+    };
+    if args
+        .schema_version
+        .is_some_and(|version| version != current_version)
+    {
         eprintln!(
-            "{}: Only schema version 1 is supported by this build",
-            "error".red()
+            "{}: Schema '{}' supports major version {} in this build",
+            "error".red(),
+            args.name,
+            current_version
         );
         ExitCode::UsageError.exit();
     }
@@ -839,16 +852,18 @@ fn handle_cfg(args: CfgArgs) {
         OutputFormat::Jsonl => {
             let meta = JsonlMetadataRecord {
                 record_type: "metadata".to_string(),
-                schema_version: 1,
+                schema_version: JSONL_SCHEMA_VERSION,
                 tool_version: env!("CARGO_PKG_VERSION").to_string(),
-                input_identity: identity,
-                interpretation: interp,
+                input_identity: identity.clone(),
+                interpretation: interp.clone(),
                 analysis_configuration: config,
             };
             println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            let context = JsonlRecordContext::successful(identity, interp);
             for block in &cfg.blocks {
                 let rec = JsonlDataRecord {
                     record_type: "basic_block".to_string(),
+                    context: context.clone(),
                     data: block.clone(),
                 };
                 println!("{}", serde_json::to_string(&rec).unwrap_or_default());
@@ -967,16 +982,18 @@ fn handle_xrefs(args: XrefsArgs) {
         OutputFormat::Jsonl => {
             let meta = JsonlMetadataRecord {
                 record_type: "metadata".to_string(),
-                schema_version: 1,
+                schema_version: JSONL_SCHEMA_VERSION,
                 tool_version: env!("CARGO_PKG_VERSION").to_string(),
-                input_identity: identity,
-                interpretation: interp,
+                input_identity: identity.clone(),
+                interpretation: interp.clone(),
                 analysis_configuration: config,
             };
             println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            let context = JsonlRecordContext::successful(identity, interp);
             for entry in &matching_refs {
                 let rec = JsonlDataRecord {
                     record_type: "xref".to_string(),
+                    context: context.clone(),
                     data: entry.clone(),
                 };
                 println!("{}", serde_json::to_string(&rec).unwrap_or_default());
@@ -1051,16 +1068,18 @@ fn handle_query(args: QueryArgs) {
         OutputFormat::Jsonl => {
             let meta = JsonlMetadataRecord {
                 record_type: "metadata".to_string(),
-                schema_version: 1,
+                schema_version: JSONL_SCHEMA_VERSION,
                 tool_version: env!("CARGO_PKG_VERSION").to_string(),
-                input_identity: identity,
-                interpretation: interp,
+                input_identity: identity.clone(),
+                interpretation: interp.clone(),
                 analysis_configuration: config,
             };
             println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            let context = JsonlRecordContext::successful(identity, interp);
             for m in &response.matches {
                 let rec = JsonlDataRecord {
                     record_type: "query_match".to_string(),
+                    context: context.clone(),
                     data: m.clone(),
                 };
                 println!("{}", serde_json::to_string(&rec).unwrap_or_default());
@@ -1150,17 +1169,19 @@ fn handle_diff(args: DiffArgs) {
         OutputFormat::Jsonl => {
             let meta = JsonlMetadataRecord {
                 record_type: "metadata".to_string(),
-                schema_version: 1,
+                schema_version: JSONL_SCHEMA_VERSION,
                 tool_version: env!("CARGO_PKG_VERSION").to_string(),
-                input_identity: identity,
-                interpretation: interp,
+                input_identity: identity.clone(),
+                interpretation: interp.clone(),
                 analysis_configuration: config,
             };
             println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            let context = JsonlRecordContext::successful(identity, interp);
             let mut record_count = 0;
             for proto_diff in &diff.proto_diffs {
                 let rec = JsonlDataRecord {
                     record_type: "diff_prototype".to_string(),
+                    context: context.clone(),
                     data: proto_diff.clone(),
                 };
                 println!("{}", serde_json::to_string(&rec).unwrap_or_default());
@@ -1203,6 +1224,7 @@ struct ExportProtoMeta {
 #[serde(tag = "record_type", rename_all = "snake_case")]
 enum ExportRecord {
     ExportStart {
+        schema_version: u32,
         tool_version: String,
         total_files: usize,
     },
@@ -1213,21 +1235,27 @@ enum ExportRecord {
         interpretation: Option<ResolvedInterpretation>,
     },
     Prototype {
+        context: JsonlRecordContext,
         data: ExportProtoMeta,
     },
     Instruction {
+        context: JsonlRecordContext,
         data: luad_core::DisassembledInstruction,
     },
     Constant {
+        context: JsonlRecordContext,
         data: luad_core::model::Constant,
     },
     Upvalue {
+        context: JsonlRecordContext,
         data: luad_core::model::UpvalueDesc,
     },
     Xref {
+        context: JsonlRecordContext,
         data: luad_analysis::XrefEntry,
     },
     Diagnostic {
+        context: JsonlRecordContext,
         data: luad_core::Diagnostic,
     },
     FileEnd {
@@ -1250,14 +1278,16 @@ enum ExportRecord {
 }
 
 struct FactEmitter {
+    context: JsonlRecordContext,
     max_facts: Option<usize>,
     emitted_count: usize,
     instruction_count: usize,
 }
 
 impl FactEmitter {
-    fn new(max_facts: Option<usize>) -> Self {
+    fn new(context: JsonlRecordContext, max_facts: Option<usize>) -> Self {
         Self {
+            context,
             max_facts,
             emitted_count: 0,
             instruction_count: 0,
@@ -1277,6 +1307,7 @@ impl FactEmitter {
         }
         let rec = JsonlDataRecord {
             record_type: record_type.to_string(),
+            context: self.context.clone(),
             data,
         };
         println!("{}", serde_json::to_string(&rec).unwrap_or_default());
@@ -1290,6 +1321,7 @@ impl FactEmitter {
         }
         let rec = JsonlDataRecord {
             record_type: "instruction".to_string(),
+            context: self.context.clone(),
             data: inst,
         };
         println!("{}", serde_json::to_string(&rec).unwrap_or_default());
@@ -1316,24 +1348,21 @@ fn emit_export_proto_tree(
         return;
     }
 
-    let proto_rec = JsonlDataRecord {
-        record_type: "prototype".to_string(),
-        data: ExportProtoMeta {
-            id: proto.id.clone(),
-            path: proto.path.clone(),
-            source_name: proto.source_name.as_ref().map(|s| s.display.clone()),
-            line_defined: proto.line_defined,
-            last_line_defined: proto.last_line_defined,
-            numparams: proto.numparams as usize,
-            is_vararg: proto.is_vararg != 0,
-            maxstacksize: proto.maxstacksize as usize,
-            instructions_count: proto.instructions.len(),
-            constants_count: proto.constants.len(),
-            upvalues_count: proto.upvalues.len(),
-            protos_count: proto.protos.len(),
-        },
+    let proto_meta = ExportProtoMeta {
+        id: proto.id.clone(),
+        path: proto.path.clone(),
+        source_name: proto.source_name.as_ref().map(|s| s.display.clone()),
+        line_defined: proto.line_defined,
+        last_line_defined: proto.last_line_defined,
+        numparams: proto.numparams as usize,
+        is_vararg: proto.is_vararg != 0,
+        maxstacksize: proto.maxstacksize as usize,
+        instructions_count: proto.instructions.len(),
+        constants_count: proto.constants.len(),
+        upvalues_count: proto.upvalues.len(),
+        protos_count: proto.protos.len(),
     };
-    if !emitter.emit_fact("prototype", &proto_rec.data) {
+    if !emitter.emit_fact("prototype", &proto_meta) {
         return;
     }
 
@@ -1418,6 +1447,7 @@ fn handle_export(args: ExportArgs) {
         "{}",
         serde_json::to_string(&ExportStartRecord {
             record_type: "export_start".to_string(),
+            schema_version: JSONL_SCHEMA_VERSION,
             tool_version: env!("CARGO_PKG_VERSION").to_string(),
             total_files: file_paths.len(),
         })
@@ -1446,6 +1476,7 @@ fn handle_export(args: ExportArgs) {
                 );
                 let diag_rec = JsonlDataRecord {
                     record_type: "diagnostic".to_string(),
+                    context: JsonlRecordContext::failed_read(),
                     data: diag,
                 };
                 println!("{}", serde_json::to_string(&diag_rec).unwrap_or_default());
@@ -1471,11 +1502,11 @@ fn handle_export(args: ExportArgs) {
             Err(_) => {
                 any_failed = true;
                 failed_count += 1;
-                let sha256 = format!("{:x}", sha2::Sha256::digest(&bytes));
+                let sha256 = hex::encode(sha2::Sha256::digest(&bytes));
                 let start_rec = FileStartRecord {
                     record_type: "file_start".to_string(),
                     path: path_str.clone(),
-                    sha256,
+                    sha256: sha256.clone(),
                     byte_length: bytes.len(),
                     interpretation: None,
                 };
@@ -1505,8 +1536,14 @@ fn handle_export(args: ExportArgs) {
                     );
                     (diag, msg)
                 };
+                let parse_identity = InputIdentity {
+                    path: path_str.clone(),
+                    sha256,
+                    byte_length: bytes.len(),
+                };
                 let diag_rec = JsonlDataRecord {
                     record_type: "diagnostic".to_string(),
+                    context: JsonlRecordContext::failed_parse(parse_identity),
                     data: diag,
                 };
                 println!("{}", serde_json::to_string(&diag_rec).unwrap_or_default());
@@ -1533,7 +1570,7 @@ fn handle_export(args: ExportArgs) {
                 path: identity.path.clone(),
                 sha256: identity.sha256.clone(),
                 byte_length: identity.byte_length,
-                interpretation: Some(interp),
+                interpretation: Some(interp.clone()),
             })
             .unwrap_or_default()
         );
@@ -1543,7 +1580,8 @@ fn handle_export(args: ExportArgs) {
         let available_fact_count =
             count_available_facts_proto_tree(&chunk.main_proto, &disasm) + xref_index.entries.len();
 
-        let mut emitter = FactEmitter::new(args.max_facts_per_file);
+        let context = JsonlRecordContext::successful(identity.clone(), interp);
+        let mut emitter = FactEmitter::new(context.clone(), args.max_facts_per_file);
         emit_export_proto_tree(&chunk.main_proto, &disasm, &mut emitter);
 
         for entry in &xref_index.entries {
@@ -1555,6 +1593,7 @@ fn handle_export(args: ExportArgs) {
         for diag in &chunk.diagnostics {
             let rec = JsonlDataRecord {
                 record_type: "diagnostic".to_string(),
+                context: context.clone(),
                 data: diag.clone(),
             };
             println!("{}", serde_json::to_string(&rec).unwrap_or_default());
@@ -1603,7 +1642,12 @@ mod tests {
 
     #[test]
     fn test_fact_emitter_budget_and_counts() {
-        let mut emitter = FactEmitter::new(Some(2));
+        let context = JsonlRecordContext::failed_parse(InputIdentity {
+            path: "test.luac".to_string(),
+            sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
+            byte_length: 32,
+        });
+        let mut emitter = FactEmitter::new(context, Some(2));
         assert!(emitter.should_emit());
         assert_eq!(emitter.emitted_count, 0);
         assert_eq!(emitter.instruction_count, 0);
@@ -1647,7 +1691,8 @@ mod tests {
 
     #[test]
     fn test_fact_emitter_unbounded() {
-        let mut emitter = FactEmitter::new(None);
+        let context = JsonlRecordContext::failed_read();
+        let mut emitter = FactEmitter::new(context, None);
         assert!(emitter.should_emit());
         assert!(emitter.emit_fact("prototype", &"proto_data"));
         assert!(emitter.emit_fact("constant", &"const_data"));

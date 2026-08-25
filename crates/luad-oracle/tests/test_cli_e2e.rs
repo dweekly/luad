@@ -124,7 +124,6 @@ fn test_cli_schema_export() {
         "xrefs",
         "query",
         "diff",
-        "capabilities",
     ] {
         let output = Command::new(&luad)
             .args(["schema", schema_name, "--schema-version", "1"])
@@ -135,6 +134,17 @@ fn test_cli_schema_export() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let parsed: serde_json::Value =
             serde_json::from_str(&stdout).expect("Schema output must be valid JSON");
+        assert!(parsed.get("$schema").is_some() || parsed.get("title").is_some());
+    }
+
+    for schema_name in ["capabilities", "export"] {
+        let output = Command::new(&luad)
+            .args(["schema", schema_name, "--schema-version", "2"])
+            .output()
+            .expect("luad schema major 2 must run");
+        assert_eq!(output.status.code(), Some(0));
+        let parsed: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("Schema output must be valid JSON");
         assert!(parsed.get("$schema").is_some() || parsed.get("title").is_some());
     }
 

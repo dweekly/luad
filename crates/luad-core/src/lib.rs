@@ -16,7 +16,8 @@ pub mod provenance;
 pub mod reader;
 
 pub use capabilities::{
-    get_canonical_capabilities, CapabilityManifest, DialectCapability, SupportTier,
+    get_canonical_capabilities, CapabilityManifest, DiagnosticCatalogCapability, DialectCapability,
+    SupportTier,
 };
 
 pub use diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
@@ -32,8 +33,8 @@ pub use disasm::{
 };
 pub use envelope::{
     AnalysisConfiguration, ExportEndRecord, ExportStartRecord, FileEndRecord, FileStartRecord,
-    InputIdentity, JsonlDataRecord, JsonlMetadataRecord, JsonlSummaryRecord, MachineDocument,
-    ValidationResponse,
+    InputIdentity, JsonlDataRecord, JsonlMetadataRecord, JsonlRecordContext, JsonlSummaryRecord,
+    MachineDocument, ValidationResponse, JSONL_SCHEMA_VERSION,
 };
 pub use id::{ProtoPath, StableId};
 

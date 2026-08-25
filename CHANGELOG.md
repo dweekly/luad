@@ -57,6 +57,9 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Machine interface
 
+- JSONL facts now carry required per-record input and interpretation context, including
+  honest partial context on parse and read failures; streaming schemas use major 2.
+- Capability output now exposes the diagnostic-catalog command, schema, and formats.
 - Lua 5.1 `CLOSURE` query summaries and semantic IR explanations now report the
   owner-relative child prototype path instead of formatting the local `Bx` index as a
   root prototype.

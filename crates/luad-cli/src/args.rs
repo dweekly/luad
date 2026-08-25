@@ -317,8 +317,8 @@ pub struct SchemaArgs {
     pub name: String,
 
     /// Schema major version.
-    #[arg(long = "schema-version", short = 's', default_value_t = 1)]
-    pub schema_version: u32,
+    #[arg(long = "schema-version", short = 's')]
+    pub schema_version: Option<u32>,
 }
 
 #[derive(Args, Debug)]
