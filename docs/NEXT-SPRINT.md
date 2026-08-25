@@ -1,127 +1,162 @@
-# Active sprint: Lua 5.1 count-encoded register windows
+# Active sprint: public diagnostic catalog
 
-Lane: semantic matrix. Target: one frozen acceptance commit, one implementation
+Lane: machine contract. Target: one frozen acceptance commit, one implementation
 commit, and one canonical gate.
 
 ## Claim and researcher value
 
-Lua 5.1 validation treats `CALL`, `TAILCALL`, `RETURN`, `SETLIST`, and `VARARG`
-count fields as scalar counts while validating every statically bounded register
-window those counts describe. Fixed argument, result, return-value, table-source, and
-vararg-result endpoints must remain below the owning prototype's `maxstacksize`.
-Open-ended count value zero remains explicitly unbounded and receives no invented
-static endpoint.
+Every diagnostic code that `luad` can emit from production code is discoverable
+without supplying a bytecode artifact. Human researchers and external agents can
+deterministically retrieve the code's severity, category, semantics, and suggested
+next action through a self-documenting CLI and a versioned JSON Schema.
 
-This closes the remaining count-encoded register spans without making `B` or `C`
-look like direct registers in diagnostics or machine disassembly.
+The catalog is descriptive product metadata. It does not classify vulnerabilities,
+interpret a research target, retain project state, or make diagnostic emission depend
+on a network service or session.
 
-## Semantic authority
+## Public command and schema
 
-Acceptance derives each row from the executed Lua 5.1.5 VM rule and independently
-encodes the iABC word. With a prototype bound of six registers and `A = 1`, prove:
+Add this public command:
 
-| Instruction role | Fixed window | Last valid count | First invalid count |
-|---|---|---:|---:|
-| `CALL.B` arguments, including function | `R(A)..R(A+B-1)` | 5 | 6 |
-| `CALL.C` results | `R(A)..R(A+C-2)` when `C > 1` | 6 | 7 |
-| `TAILCALL.B` arguments, including function | `R(A)..R(A+B-1)` | 5 | 6 |
-| `RETURN.B` returned values | `R(A)..R(A+B-2)` when `B > 1` | 6 | 7 |
-| `SETLIST.B` table sources | `R(A+1)..R(A+B)` when `B > 0` | 4 | 5 |
-| `VARARG.B` results | `R(A)..R(A+B-2)` when `B > 1` | 6 | 7 |
+```console
+luad diagnostics [CODE] --format text|json
+```
 
-For each fixed row, changing only the named count across the boundary produces
-exactly one `L51-REG-SPAN-001` with the mnemonic, exact window, owning bound,
-instruction stable ID, source offset, source length, and raw bytes in validation JSON,
-with the matching physical word and typed operands in disassembly JSON.
-The valid boundary produces none. `CALL` proves its argument and result windows in
-separate cases with the other field held valid. The two violations are not combined
-because structurally identical public diagnostics are deduplicated.
+With no `CODE`, the command emits the complete catalog in ascending bytewise code
+order. With an exact `CODE`, it emits the same response shape containing exactly one
+descriptor. An unknown, partial, or case-folded code is a usage error with nonzero
+exit status and must never return a successful empty result.
 
-For every applicable zero-count form, prove that validation does not invent a static
-span. Prove the empty fixed forms `CALL.B = 1`, `CALL.C = 1`, `RETURN.B = 1`, and
-`VARARG.B = 1` cannot underflow an endpoint calculation. Prove that `TAILCALL.C` and
-`SETLIST.C` remain non-register fields even at their
-largest encoded value. No matrix case may emit `L51-REG-002` or `L51-REG-003` for a
-count field.
+JSON uses a top-level `DiagnosticCatalogResponse` containing:
 
-The acceptance comparator must reject at least these mutations: omitted expected
-span, wrong endpoint formula, wrong owner bound or target ID, scalar count retyped as
-a register, and a diagnostic invented for an open-ended count.
+- `schema_version`, fixed to major `1`;
+- `tool_version`;
+- `diagnostic_count`, equal to the array length;
+- `diagnostics`, an ordered array of `DiagnosticDescriptor` records.
 
-## Public boundary and fixtures
+Each descriptor contains exactly these required facts:
 
-Use the manifest-pinned Lua 5.1 `control_flow.luac` fixture and derive its root
-`maxstacksize` through live `inspect --format json`. Mutate one root instruction word
-at its recorded byte location while preserving the rest of the chunk. Exercise live
-`validate --format json` and selected-prototype `disasm --format json`, validate both
-documents against their published schemas, and pin the fixture hash.
+- `code`;
+- `severity`;
+- `category`;
+- `semantics`, explaining what condition the code reports;
+- `suggested_action`, giving a concrete next step to the caller.
+
+The response has no artificial input identity or dialect interpretation because the
+catalog does not analyze an input artifact. `luad schema diagnostics` publishes its
+JSON Schema. `luad schema diagnostic` continues to describe an emitted diagnostic
+instance.
+
+Text output is deterministic and bounded. Every row begins with the exact code,
+severity, and category, followed by its semantics and suggested action. Exact lookup
+uses the same renderer as list output.
+
+## Catalog authority and completeness
+
+`luad-core` owns the descriptor type, the canonical catalog, exact lookup, sorting,
+and uniqueness validation. The CLI only selects and renders catalog records.
+
+The frozen source inventory contains 108 production-emittable codes, including the
+three Lua 5.4 disassembly codes without numeric suffixes. Acceptance independently
+walks production Rust sources under `crates/`, excluding test paths and the catalog
+module at `crates/luad-core/src/diagnostic_catalog.rs`, and extracts
+diagnostic-emission literals. It proves exact set
+equality with the public live catalog.
+
+Production calls to `Diagnostic::error` and `Diagnostic::warning`, plus direct
+`Diagnostic` records, must use a string literal at the emission site. A bound,
+computed, or concatenated emission code
+is rejected by acceptance because it cannot be proven catalog-complete. Adding,
+removing, or renaming a production emission therefore requires the catalog and its
+public evidence to change together.
+
+Every descriptor must have a unique nonempty code, a nonempty specific semantics
+sentence, and a nonempty actionable next step. The catalog contains no aliases,
+wildcards, family-only placeholders, or entries that production cannot emit.
+
+## Independent acceptance
 
 The frozen acceptance module is
-`crates/luad-oracle/tests/test_validator_count_spans_lua51.rs`. The canonical gate is
-`gate-validator-count-spans-lua51`, comprising:
+`crates/luad-oracle/tests/test_diagnostic_catalog.rs`. It contains exactly these
+non-skipping tests:
 
-- `tests/gates/gate-validator-count-spans-lua51.json`;
-- `scripts/gates/gate-validator-count-spans-lua51.sh`;
-- the exact non-skipping acceptance tests enumerated by the gate specification;
-- `gate-proof-harness`, `gate-public-disasm-lua51`,
+- `test_catalog_code_set_matches_independent_production_inventory`;
+- `test_production_emitters_use_literal_diagnostic_codes`;
+- `test_catalog_descriptors_are_unique_sorted_complete_and_actionable`;
+- `test_public_json_list_and_lookup_are_schema_valid_deterministic`;
+- `test_public_text_list_and_lookup_golden`;
+- `test_unknown_code_fails_closed`;
+- `test_catalog_comparator_rejects_killer_mutations`;
+- `test_existing_diagnostic_instance_schema_remains_compatible`.
+
+The comparator must reject at least these mutations: omitted production code, extra
+catalog-only code, duplicate code, reordered records, wrong severity, wrong category,
+blank semantics, blank suggested action, successful empty unknown lookup, nonliteral
+emitter code, and a schema that omits a required descriptor field.
+
+Representative exact metadata is pinned for core truncation, Lua 5.1 register spans,
+Lua 5.4 invalid opcodes, and unsupported plain Lua source. The complete code set is
+pinned independently of production discovery so deleting an emitter and its catalog
+entry together cannot silently shrink the contract.
+
+The canonical gate is `gate-diagnostic-catalog`, comprising:
+
+- `tests/gates/gate-diagnostic-catalog.json`;
+- `scripts/gates/gate-diagnostic-catalog.sh`;
+- the exact eight tests above;
+- `gate-proof-harness`, `gate-machine-contract`,
   `gate-validation-null-hypothesis`, and
-  `gate-validator-reference-operands-lua51` as prerequisites.
+  `gate-validator-count-spans-lua51` as prerequisites.
 
-The gate pins Lua 5.1.5 compiler identity and the fixture hash. A missing compiler,
-fixture, test, boundary row, mutation, or schema check is a hard failure.
+A missing test, code, descriptor field, schema check, mutation rejection, or public CLI
+probe is a hard failure. The gate executes without network access, skipped tests, or
+private corpora.
 
 ## Allowed scope
 
 Acceptance author:
 
-- `crates/luad-oracle/tests/test_validator_count_spans_lua51.rs`.
+- `crates/luad-oracle/tests/test_diagnostic_catalog.rs`.
 
-Steward-owned gate and planning paths:
+Steward-owned paths:
 
-- `tests/gates/gate-validator-count-spans-lua51.json`;
-- `scripts/gates/gate-validator-count-spans-lua51.sh`;
-- `docs/NEXT-SPRINT.md` and the documentation index freshness entry.
-
-The steward may align the existing scalar-domain control in
-`crates/luad-oracle/tests/test_validator_rk_b_lua51.rs` so `CALL.B = 256`
-continues to prove that `B` is neither an RK constant nor a direct register while
-requiring the count-derived register span to be rejected.
+- `tests/gates/gate-diagnostic-catalog.json`;
+- `scripts/gates/gate-diagnostic-catalog.sh`;
+- `docs/NEXT-SPRINT.md`;
+- the documentation index freshness entry.
 
 Implementation agent:
 
-- `crates/luad-dialect-lua51/src/validator.rs`;
-- ordinary validator unit tests in that file only when they clarify the production
-  helper independently of the frozen public acceptance module.
+- a new catalog module in `crates/luad-core/src/`;
+- `crates/luad-core/src/lib.rs` and `crates/luad-core/src/diagnostic.rs` when needed
+  for public catalog types;
+- `crates/luad-cli/src/args.rs`;
+- `crates/luad-cli/src/main.rs`;
+- CLI render modules used by the new command;
+- `docs/MACHINE-INTERFACE.md`, `README.md`, and `CHANGELOG.md` for the public command
+  contract and user-visible change.
 
-The implementation may introduce one small dialect-local helper for expressing
-statically bounded windows. The helper must accept the semantic start register so
-`SETLIST` reports `R(A+1)` rather than reusing `R(A)`. It may not change disassembly,
-lifting, schemas, fixture
-bytes, the diagnostic shape, or frozen acceptance and gate files.
-
-## Non-goals
-
-`LOADNIL` and `CONCAT` already carry direct endpoint operands and are outside this
-count-field matrix. `SETLIST.C = 0` and its following raw block-number word are outside
-this matrix; `SETLIST` rows use a nonzero `C`. Dynamic top-of-stack inference for
-zero-count forms, register
-provenance, CFG changes, diagnostic-catalog publication, capability promotion, and
-other Lua dialects are outside this sprint.
+The implementation may use a static descriptor table and a small lookup function. It
+may not alter when diagnostics are emitted, change existing diagnostic instance
+schemas, rewrite dialect parsers or validators, add persistent state, or add runtime
+catalog loading.
 
 ## Verification and stop condition
 
-Freeze the acceptance commit only after the focused test fails for the absent span
-behavior while all comparator mutations are demonstrably live. The steward then runs:
+Freeze acceptance only after the inventory, comparator, and CLI probes are live and
+the focused module fails solely because the public catalog and literal-emitter
+normalization are absent. The steward then
+runs:
 
 ```console
 cargo build -p luad-cli --bin luad
-cargo test -p luad-oracle --test test_validator_count_spans_lua51
-bash scripts/gates/gate-validator-count-spans-lua51.sh /tmp/luad-gate-count-spans
+cargo test -p luad-oracle --test test_diagnostic_catalog
+bash scripts/gates/gate-diagnostic-catalog.sh /tmp/luad-gate-diagnostic-catalog
 bash scripts/check.sh
 ```
 
 Acceptance requires a clean candidate revision, zero skipped or ignored tests, a
-tamper-evident gate artifact, unchanged frozen acceptance files during implementation,
-and exact public diagnostics for every matrix boundary. After merge and remote
-verification, replace this document with the diagnostic-discoverability sprint and
-remove the temporary branches and worktrees.
+tamper-evident gate artifact, unchanged frozen acceptance and gate files during
+implementation, exact public/source code-set equality, and successful schema
+validation. After merge and remote verification, replace this document with the Area
+1 closure sprint and remove the temporary branches and worktrees.
