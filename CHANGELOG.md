@@ -4,6 +4,12 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+- Lua 5.1 callees now retain typed constant-key `GETTABLE` and `SELF` lookup labels
+  across bounded aliases, equal control-flow joins, and safe closure captures without
+  claiming receiver identity or emitting an exact call edge. Typed key identity,
+  deterministic evidence, explicit `lookup-label-only` call relations, public text and
+  machine output, schemas, and NaN-loop convergence are covered by one authority-bound
+  acceptance gate.
 - Lua 5.1 now classifies closure bindings and `SETLIST C == 0` payload words through
   one physical-role pass. Non-executable companions retain raw words, owner links, and
   physical PCs while remaining absent from effects, calls, and CFG execution.

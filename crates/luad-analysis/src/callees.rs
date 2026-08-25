@@ -13,6 +13,19 @@ use crate::ControlFlowGraph;
 const MAX_PATH_SEGMENTS: usize = 32;
 const MAX_TRANSFER_STEPS: usize = 1_000_000;
 
+/// Which physical opcode selected the callee value.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum CalleeLookupKind {
+    /// Lookup via `GETTABLE`.
+    Gettable,
+    /// Lookup via `SELF`.
+    #[serde(rename = "self")]
+    SelfOp,
+}
+
 /// Epistemic basis for a symbolic Lua value label.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
@@ -47,9 +60,15 @@ pub enum CalleeUnresolvedReason {
 }
 
 /// Resolution attached to one physical call instruction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "status", rename_all = "kebab-case")]
 pub enum CalleeResolution {
+    /// A constant-key lookup selector proved by the listed bytecode instructions.
+    LookupLabel {
+        lookup_kind: CalleeLookupKind,
+        key: luad_core::model::ConstantValue,
+        evidence: Vec<StableId>,
+    },
     /// A symbolic label path proved by the listed bytecode instructions.
     ResolvedPath {
         basis: SymbolicPathBasis,
@@ -66,7 +85,7 @@ pub enum CalleeResolution {
 }
 
 /// One auditable callee result for a `CALL` or `TAILCALL` instruction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CalleeFact {
     pub call_id: StableId,
     pub proto_path: ProtoPath,
@@ -77,22 +96,27 @@ pub struct CalleeFact {
 }
 
 /// Callee facts for one prototype.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CalleeAnalysis {
     pub proto_id: StableId,
     pub calls: Vec<CalleeFact>,
 }
 
 /// Callee facts for every prototype in one parsed chunk.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ChunkCalleeAnalysis {
     pub prototypes: Vec<CalleeAnalysis>,
 }
 
 /// A caller-supplied fact about one captured upvalue.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum CaptureValue {
+    LookupLabel {
+        lookup_kind: CalleeLookupKind,
+        key: luad_core::model::ConstantValue,
+        evidence: Vec<StableId>,
+    },
     SymbolicPath {
         basis: SymbolicPathBasis,
         segments: Vec<String>,
@@ -135,8 +159,12 @@ pub(crate) struct GlobalStoreFact {
     pub value: GlobalStoreValue,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 enum ValueKind {
+    LookupLabel {
+        lookup_kind: CalleeLookupKind,
+        key: luad_core::model::ConstantValue,
+    },
     SymbolicPath {
         basis: SymbolicPathBasis,
         segments: Vec<String>,
@@ -151,13 +179,13 @@ struct DataflowResult {
     exhausted: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 struct KnownValue {
     kind: ValueKind,
     evidence: BTreeSet<StableId>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 enum FlowValue {
     Bottom,
     Known(KnownValue),
@@ -232,7 +260,7 @@ fn run_dataflow(
         } else {
             meet_predecessors(block, &out_states, frame_size)
         };
-        if incoming != in_states[block_idx] {
+        if !register_states_equal(&incoming, &in_states[block_idx]) {
             in_states[block_idx] = incoming.clone();
         }
 
@@ -251,7 +279,7 @@ fn run_dataflow(
             break;
         }
 
-        if state != out_states[block_idx] {
+        if !register_states_equal(&state, &out_states[block_idx]) {
             out_states[block_idx] = state;
             for edge in &block.successors {
                 if cfg.blocks[edge.to_block].is_reachable && queued.insert(edge.to_block) {
@@ -315,10 +343,188 @@ fn meet_predecessors(
     result
 }
 
+fn keys_join(
+    left: &luad_core::model::ConstantValue,
+    right: &luad_core::model::ConstantValue,
+) -> bool {
+    match (left, right) {
+        (luad_core::model::ConstantValue::Nil, luad_core::model::ConstantValue::Nil) => true,
+        (
+            luad_core::model::ConstantValue::Boolean(a),
+            luad_core::model::ConstantValue::Boolean(b),
+        ) => a == b,
+        (
+            luad_core::model::ConstantValue::Integer {
+                val: v1,
+                raw_hex: h1,
+            },
+            luad_core::model::ConstantValue::Integer {
+                val: v2,
+                raw_hex: h2,
+            },
+        ) => v1 == v2 && h1 == h2,
+        (
+            luad_core::model::ConstantValue::Float {
+                raw_hex: h1,
+                is_nan: n1,
+                ..
+            },
+            luad_core::model::ConstantValue::Float {
+                raw_hex: h2,
+                is_nan: n2,
+                ..
+            },
+        ) => {
+            if *n1 || *n2 {
+                false
+            } else {
+                h1 == h2
+            }
+        }
+        (
+            luad_core::model::ConstantValue::ShortString(s1),
+            luad_core::model::ConstantValue::ShortString(s2),
+        )
+        | (
+            luad_core::model::ConstantValue::LongString(s1),
+            luad_core::model::ConstantValue::LongString(s2),
+        ) => s1.raw_bytes == s2.raw_bytes,
+        _ => false,
+    }
+}
+
+fn constant_values_equal_for_state(
+    left: &luad_core::model::ConstantValue,
+    right: &luad_core::model::ConstantValue,
+) -> bool {
+    match (left, right) {
+        (luad_core::model::ConstantValue::Nil, luad_core::model::ConstantValue::Nil) => true,
+        (
+            luad_core::model::ConstantValue::Boolean(left),
+            luad_core::model::ConstantValue::Boolean(right),
+        ) => left == right,
+        (
+            luad_core::model::ConstantValue::Integer {
+                val: left_val,
+                raw_hex: left_hex,
+            },
+            luad_core::model::ConstantValue::Integer {
+                val: right_val,
+                raw_hex: right_hex,
+            },
+        ) => left_val == right_val && left_hex == right_hex,
+        (
+            luad_core::model::ConstantValue::Float {
+                val: left_val,
+                raw_hex: left_hex,
+                is_nan: left_nan,
+                is_inf: left_inf,
+            },
+            luad_core::model::ConstantValue::Float {
+                val: right_val,
+                raw_hex: right_hex,
+                is_nan: right_nan,
+                is_inf: right_inf,
+            },
+        ) => {
+            left_val.to_bits() == right_val.to_bits()
+                && left_hex == right_hex
+                && left_nan == right_nan
+                && left_inf == right_inf
+        }
+        (
+            luad_core::model::ConstantValue::ShortString(left),
+            luad_core::model::ConstantValue::ShortString(right),
+        )
+        | (
+            luad_core::model::ConstantValue::LongString(left),
+            luad_core::model::ConstantValue::LongString(right),
+        ) => left == right,
+        _ => false,
+    }
+}
+
+fn value_kinds_equal_for_state(left: &ValueKind, right: &ValueKind) -> bool {
+    match (left, right) {
+        (
+            ValueKind::LookupLabel {
+                lookup_kind: left_kind,
+                key: left_key,
+            },
+            ValueKind::LookupLabel {
+                lookup_kind: right_kind,
+                key: right_key,
+            },
+        ) => left_kind == right_kind && constant_values_equal_for_state(left_key, right_key),
+        (
+            ValueKind::SymbolicPath {
+                basis: left_basis,
+                segments: left_segments,
+            },
+            ValueKind::SymbolicPath {
+                basis: right_basis,
+                segments: right_segments,
+            },
+        ) => left_basis == right_basis && left_segments == right_segments,
+        (ValueKind::LiteralString(left), ValueKind::LiteralString(right)) => left == right,
+        (ValueKind::Closure(left), ValueKind::Closure(right)) => left == right,
+        (ValueKind::NonClosure, ValueKind::NonClosure) => true,
+        _ => false,
+    }
+}
+
+fn flow_values_equal_for_state(left: &FlowValue, right: &FlowValue) -> bool {
+    match (left, right) {
+        (FlowValue::Bottom, FlowValue::Bottom) => true,
+        (FlowValue::Unknown(left), FlowValue::Unknown(right)) => left == right,
+        (FlowValue::Known(left), FlowValue::Known(right)) => {
+            left.evidence == right.evidence && value_kinds_equal_for_state(&left.kind, &right.kind)
+        }
+        _ => false,
+    }
+}
+
+fn register_states_equal(left: &RegisterState, right: &RegisterState) -> bool {
+    left.len() == right.len()
+        && left
+            .iter()
+            .zip(right)
+            .all(|(left, right)| flow_values_equal_for_state(left, right))
+}
+
+fn values_join(left: &ValueKind, right: &ValueKind) -> bool {
+    match (left, right) {
+        (
+            ValueKind::LookupLabel {
+                lookup_kind: lk,
+                key: lkey,
+            },
+            ValueKind::LookupLabel {
+                lookup_kind: rk,
+                key: rkey,
+            },
+        ) => lk == rk && keys_join(lkey, rkey),
+        (
+            ValueKind::SymbolicPath {
+                basis: lb,
+                segments: ls,
+            },
+            ValueKind::SymbolicPath {
+                basis: rb,
+                segments: rs,
+            },
+        ) => lb == rb && ls == rs,
+        (ValueKind::LiteralString(l), ValueKind::LiteralString(r)) => l == r,
+        (ValueKind::Closure(l), ValueKind::Closure(r)) => l == r,
+        (ValueKind::NonClosure, ValueKind::NonClosure) => true,
+        _ => false,
+    }
+}
+
 fn meet_value(left: &FlowValue, right: &FlowValue) -> FlowValue {
     match (left, right) {
         (FlowValue::Bottom, value) | (value, FlowValue::Bottom) => value.clone(),
-        (FlowValue::Known(a), FlowValue::Known(b)) if a.kind == b.kind => {
+        (FlowValue::Known(a), FlowValue::Known(b)) if values_join(&a.kind, &b.kind) => {
             let mut evidence = a.evidence.clone();
             evidence.extend(b.evidence.iter().cloned());
             FlowValue::Known(KnownValue {
@@ -417,7 +623,7 @@ fn transfer_table_lookup(
     if is_self {
         set_register(state, dest.saturating_add(1), get_register(before, source));
     }
-    let Some(key) = string_operand(inst) else {
+    let Some(key_val) = constant_operand(inst) else {
         set_register(
             state,
             dest,
@@ -425,15 +631,29 @@ fn transfer_table_lookup(
         );
         return;
     };
-    match get_register(before, source) {
-        FlowValue::Known(KnownValue {
-            kind:
-                ValueKind::SymbolicPath {
-                    basis,
-                    mut segments,
-                },
-            mut evidence,
-        }) => {
+    let lookup_kind = if is_self {
+        CalleeLookupKind::SelfOp
+    } else {
+        CalleeLookupKind::Gettable
+    };
+    let receiver = get_register(before, source);
+    let str_segment = match &key_val {
+        luad_core::model::ConstantValue::ShortString(s)
+        | luad_core::model::ConstantValue::LongString(s) => Some(s.display.clone()),
+        _ => None,
+    };
+    match (receiver, str_segment) {
+        (
+            FlowValue::Known(KnownValue {
+                kind:
+                    ValueKind::SymbolicPath {
+                        basis,
+                        mut segments,
+                    },
+                mut evidence,
+            }),
+            Some(segment),
+        ) => {
             if segments.len() >= MAX_PATH_SEGMENTS {
                 set_register(
                     state,
@@ -441,7 +661,7 @@ fn transfer_table_lookup(
                     FlowValue::Unknown(CalleeUnresolvedReason::PathLimit),
                 );
             } else {
-                segments.push(key);
+                segments.push(segment);
                 evidence.insert(inst.id.clone());
                 set_register(
                     state,
@@ -453,12 +673,19 @@ fn transfer_table_lookup(
                 );
             }
         }
-        FlowValue::Unknown(reason) => set_register(state, dest, FlowValue::Unknown(reason)),
-        _ => set_register(
-            state,
-            dest,
-            FlowValue::Unknown(CalleeUnresolvedReason::UnsupportedValue),
-        ),
+        _ => {
+            set_register(
+                state,
+                dest,
+                FlowValue::Known(KnownValue {
+                    kind: ValueKind::LookupLabel {
+                        lookup_kind,
+                        key: key_val,
+                    },
+                    evidence: [inst.id.clone()].into_iter().collect(),
+                }),
+            );
+        }
     }
 }
 
@@ -702,6 +929,14 @@ fn fact_from_state(
     let register = register_operand(inst, 0).unwrap_or(0);
     let resolution = match get_register(state, register) {
         FlowValue::Known(KnownValue {
+            kind: ValueKind::LookupLabel { lookup_kind, key },
+            evidence,
+        }) => CalleeResolution::LookupLabel {
+            lookup_kind,
+            key,
+            evidence: evidence.into_iter().collect(),
+        },
+        FlowValue::Known(KnownValue {
             kind: ValueKind::SymbolicPath { basis, segments },
             evidence,
         }) => CalleeResolution::ResolvedPath {
@@ -717,7 +952,7 @@ fn fact_from_state(
             evidence: evidence.into_iter().collect(),
         },
         FlowValue::Known(KnownValue {
-            kind: ValueKind::NonClosure,
+            kind: ValueKind::NonClosure | ValueKind::LiteralString(_),
             ..
         }) => CalleeResolution::Unresolved {
             reason: CalleeUnresolvedReason::UnsupportedValue,
@@ -775,6 +1010,13 @@ fn prototype_operand(inst: &SemanticInstruction) -> Option<ProtoPath> {
     })
 }
 
+fn constant_operand(inst: &SemanticInstruction) -> Option<luad_core::model::ConstantValue> {
+    inst.operands.iter().find_map(|operand| match operand {
+        TypedOperand::Constant { value, .. } => Some(value.clone()),
+        _ => None,
+    })
+}
+
 fn string_operand(inst: &SemanticInstruction) -> Option<String> {
     lua_string_operand(inst).map(|value| value.display.clone())
 }
@@ -799,6 +1041,17 @@ fn has_constant_operand(inst: &SemanticInstruction) -> bool {
 
 fn flow_from_capture(value: &CaptureValue) -> FlowValue {
     match value {
+        CaptureValue::LookupLabel {
+            lookup_kind,
+            key,
+            evidence,
+        } => FlowValue::Known(KnownValue {
+            kind: ValueKind::LookupLabel {
+                lookup_kind: *lookup_kind,
+                key: key.clone(),
+            },
+            evidence: evidence.iter().cloned().collect(),
+        }),
         CaptureValue::SymbolicPath {
             basis,
             segments,
@@ -1315,6 +1568,14 @@ fn capture_from_descriptor(
 fn capture_from_flow(value: FlowValue) -> CaptureValue {
     match value {
         FlowValue::Known(KnownValue {
+            kind: ValueKind::LookupLabel { lookup_kind, key },
+            evidence,
+        }) => CaptureValue::LookupLabel {
+            lookup_kind,
+            key,
+            evidence: evidence.into_iter().collect(),
+        },
+        FlowValue::Known(KnownValue {
             kind: ValueKind::SymbolicPath { basis, segments },
             evidence,
         }) => CaptureValue::SymbolicPath {
@@ -1351,6 +1612,24 @@ fn capture_from_flow(value: FlowValue) -> CaptureValue {
 
 fn join_capture(left: &CaptureValue, right: &CaptureValue) -> CaptureValue {
     match (left, right) {
+        (
+            CaptureValue::LookupLabel {
+                lookup_kind: left_kind,
+                key: left_key,
+                evidence: left_evidence,
+            },
+            CaptureValue::LookupLabel {
+                lookup_kind: right_kind,
+                key: right_key,
+                evidence: right_evidence,
+            },
+        ) if left_kind == right_kind && keys_join(left_key, right_key) => {
+            CaptureValue::LookupLabel {
+                lookup_kind: *left_kind,
+                key: left_key.clone(),
+                evidence: union_evidence(left_evidence, right_evidence),
+            }
+        }
         (
             CaptureValue::SymbolicPath {
                 basis: left_basis,
@@ -1417,7 +1696,8 @@ fn union_evidence(left: &[StableId], right: &[StableId]) -> Vec<StableId> {
 
 fn add_capture_evidence(value: &mut CaptureValue, id: &StableId) {
     let evidence = match value {
-        CaptureValue::SymbolicPath { evidence, .. }
+        CaptureValue::LookupLabel { evidence, .. }
+        | CaptureValue::SymbolicPath { evidence, .. }
         | CaptureValue::LiteralString { evidence, .. }
         | CaptureValue::Closure { evidence, .. } => Some(evidence),
         CaptureValue::Unknown { .. } => None,
@@ -1578,5 +1858,40 @@ mod tests {
                 reason: CalleeUnresolvedReason::DynamicKey
             }
         ));
+    }
+
+    #[test]
+    fn lookup_label_joins_equal_keys_and_rejects_conflicts() {
+        let key = luad_core::model::ConstantValue::ShortString(
+            luad_core::model::LuaString::from_bytes(b"execute"),
+        );
+        let left = FlowValue::Known(KnownValue {
+            kind: ValueKind::LookupLabel {
+                lookup_kind: CalleeLookupKind::Gettable,
+                key: key.clone(),
+            },
+            evidence: [StableId::instruction(ProtoPath::root(), 2)]
+                .into_iter()
+                .collect(),
+        });
+        let right = FlowValue::Known(KnownValue {
+            kind: ValueKind::LookupLabel {
+                lookup_kind: CalleeLookupKind::Gettable,
+                key,
+            },
+            evidence: [StableId::instruction(ProtoPath::root(), 4)]
+                .into_iter()
+                .collect(),
+        });
+        let FlowValue::Known(joined) = meet_value(&left, &right) else {
+            panic!("equal lookup labels must survive join");
+        };
+        assert_eq!(
+            joined.evidence.into_iter().collect::<Vec<_>>(),
+            vec![
+                StableId::instruction(ProtoPath::root(), 2),
+                StableId::instruction(ProtoPath::root(), 4)
+            ]
+        );
     }
 }

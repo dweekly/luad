@@ -1,0 +1,37 @@
+{
+  "schema_version": 2,
+  "gate_id": "gate-constant-key-labels-lua51",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_constant_key_labels_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_call_relations_and_xrefs_preserve_the_no_exact_edge_boundary",
+    "test_independent_model_and_comparator_reject_killer_mutations",
+    "test_independent_model_reproduces_the_hand_written_lookup_label_matrix",
+    "test_library_callee_facts_match_the_independent_lookup_label_matrix",
+    "test_lookup_label_bounds_and_stop_reasons_stay_explicit",
+    "test_public_cli_text_json_jsonl_and_export_agree_on_lookup_labels",
+    "test_public_schema_freezes_the_lookup_label_contract",
+    "test_query_grammar_never_matches_lookup_labels"
+  ],
+  "required_compiler_version": "Lua 5.1.5",
+  "required_compiler_sha256": {
+    "linux-x86_64": "e2ba74327f3a4662689b9e58909b410af8635add51a35b951021d0b1d90c6000",
+    "macos-aarch64": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239"
+  },
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-symbolic-callees-lua51",
+    "gate-call-relations-lua51"
+  ],
+  "allowed_capability_mutations": []
+}

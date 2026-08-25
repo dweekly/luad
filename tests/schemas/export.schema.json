@@ -601,7 +601,8 @@
         "missing-prototype-store",
         "multiple-prototype-stores",
         "non-closure-store",
-        "ambiguous-store-value"
+        "ambiguous-store-value",
+        "lookup-label-only"
       ]
     },
     "CalleeFact": {
@@ -640,9 +641,58 @@
         }
       }
     },
+    "CalleeLookupKind": {
+      "description": "Which physical opcode selected the callee value.",
+      "oneOf": [
+        {
+          "description": "Lookup via `GETTABLE`.",
+          "type": "string",
+          "enum": [
+            "gettable"
+          ]
+        },
+        {
+          "description": "Lookup via `SELF`.",
+          "type": "string",
+          "enum": [
+            "self"
+          ]
+        }
+      ]
+    },
     "CalleeResolution": {
       "description": "Resolution attached to one physical call instruction.",
       "oneOf": [
+        {
+          "description": "A constant-key lookup selector proved by the listed bytecode instructions.",
+          "type": "object",
+          "required": [
+            "evidence",
+            "key",
+            "lookup_kind",
+            "status"
+          ],
+          "properties": {
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/StableId"
+              }
+            },
+            "key": {
+              "$ref": "#/definitions/ConstantValue"
+            },
+            "lookup_kind": {
+              "$ref": "#/definitions/CalleeLookupKind"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "lookup-label"
+              ]
+            }
+          }
+        },
         {
           "description": "A symbolic label path proved by the listed bytecode instructions.",
           "type": "object",

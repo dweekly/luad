@@ -240,18 +240,22 @@ fn luad_bin() -> PathBuf {
     if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
         return path.into();
     }
-    let root = workspace();
-    let output = Command::new("cargo")
-        .args(["build", "-p", "luad-cli", "--bin", "luad"])
-        .current_dir(&root)
-        .output()
-        .expect("build luad CLI");
-    assert!(
-        output.status.success(),
-        "luad build failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    root.join("target/debug/luad")
+    static LUAD: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    LUAD.get_or_init(|| {
+        let root = workspace();
+        let output = Command::new("cargo")
+            .args(["build", "-p", "luad-cli", "--bin", "luad"])
+            .current_dir(&root)
+            .output()
+            .expect("build luad CLI");
+        assert!(
+            output.status.success(),
+            "luad build failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        root.join("target/debug/luad")
+    })
+    .clone()
 }
 
 fn run(args: &[&str]) -> Output {

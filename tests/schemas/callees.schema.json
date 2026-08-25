@@ -151,9 +151,58 @@
         }
       }
     },
+    "CalleeLookupKind": {
+      "description": "Which physical opcode selected the callee value.",
+      "oneOf": [
+        {
+          "description": "Lookup via `GETTABLE`.",
+          "type": "string",
+          "enum": [
+            "gettable"
+          ]
+        },
+        {
+          "description": "Lookup via `SELF`.",
+          "type": "string",
+          "enum": [
+            "self"
+          ]
+        }
+      ]
+    },
     "CalleeResolution": {
       "description": "Resolution attached to one physical call instruction.",
       "oneOf": [
+        {
+          "description": "A constant-key lookup selector proved by the listed bytecode instructions.",
+          "type": "object",
+          "required": [
+            "evidence",
+            "key",
+            "lookup_kind",
+            "status"
+          ],
+          "properties": {
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/StableId"
+              }
+            },
+            "key": {
+              "$ref": "#/definitions/ConstantValue"
+            },
+            "lookup_kind": {
+              "$ref": "#/definitions/CalleeLookupKind"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "lookup-label"
+              ]
+            }
+          }
+        },
         {
           "description": "A symbolic label path proved by the listed bytecode instructions.",
           "type": "object",
@@ -267,6 +316,161 @@
           }
         }
       }
+    },
+    "ConstantValue": {
+      "description": "Constant value preserved without loss of floating-point or integer bit patterns.",
+      "oneOf": [
+        {
+          "description": "`nil` constant.",
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "nil"
+              ]
+            }
+          }
+        },
+        {
+          "description": "Boolean `false` or `true`.",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "boolean"
+              ]
+            },
+            "value": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "description": "64-bit signed integer with raw hex representation.",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "integer"
+              ]
+            },
+            "value": {
+              "type": "object",
+              "required": [
+                "raw_hex",
+                "val"
+              ],
+              "properties": {
+                "raw_hex": {
+                  "description": "Exact hex bytes.",
+                  "type": "string"
+                },
+                "val": {
+                  "description": "Parsed 64-bit integer value.",
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "IEEE-754 64-bit float with raw hex representation (preserves NaN payloads and signed zero).",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "float"
+              ]
+            },
+            "value": {
+              "type": "object",
+              "required": [
+                "is_inf",
+                "is_nan",
+                "raw_hex",
+                "val"
+              ],
+              "properties": {
+                "is_inf": {
+                  "description": "Positive or negative infinity.",
+                  "type": "boolean"
+                },
+                "is_nan": {
+                  "description": "Special float classifications.",
+                  "type": "boolean"
+                },
+                "raw_hex": {
+                  "description": "Exact 8-byte hex representation.",
+                  "type": "string"
+                },
+                "val": {
+                  "description": "Parsed float value.",
+                  "type": "number",
+                  "format": "double"
+                }
+              }
+            }
+          }
+        },
+        {
+          "description": "Short string constant.",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "short-string"
+              ]
+            },
+            "value": {
+              "$ref": "#/definitions/LuaString"
+            }
+          }
+        },
+        {
+          "description": "Long string constant.",
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "long-string"
+              ]
+            },
+            "value": {
+              "$ref": "#/definitions/LuaString"
+            }
+          }
+        }
+      ]
     },
     "Diagnostic": {
       "description": "Structured diagnostic item.",
@@ -414,6 +618,34 @@
         "sha256": {
           "description": "SHA-256 hash of the complete input byte stream.",
           "type": "string"
+        }
+      }
+    },
+    "LuaString": {
+      "description": "A lossless Lua string retaining exact byte contents along with escaped display representation.",
+      "type": "object",
+      "required": [
+        "display",
+        "is_utf8",
+        "raw_bytes"
+      ],
+      "properties": {
+        "display": {
+          "description": "Escaped ASCII/UTF-8 representation suitable for human inspection.",
+          "type": "string"
+        },
+        "is_utf8": {
+          "description": "Whether the string is valid UTF-8.",
+          "type": "boolean"
+        },
+        "raw_bytes": {
+          "description": "Raw byte sequence of the string.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
         }
       }
     },

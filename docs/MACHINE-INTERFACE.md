@@ -273,17 +273,19 @@ Capture xrefs are a required extension of the existing fact interface: callers m
 ### `callees`
 
 Emits exactly one fact for every physical Lua 5.1 `CALL` and `TAILCALL`, across the
-entire prototype tree. A resolution is a tagged union: `resolved-path` carries a global
-or module label, ordered path segments, and stable instruction evidence;
-`resolved-prototype` carries a directly constructed child prototype identity and
-evidence; `unresolved` carries one typed reason.
+entire prototype tree. A resolution is a tagged union: `lookup-label` carries a lookup
+form (`gettable` or `self`), exact typed constant key, and stable instruction evidence;
+`resolved-path` carries a global or module label, ordered path segments, and stable
+instruction evidence; `resolved-prototype` carries a directly constructed child
+prototype identity and evidence; `unresolved` carries one typed reason.
 
-Global and module paths are symbolic lookup labels, not runtime object identities.
-Module labels require an exactly shaped literal `require` call. Analysis retains values
-across CFG joins only when all reachable predecessors agree, tracks closure bindings
-across prototype levels, and rejects captures that may be mutated after closure
-construction. Dynamic keys, conflicts, open register windows, overwritten values,
-unreachable calls, ambiguity, and analysis bounds are reported rather than omitted.
+Lookup labels and global/module paths are symbolic lookup selectors, not runtime object
+identities. Module labels require an exactly shaped literal `require` call. Analysis
+retains values across CFG joins only when all reachable predecessors agree, tracks
+closure bindings across prototype levels, and rejects captures that may be mutated after
+closure construction. Dynamic keys, conflicts, open register windows, overwritten
+values, unreachable calls, ambiguity, and analysis bounds are reported rather than
+omitted.
 
 JSON uses the `callees` schema. JSONL emits self-identifying `callee` facts followed by
 a summary. Text is a human rendering of the same typed facts.
@@ -293,8 +295,9 @@ a summary. Text is a human rendering of the same typed facts.
 Emits exactly one caller-to-prototype result for every physical Lua 5.1 `CALL` and
 `TAILCALL`. A `resolved` result carries an exact child-prototype path, a closed
 resolution basis, and sorted stable instruction evidence. An `unresolved` result carries
-a typed stop reason and the available evidence; symbolic names without a unique
-prototype store do not become edges.
+a typed stop reason (including `lookup-label-only`) and the available evidence;
+constant-key lookup labels and symbolic names without a unique prototype store do not
+become edges.
 
 `closure-value` relations retain direct, aliased, CFG-agreed, and safely captured
 closure identities. `unique-global-store` relations join a literal global lookup to one
