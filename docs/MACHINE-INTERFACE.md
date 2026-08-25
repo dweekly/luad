@@ -56,6 +56,13 @@ capabilities and streaming JSONL use major 2. Omitting `--schema-version` select
 current major for the requested schema. An explicit unsupported major fails with a
 usage error.
 
+Within a schema major, object structure and tagged-union discriminants are closed:
+consumers must reject an unknown required structure or variant rather than guessing its
+meaning. Fields documented as labels, names, IDs, hashes, schemes, mnemonics, or other
+open vocabularies remain strings and must be preserved even when the consumer does not
+recognize the value. Typed reason, status, relation, basis, and expression-kind enums are
+closed. The published JSON Schema is the authority for which rule applies to a field.
+
 ## Output formats
 
 - `text`: human-oriented; not a stable parsing interface.
@@ -80,6 +87,22 @@ Output ordering is intended to be deterministic for identical input bytes, optio
 | 6 | Internal error |
 
 Do not infer validity from the presence of output alone; inspect both the exit code and structured verdict/diagnostics.
+
+The following outcome rules apply at the process boundary:
+
+| Outcome | Exit | Stdout |
+|---|---:|---|
+| Successful command, including a query with zero matches | 0 | Complete output in the requested format |
+| Parsed input with validation findings | 1 | Complete validation result |
+| Parse failure after a format has been recognized, such as a truncated chunk body | 1 | Empty for single-input analysis commands |
+| Invalid predicate, selector, option, schema major, or command | 2 | Empty |
+| Input/output failure | 3 | Empty, except a framed batch export described below |
+| Unsupported, unrecognized, or ambiguous input format | 4 | Empty, except a framed batch export described below |
+| Resource ceiling reached | 5 | Empty, except a bounded export that reports truncation |
+| Internal defect | 6 | No result may be trusted |
+
+Operational diagnostics use stderr. A mixed `export` follows its separately documented
+aggregate rule and emits a terminal record for every requested input.
 
 ## Input and parse modes
 
@@ -268,7 +291,41 @@ Expose analysis results with schemas and bounded query pagination. The query gra
 is intentionally narrow and rejects malformed expressions, unsupported operators,
 trailing tokens, nonexistent targets, and invalid cursors with a usage error.
 
-Capture xrefs are a required extension of the existing fact interface: callers must be able to traverse both parent register/upvalue to child upvalue and child upvalue back to its source binding. A convenience `upvalues` rendering can be added, but it must be a view of the same capture facts rather than a second analysis implementation.
+`query --where` accepts `and`, `or`, parentheses, `==`, `!=`, and the explicitly listed
+`contains` forms. Quoted operands are strings; unquoted `nil`, booleans, and numbers are
+typed literals. A quoted `"0"`, numeric `+0.0`, and numeric `-0.0` are distinct. The
+complete retrieval vocabulary is:
+
+| Field | Operand | Operators | Matching record |
+|---|---|---|---|
+| `constant` / `string` | Typed constant | `==`, `!=`; `contains` for a quoted string | Constant |
+| `constant.type` | Closed: `nil`, `boolean`, `integer`, `float`, `short-string`, `long-string` | `==`, `!=` | Constant |
+| `callee.status` | Closed callee-resolution status | `==`, `!=` | Call instruction |
+| `callee.path` | Quoted symbolic path | `==`, `!=`, `contains` | Call instruction |
+| `callee.lookup.kind` | Closed: `gettable`, `self` | `==`, `!=` | Call instruction |
+| `callee.lookup.key` | Typed constant key | `==`, `!=`; `contains` for a quoted string | Call instruction |
+| `callee.reason` | Closed callee unresolved reason | `==`, `!=` | Call instruction |
+| `call.reason` | Closed call-relation unresolved reason | `==`, `!=` | Call instruction |
+| `call.target` | Quoted existing `proto:...` ID | `==`, `!=` | Call instruction |
+| `origin.kind` | Closed origin-expression kind | `==`, `!=` | Call instruction |
+| `origin.argument.index` | Nonnegative integer | `==`, `!=` | Call instruction |
+| `interpretation.profile` | Closed recognized profile | `==`, `!=` | Interpretation |
+| `prototype.digest` | Quoted content digest | `==`, `!=` | Prototype |
+| `opcode` / `mnemonic` | Mnemonic | `==`, `!=` | Instruction |
+| `effect.read.register`, `effect.write.register`, `effect.read.upvalue`, `effect.write.upvalue` | Nonnegative byte index | `==`, `!=` | Instruction |
+
+The `callee.*`, `call.*`, `origin.*`, and `prototype.digest` fields require a Lua 5.1
+interpretation. Using them with another dialect is a usage error, not a zero-match result.
+Closed members are discoverable from the corresponding schema. An operand that cannot
+be applied to its field is a usage error; it never degrades to an empty or unfiltered
+answer. Results use structural prototype order, then physical PC or constant order.
+
+Capture xrefs support both parent register/upvalue to child upvalue and child upvalue
+back to its binding evidence. Each Lua 5.1 closure site emits its own closure-owner and
+descriptor-instruction `binds` edges. The descriptor's `reads` edge identifies the
+site-specific parent register or upvalue, including when one child prototype is
+instantiated more than once. A convenience `upvalues` rendering can be added, but it
+must be a view of the same capture facts rather than a second analysis implementation.
 
 ### `callees`
 
@@ -380,17 +437,13 @@ nonzero when any input is skipped or failed, after emitting the complete framed 
 Zero successful inputs are always nonzero. Stderr ends with a deterministic summary in
 the form `N exported, N skipped, N failed`; stdout remains JSONL only.
 
-### `compile`
-
-The command is visible but intentionally unsupported and exits with code 4. It must not be used to execute untrusted source.
-
 ## Pagination and truncation
 
 `query` returns a bounded page, `next_cursor`, and `is_truncated`. Emitted cursors are
 opaque, deterministic tokens bound to the input identity, query expression, and
 offset by a checksum. The checksum detects cross-context reuse; it is not an
-authentication mechanism. The CLI also accepts an explicit integer offset in
-`0..=total_matches`; integer offsets are not bound to a prior response.
+authentication mechanism. Bare integer offsets and malformed or cross-context tokens
+are usage errors with empty stdout.
 
 `export` supports `--max-facts-per-file N` to bound ordinary counted facts per
 input while preserving control records (`export_start`, `file_start`,

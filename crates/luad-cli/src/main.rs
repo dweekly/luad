@@ -315,13 +315,6 @@ fn main() {
         Commands::Query(args) => handle_query(args),
         Commands::Diff(args) => handle_diff(args),
         Commands::Export(args) => handle_export(args),
-        Commands::Compile(_) => {
-            eprintln!(
-                "{}: 'compile' command is not supported in bytecode analysis mode",
-                "error".red().bold()
-            );
-            ExitCode::UnsupportedFormat.exit();
-        }
     }
 }
 

@@ -282,7 +282,7 @@
           ]
         },
         "kind": {
-          "description": "Artifact category (\"instruction\", \"constant\", \"prototype\", \"upvalue\").",
+          "description": "Artifact category (\"instruction\", \"constant\", \"prototype\", \"upvalue\", \"interpretation\").",
           "type": "string"
         },
         "summary": {

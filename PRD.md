@@ -445,15 +445,6 @@ No verdict is named `safe`, because structural validation does not establish beh
 - **FR-DIFF-004:** Produce stable JSON diff objects suitable for automation.
 - **FR-DIFF-005:** Support cross-firmware joins and comparisons over versioned prototype
   content identities without treating a hash match as source-level identity.
-
-### 5.8 Optional compiler-laboratory workflow
-
-- **FR-LAB-001:** When explicitly given a trusted source file, invoke a user-selected external `luac` binary and analyze its output.
-- **FR-LAB-002:** Never choose or download a compiler implicitly.
-- **FR-LAB-003:** Record compiler path, version output, command arguments, source hash, and produced chunk hash.
-- **FR-LAB-004:** Support compiling one source with multiple explicitly configured compiler binaries and comparing their output.
-- **FR-LAB-005:** Keep this workflow isolated from analysis of unknown chunks; source compilation is never part of format detection.
-
 ## 6. CLI requirements and command surface
 
 ### 6.1 Why a CLI is the correct primary deliverable
@@ -485,7 +476,6 @@ luad xrefs         Query references to and from an artifact
 luad explain       Explain a field, prototype, instruction, block, or diagnostic
 luad query         Run a bounded structured query
 luad diff          Compare two chunks
-luad compile       Compile trusted source with an explicit external compiler
 luad capabilities  Describe commands, dialects, features, limits, and schemas
 luad schema        Print a selected JSON Schema
 luad completions   Generate shell completions
@@ -801,7 +791,7 @@ The attacker may know the exact `luad` version and default limits.
 - Refuse to overwrite existing files unless an explicit overwrite option names that behavior.
 - Do not load project configuration from the analyzed file's directory unless explicitly enabled.
 - Do not access the network.
-- Do not invoke external compilers except through the explicit `compile` command.
+- Do not invoke external compilers.
 
 ### 9.3 Fuzzing requirements
 

@@ -19,7 +19,7 @@
     "test_lookup_label_bounds_and_stop_reasons_stay_explicit",
     "test_public_cli_text_json_jsonl_and_export_agree_on_lookup_labels",
     "test_public_schema_freezes_the_lookup_label_contract",
-    "test_query_grammar_never_matches_lookup_labels"
+    "test_query_lookup_label_predicates_are_typed_and_precise"
   ],
   "required_compiler_version": "Lua 5.1.5",
   "required_compiler_sha256": {

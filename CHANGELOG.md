@@ -4,6 +4,17 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+- Implemented the complete, table-driven, fail-closed structured retrieval vocabulary
+  across typed constants, callee resolutions, call relations, call argument origins,
+  interpretation profiles, and prototype content identities with exact typed matching,
+  signed zero distinction (+0.0 vs -0.0), and context-bound cursor pagination that
+  rejects unsigned offsets.
+- Lua 5.1 xref indexing now derives `Binds` links directly from physical companion
+  descriptor instructions at each `CLOSURE` site, ensuring site-accurate forward and
+  inverse binding evidence, including descriptor-to-parent reads, without collapsing
+  across repeated instantiations of the same child prototype.
+- Removed the nonfunctional `compile` CLI command, capability surface, and documentation
+  references.
 - Lua 5.1 callees now retain typed constant-key `GETTABLE` and `SELF` lookup labels
   across bounded aliases, equal control-flow joins, and safe closure captures without
   claiming receiver identity or emitting an exact call edge. Typed key identity,

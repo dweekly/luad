@@ -3047,7 +3047,7 @@ fn test_lookup_label_bounds_and_stop_reasons_stay_explicit() {
 }
 
 #[test]
-fn test_query_grammar_never_matches_lookup_labels() {
+fn test_query_lookup_label_predicates_are_typed_and_precise() {
     let row = matrix()
         .into_iter()
         .find(|row| row.name == "gettable-string-key-immediate-call")
@@ -3055,13 +3055,44 @@ fn test_query_grammar_never_matches_lookup_labels() {
     let file = temp_chunk(&build_chunk(&row.root));
     let path = file.path().to_str().expect("UTF-8 path");
 
-    // No callee-path or lookup-label predicate enters the grammar in this sprint.
+    let key_document = run_luad_json(&[
+        "query",
+        path,
+        "--where",
+        "callee.lookup.key == \"execute\"",
+        "--format",
+        "json",
+    ]);
+    let key_matches = find_query_matches(&key_document);
+    assert_eq!(key_matches.len(), 1);
+    assert_eq!(key_matches[0]["kind"], "instruction");
+
+    let kind_document = run_luad_json(&[
+        "query",
+        path,
+        "--where",
+        "callee.lookup.kind == \"gettable\"",
+        "--format",
+        "json",
+    ]);
+    assert_eq!(find_query_matches(&kind_document), key_matches);
+
+    let path_document = run_luad_json(&[
+        "query",
+        path,
+        "--where",
+        "callee.path == \"execute\"",
+        "--format",
+        "json",
+    ]);
+    assert!(find_query_matches(&path_document).is_empty());
+
     for predicate in [
         "lookup_label == \"execute\"",
         "lookup.kind == gettable",
         "callee == \"execute\"",
-        "callee.path == \"execute\"",
         "callee.key == \"execute\"",
+        "callee.lookup.kind == gettable",
     ] {
         let output = run_luad(&["query", path, "--where", predicate, "--format", "json"]);
         assert!(
@@ -3070,7 +3101,7 @@ fn test_query_grammar_never_matches_lookup_labels() {
         );
     }
 
-    // The predicates that do exist keep matching physical artifacts only.
+    // Query results remain physical artifacts rather than invented label objects.
     for predicate in ["mnemonic == GETTABLE", "string == \"execute\"", "CALL"] {
         let document = run_luad_json(&["query", path, "--where", predicate, "--format", "json"]);
         let matches = find_query_matches(&document);

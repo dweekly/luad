@@ -96,6 +96,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "call-argument origins (experimental)".to_string(),
                 "provable call relations (experimental)".to_string(),
                 "prototype subtree identity (experimental)".to_string(),
+                "typed structured retrieval (experimental)".to_string(),
             ],
             status: SupportTier::Experimental,
             required_gates: vec![

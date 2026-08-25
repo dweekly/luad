@@ -12,7 +12,7 @@
     "--nocapture"
   ],
   "expected_tests": [
-    "test_cli_query_cursor_offset_tampering_and_integer_contract",
+    "test_cli_query_cursor_binding_and_tampering_contract",
     "test_cli_selection_stock_and_lnum32_automatic_and_explicit",
     "test_table_driven_cli_selection_conformance"
   ],
