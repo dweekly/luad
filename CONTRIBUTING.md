@@ -127,6 +127,11 @@ Requirements:
 
 Bundled `.luac` files are evidence artifacts, not ordinary test data. Do not regenerate them casually.
 
+The stock cross-version corpus is recorded in
+`tests/fixtures/precompiled/MANIFEST.json`. Public firmware-shaped qualification
+cases use `tests/fixtures/embedded/MANIFEST.json`; each entry names its redistribution
+license and pins the source, binary, compiler, layout, and expected stress properties.
+
 Any regenerated fixture set must record:
 
 - exact Lua release;

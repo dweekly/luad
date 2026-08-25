@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-area1-validator-diagnostics",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_area1_validator_diagnostics",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_area1_gate_closure_is_exact_and_rejects_substitution",
+    "test_public_corruptions_emit_exact_catalog_backed_diagnostics",
+    "test_public_embedded_case_provenance_and_stress_shape",
+    "test_public_owner_paths_agree_on_deep_embedded_case",
+    "test_public_valid_lua51_profile_matrix_has_zero_diagnostics"
+  ],
+  "required_compiler_version": "Lua 5.1.5",
+  "required_compiler_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
+  "required_fixtures": [
+    {
+      "path": "tests/fixtures/embedded/area1_validator.luac",
+      "sha256": "01857f082dfc5c8b21238c55db7a03e2a6bf3d6e48c36df96fd279f9ce611cab"
+    }
+  ],
+  "required_profile": "lua5.1-area1-validator-diagnostics",
+  "prerequisite_gates": [
+    "gate-cli-selection-contract",
+    "gate-closure-prototype-identity-lua51",
+    "gate-diagnostic-catalog",
+    "gate-layout-lua51-stock",
+    "gate-profile-lua51-lnum",
+    "gate-proof-harness",
+    "gate-public-disasm-lua51",
+    "gate-validation-null-hypothesis",
+    "gate-validator-closure-capture-span-lua51",
+    "gate-validator-count-spans-lua51",
+    "gate-validator-nested-rk-owner-lua51",
+    "gate-validator-numeric-for-span-lua51",
+    "gate-validator-reference-operands-lua51",
+    "gate-validator-register-a-lua51",
+    "gate-validator-register-b-lua51",
+    "gate-validator-register-c-lua51",
+    "gate-validator-rk-b-lua51",
+    "gate-validator-rk-c-lua51",
+    "gate-validator-self-span-lua51",
+    "gate-validator-tforloop-span-lua51"
+  ],
+  "allowed_capability_mutations": []
+}

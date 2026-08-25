@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-validator-nested-rk-owner-lua51",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_validator_rk_nested_owner_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_validator_rk_nested_owner_lua51"
+  ],
+  "required_compiler_version": "Lua 5.1.5",
+  "required_compiler_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
+  "required_fixtures": [
+    {
+      "path": "tests/fixtures/precompiled/lua51/closures.luac",
+      "sha256": "62c4438b660880fa546cbe377d1f40113d2efc25aefc40df227979276efa756e"
+    }
+  ],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-validator-rk-b-lua51",
+    "gate-validator-rk-c-lua51",
+    "gate-closure-prototype-identity-lua51"
+  ],
+  "allowed_capability_mutations": []
+}

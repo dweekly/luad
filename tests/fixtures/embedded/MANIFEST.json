@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "area1-validator-stock64",
+      "purpose": "Public firmware-shaped validator stress case with deep closure ownership, high register indices, and a large constant pool.",
+      "redistribution_license": "MIT",
+      "source_path": "tests/fixtures/embedded/area1_validator.lua",
+      "source_sha256": "d123c19a4f2f6dc4e06a2dacfc27d3fd75c0c766dba0fa27eb7f47e5f531f8b8",
+      "binary_path": "tests/fixtures/embedded/area1_validator.luac",
+      "binary_sha256": "01857f082dfc5c8b21238c55db7a03e2a6bf3d6e48c36df96fd279f9ce611cab",
+      "byte_length": 17245,
+      "compiler_version": "Lua 5.1.5",
+      "compiler_binary_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
+      "compiler_source_url": "https://www.lua.org/ftp/lua-5.1.5.tar.gz",
+      "compiler_source_sha256": "2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333",
+      "generation_command": "/tmp/lua-tools/bin/luac5.1 -o tests/fixtures/embedded/area1_validator.luac tests/fixtures/embedded/area1_validator.lua",
+      "target_profile": "stock",
+      "target_layout": "lua51-stock-64bit",
+      "expected_deepest_prototype": "proto:0/0/0/0/0/0",
+      "expected_deepest_maxstacksize": 222,
+      "expected_deepest_constant_count": 450,
+      "expected_deepest_instruction_count": 471
+    }
+  ]
+}
