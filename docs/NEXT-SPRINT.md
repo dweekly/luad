@@ -1,146 +1,161 @@
-# Active sprint: Lua 5.1 companion-word and capture safety
+# Active sprint: constant-key Lua 5.1 call labels
 
-Lane: corrective semantic analysis. Target: prevent non-executable data and shared
-upvalue mutation from producing plausible false call facts.
+Lane: bounded semantic feature. Target: preserve a literal call-selection key when the
+receiver identity is not provable.
 
 ## Claim and researcher value
 
-Two bounded Lua 5.1 semantic families will close together:
+For a Lua 5.1 `CALL` or `TAILCALL` whose callee value comes from constant-key
+`GETTABLE` or `SELF`, `luad` will emit a typed lookup label even when it cannot prove a
+global, module, or exact-prototype callee. The label records only:
 
-1. A closure or symbolic value captured from a parent local/upvalue remains known only
-   when no parent write, descendant write, or sibling closure can mutate the shared
-   upvalue cell.
-2. When executable `SETLIST` has `C == 0`, its following physical word is a raw
-   list-batch operand. That word is non-executable and cannot create effects, CFG
-   branches, calls, origins, call relations, xrefs, or explanations as an opcode.
+- whether selection used `GETTABLE` or `SELF`;
+- the exact typed constant key;
+- the lookup instruction and all value-preserving alias/capture evidence between that
+  lookup and the call.
 
-Researchers will not receive a resolved prototype target that may have been replaced
-through a sibling closure, and arbitrary bits in a list-batch operand will not appear as
-program behavior.
+The label does not identify the receiver, implementation, runtime target, framework
+route, or reachability. It is not a resolved symbolic path or a provable call edge.
 
-## Shared capture contract
+This lets a caller retrieve literal selectors such as `execute`, `call`, or `format`
+without reimplementing Lua register flow.
 
-Lua 5.1 closures that capture the same parent local share one upvalue cell. A capture
-environment may preserve a value only when all relevant mutation checks agree:
+## Public semantic contract
 
-- the parent does not write the captured register or upvalue on any path after the
-  closure site;
-- the receiving child or any descendant does not write the captured slot;
-- no sibling closure captures the same parent register and writes its corresponding
-  upvalue slot;
-- for a parent-upvalue binding, the parent prototype and its descendants do not write
-  that upvalue cell.
+`CalleeResolution` gains a distinct tagged lookup-label result. It is not encoded by
+adding a rootless segment to `ResolvedPath`.
 
-The callee and call-relation analyses use the same conservative mutation facts already
-required by origin analysis. A rejected capture emits the existing `mutable-capture`
-reason. It never degrades into a different plausible target. Unresolved relations never
-emit a `calls` xref. The implementation builds one bounded mutation summary for each
-top-level prototype tree per analysis invocation and reuses the shared summary logic
-across callee, origin, and call-relation analysis. Reaching the bound produces the
-existing `analysis-limit` outcome rather than a preserved value.
+The structured result uses `status: "lookup-label"` and contains:
 
-## Shared physical-role contract
+- `lookup_kind`: `gettable` or `self`;
+- `key`: the selected `luad_core::model::ConstantValue` using its normal machine
+  encoding unchanged;
+- `evidence`: a `StableId` array normalized by lexicographic sort and deduplication,
+  including every contributing lookup instruction and accepted alias or capture hop.
 
-Physical-role discovery makes one forward pass in ascending physical-PC order. The
-first unclaimed executable owner claims its complete companion range. A claimed word
-is never reconsidered as an owner, regardless of the opcode bits it resembles:
+The result carries no receiver register, receiver path, or receiver-derived field.
+Consumers may treat every evidence member as a contributing proof site, never as a
+unique receiver or lookup site.
 
-- `CLOSURE` owns exactly the child prototype's declared number of following
-  `closure_binding` descriptor words.
-- Executable `SETLIST A B 0` owns exactly one following `setlist_extra` word whose
-  complete raw `u32` value is the list-batch operand.
-- A word already classified as a non-executable companion cannot itself own companions,
-  regardless of the opcode bits it resembles.
-- A companion range that extends past the code vector is a validation error.
-- Any executable control transfer into a companion is a validation error. This includes
-  explicit jump targets and the `pc + 2` target of conditional-skip instructions.
+A string key is expected to provide the main firmware value, but the machine contract
+retains the typed constant rather than silently stringifying numbers or booleans.
+Human text may render an escaped, bounded preview while structured output retains the
+normal constant representation and output limits.
 
-Disassembly and semantic IR preserve the extra word's physical PC and raw bytes, give it
-the `setlist_extra` role, link it to its owning `SETLIST`, and expose its raw value as
-data. It has no executable reads, writes, jump target, conditional skip, metamethod,
-call kind, or standalone opcode explanation.
+The label propagates through the same bounded, control-flow-aware mechanisms used for
+stronger callee facts:
 
-CFG remains physically auditable: block `start_pc` and `end_pc` retain physical bounds,
-while `instruction_pcs` contains executable PCs only and may therefore be noncontiguous.
-The last executable PC determines the terminator, `is_exit`, and outgoing edges.
-Companions are never leaders, terminators, or edge endpoints. Reachability and dataflow
-operate only on executable instructions. Analysis enumeration uses the shared role
-rather than re-decoding low opcode bits.
+- register `MOVE` aliases;
+- equal joins that preserve the same lookup kind and typed key while retaining every
+  contributing lookup instruction and unioning all evidence;
+- safe parent-to-child closure captures;
+- repeated instantiation sites only when their joined lookup labels are equal;
+- the analysis and path bounds defined by the public contract.
 
-## Public surface
+It stops explicitly at dynamic keys, conflicting keys or lookup kinds, overwrite,
+mutable or ambiguous capture, unsupported instruction, open register window, or
+analysis exhaustion. An equal literal key selected from different unknown receivers may
+join because the fact claims only the selector, not receiver equality.
 
-Text and structured disassembly render `setlist_extra` as a data continuation, not an
-ordinary mnemonic. Explain identifies its owner and non-executable role. CFG, callee,
-origin, callgraph, xref, query, and recursive export agree on the same physical role.
+Join equality requires the same constant type tag and byte-identical serialized value;
+it is never numeric or stringified equality. Positive and negative zero conflict, and
+NaN keys are conservatively excluded from equal joins even when their payload bytes
+match. A single NaN-key lookup still emits a typed label; a join blocked only by this
+NaN rule stops with `control-flow-conflict`.
 
-The existing Lua 5.1 closure-binding representation remains unchanged except that role
-discovery cannot be confused by opcode-shaped companion data. No new command or security
-classification is added.
-
-`luad-prototype-v1` remains byte-for-byte frozen with its existing canonical vectors.
-Because v1 hashes the instruction role and mnemonic, corrected companion semantics use
-`luad-prototype-v2`; recursive export emits v2 as the current identity scheme for Lua
-5.1. The v1 encoder and golden vector remain available as a compatibility definition,
-and the v2 contract differs only where physical-role normalization changes canonical
-instruction content. The identity schema continues to carry an explicit `scheme` value.
+When a receiver has a provable global or module symbolic path, the
+`ResolvedPath` result remains stronger and unchanged. A directly constructed closure
+remains `ResolvedPrototype`. Constant-key labels do not create exact call relations or
+`calls` xrefs. `CallRelationUnresolvedReason` gains `lookup-label-only`, and the
+unresolved relation retains the lookup label's evidence. `CalleeUnresolvedReason` gains
+no variant, and its total conversion into call-relation reasons remains unchanged.
+The new reason is an additive member of a closed enum under the documented pre-1.0
+schema-major-1 stability policy; the retrieval-freeze stage will define the general
+post-freeze compatibility rule for analysis vocabularies.
 
 ## Acceptance matrix
 
-One table-driven corrective family will prove capture safety for:
+One table-driven Lua 5.1 family will cover:
 
-- one sibling closure that mutates a parent local captured by a separate caller closure;
-- the same shape through a parent upvalue across an additional nesting level;
-- mutation before versus after the relevant closure site;
-- a non-mutating sibling, equal safe captures, and direct local closure flow;
-- a bounded-summary exhaustion case producing `analysis-limit`;
-- callee `mutable-capture`, unresolved call relation, and absence of a `calls` xref;
-- agreement with origin analysis on the same shared-cell mutation shapes.
+1. `GETTABLE` with an unknown receiver and a literal string key immediately called.
+2. `SELF` with an unknown receiver and a literal string key immediately called.
+3. Register aliases between lookup and call.
+4. Equal-key joins across control-flow branches with deterministic evidence union.
+5. The same equal key selected from different unknown receiver registers.
+6. Conflicting keys and conflicting `GETTABLE`/`SELF` forms.
+7. Dynamic RK register keys.
+8. Overwrite after lookup.
+9. Safe local and parent-upvalue capture, plus mutable and ambiguous capture rejection.
+10. Repeated child-prototype instantiation with equal versus conflicting labels.
+11. A provable global/module receiver retaining the stronger `ResolvedPath` result.
+12. Non-string RK(C) constants producing typed labels without stringification, with the
+    independent decoder proving the Lua 5.1 operand encoding; signed-zero and NaN join
+    boundaries are explicit rows.
+13. Analysis-bound exhaustion and unreachable calls retaining their explicit stop
+    reasons.
+14. Callee-path query predicates will not match lookup labels; no lookup-label predicate
+    enters the grammar in this sprint.
 
-A synthesized physical-word family will cover `SETLIST C == 0` extra values whose low
-bits resemble `CALL`, `TAILCALL`, `JMP`, `RETURN`, `CLOSURE`, and `SETLIST`.
-It will prove:
+For every positive row, independent acceptance checks exact lookup kind, typed key,
+ordered evidence set, physical call ID, text rendering, JSON/JSONL, recursive export,
+and deterministic repetition. It also checks that call relations remain unresolved and
+no exact `calls` xref is emitted.
 
-- exactly one `setlist_extra` role at the expected physical PC;
-- no invented call/origin/relation/xref or executable effects;
-- no invented leader, successor, exit, or unreachable region;
-- the real instruction after the extra word remains reachable and executes normally;
-- a closure-binding word that resembles `SETLIST C == 0` does not consume another word;
-- an extra word that resembles `CLOSURE` does not create closure bindings;
-- `SETLIST A 0 0` preserves its open value window while owning exactly one extra word;
-- truncated companion ranges, explicit jumps into companions, and conditional skips
-  into companions fail validation with stable diagnostics;
-- the frozen v1 canonical vector is unchanged and v2 is emitted with corrected roles;
-- text, JSON, JSONL, explain, CFG, and recursive export agree.
+The acceptance model decodes the synthesized Lua 5.1 words and performs its own bounded
+register-flow calculation. It does not call production callee transfer, joins, capture
+derivation, renderer, or schema types to decide the expected result. Killer mutations
+must reject at least: dropping the key operand, treating every label as `SELF`, merging
+different keys or lookup kinds, replacing byte-exact key comparison with numeric
+comparison, dropping one branch's lookup evidence, erasing an alias evidence hop,
+emitting a receiver-derived field, converting a lookup label to `ResolvedPath`,
+downgrading a provable `ResolvedPath` to a lookup label, emitting an exact call edge,
+and replacing an explicit stop reason with a plausible label.
 
-Independent acceptance implements its own raw-word and parsed-prototype role enumerator
-inside the oracle test crate. It does not call production role discovery, lifting, or
-disassembly when deciding which PCs are executable. Killer mutations remove the sibling
-scan, skip the parent-upvalue scan, retain the stale prototype target, emit an unresolved
-`calls` xref, execute the extra word, derive a branch from its bits, or let companion
-data own another companion.
+## Corpus outcome check
+
+The private reference corpus is a sizing check, not an oracle or release gate. After
+the public matrix passes, one release-build survey will report:
+
+- total call sites;
+- counts by `ResolvedPath`, `ResolvedPrototype`, lookup label, and each unresolved
+  reason;
+- lookup-label counts by `GETTABLE` and `SELF`;
+- `overwritten` and `unsupported-value` counts;
+- deterministic output hash across two identical invocations;
+- elapsed time and maximum resident set size using the documented measurement method.
+
+The survey reports constant-key `SELF` and `GETTABLE` selections separately. Their
+counts carry no acceptance threshold or pass condition and remain supplemental product
+evidence rather than a public correctness claim.
+
+Any public semantic discovered by the survey is minimized into a redistributable row
+before it can affect the contract.
 
 ## Allowed production paths
 
-- shared Lua 5.1 physical-role discovery, disassembly, lifter, and validator
-- CFG handling of non-executable roles
-- callee capture-safety logic and shared helpers used by origins/call relations
-- prototype identity v2 encoding while preserving the frozen v1 definition
-- existing explain/query/xref/export rendering only where shared role propagation
-  requires it
-- focused redistributable fixtures or synthesized chunks, corrective oracle tests,
-  diagnostics, one combined gate spec/runner, schemas/examples, and indexed docs
+- Lua 5.1 callee value, transfer, join, and capture representations
+- call-relation mapping needed to preserve the no-exact-edge boundary
+- text, JSON, JSONL, query, and recursive-export rendering of callee facts
+- callee and callgraph schemas, examples, capability descriptions, and indexed docs
+- one table-driven oracle family and one combined gate using synthesized or maintained
+  redistributable fixtures
 
 ## Non-goals
 
-This sprint does not add constant-key labels, query predicates, SSA, decompilation,
-runtime execution, general table analysis, sink policy, new dialects, or support-tier
-promotion. It does not redesign every Lua 5.1 companion form or use private firmware as
-an oracle.
+This sprint does not infer receiver identity, runtime object type, actual method
+implementation, framework routing, sink danger, attacker control, reachability,
+prototype call edges, general table contents, SSA, or decompiled syntax. It does not
+add a dedicated search command, broaden query grammar, change support tiers, repair the
+site-accurate repeated-instantiation `Binds` xrefs assigned to the retrieval stage, or
+add a dialect.
 
 ## Verification and stop condition
 
-Acceptance requires both corrective matrices and killers, all existing Lua 5.1
-callee/origin/call-relation/closure/CFG gates, canonical machine and batch checks,
-aggregate repository checks, a fresh model-diverse combined-area PASS, green pull-request
-CI, and a clean merged revision equal to `origin/main`. The sprint stops rather than
-preserving a capture or executing a word whose role is ambiguous.
+Acceptance requires the independent matrix and live killer probes, the symbolic
+callee, call-relation, origin, closure, semantic-safety, machine-contract, and batch
+gates, aggregate repository checks, a model-diverse correctness PASS, green pull-request
+CI, and a clean merged revision equal to `origin/main`.
+
+The sprint stops rather than emitting a label when the key, lookup form, evidence chain,
+or preservation boundary is ambiguous. It stops rather than upgrading a lookup label
+to a symbolic path or exact call edge without receiver or prototype proof.
