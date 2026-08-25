@@ -16,8 +16,9 @@ the target remains experimental until a release evidence bundle promotes it.
 Streaming facts carry their own artifact and interpretation identity for stateless
 firmware-tree ingestion.
 Lua 5.1 calls expose bounded symbolic global/module labels, direct closure identities,
-stable instruction evidence, and explicit unresolved reasons through `callees` and
-recursive export. Fixed call arguments expose bounded, owner-qualified value-expression
+typed constant-key `GETTABLE`/`SELF` labels, stable instruction evidence, and explicit
+unresolved reasons through `callees` and recursive export. Fixed call arguments expose
+bounded, owner-qualified value-expression
 origins through `origins`, including eager `CONCAT`, Lua `MOD`, and explicit cutoff
 reasons without sink or taint policy. `callgraph` links calls to exact child prototypes
 when direct closure flow or one literal global store establishes a unique relation;

@@ -22,18 +22,7 @@ an exact release, profile, layout, public surface, and evidence manifest.
 
 ## Delivery sequence
 
-### 1. Expose constant-key call labels
-
-Constant-key `GETTABLE` and `SELF` lookups will retain a typed lookup label when the
-receiver does not have a provable global or module path. The label will state only the
-bytecode-selected key, lookup form, and instruction evidence. It will not claim receiver
-identity, method implementation, exact callee identity, or runtime reachability.
-Stronger global, module, and exact-prototype facts remain distinct.
-
-Exit outcome: external researchers can retrieve calls selected by a literal method or
-field name without `luad` guessing which runtime object supplies that member.
-
-### 2. Freeze retrieval and machine contracts
+### 1. Freeze retrieval and machine contracts
 
 Queries will cover callee paths and lookup labels, unresolved reasons, origin shapes,
 call relations, interpretation identity, and prototype content identity. Every
@@ -52,7 +41,7 @@ surface unless its complete trusted-compiler contract is independently implement
 Exit outcome: a human or AI consumer can retrieve every release-critical fact without
 reimplementing bytecode decoding or relying on undocumented enum and process behavior.
 
-### 3. Qualify the stable LNUM32 release
+### 2. Qualify the stable LNUM32 release
 
 The release candidate will freeze the schema major, publish exact target artifacts,
 derive the `lua5.1-lnum32` support tier from the verified release evidence bundle, and
@@ -65,7 +54,7 @@ arm64 and Linux x86_64.
 Exit outcome: a human or AI agent can complete the reference firmware workflows with
 the supported CLI and a thin external judgment layer.
 
-### 4. Qualify additional targets independently
+### 3. Qualify additional targets independently
 
 Stock Lua layouts, Lua 5.2, 5.3, 5.4, 5.5, LuaJIT, and vendor mappings advance one exact
 target at a time. Vendor qualification may consume a provenance-bound mapping recovered
@@ -75,17 +64,13 @@ remain external.
 ## Dependency order
 
 ```text
-constant-key call labels
-  -> retrieval and machine-contract freeze
+retrieval and machine-contract freeze
   -> stable LNUM32 release evidence
   -> independently qualified additional targets
 ```
 
 ## Customer checkpoints
 
-- After constant-key call labels: repeat the firmware-scale call-site survey and trace
-  representative format/concatenation arguments, caller relationships, and
-  cross-version matches while leaving reachability and sink policy external.
 - Before schema freeze: review callees, origins, call relations, capture xrefs, and
   queries as one public area, then exercise every retrieval recipe against
   representative firmware.

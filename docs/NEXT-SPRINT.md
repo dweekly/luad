@@ -1,161 +1,131 @@
-# Active sprint: constant-key Lua 5.1 call labels
+# Active sprint: Lua 5.1 retrieval and machine-contract freeze
 
-Lane: bounded semantic feature. Target: preserve a literal call-selection key when the
-receiver identity is not provable.
+Lane: public semantic batch. Target: make every release-critical Lua 5.1 fact directly
+retrievable through a coherent, fail-closed machine interface.
 
 ## Claim and researcher value
 
-For a Lua 5.1 `CALL` or `TAILCALL` whose callee value comes from constant-key
-`GETTABLE` or `SELF`, `luad` will emit a typed lookup label even when it cannot prove a
-global, module, or exact-prototype callee. The label records only:
+An external consumer can search and navigate constants, symbolic callees, constant-key
+lookup labels, unresolved reasons, argument-origin shapes, exact and unresolved call
+relations, prototype identities, and closure captures without decoding instructions or
+joining ambiguous records by position.
 
-- whether selection used `GETTABLE` or `SELF`;
-- the exact typed constant key;
-- the lookup instruction and all value-preserving alias/capture evidence between that
-  lookup and the call.
+Every accepted predicate applies its complete typed operand. Unknown fields,
+unsupported operators, malformed values, and predicates whose operands cannot be
+applied are usage errors rather than empty or overbroad answers. Pagination remains
+bound to the complete query and input identity.
 
-The label does not identify the receiver, implementation, runtime target, framework
-route, or reachability. It is not a resolved symbolic path or a provable call edge.
+## Public contract batch
 
-This lets a caller retrieve literal selectors such as `execute`, `call`, or `format`
-without reimplementing Lua register flow.
+### Retrieval vocabulary
 
-## Public semantic contract
+Extend the existing bounded query surface with one documented, table-driven vocabulary
+covering:
 
-`CalleeResolution` gains a distinct tagged lookup-label result. It is not encoded by
-adding a rootless segment to `ResolvedPath`.
+- typed constants and exact string containment;
+- callee resolution kind, symbolic path, lookup kind, and typed lookup key;
+- callee and call-relation unresolved reasons;
+- argument index and origin-expression kind;
+- exact child-prototype call target;
+- artifact interpretation identity and prototype content identity;
+- forward and inverse closure-capture relations, including the physical closure site.
 
-The structured result uses `status: "lookup-label"` and contains:
+The implementation may query normalized in-memory facts or the same recursive export
+records. It must not create a second decoder or a second semantic representation.
+Predicates over typed values preserve their public type and byte identity; text
+containment is defined only for string constants and rejects incompatible operand
+types. All result ordering is deterministic.
 
-- `lookup_kind`: `gettable` or `self`;
-- `key`: the selected `luad_core::model::ConstantValue` using its normal machine
-  encoding unchanged;
-- `evidence`: a `StableId` array normalized by lexicographic sort and deduplication,
-  including every contributing lookup instruction and accepted alias or capture hop.
+### Capture-site identity
 
-The result carries no receiver register, receiver path, or receiver-derived field.
-Consumers may treat every evidence member as a contributing proof site, never as a
-unique receiver or lookup site.
+A capture relation identifies the parent prototype, physical `CLOSURE` instruction,
+descriptor instruction, child prototype instance, child upvalue slot, and parent
+register or upvalue source. When the same child prototype definition is instantiated at
+multiple closure sites, forward and inverse xrefs remain distinct and return the binder
+for the selected site. No relation is inferred from child-prototype position alone.
 
-A string key is expected to provide the main firmware value, but the machine contract
-retains the typed constant rather than silently stringifying numbers or booleans.
-Human text may render an escaped, bounded preview while structured output retains the
-normal constant representation and output limits.
+### Machine compatibility and process behavior
 
-The label propagates through the same bounded, control-flow-aware mechanisms used for
-stronger callee facts:
+Document and enforce one compatibility rule for schema-major 1 analysis records:
+structural fields and tagged result variants are closed within the major, while fields
+explicitly documented as open vocabularies are represented so an unknown member can be
+retained or rejected deliberately rather than silently misread. Canonical schemas,
+capability output, examples, and deserialization tests express the same rule.
 
-- register `MOVE` aliases;
-- equal joins that preserve the same lookup kind and typed key while retaining every
-  contributing lookup instruction and unioning all evidence;
-- safe parent-to-child closure captures;
-- repeated instantiation sites only when their joined lookup labels are equal;
-- the analysis and path bounds defined by the public contract.
+Publish one command/verdict/exit-code table for every public command. Successful
+queries, no-match queries, invalid predicates, malformed input, validation findings,
+resource exhaustion, and mixed batch results have distinct documented behavior where
+their semantics differ. Machine stdout stays parseable; diagnostics and operational
+messages stay on their documented channels.
 
-It stops explicitly at dynamic keys, conflicting keys or lookup kinds, overwrite,
-mutable or ambiguous capture, unsupported instruction, open register window, or
-analysis exhaustion. An equal literal key selected from different unknown receivers may
-join because the fact claims only the selector, not receiver equality.
+Remove the nonfunctional `compile` command, its capability/schema/help entries, and
+forward-looking product requirements. `luad` does not run compilers as part of the
+release surface. Repository proof tooling may invoke pinned compilers independently.
 
-Join equality requires the same constant type tag and byte-identical serialized value;
-it is never numeric or stringified equality. Positive and negative zero conflict, and
-NaN keys are conservatively excluded from equal joins even when their payload bytes
-match. A single NaN-key lookup still emits a typed label; a join blocked only by this
-NaN rule stops with `control-flow-conflict`.
+### Tested composition recipes
 
-When a receiver has a provable global or module symbolic path, the
-`ResolvedPath` result remains stronger and unchanged. A directly constructed closure
-remains `ResolvedPrototype`. Constant-key labels do not create exact call relations or
-`calls` xrefs. `CallRelationUnresolvedReason` gains `lookup-label-only`, and the
-unresolved relation retains the lookup label's evidence. `CalleeUnresolvedReason` gains
-no variant, and its total conversion into call-relation reasons remains unchanged.
-The new reason is an additive member of a closed enum under the documented pre-1.0
-schema-major-1 stability policy; the retrieval-freeze stage will define the general
-post-freeze compatibility rule for analysis vocabularies.
+Executable recipes cover:
 
-## Acceptance matrix
+1. exact and substring constant search over a firmware tree;
+2. calls selected by a symbolic path or constant key;
+3. calls grouped by unresolved reason;
+4. fixed call arguments grouped by origin-expression shape;
+5. forward and inverse multi-hop capture traversal with closure-site identity;
+6. navigation between a call site and an exact child prototype when proven;
+7. comparison by artifact interpretation identity and prototype content identity.
 
-One table-driven Lua 5.1 family will cover:
+Prefer `export` plus a standard JSON processor when that path is clear and bounded. A
+dedicated constant-search command is in scope only if the executable recipe demonstrates
+a material correctness or usability advantage and reuses the same fact implementation.
 
-1. `GETTABLE` with an unknown receiver and a literal string key immediately called.
-2. `SELF` with an unknown receiver and a literal string key immediately called.
-3. Register aliases between lookup and call.
-4. Equal-key joins across control-flow branches with deterministic evidence union.
-5. The same equal key selected from different unknown receiver registers.
-6. Conflicting keys and conflicting `GETTABLE`/`SELF` forms.
-7. Dynamic RK register keys.
-8. Overwrite after lookup.
-9. Safe local and parent-upvalue capture, plus mutable and ambiguous capture rejection.
-10. Repeated child-prototype instantiation with equal versus conflicting labels.
-11. A provable global/module receiver retaining the stronger `ResolvedPath` result.
-12. Non-string RK(C) constants producing typed labels without stringification, with the
-    independent decoder proving the Lua 5.1 operand encoding; signed-zero and NaN join
-    boundaries are explicit rows.
-13. Analysis-bound exhaustion and unreachable calls retaining their explicit stop
-    reasons.
-14. Callee-path query predicates will not match lookup labels; no lookup-label predicate
-    enters the grammar in this sprint.
+## Acceptance design
 
-For every positive row, independent acceptance checks exact lookup kind, typed key,
-ordered evidence set, physical call ID, text rendering, JSON/JSONL, recursive export,
-and deterministic repetition. It also checks that call relations remain unresolved and
-no exact `calls` xref is emitted.
+Use one table-driven public matrix and one combined gate. The matrix includes positive,
+zero-result, malformed, unknown-field, unsupported-operator, wrong-type,
+ignored-operand, cursor-replay, cursor-tamper, and bound-exhaustion rows for every
+predicate family. Every positive row proves exact selected records and deterministic
+ordering through the live CLI. Every negative row proves a nonzero usage or resource
+exit and no plausible partial answer on stdout.
 
-The acceptance model decodes the synthesized Lua 5.1 words and performs its own bounded
-register-flow calculation. It does not call production callee transfer, joins, capture
-derivation, renderer, or schema types to decide the expected result. Killer mutations
-must reject at least: dropping the key operand, treating every label as `SELF`, merging
-different keys or lookup kinds, replacing byte-exact key comparison with numeric
-comparison, dropping one branch's lookup evidence, erasing an alias evidence hop,
-emitting a receiver-derived field, converting a lookup label to `ResolvedPath`,
-downgrading a provable `ResolvedPath` to a lookup label, emitting an exact call edge,
-and replacing an explicit stop reason with a plausible label.
+The capture matrix instantiates one child prototype at two or more physical closure
+sites with different register and parent-upvalue binders. It proves both traversal
+directions and rejects a mutation that collapses the sites. Remaining killer mutations
+include dropping a `contains` operand, stringifying typed constants, treating unknown
+enum values as known, accepting a cursor from another predicate, and returning success
+for an invalid predicate.
 
-## Corpus outcome check
+Schema tests deserialize representative current records and deliberately altered
+open-vocabulary records according to the published compatibility rule. CLI tests cover
+the complete exit table. Recipe tests execute documented commands against
+redistributable fixtures and validate their results rather than snapshotting prose.
 
-The private reference corpus is a sizing check, not an oracle or release gate. After
-the public matrix passes, one release-build survey will report:
-
-- total call sites;
-- counts by `ResolvedPath`, `ResolvedPrototype`, lookup label, and each unresolved
-  reason;
-- lookup-label counts by `GETTABLE` and `SELF`;
-- `overwritten` and `unsupported-value` counts;
-- deterministic output hash across two identical invocations;
-- elapsed time and maximum resident set size using the documented measurement method.
-
-The survey reports constant-key `SELF` and `GETTABLE` selections separately. Their
-counts carry no acceptance threshold or pass condition and remain supplemental product
-evidence rather than a public correctness claim.
-
-Any public semantic discovered by the survey is minimized into a redistributable row
-before it can affect the contract.
+The private firmware corpus is a usability and sizing check, never an oracle. A final
+release-build survey records query coverage, no-match/error behavior, elapsed time,
+maximum resident set size, and a deterministic output hash. Any newly discovered
+semantic becomes a minimized public fixture before changing acceptance.
 
 ## Allowed production paths
 
-- Lua 5.1 callee value, transfer, join, and capture representations
-- call-relation mapping needed to preserve the no-exact-edge boundary
-- text, JSON, JSONL, query, and recursive-export rendering of callee facts
-- callee and callgraph schemas, examples, capability descriptions, and indexed docs
-- one table-driven oracle family and one combined gate using synthesized or maintained
-  redistributable fixtures
+- query grammar, typed predicate evaluation, pagination binding, and result records;
+- xref capture identity and traversal;
+- CLI help, capability declarations, schemas, examples, and machine documentation;
+- removal of the nonfunctional compiler-laboratory surface;
+- one table-driven oracle family, recipe executor, and combined gate;
+- compatibility fixes required by live negative controls in this batch.
 
 ## Non-goals
 
-This sprint does not infer receiver identity, runtime object type, actual method
-implementation, framework routing, sink danger, attacker control, reachability,
-prototype call edges, general table contents, SSA, or decompiled syntax. It does not
-add a dedicated search command, broaden query grammar, change support tiers, repair the
-site-accurate repeated-instantiation `Binds` xrefs assigned to the retrieval stage, or
-add a dialect.
+This sprint does not add decompilation, sink classification, taint analysis, receiver
+identity, runtime reachability, framework routing, persistent research state, firmware
+unpacking, dynamic interpreter execution, arbitrary dataflow predicates, or a new Lua
+dialect. It does not promote a support tier or freeze a release artifact.
 
 ## Verification and stop condition
 
-Acceptance requires the independent matrix and live killer probes, the symbolic
-callee, call-relation, origin, closure, semantic-safety, machine-contract, and batch
-gates, aggregate repository checks, a model-diverse correctness PASS, green pull-request
-CI, and a clean merged revision equal to `origin/main`.
+Acceptance requires the combined retrieval gate, affected existing semantic and machine
+gates, aggregate repository checks, a model-diverse adversarial correctness review,
+green pull-request CI, and a clean merged revision equal to `origin/main`.
 
-The sprint stops rather than emitting a label when the key, lookup form, evidence chain,
-or preservation boundary is ambiguous. It stops rather than upgrading a lookup label
-to a symbolic path or exact call edge without receiver or prototype proof.
+The sprint stops rather than returning a result when a predicate operand cannot be
+applied, a capture site is ambiguous, a cursor does not bind to the complete request, or
+a compatibility case cannot be interpreted under the documented schema-major rule.
