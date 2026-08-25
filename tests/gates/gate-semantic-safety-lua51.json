@@ -22,8 +22,11 @@
     "test_shared_capture_mutation_matrix",
     "test_shared_capture_summary_exhaustion_returns_analysis_limit"
   ],
-  "required_compiler_version": null,
-  "required_compiler_sha256": null,
+  "required_compiler_version": "Lua 5.1.5",
+  "required_compiler_sha256": {
+    "linux-x86_64": "e2ba74327f3a4662689b9e58909b410af8635add51a35b951021d0b1d90c6000",
+    "macos-aarch64": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239"
+  },
   "required_fixtures": [
     {
       "path": "tests/fixtures/precompiled/lua51/hello.luac",
