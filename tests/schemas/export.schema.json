@@ -6,6 +6,7 @@
       "type": "object",
       "required": [
         "record_type",
+        "schema_version",
         "tool_version",
         "total_files"
       ],
@@ -15,6 +16,11 @@
           "enum": [
             "export_start"
           ]
+        },
+        "schema_version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
         },
         "tool_version": {
           "type": "string"
@@ -67,10 +73,14 @@
     {
       "type": "object",
       "required": [
+        "context",
         "data",
         "record_type"
       ],
       "properties": {
+        "context": {
+          "$ref": "#/definitions/JsonlRecordContext"
+        },
         "data": {
           "$ref": "#/definitions/ExportProtoMeta"
         },
@@ -85,10 +95,14 @@
     {
       "type": "object",
       "required": [
+        "context",
         "data",
         "record_type"
       ],
       "properties": {
+        "context": {
+          "$ref": "#/definitions/JsonlRecordContext"
+        },
         "data": {
           "$ref": "#/definitions/DisassembledInstruction"
         },
@@ -103,10 +117,14 @@
     {
       "type": "object",
       "required": [
+        "context",
         "data",
         "record_type"
       ],
       "properties": {
+        "context": {
+          "$ref": "#/definitions/JsonlRecordContext"
+        },
         "data": {
           "$ref": "#/definitions/Constant"
         },
@@ -121,10 +139,14 @@
     {
       "type": "object",
       "required": [
+        "context",
         "data",
         "record_type"
       ],
       "properties": {
+        "context": {
+          "$ref": "#/definitions/JsonlRecordContext"
+        },
         "data": {
           "$ref": "#/definitions/UpvalueDesc"
         },
@@ -139,10 +161,14 @@
     {
       "type": "object",
       "required": [
+        "context",
         "data",
         "record_type"
       ],
       "properties": {
+        "context": {
+          "$ref": "#/definitions/JsonlRecordContext"
+        },
         "data": {
           "$ref": "#/definitions/XrefEntry"
         },
@@ -157,10 +183,14 @@
     {
       "type": "object",
       "required": [
+        "context",
         "data",
         "record_type"
       ],
       "properties": {
+        "context": {
+          "$ref": "#/definitions/JsonlRecordContext"
+        },
         "data": {
           "$ref": "#/definitions/Diagnostic"
         },
@@ -937,6 +967,59 @@
           "type": "integer",
           "format": "uint",
           "minimum": 0.0
+        }
+      }
+    },
+    "InputIdentity": {
+      "description": "Identity and provenance metadata for an analyzed input artifact.",
+      "type": "object",
+      "required": [
+        "byte_length",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "byte_length": {
+          "description": "Total byte length of the input.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "path": {
+          "description": "File path or source identifier (e.g. \"hello.luac\" or \"`<stdin>`\").",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 hash of the complete input byte stream.",
+          "type": "string"
+        }
+      }
+    },
+    "JsonlRecordContext": {
+      "description": "Context capturing provenance and interpretation for a streamed JSONL record.",
+      "type": "object",
+      "properties": {
+        "input_identity": {
+          "description": "Provenance identity of the analyzed input, if available.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/InputIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "interpretation": {
+          "description": "Resolved interpretation, if available.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ResolvedInterpretation"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },

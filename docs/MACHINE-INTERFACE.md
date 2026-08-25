@@ -25,9 +25,10 @@ luad capabilities --format json
 luad diagnostics --format json
 luad schema capabilities
 luad schema diagnostics
+luad schema export
 ```
 
-Available schema names in the current schema major version are:
+Available schema names are:
 
 - `chunk`
 - `diagnostic`
@@ -44,7 +45,10 @@ Available schema names in the current schema major version are:
 - `manifest`
 - `export`
 
-Request another schema major with `--schema-version`. Unsupported versions fail with a usage error.
+Each schema family advances independently. Complete JSON documents remain at major 1;
+capabilities and streaming JSONL use major 2. Omitting `--schema-version` selects the
+current major for the requested schema. An explicit unsupported major fails with a
+usage error.
 
 ## Output formats
 
@@ -95,7 +99,9 @@ proto:0/2:local:0
 diagnostic:<code>:<target-id>
 ```
 
-A `StableId` is not globally stable and does not imply equivalence across recompilation. External persistence must pair it with the exact input hash and, in the future, the resolved dialect/profile, validated chunk layout, and parse configuration.
+A `StableId` is not globally stable and does not imply equivalence across recompilation.
+External persistence must pair it with the exact input hash and resolved interpretation.
+Every JSONL fact carries that context directly.
 
 Invalid or absent targets should fail closed. Report any command that silently falls back to another object.
 
@@ -170,6 +176,12 @@ Batch exports firmware artifacts in streaming JSONL format.
 `instruction`, `constant`, `upvalue`, `xref`) emitted per input file while
 preserving stream framing, diagnostics, and per-file truncation metadata.
 
+Every data record has a required `context` object. Successful facts carry
+`input_identity` and `interpretation`; parse-failure diagnostics carry identity with a
+null interpretation; read-failure diagnostics carry null identity and interpretation.
+Consumers may discard or interleave control records without losing fact attribution.
+`export_start.schema_version` identifies the stream contract.
+
 ### `compile`
 
 The command is visible but intentionally unsupported and exits with code 4. It must not be used to execute untrusted source.
@@ -196,5 +208,8 @@ The capability document is useful for discovering implemented surface. Callers m
 interpret every dialect/profile and command surface as `experimental` unless a
 target-specific release manifest for the exact tool revision and interpretation
 says otherwise.
+
+`diagnostic_catalog` identifies the `diagnostics` command, its schema name, and output
+formats so callers can discover the diagnostic authority without parsing help text.
 
 No machine consumer should need to infer support from README prose once the evidence-backed manifest is complete.

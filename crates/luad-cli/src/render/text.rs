@@ -421,6 +421,14 @@ pub fn render_capabilities(manifest: &luad_core::CapabilityManifest, evidence: b
         manifest.schema_version
     );
     println!();
+    println!("{}", "Diagnostic Catalog:".bold());
+    println!(
+        "  {} (schema: {}, formats: {})",
+        manifest.diagnostic_catalog.command,
+        manifest.diagnostic_catalog.schema,
+        manifest.diagnostic_catalog.formats.join(", ")
+    );
+    println!();
     println!("{}", "Dialect Matrix:".bold());
     for d in &manifest.dialects {
         let features_str = d.features.join(", ");

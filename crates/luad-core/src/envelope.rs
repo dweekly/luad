@@ -11,6 +11,9 @@ use crate::diagnostic::{Diagnostic, Verdict};
 use crate::dialect::ResolvedInterpretation;
 use crate::limits::{ParseMode, ResourceLimits};
 
+/// Current schema major for JSONL metadata and data records.
+pub const JSONL_SCHEMA_VERSION: u32 = 2;
+
 /// Identity and provenance metadata for an analyzed input artifact.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct InputIdentity {
@@ -82,11 +85,51 @@ pub struct JsonlMetadataRecord {
     pub analysis_configuration: AnalysisConfiguration,
 }
 
+/// Context capturing provenance and interpretation for a streamed JSONL record.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct JsonlRecordContext {
+    /// Provenance identity of the analyzed input, if available.
+    pub input_identity: Option<InputIdentity>,
+    /// Resolved interpretation, if available.
+    pub interpretation: Option<ResolvedInterpretation>,
+}
+
+impl JsonlRecordContext {
+    /// Create a context for a successfully analyzed artifact.
+    pub fn successful(
+        input_identity: InputIdentity,
+        interpretation: ResolvedInterpretation,
+    ) -> Self {
+        Self {
+            input_identity: Some(input_identity),
+            interpretation: Some(interpretation),
+        }
+    }
+
+    /// Create a context for an artifact whose parsing failed after reading bytes.
+    pub fn failed_parse(input_identity: InputIdentity) -> Self {
+        Self {
+            input_identity: Some(input_identity),
+            interpretation: None,
+        }
+    }
+
+    /// Create a context for an artifact whose input bytes could not be read.
+    pub fn failed_read() -> Self {
+        Self {
+            input_identity: None,
+            interpretation: None,
+        }
+    }
+}
+
 /// JSONL streaming typed item record.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct JsonlDataRecord<T> {
     /// Discriminator (e.g. "instruction", "prototype", "xref", "diagnostic").
     pub record_type: String,
+    /// Context identifying the input and interpretation for this record.
+    pub context: JsonlRecordContext,
     /// Item payload.
     pub data: T,
 }
@@ -108,6 +151,7 @@ pub struct JsonlSummaryRecord {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ExportStartRecord {
     pub record_type: String,
+    pub schema_version: u32,
     pub tool_version: String,
     pub total_files: usize,
 }

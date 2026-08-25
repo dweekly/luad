@@ -14,6 +14,8 @@
   "expected_tests": [
     "test_all_schema_exports_return_valid_json_schema",
     "test_cross_dialect_diff_without_semantic_flag_rejected",
+    "test_every_single_input_jsonl_fact_is_self_identifying",
+    "test_jsonl_context_killer_mutations_are_rejected",
     "test_jsonl_streaming_batch_export_deterministic_and_recursive",
     "test_jsonl_streaming_cfg_format_integrity",
     "test_jsonl_streaming_diff_format_integrity",

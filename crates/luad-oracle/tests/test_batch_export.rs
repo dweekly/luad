@@ -3,6 +3,8 @@
 use sha2::{Digest, Sha256};
 use std::process::Command;
 
+use luad_core::envelope::{JsonlDataRecord, JSONL_SCHEMA_VERSION};
+
 fn get_luad_bin() -> String {
     if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
         return path;
@@ -92,6 +94,7 @@ fn test_batch_export_jsonl_record_structure_and_discriminators() {
 
     let first: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
     assert_eq!(first["record_type"], "export_start");
+    assert_eq!(first["schema_version"], JSONL_SCHEMA_VERSION);
 
     let second: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
     assert_eq!(second["record_type"], "file_start");
@@ -305,4 +308,129 @@ fn test_batch_export_emits_recursive_facts_and_xrefs_for_closures() {
     assert!(instructions > 0, "must emit instructions");
     assert!(upvalues > 0, "must emit upvalues");
     assert!(xrefs > 0, "must emit xrefs");
+}
+
+#[test]
+fn test_batch_export_facts_remain_attributable_after_control_records_are_removed() {
+    let luad = get_luad_bin();
+    let root = luad_oracle::find_workspace_root();
+    let stock = root.join("tests/fixtures/precompiled/lua51/closures.luac");
+    let lnum = root.join("tests/fixtures/precompiled/lua51_lnum32/hello.luac");
+    let output = Command::new(&luad)
+        .args([
+            "export",
+            stock.to_str().unwrap(),
+            lnum.to_str().unwrap(),
+            "--format",
+            "jsonl",
+        ])
+        .output()
+        .expect("mixed-profile export");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let facts: Vec<JsonlDataRecord<serde_json::Value>> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .filter(|record| {
+            matches!(
+                record["record_type"].as_str(),
+                Some("prototype" | "instruction" | "constant" | "upvalue" | "xref" | "diagnostic")
+            )
+        })
+        .map(|record| serde_json::from_value(record).expect("export fact context"))
+        .collect();
+    assert!(!facts.is_empty());
+
+    let mut saw_stock = false;
+    let mut saw_lnum = false;
+    for fact in facts {
+        let identity = fact
+            .context
+            .input_identity
+            .expect("successful fact identity");
+        let interpretation = fact
+            .context
+            .interpretation
+            .expect("successful interpretation");
+        assert_eq!(
+            identity.byte_length,
+            std::fs::metadata(&identity.path).unwrap().len() as usize
+        );
+        assert_eq!(
+            identity.sha256,
+            hex::encode(Sha256::digest(std::fs::read(&identity.path).unwrap()))
+        );
+        match identity.path.as_str() {
+            path if path == stock.to_str().unwrap() => {
+                saw_stock = true;
+                assert_eq!(interpretation.profile, "lua5.1");
+            }
+            path if path == lnum.to_str().unwrap() => {
+                saw_lnum = true;
+                assert_eq!(interpretation.profile, "lua5.1-lnum32");
+            }
+            path => panic!("unexpected fact input: {path}"),
+        }
+    }
+    assert!(saw_stock && saw_lnum);
+}
+
+#[test]
+fn test_batch_export_failure_diagnostics_report_only_available_context() {
+    let luad = get_luad_bin();
+    let root = luad_oracle::find_workspace_root();
+    let unreadable = root.join("missing-stream-context-fixture.luac");
+    let temp_dir = tempfile::tempdir().unwrap();
+    let source = temp_dir.path().join("source.lua");
+    std::fs::write(&source, "print('source')\n").unwrap();
+
+    let output = Command::new(&luad)
+        .args([
+            "export",
+            source.to_str().unwrap(),
+            unreadable.to_str().unwrap(),
+            "--format",
+            "jsonl",
+        ])
+        .output()
+        .expect("failure export");
+    assert_ne!(output.status.code(), Some(0));
+
+    let diagnostics: Vec<JsonlDataRecord<serde_json::Value>> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+        .filter(|record| record["record_type"] == "diagnostic")
+        .map(|record| serde_json::from_value(record).expect("diagnostic context"))
+        .collect();
+    assert_eq!(diagnostics.len(), 2);
+
+    let parse = diagnostics
+        .iter()
+        .find(|record| record.data["code"] == "PARSE-SOURCE-001")
+        .unwrap();
+    let parse_identity = parse
+        .context
+        .input_identity
+        .as_ref()
+        .expect("read bytes identity");
+    assert_eq!(parse_identity.path, source.to_str().unwrap());
+    assert_eq!(
+        parse_identity.byte_length,
+        std::fs::read(&source).unwrap().len()
+    );
+    assert!(parse.context.interpretation.is_none());
+
+    let read = diagnostics
+        .iter()
+        .find(|record| record.data["code"] == "IO-001")
+        .unwrap();
+    assert!(read.context.input_identity.is_none());
+    assert!(read.context.interpretation.is_none());
 }

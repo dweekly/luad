@@ -1,86 +1,74 @@
-# Active sprint: exact LNUM32 surface qualification
+# Active sprint: self-identifying JSONL facts
 
-Lane: qualification. Target: prove one exact embedded Lua target without changing its
-experimental capability tier.
+Lane: machine contract. Target: make every streamed fact independently attributable
+without requiring hidden file-boundary state.
 
 ## Claim and researcher value
 
-For the OpenWrt-derived Lua 5.1.5 LNUM32 target with layout
-`int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4`, every maintained public read
-surface will select and report the same interpretation, and release evidence assembly
-will reject prerequisites from any other profile or layout.
+Every JSONL data record emitted by `inspect`, `disasm`, `cfg`, `xrefs`, `query`, `diff`,
+and recursive `export` will carry the input identity and resolved interpretation needed
+to join or audit that record in isolation. A consumer may interleave, filter, shard, or
+persist fact lines without retaining the preceding metadata or `file_start` record.
 
-This sprint closes the public interpretation boundary needed by firmware researchers.
-It deliberately leaves support-tier promotion for the following sprint, where the tier
-can be derived from a verified exact-target evidence bundle.
+This directly supports firmware-tree workflows where many chunks, profiles, and errors
+share one stream and an AI agent or relational loader consumes individual records.
+
+## Contract
+
+A single reusable record context will contain:
+
+- the input path, SHA-256, and byte length when an input artifact was read;
+- the resolved base dialect, patch/oracle version, profile, validated layout, and
+  selection mode when interpretation succeeded;
+- an explicit absence of unavailable identity or interpretation fields on failed-input
+  diagnostics rather than invented hashes or profiles.
+
+Every `JsonlDataRecord<T>` will require this context. Export fact records—prototype,
+instruction, constant, upvalue, xref, and diagnostic—will use the same generic shape as
+single-file JSONL commands. Control records may retain their present framing fields,
+but no fact may depend on them for attribution.
+
+The schema major will advance because the new context is required. Canonical schemas,
+examples, and recipes will show consumers how to select `.context.input_identity.path`,
+`.context.input_identity.sha256`, and `.context.interpretation.profile` directly from
+any fact line.
 
 ## Acceptance matrix
 
-One public authority matrix covers the debug and stripped fixtures through:
+One table-driven machine-contract suite will exercise every JSONL-producing command and
+every export fact variant. It will prove:
 
-- detected and explicit `inspect`;
-- JSON and text `disasm` with three-way agreement against the independent decoder and
-  the pinned OpenWrt-derived compiler listing;
-- `validate` with zero diagnostics on valid fixtures;
-- `query` with an owner-qualified result and an actually applied predicate operand;
-- recursive JSONL `export`, including mixed stock/LNUM inputs with per-file profile
-  selection and no interpretation bleed;
-- symmetric explicit-profile substitution failures for LNUM-as-stock and stock-as-LNUM.
+- schema validation and deterministic output;
+- exact path/hash/length agreement with the source bytes;
+- exact interpretation agreement with the corresponding metadata or `file_start`;
+- mixed stock Lua 5.1 and LNUM32 export records retain distinct local contexts after
+  arbitrary fact-line interleaving;
+- deleting metadata and control records leaves every successful fact attributable;
+- failed reads and parse failures produce honest diagnostic context;
+- removing, swapping, or mutating a fact context is rejected by the comparator or schema.
 
-The compiler comparison is mandatory. The gate runner supplies the authenticated
-compiler path to the test process after checking the platform-specific compiler hash.
-Absence of the compiler, an unlisted platform, an incorrect binary, or an unapplied
-comparison fails the gate; no environment-conditional success path is permitted.
-
-Release-manifest assembly and verification bind Lua 5.1 prerequisites to exact target
-identity. A prerequisite that declares a different concrete profile or layout cannot
-satisfy an LNUM32 release. Profile-neutral gates remain eligible only when explicitly
-listed by the exact-target release gate. Prefix matching is not evidence of target
-compatibility.
-
-The Lua 5.1 opcode/validator authority documents and tests that `OP_TEST` and closure
-binding descriptors do not validate their encoded `A` field as an executed register
-operand.
-
-## Required gate changes
-
-- `gate-authority-lua51-openwrt-lnum32` pins `Lua 5.1.5 (double int32)` and the exact
-  compiler SHA-256 for every maintained CI platform.
-- The authority gate names every test in the acceptance matrix and carries the frozen
-  fixture hashes already authenticated by `AUTHORITY.json`.
-- Release-manifest negative controls substitute a stock Lua 5.1 profile/layout and an
-  unrelated Lua 5.1-prefixed profile; both must be rejected.
-- Existing proof-harness, machine-contract, profile, public-disassembly, CLI-selection,
-  diagnostics, validator, and prototype-identity gates remain prerequisites rather than
-  being reimplemented here.
+The same matrix will add structured capability discovery for the `diagnostics` command
+and `diagnostics` schema so an agent can find the catalog without reading prose. It will
+not redesign the complete command catalog.
 
 ## Allowed production paths
 
-- `crates/luad-oracle/src/gate_runner.rs`
-- Lua 5.1 opcode or validator authority documentation only where needed for the
-  executed-role exception
-- the minimum gate-runner environment plumbing needed to expose the verified compiler
-  path to the named test process
-
-Tests, gate specs, gate scripts, schemas, and `CHANGELOG.md` may change as required by
-the matrix. Parser, disassembler, query, export, and capability production semantics are
-out of scope unless a red public-boundary test demonstrates a target-specific defect.
+- `crates/luad-core/src/envelope.rs`
+- `crates/luad-core/src/capabilities.rs`
+- JSONL construction in `crates/luad-cli/src/main.rs`
+- text capability rendering only as needed for the same discovery fact
+- canonical schemas, machine examples, recipes, tests, gate specs, and `CHANGELOG.md`
 
 ## Non-goals
 
-This sprint does not add a supported target record, load a release evidence bundle,
-change the capabilities schema, promote base `lua5.1`, add symbolic callee or origin
-analysis, ingest a private firmware corpus, or treat a public corpus as an oracle.
+This sprint does not add persistent session state, symbolic callees, value origins,
+prototype content hashes, a dedicated constant-search command, support-tier promotion,
+or a general plugin/command registry. It does not remove JSONL framing records or change
+ordinary JSON document envelopes.
 
 ## Verification and stop condition
 
-Acceptance requires:
-
-1. focused red tests for exact profile/layout substitution and mandatory compiler use;
-2. the complete authority surface matrix passing with zero skipped or conditional tests;
-3. the named prerequisite gates and aggregate repository checks passing;
-4. green pull-request CI on every maintained platform;
-5. a clean merged revision with local `main` equal to `origin/main`.
-
-The next sprint may promote only `lua5.1-lnum32`, and only from evidence produced by
-this qualified revision.
+Acceptance requires the focused machine-contract matrix, adversarial context mutations,
+the canonical machine-contract and batch-export gates, aggregate repository checks,
+green pull-request CI, and a clean merged revision with local `main` equal to
+`origin/main`.

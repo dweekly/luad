@@ -5,8 +5,8 @@ use std::process::Command;
 use luad_analysis::{ChunkDiff, ControlFlowGraph, QueryResponse, XrefResponse};
 use luad_core::capabilities::CapabilityManifest;
 use luad_core::envelope::{
-    ExportEndRecord, ExportStartRecord, FileEndRecord, FileStartRecord, MachineDocument,
-    ValidationResponse,
+    ExportEndRecord, ExportStartRecord, FileEndRecord, FileStartRecord, JsonlDataRecord,
+    JsonlMetadataRecord, MachineDocument, ValidationResponse, JSONL_SCHEMA_VERSION,
 };
 use luad_core::model::Chunk;
 use luad_core::DisassembledPrototype;
@@ -336,7 +336,13 @@ fn test_live_capabilities_json_and_schema_validation() {
     let manifest: CapabilityManifest = serde_json::from_slice(&output.stdout)
         .expect("Failed to deserialize capabilities JSON document");
 
-    assert_eq!(manifest.schema_version, 1);
+    assert_eq!(manifest.schema_version, 2);
+    assert_eq!(manifest.diagnostic_catalog.command, "diagnostics");
+    assert_eq!(manifest.diagnostic_catalog.schema, "diagnostics");
+    assert_eq!(
+        manifest.diagnostic_catalog.formats,
+        ["json".to_string(), "text".to_string()]
+    );
     assert!(!manifest.dialects.is_empty());
 }
 
@@ -361,7 +367,7 @@ fn test_jsonl_streaming_disasm_format_integrity() {
 
     let first: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
     assert_eq!(first["record_type"], "metadata");
-    assert_eq!(first["schema_version"], 1);
+    assert_eq!(first["schema_version"], JSONL_SCHEMA_VERSION);
 
     let last: serde_json::Value = serde_json::from_str(lines.last().unwrap()).unwrap();
     assert_eq!(last["record_type"], "summary");
@@ -425,6 +431,119 @@ fn test_jsonl_streaming_diff_format_integrity() {
 
     let last: serde_json::Value = serde_json::from_str(lines.last().unwrap()).unwrap();
     assert_eq!(last["record_type"], "summary");
+}
+
+#[test]
+fn test_every_single_input_jsonl_fact_is_self_identifying() {
+    let luad = get_luad_bin();
+    let root = luad_oracle::find_workspace_root();
+    let hello = root.join("tests/fixtures/precompiled/lua54/hello.luac");
+    let stripped = root.join("tests/fixtures/precompiled/lua54/hello_stripped.luac");
+    let commands = vec![
+        vec!["inspect".to_string(), hello.display().to_string()],
+        vec!["disasm".to_string(), hello.display().to_string()],
+        vec!["cfg".to_string(), hello.display().to_string()],
+        vec!["xrefs".to_string(), hello.display().to_string()],
+        vec![
+            "query".to_string(),
+            hello.display().to_string(),
+            "--where".to_string(),
+            "mnemonic == 'VARARGPREP'".to_string(),
+        ],
+        vec![
+            "diff".to_string(),
+            hello.display().to_string(),
+            stripped.display().to_string(),
+        ],
+    ];
+
+    for mut args in commands {
+        let command = args[0].clone();
+        args.extend(["--format".to_string(), "jsonl".to_string()]);
+        let output = Command::new(&luad)
+            .args(&args)
+            .output()
+            .unwrap_or_else(|error| panic!("{command} JSONL failed: {error}"));
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{command} stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let records: Vec<serde_json::Value> = String::from_utf8(output.stdout)
+            .expect("JSONL is UTF-8")
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("JSONL record"))
+            .collect();
+        let metadata: JsonlMetadataRecord = serde_json::from_value(records[0].clone())
+            .unwrap_or_else(|error| panic!("{command} metadata: {error}"));
+        assert_eq!(metadata.schema_version, JSONL_SCHEMA_VERSION);
+
+        let facts: Vec<_> = records
+            .iter()
+            .filter(|record| {
+                !matches!(record["record_type"].as_str(), Some("metadata" | "summary"))
+            })
+            .collect();
+        assert!(!facts.is_empty(), "{command} emitted no facts");
+        for fact in facts {
+            let typed: JsonlDataRecord<serde_json::Value> = serde_json::from_value(fact.clone())
+                .unwrap_or_else(|error| panic!("{command} fact lacks required context: {error}"));
+            assert_eq!(
+                typed.context.input_identity.as_ref(),
+                Some(&metadata.input_identity)
+            );
+            assert_eq!(
+                typed.context.interpretation.as_ref(),
+                Some(&metadata.interpretation)
+            );
+        }
+    }
+}
+
+#[test]
+fn test_jsonl_context_killer_mutations_are_rejected() {
+    let luad = get_luad_bin();
+    let root = luad_oracle::find_workspace_root();
+    let fixture = root.join("tests/fixtures/precompiled/lua54/hello.luac");
+    let output = Command::new(&luad)
+        .args(["disasm", fixture.to_str().unwrap(), "--format", "jsonl"])
+        .output()
+        .expect("disasm JSONL");
+    assert_eq!(output.status.code(), Some(0));
+    let records: Vec<serde_json::Value> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let metadata: JsonlMetadataRecord = serde_json::from_value(records[0].clone()).unwrap();
+    let fact = records
+        .iter()
+        .find(|record| record["record_type"] == "instruction")
+        .unwrap();
+
+    let mut missing = fact.clone();
+    missing.as_object_mut().unwrap().remove("context");
+    assert!(serde_json::from_value::<JsonlDataRecord<serde_json::Value>>(missing).is_err());
+
+    for field in ["sha256", "path"] {
+        let mut mutated = fact.clone();
+        mutated["context"]["input_identity"][field] = serde_json::json!("tampered");
+        let typed: JsonlDataRecord<serde_json::Value> = serde_json::from_value(mutated).unwrap();
+        assert_ne!(
+            typed.context.input_identity.as_ref(),
+            Some(&metadata.input_identity)
+        );
+    }
+
+    let mut swapped = fact.clone();
+    swapped["context"]["interpretation"]["profile"] = serde_json::json!("lnum32");
+    let typed: JsonlDataRecord<serde_json::Value> = serde_json::from_value(swapped).unwrap();
+    assert_ne!(
+        typed.context.interpretation.as_ref(),
+        Some(&metadata.interpretation)
+    );
 }
 
 #[test]
