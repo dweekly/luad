@@ -1,18 +1,22 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "gate_id": "gate-authority-lua51-openwrt-lnum32",
   "command_argv": [
-    "cargo", "test", "-p", "luad-oracle", "--test",
+    "cargo", "test", "-p", "luad-oracle", "--features", "lnum32-authority-gate", "--test",
     "test_authority_lua51_openwrt_lnum32", "--", "--nocapture"
   ],
   "expected_tests": [
-    "test_authority_independent_public_and_compiler_facts_agree",
+    "test_authority_independent_and_public_facts_agree",
+    "test_authority_live_compiler_listing_agrees",
     "test_authority_manifest_and_frozen_artifacts_are_authenticated",
     "test_authority_mutations_are_rejected",
     "test_authority_public_selection_validation_export_and_substitution"
   ],
-  "required_compiler_version": null,
-  "required_compiler_sha256": null,
+  "required_compiler_version": "Lua 5.1.5",
+  "required_compiler_sha256": {
+    "linux-x86_64": "0000000000000000000000000000000000000000000000000000000000000000",
+    "macos-aarch64": "5d09175860c339307da8a0c81338c7e6ef57dbe5fe0497774bc6ac3e1c256575"
+  },
   "required_fixtures": [
     {
       "path": "tests/fixtures/authority/lua51-openwrt-lnum32/AUTHORITY.json",

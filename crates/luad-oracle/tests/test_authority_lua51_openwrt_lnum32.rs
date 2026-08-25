@@ -5,6 +5,7 @@ use std::process::{Command, Output};
 
 use luad_core::envelope::{MachineDocument, ValidationResponse};
 use luad_core::{Chunk, ConstantValue, DisassembledPrototype, Prototype, SelectionMode};
+#[cfg(feature = "lnum32-authority-gate")]
 use luad_oracle::{compare_chunk_tree_three_way_lua51, parse_luac_dump, LuacProtoDumpList};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -297,7 +298,7 @@ fn test_authority_manifest_and_frozen_artifacts_are_authenticated() {
 }
 
 #[test]
-fn test_authority_independent_public_and_compiler_facts_agree() {
+fn test_authority_independent_and_public_facts_agree() {
     for name in ["authority_lnum32.luac", "authority_lnum32_stripped.luac"] {
         let path = fixture(name);
         let bytes = std::fs::read(&path).unwrap();
@@ -337,20 +338,58 @@ fn test_authority_independent_public_and_compiler_facts_agree() {
         assert_eq!(code, independent.instructions);
 
         let disasm = run(&["disasm", path.to_str().unwrap(), "--format", "json"]);
+        assert!(
+            disasm.status.success(),
+            "JSON disasm failed for {name}: {}",
+            String::from_utf8_lossy(&disasm.stderr)
+        );
+        let _disasm: MachineDocument<DisassembledPrototype> =
+            serde_json::from_slice(&disasm.stdout).unwrap();
+
+        let text_disasm = run(&["disasm", path.to_str().unwrap(), "--format", "text"]);
+        assert!(
+            text_disasm.status.success(),
+            "text disasm failed for {name}: {}",
+            String::from_utf8_lossy(&text_disasm.stderr)
+        );
+        let text_out = String::from_utf8_lossy(&text_disasm.stdout);
+        assert!(
+            text_out.contains("LOADK") && text_out.contains("openwrt-lnum32"),
+            "text disassembly missing LNUM32 facts for {name}"
+        );
+    }
+}
+
+#[cfg(feature = "lnum32-authority-gate")]
+#[test]
+fn test_authority_live_compiler_listing_agrees() {
+    let compiler = std::env::var("LUAD_GATE_COMPILER_PATH")
+        .expect("LUAD_GATE_COMPILER_PATH is required to execute authority listing comparison");
+    for name in ["authority_lnum32.luac", "authority_lnum32_stripped.luac"] {
+        let path = fixture(name);
+        let inspect = run(&["inspect", path.to_str().unwrap(), "--format", "json"]);
+        assert!(inspect.status.success());
+        let chunk: MachineDocument<Chunk> = serde_json::from_slice(&inspect.stdout).unwrap();
+        let disasm = run(&["disasm", path.to_str().unwrap(), "--format", "json"]);
+        assert!(disasm.status.success());
         let disasm: MachineDocument<DisassembledPrototype> =
             serde_json::from_slice(&disasm.stdout).unwrap();
-        if let Ok(compiler) = std::env::var("LUAD_LNUM32_LUAC") {
-            let listing = Command::new(compiler)
-                .args(["-l", "-l", "-p", path.to_str().unwrap()])
-                .output()
-                .expect("run authority compiler listing");
-            assert!(listing.status.success());
-            let parsed = parse_luac_dump(&String::from_utf8_lossy(&listing.stdout)).unwrap();
-            let list = LuacProtoDumpList {
-                functions: &parsed.functions,
-            };
-            compare_chunk_tree_three_way_lua51(&doc.data.main_proto, &list, &disasm.data).unwrap();
-        }
+        let listing = Command::new(&compiler)
+            .args(["-l", "-l", "-p", path.to_str().unwrap()])
+            .output()
+            .expect("run authority compiler listing");
+        assert!(
+            listing.status.success(),
+            "compiler listing failed for {name}: {}",
+            String::from_utf8_lossy(&listing.stderr)
+        );
+        let parsed =
+            parse_luac_dump(&String::from_utf8_lossy(&listing.stdout)).expect("parse luac dump");
+        let list = LuacProtoDumpList {
+            functions: &parsed.functions,
+        };
+        compare_chunk_tree_three_way_lua51(&chunk.data.main_proto, &list, &disasm.data)
+            .expect("three-way agreement between chunk, compiler dump, and disasm");
     }
 }
 
@@ -388,10 +427,100 @@ fn test_authority_public_selection_validation_export_and_substitution() {
         assert_eq!(file_start["interpretation"]["profile"], "lua5.1-lnum32");
         assert_eq!(file_start["interpretation"]["validated_layout"], LAYOUT);
 
+        let q_loadk = run(&[
+            "query",
+            text,
+            "--where",
+            "mnemonic == \"LOADK\"",
+            "--format",
+            "json",
+        ]);
+        assert!(q_loadk.status.success());
+        let doc_loadk: Value = serde_json::from_slice(&q_loadk.stdout).unwrap();
+        let count_loadk = doc_loadk["data"]["count"].as_u64().unwrap();
+        assert!(count_loadk > 0);
+        let matches_loadk = doc_loadk["data"]["matches"].as_array().unwrap();
+        for m in matches_loadk {
+            let id = m["id"].as_str().unwrap();
+            assert!(
+                id.starts_with("proto:") && id.contains(":pc:"),
+                "instruction ID must be owner-qualified: {id}"
+            );
+        }
+
+        let q_closure = run(&[
+            "query",
+            text,
+            "--where",
+            "mnemonic == \"CLOSURE\"",
+            "--format",
+            "json",
+        ]);
+        assert!(q_closure.status.success());
+        let doc_closure: Value = serde_json::from_slice(&q_closure.stdout).unwrap();
+        let count_closure = doc_closure["data"]["count"].as_u64().unwrap();
+        assert!(count_closure > 0);
+        assert_ne!(
+            count_loadk, count_closure,
+            "changing query predicate operand must change match count"
+        );
+        let matches_closure = doc_closure["data"]["matches"].as_array().unwrap();
+        for m in matches_closure {
+            let id = m["id"].as_str().unwrap();
+            assert!(
+                id.starts_with("proto:") && id.contains(":pc:"),
+                "instruction ID must be owner-qualified: {id}"
+            );
+        }
+
         let stock = run(&["inspect", text, "--dialect", "lua5.1", "--format", "json"]);
         assert!(!stock.status.success());
         assert!(String::from_utf8_lossy(&stock.stderr).contains("Invalid integral flag 4"));
     }
+
+    let stock_fixture = workspace().join("tests/fixtures/precompiled/lua51/hello.luac");
+    let lnum_fixture = fixture("authority_lnum32.luac");
+    let mixed_export = run(&[
+        "export",
+        "--format",
+        "jsonl",
+        stock_fixture.to_str().unwrap(),
+        lnum_fixture.to_str().unwrap(),
+    ]);
+    assert!(mixed_export.status.success());
+    let export_lines: Vec<Value> = String::from_utf8(mixed_export.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let file_starts: Vec<&Value> = export_lines
+        .iter()
+        .filter(|v| v["record_type"] == "file_start")
+        .collect();
+    assert_eq!(file_starts.len(), 2, "expected 2 file_start records");
+    assert_eq!(file_starts[0]["interpretation"]["profile"], "lua5.1");
+    assert_eq!(
+        file_starts[0]["interpretation"]["validated_layout"],
+        "int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0"
+    );
+    assert_eq!(file_starts[1]["interpretation"]["profile"], "lua5.1-lnum32");
+    assert_eq!(file_starts[1]["interpretation"]["validated_layout"], LAYOUT);
+
+    let forced_stock = run(&[
+        "inspect",
+        stock_fixture.to_str().unwrap(),
+        "--dialect",
+        "lua5.1-lnum32",
+        "--format",
+        "json",
+    ]);
+    assert!(!forced_stock.status.success());
+    let forced_stderr = String::from_utf8_lossy(&forced_stock.stderr);
+    assert!(
+        forced_stderr.contains("Invalid lua_Integer size 0 for LNUM32 profile")
+            || forced_stderr.contains("Invalid integral flag"),
+        "stock fixture forced through lua5.1-lnum32 must fail symmetrically: {forced_stderr}"
+    );
 }
 
 #[test]

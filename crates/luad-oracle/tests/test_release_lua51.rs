@@ -270,3 +270,117 @@ fn test_lua51_release_manifest_rejects_lua54_prerequisite_substitution() {
         "Lua 5.4 gates must be rejected when assembling a Lua 5.1 release manifest"
     );
 }
+
+fn clean_prerequisite(profile: &str, gate_id: &str) -> (GateResult, GateSpec) {
+    let spec = GateSpec {
+        schema_version: 1,
+        gate_id: gate_id.to_string(),
+        command_argv: vec!["cargo".to_string(), "test".to_string()],
+        expected_tests: vec!["test_1".to_string()],
+        required_compiler_version: None,
+        required_compiler_sha256: None,
+        required_fixtures: vec![],
+        required_profile: Some(profile.to_string()),
+        prerequisite_gates: vec![],
+        allowed_capability_mutations: vec![],
+    };
+    let result = GateResult {
+        schema_version: 1,
+        gate_id: gate_id.to_string(),
+        spec_hash: spec.compute_hash(),
+        command_argv: spec.command_argv.clone(),
+        exit_code: 0,
+        success: true,
+        enumerated_tests: vec!["test_1".to_string()],
+        passed_count: 1,
+        failed_count: 0,
+        ignored_count: 0,
+        missing_expected_tests: vec![],
+        git_commit: "2222".to_string(),
+        dirty: false,
+        compiler_path: None,
+        compiler_version: None,
+        compiler_sha256: None,
+        profile: Some(profile.to_string()),
+        fixture_hashes: vec![],
+        platform: "macos".to_string(),
+        arch: "aarch64".to_string(),
+        start_timestamp: "0".to_string(),
+        end_timestamp: "1".to_string(),
+        stdout_sha256: "abc".to_string(),
+        stderr_sha256: "def".to_string(),
+    };
+    (result, spec)
+}
+
+#[test]
+fn test_lnum32_release_rejects_profile_and_layout_substitution() {
+    const LNUM_LAYOUT: &str = "int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4";
+    const STOCK64_LAYOUT: &str = "int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0";
+
+    let noncanonical = assemble_release_manifest(
+        "rel-lnum32",
+        "lua5.1.5",
+        "5.1.5",
+        Some("lua5.1-lnum32"),
+        Some(STOCK64_LAYOUT),
+        "2222",
+        true,
+        &[],
+    );
+    assert!(matches!(
+        noncanonical,
+        Err(GateRunnerError::NoncanonicalTargetProfileOrLayout { .. })
+    ));
+
+    for (profile, gate_id) in [
+        ("lua5.1", "gate-stock-lua51"),
+        (
+            "lua5.1-area1-validator-diagnostics",
+            "gate-area1-validator-diagnostics",
+        ),
+    ] {
+        let prerequisite = clean_prerequisite(profile, gate_id);
+        let result = assemble_release_manifest(
+            "rel-lnum32",
+            "lua5.1.5",
+            "5.1.5",
+            Some("lua5.1-lnum32"),
+            Some(LNUM_LAYOUT),
+            "2222",
+            true,
+            &[prerequisite],
+        );
+        assert!(matches!(
+            result,
+            Err(GateRunnerError::PrerequisiteProfileMismatch {
+                required_profile,
+                target_profile,
+                ..
+            }) if required_profile == profile && target_profile == "lua5.1-lnum32"
+        ));
+
+        let exact = clean_prerequisite("lua5.1-lnum32", "gate-exact-lnum32");
+        let manifest = assemble_release_manifest(
+            "rel-lnum32",
+            "lua5.1.5",
+            "5.1.5",
+            Some("lua5.1-lnum32"),
+            Some(LNUM_LAYOUT),
+            "2222",
+            true,
+            &[exact],
+        )
+        .expect("exact target manifest");
+        let substituted = clean_prerequisite(profile, gate_id);
+        let verified = verify_release_manifest(&manifest, "2222", &[substituted]);
+        assert!(matches!(
+            verified,
+            Err(GateRunnerError::PrerequisiteProfileMismatch {
+                required_profile,
+                target_profile,
+                ..
+            }) if required_profile == profile && target_profile == "lua5.1-lnum32"
+        ));
+    }
+}

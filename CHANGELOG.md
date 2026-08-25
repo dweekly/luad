@@ -4,6 +4,10 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+- Qualified every maintained public read surface against the reproducible OpenWrt
+  Lua 5.1.5 LNUM32 compiler and made the compiler comparison mandatory.
+- Release evidence now rejects noncanonical Lua 5.1 profile/layout pairs and
+  prerequisites bound to a different concrete profile.
 - Closed Lua 5.1 validator and diagnostic authority with a manifest-pinned,
   redistributable firmware-shaped stress fixture and a canonical prerequisite gate.
 - Added canonical gates for RK-B, nested RK ownership, SELF, numeric-for,
