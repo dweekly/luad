@@ -17,7 +17,9 @@ Streaming facts carry their own artifact and interpretation identity for statele
 firmware-tree ingestion.
 Lua 5.1 calls expose bounded symbolic global/module labels, direct closure identities,
 stable instruction evidence, and explicit unresolved reasons through `callees` and
-recursive export.
+recursive export. Fixed call arguments expose bounded, owner-qualified value-expression
+origins through `origins`, including eager `CONCAT`, Lua `MOD`, and explicit cutoff
+reasons without sink or taint policy.
 
 All stock-Lua dialects remain **experimental** unless an exact release artifact
 for the current revision and profile says otherwise. Internal library gates do not
@@ -40,12 +42,12 @@ delete the document in the same change and update this index.
 |---|---|---:|---|
 | [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-08-25 | Public scope, support status, setup, primary commands, or the documentation set changes. |
 | [`AGENTS.md`](AGENTS.md) | Binding repository instructions and safety constraints for coding agents. | 2026-08-24 | Development workflow, proof policy, current priority, or repository invariants change. |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-23 | Crates, ownership boundaries, core representations, or evidence layers change. |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-25 | Crates, ownership boundaries, core representations, or evidence layers change. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of unreleased and released user-visible changes. | 2026-08-24 | Every user-visible change or release; never use it as a forward plan. |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor setup, test taxonomy, fixture provenance, and definition of done. | 2026-08-24 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor setup, test taxonomy, fixture provenance, and definition of done. | 2026-08-25 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
 | [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-08-25 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-23 | Support policy, reporting channel, trust boundary, or threat model changes. |
-| [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-guided, evidence-gated planning, proportional role separation, sprint lifecycle, and agent orchestration. | 2026-08-25 | Planning artifacts, customer checkpoints, agent roles, gate policy, or supported orchestration interfaces change. |
+| [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-guided, evidence-gated planning, proportional role separation, sprint lifecycle, and bounded agent orchestration. | 2026-08-25 | Planning artifacts, customer checkpoints, agent roles, gate policy, review ceilings, or supported orchestration interfaces change. |
 | [`ROADMAP.md`](ROADMAP.md) | Customer-led path through composable factual analysis and stable release. | 2026-08-25 | Product priorities, dependencies, customer evidence, qualification order, or exclusions change. |
 | [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | The sole active sprint contract for one measurable, independently gated unit of work. | 2026-08-25 | The sprint is accepted, respecified, or replaced; delete obsolete sprint content rather than retaining history. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-25 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
@@ -128,6 +130,7 @@ luad validate chunk.luac --strict
 luad explain chunk.luac 'proto:0:pc:3'
 luad cfg chunk.luac --proto 'proto:0' --format dot
 luad callees chunk.luac --format jsonl
+luad origins chunk.luac --format jsonl
 luad xrefs chunk.luac --to 'proto:0:upvalue:0' --format json
 luad query chunk.luac --where 'opcode == "CALL"' --format json
 luad diff old.luac new.luac --semantic --format json

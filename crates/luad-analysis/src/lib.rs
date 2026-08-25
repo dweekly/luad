@@ -3,6 +3,7 @@
 pub mod callees;
 pub mod cfg;
 pub mod diff;
+pub mod origins;
 pub mod query;
 pub mod xrefs;
 
@@ -13,6 +14,11 @@ pub use callees::{
 };
 pub use cfg::{BasicBlock, CfgEdge, CfgEdgeKind, ControlFlowGraph};
 pub use diff::{diff_chunks, ChunkDiff, InstructionDiff, ProtoDiff};
+pub use origins::{
+    analyze_chunk_origins, CallArgumentWindow, CallOriginFact, ChunkOriginAnalysis,
+    FixedArgumentOrigin, OriginAnalysis, OriginExpression, OriginExpressionKind, OriginLiteral,
+    OriginUnknownReason,
+};
 pub use query::{
     execute_query, QueryError, QueryExpr, QueryField, QueryMatch, QueryOp, QueryResponse,
 };

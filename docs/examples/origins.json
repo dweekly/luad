@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "tool_version": "0.1.0",
+  "input_identity": {
+    "path": "tests/fixtures/precompiled/lua51/hello.luac",
+    "sha256": "d64567d2d41ff584b86602f98fff5906f58f101f6faf98598f3662bac6e96a4f",
+    "byte_length": 277
+  },
+  "interpretation": {
+    "base_dialect": "lua5.1",
+    "profile": "lua5.1",
+    "validated_layout": "int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0",
+    "parse_mode": "permissive",
+    "selection_mode": "detected",
+    "detection_evidence": "Lua 5.1 signature matched (version 0x51, format 0, profile lua5.1)"
+  },
+  "analysis_configuration": {
+    "mode": "permissive",
+    "limits": {
+      "max_input_bytes": 67108864,
+      "max_nesting_depth": 128,
+      "max_total_prototypes": 10000,
+      "max_instructions_per_proto": 1000000,
+      "max_constants_per_proto": 262144,
+      "max_upvalues_per_proto": 1024,
+      "max_string_bytes": 16777216,
+      "max_diagnostics": 50000
+    }
+  },
+  "data": {
+    "prototypes": [
+      {
+        "proto_id": "proto:0",
+        "calls": [
+          {
+            "call_id": "proto:0:pc:2",
+            "proto_path": "0",
+            "pc": 2,
+            "call_kind": "CALL",
+            "callee_register": 0,
+            "argument_window": {
+              "kind": "fixed",
+              "arguments": [
+                {
+                  "argument_index": 0,
+                  "register": 1,
+                  "origin": {
+                    "kind": "literal",
+                    "constant_id": "proto:0:k:1",
+                    "value": {
+                      "type": "string",
+                      "value": {
+                        "raw_bytes": [
+                          72,
+                          101,
+                          108,
+                          108,
+                          111,
+                          44,
+                          32,
+                          108,
+                          117,
+                          97,
+                          100,
+                          33
+                        ],
+                        "display": "Hello, luad!",
+                        "is_utf8": true
+                      }
+                    },
+                    "evidence": [
+                      "proto:0:pc:1",
+                      "proto:0:k:1"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

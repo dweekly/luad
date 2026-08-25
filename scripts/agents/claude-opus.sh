@@ -13,7 +13,9 @@ Runs Claude Opus through the logged-in claude.ai subscription. Console API
 credentials are removed from the child environment so they cannot silently
 override the subscription. Output is streaming Claude Code NDJSON; the final
 `result` event carries cumulative session usage. Set LUAD_CLAUDE_DEBUG_FILE to
-choose the detailed CLI debug log.
+choose the detailed CLI debug log. Read-only review stages use medium effort and
+a 180-second wall-time ceiling by default; set LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS
+to a positive integer to change that ceiling.
 
 review-fresh       Independent read-only review with no persisted session.
 design-review      Critique a self-contained design without repository tools.
@@ -94,7 +96,6 @@ trap finish EXIT
 common=(
   -p "$prompt"
   --model opus
-  --effort high
   --safe-mode
   --autocompact 1M
   --strict-mcp-config
@@ -108,21 +109,40 @@ common=(
 )
 clean_env=(env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL)
 
+review_timeout_seconds=${LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS:-180}
+if [[ ! "$review_timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
+  echo "LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS must be a positive integer" >&2
+  exit 2
+fi
+if command -v timeout >/dev/null 2>&1; then
+  timeout_command=timeout
+elif command -v gtimeout >/dev/null 2>&1; then
+  timeout_command=gtimeout
+else
+  echo "GNU timeout is required for bounded Claude review stages" >&2
+  exit 127
+fi
+
+run_bounded_review() {
+  "$timeout_command" --foreground --signal=INT --kill-after=5 "$review_timeout_seconds" \
+    "${clean_env[@]}" claude "${common[@]}" --effort medium "$@"
+}
+
 case "$stage" in
   design-review)
-    "${clean_env[@]}" claude "${common[@]}" "${session_args[@]}" \
+    run_bounded_review "${session_args[@]}" \
       --tools "" \
       --permission-mode plan
     ;;
   review-fresh)
-    "${clean_env[@]}" claude "${common[@]}" "${session_args[@]}" \
+    run_bounded_review "${session_args[@]}" \
       --tools "Read,Glob,Grep" \
       --permission-mode plan \
       --allowedTools "Read,Glob,Grep"
     ;;
   acceptance-start|acceptance-resume)
     allowed="Read,Glob,Grep,Edit,Write"
-    "${clean_env[@]}" claude "${common[@]}" "${session_args[@]}" \
+    "${clean_env[@]}" claude "${common[@]}" --effort high "${session_args[@]}" \
       --tools "Read,Glob,Grep,Edit,Write" \
       --permission-mode dontAsk \
       --allowedTools "$allowed"

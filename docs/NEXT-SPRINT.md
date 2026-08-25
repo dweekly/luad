@@ -21,8 +21,9 @@ and the established conservative closure environments. It will not decode raw wo
 reclassify callees.
 
 The expression union will cover literal constants, fixed parameters, upvalues, global
-and constant-key fields, call results, concatenations, unary operations, binary
-operations, and typed unknown reasons. `MOD` will remain a binary operation with its
+and constant-key fields, call results, concatenations, bounded table-construction
+inputs, unary operations, binary operations, and typed unknown reasons. Parameters are
+qualified by their owning prototype. `MOD` will remain a binary operation with its
 literal format operand and other origins visible; the fact will not assert that every
 runtime `MOD` performs formatting.
 
@@ -34,7 +35,10 @@ register-window, and transfer budgets will produce distinct cutoff reasons.
 CFG joins will retain structurally identical expressions and union their stable evidence;
 different incoming expressions become an explicit conflict rather than an invented
 merge. Fixed call-result windows become indexed `call-result` expressions. Open argument
-or result windows remain explicit unknowns. Closure-binding descriptors do not execute.
+or result windows remain explicit unknowns. Table mutations and aliases that cannot be
+updated soundly become explicit boundaries. Closure-binding descriptors do not execute,
+and a sibling or descendant closure that can mutate a shared capture prevents a stale
+parent expression from being reported.
 
 The CLI will expose `origins` in text, JSON, and self-identifying JSONL. Recursive export
 will emit the same call-argument origin facts for Lua 5.1 artifacts.
@@ -43,9 +47,10 @@ will emit the same call-argument origin facts for Lua 5.1 artifacts.
 
 A single compiler-shaped matrix will cover literal strings/numbers/booleans/nil,
 parameters, upvalues across three levels, globals, constant and dynamic fields, fixed
-call results, `MOVE`, `CONCAT`, all Lua 5.1 unary and binary opcodes, and especially
-`MOD`. It will combine these with same-block aliases, identical/conflicting branches,
-loops, overwritten ranges, open calls/varargs, unreachable calls, and expression limits.
+call results, `MOVE`, `CONCAT`, bounded table construction, all Lua 5.1 unary and binary
+opcodes, and especially `MOD`. It will combine these with same-block aliases, sibling
+closure mutation, identical/conflicting branches, loops, overwritten ranges, open
+calls/varargs, unreachable calls, and expression limits.
 
 The matrix will assert eager self-alias handling for `CONCAT`, distinguish a
 constant-only concatenation from a parameter-dependent one, and retain the format

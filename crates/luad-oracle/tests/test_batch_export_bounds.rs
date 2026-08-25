@@ -39,13 +39,14 @@ const CONTROL_RECORD_TYPES: [&str; 5] = [
 ];
 
 /// Ordinary fact records counted against `--max-facts-per-file`.
-const COUNTED_FACT_RECORD_TYPES: [&str; 6] = [
+const COUNTED_FACT_RECORD_TYPES: [&str; 7] = [
     "prototype",
     "instruction",
     "constant",
     "upvalue",
     "xref",
     "callee",
+    "origin",
 ];
 
 /// Public fixture pinned by the sprint contract: path relative to the workspace root

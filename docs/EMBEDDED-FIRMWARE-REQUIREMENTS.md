@@ -19,6 +19,11 @@ The private corpus supplies supplemental field evidence only. Every release clai
 requires minimized redistributable fixtures, recorded provenance, and public-boundary
 tests independent of the private files.
 
+The reference investigation surface includes 1,011 dispatch endpoints and 4,770
+security-sensitive call sites across the firmware tree. Product prioritization follows
+the repeated factual joins required by that workload: symbolic callees, recursive
+argument origins, provable call relations, corpus search, and content identity.
+
 Vendor key material, credential hashes, and extracted secrets remain outside this
 repository. Examples use placeholders or safely bounded prefixes and hashes.
 
