@@ -5,8 +5,9 @@
 use luad_oracle::find_workspace_root;
 use luad_oracle::gate_runner::{
     assemble_release_manifest, execute_gate_spec, verify_gate_result, verify_release_manifest,
-    FixtureRequirement, GateResult, GateRunnerError, GateSpec,
+    CompilerHashRequirement, FixtureRequirement, GateResult, GateRunnerError, GateSpec,
 };
+use std::collections::BTreeMap;
 use std::fs;
 use tempfile::NamedTempFile;
 
@@ -246,9 +247,9 @@ fn test_probe_6_wrong_compiler_binary_sha256_rejected() {
         command_argv: vec!["cargo".to_string(), "test".to_string()],
         expected_tests: vec!["test_one".to_string()],
         required_compiler_version: Some("Lua 5.4.8".to_string()),
-        required_compiler_sha256: Some(
+        required_compiler_sha256: Some(CompilerHashRequirement::Single(
             "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
-        ),
+        )),
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -299,6 +300,98 @@ fn test_probe_6_wrong_compiler_binary_sha256_rejected() {
         }
         other => panic!("Expected WrongCompilerBinary error, got {other:?}"),
     }
+}
+
+#[test]
+fn test_platform_compiler_hash_contract_is_recorded_and_fail_closed() {
+    let mut spec = mock_valid_spec("platform-compiler-hash");
+    spec.schema_version = 2;
+    spec.required_compiler_version = Some("Lua 5.1.5".to_string());
+    spec.required_compiler_sha256 = Some(CompilerHashRequirement::ByPlatform(BTreeMap::from([(
+        "macos-aarch64".to_string(),
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+    )])));
+
+    let mut result = mock_valid_result("platform-compiler-hash");
+    result.spec_hash = spec.compute_hash();
+    result.compiler_version = Some("Lua 5.1.5".to_string());
+    result.compiler_sha256 =
+        Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string());
+    result.platform = "macos".to_string();
+    result.arch = "aarch64".to_string();
+    verify_gate_result(&result, &spec, None, false).expect("recorded platform member accepted");
+
+    let mut wrong_hash = result.clone();
+    wrong_hash.compiler_sha256 =
+        Some("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string());
+    assert!(matches!(
+        verify_gate_result(&wrong_hash, &spec, None, false),
+        Err(GateRunnerError::WrongCompilerBinary { .. })
+    ));
+
+    let mut unlisted = result.clone();
+    unlisted.platform = "linux".to_string();
+    unlisted.arch = "x86_64".to_string();
+    assert_eq!(
+        verify_gate_result(&unlisted, &spec, None, false).unwrap_err(),
+        GateRunnerError::CompilerHashUnpinned {
+            platform: "linux".to_string(),
+            arch: "x86_64".to_string(),
+        }
+    );
+
+    let mut missing_hash = result;
+    missing_hash.compiler_sha256 = None;
+    assert!(matches!(
+        verify_gate_result(&missing_hash, &spec, None, false),
+        Err(GateRunnerError::CompilerMissing(_))
+    ));
+}
+
+#[test]
+fn test_platform_compiler_hash_contract_rejects_schema_substitution_and_missing_compiler() {
+    let root = find_workspace_root();
+    let tmp = NamedTempFile::new().unwrap();
+    let map = CompilerHashRequirement::ByPlatform(BTreeMap::from([(
+        format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH),
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+    )]));
+
+    let mut version_one = mock_valid_spec("platform-map-v1");
+    version_one.required_compiler_sha256 = Some(map.clone());
+    let result = mock_valid_result("platform-map-v1");
+    assert!(matches!(
+        verify_gate_result(&result, &version_one, None, false),
+        Err(GateRunnerError::TamperDetected(_, _))
+    ));
+
+    let mut version_two_scalar = mock_valid_spec("platform-scalar-v2");
+    version_two_scalar.schema_version = 2;
+    version_two_scalar.required_compiler_sha256 = Some(CompilerHashRequirement::Single(
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+    ));
+    let result = mock_valid_result("platform-scalar-v2");
+    assert!(matches!(
+        verify_gate_result(&result, &version_two_scalar, None, false),
+        Err(GateRunnerError::TamperDetected(_, _))
+    ));
+
+    let mut missing_compiler = mock_valid_spec("platform-missing-compiler");
+    missing_compiler.schema_version = 2;
+    missing_compiler.required_compiler_sha256 = Some(map);
+    assert!(matches!(
+        execute_gate_spec(&missing_compiler, tmp.path(), &root, None),
+        Err(GateRunnerError::CompilerMissing(_))
+    ));
+}
+
+#[test]
+fn test_version_one_gate_spec_hash_remains_stable() {
+    let spec = mock_valid_spec("stable-v1");
+    assert_eq!(
+        spec.compute_hash(),
+        "ff9f5d0c320bf45c9e5451eb4a95aa86c35ba739996b0a4dbf120915ea5d7617"
+    );
 }
 
 #[test]
@@ -716,9 +809,9 @@ fn test_all_canonical_gate_scripts_and_specs_consistency() {
                 spec.gate_id, stem,
                 "gate_id inside {stem}.json must match filename stem"
             );
-            assert_eq!(
-                spec.schema_version, 1,
-                "schema_version in {stem}.json must be 1"
+            assert!(
+                matches!(spec.schema_version, 1 | 2),
+                "schema_version in {stem}.json must be supported"
             );
             assert!(
                 !spec.expected_tests.is_empty(),

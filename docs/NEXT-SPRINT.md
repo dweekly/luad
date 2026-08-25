@@ -104,14 +104,31 @@ The supplemental customer check will run the accepted candidate over the private
 firmware corpus and record only aggregate parse, validation, timing, and profile results.
 Private bytes and findings remain outside the repository and cannot satisfy the gate.
 
+## Platform-bound prerequisite compiler evidence
+
+The authority gate must close its prerequisite proof on every maintained CI platform.
+Native compiler executable hashes are bound to the operating system and architecture
+that produced them. A version-2 gate specification may therefore declare a closed,
+ordered map from platform/architecture identity to compiler SHA-256. Execution uses the
+current host identity; later verification uses the identity recorded in the gate result.
+Unlisted platforms, missing compilers, missing result hashes, mismatched hashes, and
+specifications that combine scalar and mapped hashes are hard failures. Version-1 gate
+specifications retain their scalar compiler-hash contract and canonical serialization.
+
+Acceptance includes allowed-platform, wrong-hash, unlisted-platform, missing-compiler,
+cross-host verification, schema-version, and unchanged-version-1-hash probes. Each
+pinned stock Lua 5.1 compiler must also regenerate the maintained public fixture family
+byte-for-byte.
+
 ## Allowed scope and roles
 
 The acceptance author may add the authority manifest, fixture sources, generated
 fixtures, a narrowly scoped independent constant/layout reader inside the acceptance
 test, acceptance tests, and the sprint gate. The implementation agent may add the
 pinned authenticated authority-builder script and one CI invocation of the canonical
-gate. Production parser, disassembler, validator, analysis, query, capability, shared
-oracle, and proof-harness code are frozen.
+gate. The steward may add the bounded platform-aware compiler-identity contract and its
+proof-harness regressions described above. Production parser, disassembler, validator,
+analysis, query, capability, and shared oracle code are frozen.
 
 The steward owns upstream pin review, fixture provenance, mutation sufficiency, the
 canonical run, and the supplemental customer check. Opus supplies one bounded

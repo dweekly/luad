@@ -279,6 +279,39 @@ fn test_lua51_three_way_agreement_across_all_fixtures() {
     }
 }
 
+#[test]
+fn test_lua51_pinned_compiler_reproduces_all_fixtures_byte_for_byte() {
+    let root = luad_oracle::find_workspace_root();
+    let luac_bin = require_luac51();
+    for name in ["hello", "numerics", "tables", "closures", "control_flow"] {
+        let source = root.join(format!("tests/fixtures/{name}.lua"));
+        for stripped in [false, true] {
+            let output = tempfile::NamedTempFile::new().expect("temporary compiler output");
+            let mut command = Command::new(&luac_bin);
+            command.current_dir(&root).arg("-o").arg(output.path());
+            if stripped {
+                command.arg("-s");
+            }
+            command.arg(source.strip_prefix(&root).unwrap());
+            let status = command.status().expect("run pinned Lua 5.1 compiler");
+            assert!(
+                status.success(),
+                "compiler failed for {name}, stripped={stripped}"
+            );
+
+            let suffix = if stripped { "_stripped" } else { "" };
+            let expected = root.join(format!(
+                "tests/fixtures/precompiled/lua51/{name}{suffix}.luac"
+            ));
+            assert_eq!(
+                std::fs::read(output.path()).expect("read reproduced chunk"),
+                std::fs::read(&expected).expect("read frozen chunk"),
+                "pinned compiler output differs for {name}, stripped={stripped}"
+            );
+        }
+    }
+}
+
 fn verify_independent_agreement_recursive(
     proto: &luad_core::Prototype,
     disasm: &DisassembledPrototype,

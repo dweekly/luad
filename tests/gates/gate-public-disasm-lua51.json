@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "gate_id": "gate-public-disasm-lua51",
   "command_argv": [
     "cargo",
@@ -21,11 +21,15 @@
     "test_lua51_closure_bindings_have_closure_binding_role_and_zero_writes",
     "test_lua51_disasm_emits_typed_records_with_resolved_constants",
     "test_lua51_text_disassembly_renders_closure_binding_golden_lines",
+    "test_lua51_pinned_compiler_reproduces_all_fixtures_byte_for_byte",
     "test_lua51_three_way_agreement_across_all_fixtures",
     "test_lua51_xrefs_index_binds_relation_for_closures_three_hop_chain"
   ],
   "required_compiler_version": "Lua 5.1.5",
-  "required_compiler_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
+  "required_compiler_sha256": {
+    "linux-x86_64": "e2ba74327f3a4662689b9e58909b410af8635add51a35b951021d0b1d90c6000",
+    "macos-aarch64": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239"
+  },
   "required_fixtures": [
     {
       "path": "tests/fixtures/precompiled/lua51/hello.luac",

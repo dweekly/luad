@@ -24,6 +24,9 @@
     "test_probe_10_mutated_result_after_manifest_assembly_rejected",
     "test_probe_11_success_boolean_flip_rejected",
     "test_probe_12_printf_spoofed_libtest_output_rejected",
+    "test_platform_compiler_hash_contract_is_recorded_and_fail_closed",
+    "test_platform_compiler_hash_contract_rejects_schema_substitution_and_missing_compiler",
+    "test_version_one_gate_spec_hash_remains_stable",
     "test_fixture_manifest_records_complete_provenance",
     "test_all_canonical_gate_scripts_and_specs_consistency"
   ],
