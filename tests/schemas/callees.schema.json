@@ -1,0 +1,659 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MachineDocument_for_ChunkCalleeAnalysis",
+  "description": "Generic machine document envelope wrapping all top-level machine outputs.",
+  "type": "object",
+  "required": [
+    "analysis_configuration",
+    "data",
+    "input_identity",
+    "interpretation",
+    "schema_version",
+    "tool_version"
+  ],
+  "properties": {
+    "analysis_configuration": {
+      "description": "Analysis configuration applied.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/AnalysisConfiguration"
+        }
+      ]
+    },
+    "data": {
+      "description": "Command-specific payload data.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/ChunkCalleeAnalysis"
+        }
+      ]
+    },
+    "diagnostics": {
+      "description": "Structured diagnostics emitted during processing.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Diagnostic"
+      }
+    },
+    "input_identity": {
+      "description": "Provenance identity of the analyzed input.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/InputIdentity"
+        }
+      ]
+    },
+    "interpretation": {
+      "description": "Resolved dialect, profile, layout, and selection evidence.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/ResolvedInterpretation"
+        }
+      ]
+    },
+    "schema_version": {
+      "description": "Schema major version (pinned to 1).",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "tool_version": {
+      "description": "Tool semver version (e.g. \"0.1.0\").",
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "AnalysisConfiguration": {
+      "description": "Analysis and execution configuration used to produce the document.",
+      "type": "object",
+      "required": [
+        "limits",
+        "mode"
+      ],
+      "properties": {
+        "dialect_override": {
+          "description": "Explicit dialect or profile override requested by caller, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limits": {
+          "description": "Resource limit thresholds applied during parsing and analysis.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ResourceLimits"
+            }
+          ]
+        },
+        "mode": {
+          "description": "Parser mode (e.g. \"strict\" or \"permissive\").",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ParseMode"
+            }
+          ]
+        }
+      }
+    },
+    "CalleeAnalysis": {
+      "description": "Callee facts for one prototype.",
+      "type": "object",
+      "required": [
+        "calls",
+        "proto_id"
+      ],
+      "properties": {
+        "calls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CalleeFact"
+          }
+        },
+        "proto_id": {
+          "$ref": "#/definitions/StableId"
+        }
+      }
+    },
+    "CalleeFact": {
+      "description": "One auditable callee result for a `CALL` or `TAILCALL` instruction.",
+      "type": "object",
+      "required": [
+        "call_id",
+        "call_kind",
+        "callee_register",
+        "pc",
+        "proto_path",
+        "resolution"
+      ],
+      "properties": {
+        "call_id": {
+          "$ref": "#/definitions/StableId"
+        },
+        "call_kind": {
+          "type": "string"
+        },
+        "callee_register": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "pc": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "proto_path": {
+          "$ref": "#/definitions/ProtoPath"
+        },
+        "resolution": {
+          "$ref": "#/definitions/CalleeResolution"
+        }
+      }
+    },
+    "CalleeResolution": {
+      "description": "Resolution attached to one physical call instruction.",
+      "oneOf": [
+        {
+          "description": "A symbolic label path proved by the listed bytecode instructions.",
+          "type": "object",
+          "required": [
+            "basis",
+            "evidence",
+            "segments",
+            "status"
+          ],
+          "properties": {
+            "basis": {
+              "$ref": "#/definitions/SymbolicPathBasis"
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/StableId"
+              }
+            },
+            "segments": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "resolved-path"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A directly constructed closure whose child prototype identity is proved.",
+          "type": "object",
+          "required": [
+            "evidence",
+            "prototype",
+            "status"
+          ],
+          "properties": {
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/StableId"
+              }
+            },
+            "prototype": {
+              "$ref": "#/definitions/ProtoPath"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "resolved-prototype"
+              ]
+            }
+          }
+        },
+        {
+          "description": "No symbolic label path is proved.",
+          "type": "object",
+          "required": [
+            "reason",
+            "status"
+          ],
+          "properties": {
+            "reason": {
+              "$ref": "#/definitions/CalleeUnresolvedReason"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "unresolved"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "CalleeUnresolvedReason": {
+      "description": "Closed reasons why a call target is not resolved.",
+      "type": "string",
+      "enum": [
+        "missing-definition",
+        "control-flow-conflict",
+        "dynamic-key",
+        "overwritten",
+        "call-result",
+        "open-register-window",
+        "unsupported-value",
+        "unsupported-instruction",
+        "mutable-capture",
+        "ambiguous-capture",
+        "path-limit",
+        "analysis-limit",
+        "unreachable"
+      ]
+    },
+    "ChunkCalleeAnalysis": {
+      "description": "Callee facts for every prototype in one parsed chunk.",
+      "type": "object",
+      "required": [
+        "prototypes"
+      ],
+      "properties": {
+        "prototypes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CalleeAnalysis"
+          }
+        }
+      }
+    },
+    "Diagnostic": {
+      "description": "Structured diagnostic item.",
+      "type": "object",
+      "required": [
+        "category",
+        "code",
+        "message",
+        "severity",
+        "target"
+      ],
+      "properties": {
+        "category": {
+          "description": "Category of the diagnostic.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/DiagnosticCategory"
+            }
+          ]
+        },
+        "code": {
+          "description": "Stable diagnostic error code (e.g. \"L54-HEADER-001\", \"L54-JUMP-003\").",
+          "type": "string"
+        },
+        "evidence": {
+          "description": "Supporting evidence or context.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "help_topic": {
+          "description": "Topic resolvable via `luad help <topic>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "description": "Human-readable explanation.",
+          "type": "string"
+        },
+        "severity": {
+          "description": "Severity level.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Severity"
+            }
+          ]
+        },
+        "source": {
+          "description": "Raw byte location if applicable.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "suggested_action": {
+          "description": "Suggested next action for researcher or agent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "description": "Target artifact stable ID.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        }
+      }
+    },
+    "DiagnosticCategory": {
+      "description": "Category of diagnostic check.",
+      "oneOf": [
+        {
+          "description": "Raw binary parsing, truncation, or format-envelope error.",
+          "type": "string",
+          "enum": [
+            "parse"
+          ]
+        },
+        {
+          "description": "Structural integrity or header consistency error.",
+          "type": "string",
+          "enum": [
+            "structure"
+          ]
+        },
+        {
+          "description": "Opcode, operand, or companion-instruction invariant violation.",
+          "type": "string",
+          "enum": [
+            "instruction"
+          ]
+        },
+        {
+          "description": "Control-flow anomaly, out-of-bounds jump, or unreachable entry.",
+          "type": "string",
+          "enum": [
+            "control-flow"
+          ]
+        },
+        {
+          "description": "Corrupt, inconsistent, or missing debug metadata.",
+          "type": "string",
+          "enum": [
+            "debug-metadata"
+          ]
+        },
+        {
+          "description": "Higher-level analysis precondition failure.",
+          "type": "string",
+          "enum": [
+            "analysis"
+          ]
+        }
+      ]
+    },
+    "InputIdentity": {
+      "description": "Identity and provenance metadata for an analyzed input artifact.",
+      "type": "object",
+      "required": [
+        "byte_length",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "byte_length": {
+          "description": "Total byte length of the input.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "path": {
+          "description": "File path or source identifier (e.g. \"hello.luac\" or \"`<stdin>`\").",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 hash of the complete input byte stream.",
+          "type": "string"
+        }
+      }
+    },
+    "ParseMode": {
+      "description": "Parsing mode behavior.",
+      "oneOf": [
+        {
+          "description": "Stop and fail immediately at the first invalid condition.",
+          "type": "string",
+          "enum": [
+            "strict"
+          ]
+        },
+        {
+          "description": "Safely record diagnostics and attempt recovery where bounds allow.",
+          "type": "string",
+          "enum": [
+            "permissive"
+          ]
+        }
+      ]
+    },
+    "ProtoPath": {
+      "type": "string"
+    },
+    "ResolvedInterpretation": {
+      "description": "Resolved interpretation record capturing base dialect, vendor profile, layout, and selection evidence.",
+      "type": "object",
+      "required": [
+        "base_dialect",
+        "detection_evidence",
+        "parse_mode",
+        "profile",
+        "selection_mode"
+      ],
+      "properties": {
+        "base_dialect": {
+          "description": "Base Lua language dialect (e.g. \"lua5.1\", \"lua5.4\").",
+          "type": "string"
+        },
+        "detection_evidence": {
+          "description": "Human-readable evidence explaining why this dialect/profile was resolved.",
+          "type": "string"
+        },
+        "parse_mode": {
+          "description": "Parse mode (\"strict\" or \"permissive\").",
+          "type": "string"
+        },
+        "patch_or_oracle_version": {
+          "description": "Patch or vendor variant if applicable (e.g. \"lnum32\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "description": "Exact resolved profile identifier (e.g. \"lua5.1\", \"lua5.1-lnum32\").",
+          "type": "string"
+        },
+        "profile_version_or_hash": {
+          "description": "Specific profile version or cryptographic specification hash if known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selection_mode": {
+          "description": "How the profile was selected.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SelectionMode"
+            }
+          ]
+        },
+        "validated_layout": {
+          "description": "Summary of validated architectural layout widths and byte order.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ResourceLimits": {
+      "description": "Resource and safety limits for parsing unknown chunks safely.",
+      "type": "object",
+      "required": [
+        "max_constants_per_proto",
+        "max_diagnostics",
+        "max_input_bytes",
+        "max_instructions_per_proto",
+        "max_nesting_depth",
+        "max_string_bytes",
+        "max_total_prototypes",
+        "max_upvalues_per_proto"
+      ],
+      "properties": {
+        "max_constants_per_proto": {
+          "description": "Maximum constant count per prototype (default 262,144).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_diagnostics": {
+          "description": "Maximum number of diagnostics to collect before terminating early (default 50,000).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_input_bytes": {
+          "description": "Maximum allowed input file size in bytes (default 64 MiB).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_instructions_per_proto": {
+          "description": "Maximum instruction count per prototype (default 1,000,000).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_nesting_depth": {
+          "description": "Maximum recursive prototype nesting depth (default 128).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_string_bytes": {
+          "description": "Maximum single string byte length (default 16 MiB).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_total_prototypes": {
+          "description": "Maximum total number of prototypes across the entire chunk (default 10,000).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_upvalues_per_proto": {
+          "description": "Maximum upvalue count per prototype (default 1,024).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    },
+    "SelectionMode": {
+      "description": "Selection mode for dialect and profile resolution.",
+      "oneOf": [
+        {
+          "description": "Dialect / profile was automatically detected from bytecode header.",
+          "type": "string",
+          "enum": [
+            "detected"
+          ]
+        },
+        {
+          "description": "Dialect / profile was explicitly selected via CLI option or API.",
+          "type": "string",
+          "enum": [
+            "explicit"
+          ]
+        }
+      ]
+    },
+    "Severity": {
+      "description": "Diagnostic severity level.",
+      "oneOf": [
+        {
+          "description": "Informational note or hint.",
+          "type": "string",
+          "enum": [
+            "info"
+          ]
+        },
+        {
+          "description": "Warning about suspicious, unconventional, or non-fatal condition.",
+          "type": "string",
+          "enum": [
+            "warning"
+          ]
+        },
+        {
+          "description": "Error indicating structural invalidity or parsing failure.",
+          "type": "string",
+          "enum": [
+            "error"
+          ]
+        }
+      ]
+    },
+    "SourceLocation": {
+      "description": "Source byte location and raw byte representation of a field or instruction.",
+      "type": "object",
+      "required": [
+        "byte_length",
+        "byte_offset",
+        "raw_hex"
+      ],
+      "properties": {
+        "byte_length": {
+          "description": "Encoded length in bytes.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "byte_offset": {
+          "description": "Absolute byte offset in the input chunk.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "raw_hex": {
+          "description": "Lowercase hex encoding of the raw bytes.",
+          "type": "string"
+        }
+      }
+    },
+    "StableId": {
+      "type": "string"
+    },
+    "SymbolicPathBasis": {
+      "description": "Epistemic basis for a symbolic Lua value label.",
+      "oneOf": [
+        {
+          "description": "A path rooted in a literal global-table lookup.",
+          "type": "string",
+          "enum": [
+            "global-label"
+          ]
+        },
+        {
+          "description": "A path rooted in the result of a literal `require` call.",
+          "type": "string",
+          "enum": [
+            "module-label"
+          ]
+        }
+      ]
+    }
+  }
+}

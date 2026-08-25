@@ -1,74 +1,111 @@
-# Active sprint: self-identifying JSONL facts
+# Active sprint: sound symbolic callee facts
 
-Lane: machine contract. Target: make every streamed fact independently attributable
-without requiring hidden file-boundary state.
+Lane: semantic analysis. Target: emit one auditable resolution result for every Lua 5.1
+`CALL` and `TAILCALL` without allowing control-flow ambiguity to become a guessed name.
 
 ## Claim and researcher value
 
-Every JSONL data record emitted by `inspect`, `disasm`, `cfg`, `xrefs`, `query`, `diff`,
-and recursive `export` will carry the input identity and resolved interpretation needed
-to join or audit that record in isolation. A consumer may interleave, filter, shard, or
-persist fact lines without retaining the preceding metadata or `file_start` record.
+Every call instruction will produce either an evidence-linked symbolic path or a typed
+unresolved reason. The supported resolved paths will cover literal globals, constant-key
+table lookups, literal `require` module labels, deterministic register aliases, and
+closure captures whose parent value is unambiguous.
 
-This directly supports firmware-tree workflows where many chunks, profiles, and errors
-share one stream and an AI agent or relational loader consumes individual records.
+This gives firmware researchers a trustworthy denominator for call-site surveys. A
+consumer can distinguish incomplete analysis from the absence of a call and does not
+need to reimplement Lua register and closure tracking to discover common LuCI APIs.
 
 ## Contract
 
-A single reusable record context will contain:
+The analysis will operate on parsed prototypes, shared semantic instructions, and the
+existing CFG and closure-binding facts. It will not decode raw instruction words in the
+analysis crate.
 
-- the input path, SHA-256, and byte length when an input artifact was read;
-- the resolved base dialect, patch/oracle version, profile, validated layout, and
-  selection mode when interpretation succeeded;
-- an explicit absence of unavailable identity or interpretation fields on failed-input
-  diagnostics rather than invented hashes or profiles.
+The abstract value domain will contain an explicit bottom, symbolic label paths, literal
+strings, closure identities, and unknown reasons. Global and module paths are labels, not
+runtime object identities, and their distinct bases participate in equality. Each value
+will carry the stable instruction IDs that establish it. `require("luci.sys")` creates a
+module label only when the callee is the literal-global `require` label (including a
+deterministic alias), the call has exactly one literal string argument and exactly one
+result, and no open register window participates.
 
-Every `JsonlDataRecord<T>` will require this context. Export fact records—prototype,
-instruction, constant, upvalue, xref, and diagnostic—will use the same generic shape as
-single-file JSONL commands. Control records may retain their present framing fields,
-but no fact may depend on them for attribution.
+Forward register analysis will traverse reachable basic blocks in deterministic
+reverse-postorder to a bounded fixed point. Bottom is the meet identity; each register
+descends monotonically from bottom to one value to unknown. A join retains a value only
+when every reachable predecessor supplies the same basis and value. Evidence at a
+surviving join is the sorted, de-duplicated union from every predecessor. Conflicting,
+missing, loop-mutated, dynamic-key, open-register, unsupported-instruction, path-limit,
+analysis-limit, and ambiguous-capture cases remain explicitly unresolved. Transfer
+functions eagerly read their source state before applying writes, and paths have a fixed
+segment bound.
 
-The schema major will advance because the new context is required. Canonical schemas,
-examples, and recipes will show consumers how to select `.context.input_identity.path`,
-`.context.input_identity.sha256`, and `.context.interpretation.profile` directly from
-any fact line.
+All 38 Lua 5.1 opcodes will have an explicit register-write classification. Fixed and
+open ranges invalidate every potentially written register; an unclassified instruction
+invalidates the whole frame. Conditional writes use edge-specific state when the value
+cannot be retained on both successors. Closure-binding descriptors do not execute in the
+parent dataflow.
+
+A captured parent local is a live reference rather than a snapshot. The analysis will
+propagate it only when the source definition dominates the closure, no other parent write
+can mutate that register, and no relevant child or descendant `SETUPVAL` can mutate the
+shared value. Other captures receive `mutable-capture` or `ambiguous-capture`.
+
+Every public callee fact will contain the call instruction ID and prototype path, call
+kind, callee register, and a tagged resolution union. Resolved variants contain a label
+basis, path, and stable evidence; the unresolved variant contains one closed reason enum.
+The CLI will expose a bounded `callees`
+analysis command in text, JSON, and self-identifying JSONL. Recursive export will emit
+the same fact type for every prototype.
 
 ## Acceptance matrix
 
-One table-driven machine-contract suite will exercise every JSONL-producing command and
-every export fact variant. It will prove:
+A single table-driven semantic matrix will prove all supported transfer functions and
+their combinations:
 
-- schema validation and deterministic output;
-- exact path/hash/length agreement with the source bytes;
-- exact interpretation agreement with the corresponding metadata or `file_start`;
-- mixed stock Lua 5.1 and LNUM32 export records retain distinct local contexts after
-  arbitrary fact-line interleaving;
-- deleting metadata and control records leaves every successful fact attributable;
-- failed reads and parse failures produce honest diagnostic context;
-- removing, swapping, or mutating a fact context is rejected by the comparator or schema.
+- `GETGLOBAL`, `MOVE`, constant-key `GETTABLE`, and `SELF` paths;
+- literal `require` results followed by table lookups;
+- same-block aliases, identical values joining across branches, strict-dominator values,
+  and conflicting branch definitions;
+- local-register and parent-upvalue closure captures across at least three prototype
+  levels, plus conflicting instantiations of one child prototype;
+- loops that preserve a value and loops that may mutate its defining register;
+- dynamic keys, open argument/result ranges, overwritten registers, unsupported writes,
+  and unreachable code;
+- complete write classification for all 38 opcodes, range invalidation, conditional
+  writes, and closure descriptors that never execute as parent transfers;
+- captures mutated after closure construction and captures mutated through `SETUPVAL`;
+- one explicit resolved or unresolved fact for every `CALL` and `TAILCALL`;
+- deterministic text, JSON, JSONL, recursive export, schema, and capability discovery.
 
-The same matrix will add structured capability discovery for the `diagnostics` command
-and `diagnostics` schema so an agent can find the catalog without reading prose. It will
-not redesign the complete command catalog.
+Killer controls will delete a call fact, replace an unresolved result with a path, mutate
+one evidence ID, omit one predecessor's evidence at a join, leak one predecessor value
+through a conflict, substitute a module label for runtime object identity, retain a value
+through a range write, and retain a local captured before a later mutation. Each mutation
+must be rejected by typed comparison or schema validation. The public fixture matrix will
+pin a resolution/reason histogram so coverage regressions are visible without a private
+corpus.
+
+Redistributable source fixtures will be compiled by the exact Lua 5.1 authorities. A
+separate corpus survey may measure usefulness and unresolved-reason distribution, but it
+will never decide correctness or gate acceptance.
 
 ## Allowed production paths
 
-- `crates/luad-core/src/envelope.rs`
-- `crates/luad-core/src/capabilities.rs`
-- JSONL construction in `crates/luad-cli/src/main.rs`
-- text capability rendering only as needed for the same discovery fact
-- canonical schemas, machine examples, recipes, tests, gate specs, and `CHANGELOG.md`
+- `crates/luad-analysis/src/callees.rs` and its public exports
+- command parsing and rendering in `crates/luad-cli`
+- export records and public capability/schema discovery
+- redistributable fixtures, focused oracle tests, one gate spec and runner
+- indexed machine-interface, recipe, status, and changelog documentation
 
 ## Non-goals
 
-This sprint does not add persistent session state, symbolic callees, value origins,
-prototype content hashes, a dedicated constant-search command, support-tier promotion,
-or a general plugin/command registry. It does not remove JSONL framing records or change
-ordinary JSON document envelopes.
+This sprint does not classify sinks, infer attacker control, resolve dynamic table keys,
+perform points-to analysis, identify arbitrary runtime objects, construct a complete call
+graph, compute argument origins, add persistent state, or promote a support tier. It does
+not promise a particular corpus coverage percentage.
 
 ## Verification and stop condition
 
-Acceptance requires the focused machine-contract matrix, adversarial context mutations,
-the canonical machine-contract and batch-export gates, aggregate repository checks,
-green pull-request CI, and a clean merged revision with local `main` equal to
-`origin/main`.
+Acceptance requires the focused callee matrix and killer controls, canonical machine and
+batch-export regression gates, aggregate repository checks, green pull-request CI, and a
+clean merged revision with local `main` equal to `origin/main`. The sprint stops rather
+than weakening a transfer rule when a value cannot be proved at a control-flow join.

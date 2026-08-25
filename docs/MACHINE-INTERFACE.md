@@ -25,6 +25,7 @@ luad capabilities --format json
 luad diagnostics --format json
 luad schema capabilities
 luad schema diagnostics
+luad schema callees
 luad schema export
 ```
 
@@ -37,6 +38,7 @@ Available schema names are:
 - `disasm`
 - `validate`
 - `cfg`
+- `callees`
 - `xrefs`
 - `query`
 - `analysis`
@@ -148,6 +150,24 @@ trailing tokens, nonexistent targets, and invalid cursors with a usage error.
 
 Capture xrefs are a required extension of the existing fact interface: callers must be able to traverse both parent register/upvalue to child upvalue and child upvalue back to its source binding. A convenience `upvalues` rendering can be added, but it must be a view of the same capture facts rather than a second analysis implementation.
 
+### `callees`
+
+Emits exactly one fact for every physical Lua 5.1 `CALL` and `TAILCALL`, across the
+entire prototype tree. A resolution is a tagged union: `resolved-path` carries a global
+or module label, ordered path segments, and stable instruction evidence;
+`resolved-prototype` carries a directly constructed child prototype identity and
+evidence; `unresolved` carries one typed reason.
+
+Global and module paths are symbolic lookup labels, not runtime object identities.
+Module labels require an exactly shaped literal `require` call. Analysis retains values
+across CFG joins only when all reachable predecessors agree, tracks closure bindings
+across prototype levels, and rejects captures that may be mutated after closure
+construction. Dynamic keys, conflicts, open register windows, overwritten values,
+unreachable calls, ambiguity, and analysis bounds are reported rather than omitted.
+
+JSON uses the `callees` schema. JSONL emits self-identifying `callee` facts followed by
+a summary. Text is a human rendering of the same typed facts.
+
 ## Required layout and diagnostic records
 
 Evidence-backed machine output must expose the selected dialect/profile and validated layout, including byte order, declared widths, number-integrality, and how the profile was selected. Vendor constant tags such as LNUM tag 9 must not be reported as stock Lua 5.1 support.
@@ -173,7 +193,7 @@ JSON format returns a top-level `DiagnosticCatalogResponse` (`schema_version`, `
 
 Batch exports firmware artifacts in streaming JSONL format.
 `--max-facts-per-file N` bounds the number of counted fact records (`prototype`,
-`instruction`, `constant`, `upvalue`, `xref`) emitted per input file while
+`instruction`, `constant`, `upvalue`, `xref`, `callee`) emitted per input file while
 preserving stream framing, diagnostics, and per-file truncation metadata.
 
 Every data record has a required `context` object. Successful facts carry

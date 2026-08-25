@@ -192,6 +192,28 @@
           "$ref": "#/definitions/JsonlRecordContext"
         },
         "data": {
+          "$ref": "#/definitions/CalleeFact"
+        },
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "callee"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "context",
+        "data",
+        "record_type"
+      ],
+      "properties": {
+        "context": {
+          "$ref": "#/definitions/JsonlRecordContext"
+        },
+        "data": {
           "$ref": "#/definitions/Diagnostic"
         },
         "record_type": {
@@ -298,6 +320,144 @@
     }
   ],
   "definitions": {
+    "CalleeFact": {
+      "description": "One auditable callee result for a `CALL` or `TAILCALL` instruction.",
+      "type": "object",
+      "required": [
+        "call_id",
+        "call_kind",
+        "callee_register",
+        "pc",
+        "proto_path",
+        "resolution"
+      ],
+      "properties": {
+        "call_id": {
+          "$ref": "#/definitions/StableId"
+        },
+        "call_kind": {
+          "type": "string"
+        },
+        "callee_register": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "pc": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "proto_path": {
+          "$ref": "#/definitions/ProtoPath"
+        },
+        "resolution": {
+          "$ref": "#/definitions/CalleeResolution"
+        }
+      }
+    },
+    "CalleeResolution": {
+      "description": "Resolution attached to one physical call instruction.",
+      "oneOf": [
+        {
+          "description": "A symbolic label path proved by the listed bytecode instructions.",
+          "type": "object",
+          "required": [
+            "basis",
+            "evidence",
+            "segments",
+            "status"
+          ],
+          "properties": {
+            "basis": {
+              "$ref": "#/definitions/SymbolicPathBasis"
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/StableId"
+              }
+            },
+            "segments": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "resolved-path"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A directly constructed closure whose child prototype identity is proved.",
+          "type": "object",
+          "required": [
+            "evidence",
+            "prototype",
+            "status"
+          ],
+          "properties": {
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/StableId"
+              }
+            },
+            "prototype": {
+              "$ref": "#/definitions/ProtoPath"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "resolved-prototype"
+              ]
+            }
+          }
+        },
+        {
+          "description": "No symbolic label path is proved.",
+          "type": "object",
+          "required": [
+            "reason",
+            "status"
+          ],
+          "properties": {
+            "reason": {
+              "$ref": "#/definitions/CalleeUnresolvedReason"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "unresolved"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "CalleeUnresolvedReason": {
+      "description": "Closed reasons why a call target is not resolved.",
+      "type": "string",
+      "enum": [
+        "missing-definition",
+        "control-flow-conflict",
+        "dynamic-key",
+        "overwritten",
+        "call-result",
+        "open-register-window",
+        "unsupported-value",
+        "unsupported-instruction",
+        "mutable-capture",
+        "ambiguous-capture",
+        "path-limit",
+        "analysis-limit",
+        "unreachable"
+      ]
+    },
     "Confidence": {
       "description": "Confidence level of an analysis fact or artifact.",
       "oneOf": [
@@ -1462,6 +1622,25 @@
     },
     "StableId": {
       "type": "string"
+    },
+    "SymbolicPathBasis": {
+      "description": "Epistemic basis for a symbolic Lua value label.",
+      "oneOf": [
+        {
+          "description": "A path rooted in a literal global-table lookup.",
+          "type": "string",
+          "enum": [
+            "global-label"
+          ]
+        },
+        {
+          "description": "A path rooted in the result of a literal `require` call.",
+          "type": "string",
+          "enum": [
+            "module-label"
+          ]
+        }
+      ]
     },
     "UpvalueDesc": {
       "description": "Upvalue descriptor within a prototype.",

@@ -39,6 +39,9 @@ pub enum Commands {
     /// List or export control-flow graphs.
     Cfg(CfgArgs),
 
+    /// Resolve symbolic labels for every call instruction.
+    Callees(CalleesArgs),
+
     /// Query cross-references to and from an artifact.
     Xrefs(XrefsArgs),
 
@@ -158,6 +161,20 @@ pub struct CfgArgs {
     pub proto: String,
 
     /// Explicit dialect override.
+    #[arg(short, long)]
+    pub dialect: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct CalleesArgs {
+    /// Path to compiled Lua bytecode file.
+    pub file: String,
+
+    /// Output format (text, json, or jsonl).
+    #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+
+    /// Explicit Lua 5.1 dialect/profile override.
     #[arg(short, long)]
     pub dialect: Option<String>,
 }
@@ -312,7 +329,7 @@ pub struct DiagnosticsArgs {
 #[derive(Args, Debug)]
 #[command(disable_version_flag = true)]
 pub struct SchemaArgs {
-    /// Schema name (e.g. 'chunk', 'disasm', 'validate', 'xrefs', 'query', 'cfg', 'diff', 'capabilities', 'export').
+    /// Schema name (e.g. 'chunk', 'disasm', 'validate', 'callees', 'xrefs', 'query', 'cfg', 'diff', 'capabilities', 'export').
     #[arg(default_value = "chunk")]
     pub name: String,
 

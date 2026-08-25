@@ -4,6 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
+  scripts/agents/claude-opus.sh design-review PROMPT_FILE
   scripts/agents/claude-opus.sh review-fresh PROMPT_FILE
   scripts/agents/claude-opus.sh acceptance-start PROMPT_FILE
   scripts/agents/claude-opus.sh acceptance-resume SESSION_ID PROMPT_FILE
@@ -15,6 +16,7 @@ override the subscription. Output is streaming Claude Code NDJSON; the final
 choose the detailed CLI debug log.
 
 review-fresh       Independent read-only review with no persisted session.
+design-review      Critique a self-contained design without repository tools.
 acceptance-start   Start a persistent acceptance-author session.
 acceptance-resume  Inject a checkpoint into that same session.
 
@@ -30,6 +32,10 @@ fi
 
 stage=${1:-}
 case "$stage" in
+  design-review)
+    prompt_file=${2:-}
+    session_args=(--no-session-persistence)
+    ;;
   review-fresh)
     prompt_file=${2:-}
     session_args=(--no-session-persistence)
@@ -103,6 +109,11 @@ common=(
 clean_env=(env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL)
 
 case "$stage" in
+  design-review)
+    "${clean_env[@]}" claude "${common[@]}" "${session_args[@]}" \
+      --tools "" \
+      --permission-mode plan
+    ;;
   review-fresh)
     "${clean_env[@]}" claude "${common[@]}" "${session_args[@]}" \
       --tools "Read,Glob,Grep" \

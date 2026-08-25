@@ -66,7 +66,33 @@ luad export firmware/*.luac --format jsonl | jq -c '
 
 ---
 
-## 4. Reconstructing a Multi-Hop Upvalue Binding Chain
+## 4. Enumerating Symbolic Callees Without Silent Under-Counting
+
+List every call in one chunk, including explicit unresolved reasons:
+
+```bash
+luad callees firmware/main.lua --format json | jq -c '
+  .data.prototypes[].calls[] |
+  {call_id, call_kind, callee_register, resolution}'
+```
+
+Survey a firmware tree from the recursive export while retaining file identity:
+
+```bash
+luad export firmware/*.lua --format jsonl | jq -c '
+  select(.record_type == "callee") |
+  {file: .context.input_identity.path,
+   profile: .context.interpretation.profile,
+   call: .data.call_id,
+   resolution: .data.resolution}'
+```
+
+Treat `global-label` and `module-label` as bytecode-derived lookup labels. Apply sink
+classification and attacker-control policy in the consuming research layer.
+
+---
+
+## 5. Reconstructing a Multi-Hop Upvalue Binding Chain
 
 Trace the capture of local variables and parent upvalues into nested closure upvalues across prototype boundaries:
 
@@ -84,7 +110,7 @@ Output:
 
 ---
 
-## 5. Indexing Batch Exports in an External Database (e.g. SQLite)
+## 6. Indexing Batch Exports in an External Database (e.g. SQLite)
 
 Stream fact records directly into an SQLite database for SQL-based graph queries:
 
@@ -108,7 +134,7 @@ luad export firmware/*.luac --format jsonl | jq -r '
 
 ---
 
-## 6. Comparing Exports from Two Firmware Trees Externally
+## 7. Comparing Exports from Two Firmware Trees Externally
 
 Compare instruction inventories and sha256 digests between two firmware builds:
 
@@ -120,7 +146,7 @@ diff -u \
 
 ---
 
-## 7. Pagination with Context-Bound Cursors
+## 8. Pagination with Context-Bound Cursors
 
 Run paginated queries and fetch consecutive chunks:
 
@@ -144,13 +170,16 @@ fi
 
 ---
 
-## 8. Validating Live Output Against Schemas
+## 9. Validating Live Output Against Schemas
 
 Validate live output against canonical JSON Schemas using standard validation tooling:
 
 ```bash
 luad schema chunk > chunk.schema.json
 luad inspect sample.luac --format json | jsonschema -i - chunk.schema.json
+
+luad schema callees > callees.schema.json
+luad callees sample.luac --format json | jsonschema -i - callees.schema.json
 
 luad schema export > export.schema.json
 luad export sample.luac --format jsonl | while read -r record; do

@@ -70,6 +70,7 @@ fn test_all_schema_exports_return_valid_json_schema() {
         "disasm",
         "validate",
         "cfg",
+        "callees",
         "xrefs",
         "query",
         "analysis",
@@ -117,6 +118,7 @@ fn test_schema_goldens_consistency() {
         ("query", "query.schema.json"),
         ("capabilities", "capabilities.schema.json"),
         ("cfg", "cfg.schema.json"),
+        ("callees", "callees.schema.json"),
         ("xrefs", "xrefs.schema.json"),
         ("diff", "diff.schema.json"),
         ("diagnostic", "diagnostic.schema.json"),
@@ -439,10 +441,12 @@ fn test_every_single_input_jsonl_fact_is_self_identifying() {
     let root = luad_oracle::find_workspace_root();
     let hello = root.join("tests/fixtures/precompiled/lua54/hello.luac");
     let stripped = root.join("tests/fixtures/precompiled/lua54/hello_stripped.luac");
+    let lua51 = root.join("tests/fixtures/precompiled/lua51/hello.luac");
     let commands = vec![
         vec!["inspect".to_string(), hello.display().to_string()],
         vec!["disasm".to_string(), hello.display().to_string()],
         vec!["cfg".to_string(), hello.display().to_string()],
+        vec!["callees".to_string(), lua51.display().to_string()],
         vec!["xrefs".to_string(), hello.display().to_string()],
         vec![
             "query".to_string(),
@@ -736,6 +740,7 @@ fn test_validate_all_generated_examples_against_schemas() {
         ("disasm.json", "disasm.schema.json"),
         ("validate.json", "validate.schema.json"),
         ("cfg.json", "cfg.schema.json"),
+        ("callees.json", "callees.schema.json"),
         ("xrefs.json", "xrefs.schema.json"),
         ("query.json", "query.schema.json"),
         ("diff.json", "diff.schema.json"),
