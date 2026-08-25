@@ -1,131 +1,118 @@
-# Active sprint: Lua 5.1 retrieval and machine-contract freeze
+# Active sprint: reproducible Lua 5.1 LNUM32 release candidate
 
-Lane: public semantic batch. Target: make every release-critical Lua 5.1 fact directly
-retrievable through a coherent, fail-closed machine interface.
+Lane: qualification. Target: produce one installable, non-promoted release candidate
+whose target identity, prerequisite evidence, schemas, binaries, and first-use workflow
+can be independently verified.
 
 ## Claim and researcher value
 
-An external consumer can search and navigate constants, symbolic callees, constant-key
-lookup labels, unresolved reasons, argument-origin shapes, exact and unresolved call
-relations, prototype identities, and closure captures without decoding instructions or
-joining ambiguous records by position.
+An external researcher needs a fixed artifact—not a moving checkout—to attempt an
+uncoached firmware investigation. The candidate must prove exactly which source,
+platform, Lua profile, layout, schema majors, and gates it represents, while making no
+support or publication claim before independent customer transfer succeeds.
 
-Every accepted predicate applies its complete typed operand. Unknown fields,
-unsupported operators, malformed values, and predicates whose operands cannot be
-applied are usage errors rather than empty or overbroad answers. Pagination remains
-bound to the complete query and input identity.
+## Candidate contract
 
-## Public contract batch
+### Exact target and provenance
 
-### Retrieval vocabulary
+The source-controlled candidate specification names the exact target
+`lua5.1-lnum32`: OpenWrt-derived Lua 5.1.5, little-endian, 32-bit `size_t`, 32-bit
+integer LNUM constants, and the pinned vendor patch/toolchain authority. It fixes the
+schema majors, fixture hashes, compiler identities, required gate specifications, and
+required platforms without attempting to predict output hashes from the commit that
+defines the build.
 
-Extend the existing bounded query surface with one documented, table-driven vocabulary
-covering:
+Each platform job generates a typed attestation containing the clean source commit,
+candidate-specification hash, platform and target triple, Rust toolchain and build-host
+identity, binary SHA-256, archive SHA-256 and member ledger, prerequisite results, and
+aggregate-check result. A post-build job verifies both attestations and generates the
+candidate evidence index. The generated attestations and index are CI artifacts linked
+to the source commit; they are not committed back into that revision. Substituting a
+stock profile, another layout or source revision, a dirty tree, an unauthenticated
+prerequisite, or one platform artifact for the other invalidates the candidate.
 
-- typed constants and exact string containment;
-- callee resolution kind, symbolic path, lookup kind, and typed lookup key;
-- callee and call-relation unresolved reasons;
-- argument index and origin-expression kind;
-- exact child-prototype call target;
-- artifact interpretation identity and prototype content identity;
-- forward and inverse closure-capture relations, including the physical closure site.
+### Installable artifacts
 
-The implementation may query normalized in-memory facts or the same recursive export
-records. It must not create a second decoder or a second semantic representation.
-Predicates over typed values preserve their public type and byte identity; text
-containment is defined only for string constants and rejects incompatible operand
-types. All result ordering is deterministic.
+CI builds release-mode archives for macOS arm64 and Linux x86_64. The evidence index
+contains one typed artifact entry per platform; every entry names its platform, target
+triple, toolchain, archive, binary, archive members, and checksums. Each archive contains
+the `luad` binary, license files, version metadata, and a copy of the candidate
+specification. The platform attestation is an external sidecar that hashes the complete
+archive, avoiding self-referential archive metadata.
 
-### Capture-site identity
+A packaging smoke verifier extracts each archive and checks its member ledger,
+checksums, `--version`, capability identity, and schema discovery without a checkout.
+Semantic qualification points the extracted binary at the maintained public acceptance
+suite and existing redistributable fixtures. Existing gates remain the semantic
+authorities; the archive harness only proves that they exercised the packaged binary.
 
-A capture relation identifies the parent prototype, physical `CLOSURE` instruction,
-descriptor instruction, child prototype instance, child upvalue slot, and parent
-register or upvalue source. When the same child prototype definition is instantiated at
-multiple closure sites, forward and inverse xrefs remain distinct and return the binder
-for the selected site. No relation is inferred from child-prototype position alone.
+### Customer handoff
 
-### Machine compatibility and process behavior
+A concise real-firmware quickstart starts from a firmware tree the researcher is
+authorized to inspect, inventories compiled Lua, verifies interpretation identity,
+searches constants, enumerates callees and unresolved reasons, inspects argument
+origins, traverses closure captures, and records deterministic output. It does not claim
+that firmware acquisition or unpacking is executed in CI. Every analysis command uses
+only the archived binary plus standard shell/JSON tools and states the expected
+exit/output contract.
 
-Document and enforce one compatibility rule for schema-major 1 analysis records:
-structural fields and tagged result variants are closed within the major, while fields
-explicitly documented as open vocabularies are represented so an unknown member can be
-retained or rejected deliberately rather than silently misread. Canonical schemas,
-capability output, examples, and deserialization tests express the same rule.
+A separate checked transcript runs the same analysis layer against named
+redistributable fixtures with the extracted archive. CI verifies the command and
+machine-output contract, while independent real-firmware transfer remains the next
+roadmap checkpoint.
 
-Publish one command/verdict/exit-code table for every public command. Successful
-queries, no-match queries, invalid predicates, malformed input, validation findings,
-resource exhaustion, and mixed batch results have distinct documented behavior where
-their semantics differ. Machine stdout stays parseable; diagnostics and operational
-messages stay on their documented channels.
-
-Remove the nonfunctional `compile` command, its capability/schema/help entries, and
-forward-looking product requirements. `luad` does not run compilers as part of the
-release surface. Repository proof tooling may invoke pinned compilers independently.
-
-### Tested composition recipes
-
-Executable recipes cover:
-
-1. exact and substring constant search over a firmware tree;
-2. calls selected by a symbolic path or constant key;
-3. calls grouped by unresolved reason;
-4. fixed call arguments grouped by origin-expression shape;
-5. forward and inverse multi-hop capture traversal with closure-site identity;
-6. navigation between a call site and an exact child prototype when proven;
-7. comparison by artifact interpretation identity and prototype content identity.
-
-Prefer `export` plus a standard JSON processor when that path is clear and bounded. A
-dedicated constant-search command is in scope only if the executable recipe demonstrates
-a material correctness or usability advantage and reuses the same fact implementation.
+The candidate and its capability manifest remain experimental. This sprint creates no
+tag, GitHub Release, package publication, supported-tier entry, or claim that customer
+transfer has succeeded.
 
 ## Acceptance design
 
-Use one table-driven public matrix and one combined gate. The matrix includes positive,
-zero-result, malformed, unknown-field, unsupported-operator, wrong-type,
-ignored-operand, cursor-replay, cursor-tamper, and bound-exhaustion rows for every
-predicate family. Every positive row proves exact selected records and deterministic
-ordering through the live CLI. Every negative row proves a nonzero usage or resource
-exit and no plausible partial answer on stdout.
+One candidate gate verifies the source-controlled specification, typed per-platform
+attestations, generated evidence index, and complete prerequisite closure from one clean
+commit. Platform jobs run packaging smoke and the canonical semantic gates against the
+extracted binary; a post-build job verifies the complete two-platform set. Negative
+controls reject mutations to the source commit, specification hash, target
+profile/layout, compiler or fixture hash, schema major, artifact identity, prerequisite
+result, platform set, dirty-state flag, archive checksum, or member ledger. Missing,
+ignored, stale, cross-profile, and cross-platform substitutions fail.
 
-The capture matrix instantiates one child prototype at two or more physical closure
-sites with different register and parent-upvalue binders. It proves both traversal
-directions and rejects a mutation that collapses the sites. Remaining killer mutations
-include dropping a `contains` operand, stringifying typed constants, treating unknown
-enum values as known, accepting a cursor from another predicate, and returning success
-for an invalid predicate.
+The checked transcript is executed against named redistributable fixtures with the
+extracted archive, not `cargo run` or a workspace binary. Its asserted outputs cover
+every documented analysis workflow and preserve profile/input identity. Release
+assembly is deterministic in file selection and metadata ordering; platform-specific
+binary bytes are authenticated, not claimed equal across operating systems.
 
-Schema tests deserialize representative current records and deliberately altered
-open-vocabulary records according to the published compatibility rule. CLI tests cover
-the complete exit table. Recipe tests execute documented commands against
-redistributable fixtures and validate their results rather than snapshotting prose.
-
-The private firmware corpus is a usability and sizing check, never an oracle. A final
-release-build survey records query coverage, no-match/error behavior, elapsed time,
-maximum resident set size, and a deterministic output hash. Any newly discovered
-semantic becomes a minimized public fixture before changing acceptance.
+The acceptance outline must reuse the existing gate runner and semantic gates. It may
+add one release-candidate manifest/schema and one gate; it must not duplicate semantic
+oracles or re-run one prerequisite as many micro-gates.
 
 ## Allowed production paths
 
-- query grammar, typed predicate evaluation, pagination binding, and result records;
-- xref capture identity and traversal;
-- CLI help, capability declarations, schemas, examples, and machine documentation;
-- removal of the nonfunctional compiler-laboratory surface;
-- one table-driven oracle family, recipe executor, and combined gate;
-- compatibility fixes required by live negative controls in this batch.
+- release-candidate manifest/schema and prerequisite closure;
+- CI release-mode archive assembly for the two target platforms;
+- archive smoke verification, checksums, and evidence-bundle assembly;
+- capabilities/evidence rendering required to describe the experimental candidate;
+- real-firmware quickstart, checked fixture transcript, and candidate procedure;
+- one qualification gate and its adversarial manifest mutations.
 
 ## Non-goals
 
 This sprint does not add decompilation, sink classification, taint analysis, receiver
 identity, runtime reachability, framework routing, persistent research state, firmware
 unpacking, dynamic interpreter execution, arbitrary dataflow predicates, or a new Lua
-dialect. It does not promote a support tier or freeze a release artifact.
+dialect. It does not run the customer investigations, promote a support tier, tag a
+version, publish a GitHub Release, sign artifacts, or publish crates/packages.
 
 ## Verification and stop condition
 
-Acceptance requires the combined retrieval gate, affected existing semantic and machine
-gates, aggregate repository checks, a model-diverse adversarial correctness review,
-green pull-request CI, and a clean merged revision equal to `origin/main`.
+Acceptance requires the release-candidate gate from one clean commit, per-platform
+attestations and extracted-binary verification on macOS arm64 and Linux x86_64, a
+post-build evidence index, complete prerequisite closure with zero skips, aggregate
+repository checks, one bounded model-diverse adversarial review, green pull-request CI,
+and a clean merged revision equal to `origin/main`.
 
-The sprint stops rather than returning a result when a predicate operand cannot be
-applied, a capture site is ambiguous, a cursor does not bind to the complete request, or
-a compatibility case cannot be interpreted under the documented schema-major rule.
+The sprint stops when any artifact cannot be rebuilt and verified by CI, any required
+identity or prerequisite is absent or substitutable, the checked transcript depends on
+the workspace, a semantic assertion is duplicated outside its canonical gate, or any
+public surface claims `lua5.1-lnum32` is supported. Customer transfer begins only with
+the accepted candidate bundle.

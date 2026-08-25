@@ -13,21 +13,21 @@ Usage:
 
 Runs Claude Opus through the logged-in claude.ai subscription. Console API
 credentials are removed from the child environment so they cannot silently
-override the subscription. Output is streaming Claude Code NDJSON; the final
-`result` event carries cumulative session usage. Set LUAD_CLAUDE_DEBUG_FILE to
-choose the detailed CLI debug log. Read-only review stages use medium effort and
-a 600-second wall-time ceiling by default; set LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS
-to a positive integer to change that ceiling.
+override the subscription. Every stage is a bounded, tool-free review over the
+self-contained prompt packet. Output is one Claude Code JSON result carrying the
+structured verdict and cumulative session usage. Set LUAD_CLAUDE_DEBUG_FILE to
+choose the detailed CLI debug log. The default wall-time ceiling is 600 seconds;
+set LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS to a positive integer to change it.
 
-review-fresh       Independent read-only review with no persisted session.
-review-start       Start a persistent, bounded read-only review session.
-review-resume      Continue that review without repeating repository discovery.
+review-fresh       Independent one-shot review with no persisted session.
+review-start       Start a persistent, bounded review of a curated packet.
+review-resume      Ask at most one bounded follow-up in that session.
 design-review      Critique a self-contained design without repository tools.
-acceptance-start   Start a persistent acceptance-author session.
-acceptance-resume  Inject a checkpoint into that same session.
+acceptance-start   Review a self-contained acceptance design.
+acceptance-resume  Ask at most one bounded acceptance follow-up.
 
-Acceptance sessions permit repository reads and file edits but no shell. The
-steward runs focused tests after each durable edit checkpoint.
+Claude does not inspect or edit the repository. The steward supplies exact context,
+applies decisions, and runs all verification.
 EOF
 }
 
@@ -96,9 +96,8 @@ if ! grep -Eq '"authMethod"[[:space:]]*:[[:space:]]*"claude.ai"' <<<"$auth_json"
 fi
 
 prompt=$(<"$prompt_file")
-if [[ "$stage" == "design-review" ]]; then
-  prompt=$'This is a no-tools review. Analyze only the supplied prompt. Do not claim to inspect a repository, invoke tools, delegate work, or invent missing implementation details. Treat missing context as an explicit ambiguity.\n\n'"$prompt"
-fi
+prompt=$'This is a single bounded no-tools review. Analyze only the supplied packet. Do not claim to inspect a repository, invoke tools, delegate work, edit files, or invent missing implementation details. A blocking finding must cite supplied evidence and describe a reproducible failure mode. Treat missing context as an explicit ambiguity. Return one verdict and stop.\n\n'"$prompt"
+reviewer_system='You are an independent software evidence reviewer. Analyze only the supplied packet. Do not inspect repositories, invoke tools other than the required structured-output response, delegate work, or propose unrelated improvements. A blocking finding must identify a reproducible failure of the stated claim. Return exactly one structured verdict.'
 started_at=$(date +%s)
 debug_file=${LUAD_CLAUDE_DEBUG_FILE:-/tmp/luad-claude-${started_at}.debug.log}
 prompt_sha256=$(shasum -a 256 "$prompt_file" | awk '{print $1}')
@@ -113,10 +112,13 @@ finish() {
 }
 trap finish EXIT
 
+review_schema='{"type":"object","additionalProperties":false,"properties":{"verdict":{"type":"string","enum":["accept","reject","needs-information"]},"blocking_findings":{"type":"array","items":{"type":"object","additionalProperties":false,"properties":{"path":{"type":"string"},"failure_mode":{"type":"string"},"required_correction":{"type":"string"}},"required":["path","failure_mode","required_correction"]}},"residual_risks":{"type":"array","items":{"type":"string"}}},"required":["verdict","blocking_findings","residual_risks"]}'
 common=(
   -p "$prompt"
   --model opus
+  --name luad-bounded-review
   --safe-mode
+  --system-prompt "$reviewer_system"
   --autocompact 1M
   --strict-mcp-config
   --mcp-config '{"mcpServers":{}}'
@@ -125,7 +127,8 @@ common=(
   --prompt-suggestions false
   --debug-file "$debug_file"
   --verbose
-  --output-format stream-json
+  --output-format json
+  --json-schema "$review_schema"
 )
 clean_env=(env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL)
 
@@ -144,27 +147,26 @@ else
 fi
 
 run_bounded_review() {
+  effort=$1
+  shift
   "$timeout_command" --foreground --signal=INT --kill-after=5 "$review_timeout_seconds" \
-    "${clean_env[@]}" claude "${common[@]}" --effort medium "$@"
+    "${clean_env[@]}" claude "${common[@]}" --effort "$effort" "$@"
 }
 
 case "$stage" in
   design-review)
-    run_bounded_review "${session_args[@]}" \
+    run_bounded_review medium "${session_args[@]}" \
       --tools "" \
       --permission-mode plan
     ;;
   review-fresh|review-start|review-resume)
-    run_bounded_review "${session_args[@]}" \
-      --tools "Read,Glob,Grep" \
-      --permission-mode plan \
-      --allowedTools "Read,Glob,Grep"
+    run_bounded_review high "${session_args[@]}" \
+      --tools "" \
+      --permission-mode plan
     ;;
   acceptance-start|acceptance-resume)
-    allowed="Read,Glob,Grep,Edit,Write"
-    "${clean_env[@]}" claude "${common[@]}" --effort high "${session_args[@]}" \
-      --tools "Read,Glob,Grep,Edit,Write" \
-      --permission-mode dontAsk \
-      --allowedTools "$allowed"
+    run_bounded_review high "${session_args[@]}" \
+      --tools "" \
+      --permission-mode plan
     ;;
 esac

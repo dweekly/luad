@@ -80,30 +80,31 @@ The steward:
 The steward does not accept a phase name, test name, commit message, aggregate test
 count, or implementation-agent walkthrough as proof.
 
-### Independent acceptance-test author
+### Acceptance-test owner
 
 This role is optional in the patch lane and normally reserved for semantic and
-qualification lanes. The test author works from the last accepted revision plus the sprint contract, before
-seeing the implementation. Its job is to encode the promised public behavior and the
-ways a superficially plausible implementation could be wrong.
+qualification lanes. The owner works from the last accepted revision plus the sprint
+contract before seeing the implementation. Its job is to encode the promised public
+behavior and the ways a superficially plausible implementation could be wrong. The
+steward owns this role by default and may delegate a bounded test-only edit when useful.
 
-The test author may change only the sprint-owned acceptance tests, independent oracle,
+The owner may change only the sprint-owned acceptance tests, independent oracle,
 fixtures and provenance, gate specification, and sprint-specific gate wrapper. It
 must not alter the shared proof harness or gate runner, and it must not implement
 production behavior. It records the expected red result and demonstrates that each
 mutation probe rejects the targeted defect.
 
-Acceptance authorship has two checkpoints. First, the author returns a read-only
-acceptance outline naming the independent authority, minimum fixtures, positive
-comparisons, killer mutations, expected red defect, and estimated test surface. The
-steward approves or narrows that outline before edits are allowed. Second, the author
-produces the first durable red test and diff before expanding the suite. An author that
-cannot reach either checkpoint stops without changing the sprint claim.
+Acceptance has two checkpoints: a bounded outline naming the independent authority,
+minimum fixtures, positive comparisons, killer mutations, expected red defect, and
+estimated test surface; then the first durable red test and diff. The steward narrows
+the outline before edits and verifies the red checkpoint before the suite expands.
 
 Model diversity is preferred for genuinely independent semantic or qualification
-evidence because it reduces correlated interpretation errors.
-The default test-author role uses Claude Code with the current `opus` alias at high
-effort. The evidence handoff records the CLI version and resolved model identity; an
+evidence because it reduces correlated interpretation errors. The steward owns the
+acceptance design and frozen boundary. Claude Opus reviews a curated acceptance packet
+without tools; the steward or a separately scoped implementation turn writes the tests.
+The model that implements production behavior does not alter the frozen acceptance
+commit. The evidence handoff records every CLI version and resolved model identity; an
 alias is not itself a reproducibility claim.
 
 ### Implementation agent
@@ -210,7 +211,7 @@ negative claims with the proposed claim. A prerequisite negative control may not
 a semantic role delegated to the new sprint; resolve overlapping ownership explicitly
 instead of allowing the implementation to make two frozen contracts contradictory.
 
-Acceptance authors receive a curated context packet: the sprint contract and hash,
+Delegated acceptance edits receive a curated context packet: the sprint contract and hash,
 the exact relevant source files or line ranges, the existing public schema boundary,
 and the permitted paths. They do not begin by rereading the whole repository or this
 workflow. Files too large for one reliable tool read are inspected in explicit ranges.
@@ -340,10 +341,10 @@ machine output:
 - allocation or rate-limit status, overage status, and termination reason;
 - the exact built-in and MCP tool set exposed to the session.
 
-Then run a read-only repository probe with the intended mode and allowlist. Managed
-sandboxes must explicitly permit the provider's configuration directory and local
-helper when required. A request that never reaches inference is an environment failure,
-not a model or budget failure.
+For an implementation provider, then run a read-only repository probe with the intended
+mode and allowlist. Claude review remains tool-free. Managed sandboxes must explicitly
+permit the provider's configuration directory and local helper when required. A request
+that never reaches inference is an environment failure, not a model or budget failure.
 
 For a Claude Pro or Max subscription, remove `ANTHROPIC_API_KEY`,
 `ANTHROPIC_AUTH_TOKEN`, and other Console or gateway credentials from the invocation
@@ -353,75 +354,39 @@ event must report `apiKeySource: none`, and the rate-limit event must report
 in this mode, not a workflow spending ceiling. Console PAYG is a separate, explicitly
 selected mode.
 
-### Claude acceptance author
+### Claude bounded review
 
-Claude supports non-interactive print mode, `--model`, `--effort`, structured JSON or
-streaming output, JSON-schema-constrained final output, tool allowlists, permission
-modes, resumable sessions, and native `--worktree` creation. The steward normally
-creates the worktree explicitly so both providers follow the same isolation model.
+Claude receives a self-contained packet and returns one review verdict. It has no
+repository, shell, read, or edit tools. The packet contains the exact claim, relevant
+code or diff, acceptance assertions, and executed evidence; it excludes the rest of the
+repository. This shape uses model diversity without turning the reviewer into a second
+coding agent or a repository-discovery loop.
 
-Use a staged invocation. The read-only outline stage is deliberately inexpensive and
-has no edit or shell tools:
-
-```console
-scripts/agents/claude-opus.sh acceptance-start /tmp/sprint-outline-prompt.txt
-```
-
-After steward approval, start a separate authoring invocation with the approved outline
-included in the prompt:
+Use `design-review` for roadmap or sprint structure, `acceptance-start` for a proposed
+acceptance design, and `review-fresh` for a candidate. Each stage has a ten-minute hard
+ceiling and no session persistence by default. A persistent `*-start` session and one
+`*-resume` follow-up are available only when the first verdict identifies a single
+bounded ambiguity that the steward can answer with new evidence. Do not resume for a
+second general review pass.
 
 ```console
-scripts/agents/claude-opus.sh acceptance-resume SESSION_ID /tmp/sprint-author-prompt.txt
+scripts/agents/claude-opus.sh design-review /tmp/plan-packet.txt
+scripts/agents/claude-opus.sh acceptance-start /tmp/acceptance-packet.txt
+scripts/agents/claude-opus.sh review-fresh /tmp/candidate-packet.txt
 ```
-
-`--allowedTools` uses prefix matching and preapproves matching uses; it is not an
-exclusive allowlist while the permission mode can still ask for approval. Shell
-operators can therefore extend an apparently narrow `Bash(command)` prefix. Acceptance
-authoring is always shell-free: `--tools` exposes only `Read,Glob,Grep,Edit,Write`, and
-`dontAsk` makes every unmatched request fail closed. The steward runs focused tests and
-gates outside the model session.
-
-The steward interrupts authoring if the outline invocation does not return a usable
-structured result, or if an atomic edit stage spends five minutes without producing a
-durable checkpoint or reviewable edit. A compiler or gate already making observable
-progress may finish; open-ended search or pre-write deliberation does not extend the
-checkpoint. Split an interrupted turn into smaller resumable edits rather than raising
-its time allowance. If the subscription allocation is
-exhausted, retain durable files and resume after reset rather than switching to API
-credits implicitly.
-
-Turn ceilings belong on atomic read-only outline or review stages. Do not let a turn
-ceiling interrupt a multi-file edit before its durable checkpoint. For a small
-compiler-directed correction, prefer a fresh prompt containing the exact diagnostics
-and allowed paths; resume a large session only when preserving its context is worth
-reloading it.
 
 The wrapper removes Console credentials, verifies `claude.ai` authentication, pins the
-current `opus` alias, uses safe mode and a 1M autocompaction target, disables slash
-commands and connected MCP servers, and constrains both the available and preapproved
-tools. Tool-free design and read-only review use medium effort with a 600-second
-wall-time ceiling; acceptance authoring uses high effort and is interrupted at the
-durable-checkpoint limit described above. The review ceiling is configurable through
-`LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS` but remains an explicit positive integer. The
-tool-free design wrapper explicitly forbids repository inspection, tool use, delegation,
-and invented implementation detail; missing context is reported as ambiguity. The
-wrapper emits streaming NDJSON, a detailed debug-log path, prompt hash, and wall time
-so the steward can distinguish provider latency, model reasoning, tool reads,
-permission denial, and an in-progress edit. Pass every required file and instruction
-explicitly.
-Verify the init event resolves the expected canonical Opus model; the alias alone is
-not evidence. Do not use
-`--dangerously-skip-permissions`.
+current `opus` alias, enables safe mode and the 1M context window, supplies a minimal
+reviewer system prompt and fixed session name, disconnects MCP and all built-in tools,
+and emits one structured JSON verdict plus the prompt hash, debug-log path, wall time,
+and cumulative usage. `LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS` may replace the positive
+default ceiling. The result must identify the expected canonical model with no API-key
+source or exposed tools. Never use `--dangerously-skip-permissions`.
 
-Independent review uses the same read-only wrapper and shell-free tools. One bounded
-review turn normally covers one sprint contract, its frozen acceptance module, and the
-candidate production paths. Increase the review
-surface only when the claim requires it; a large duplicated oracle is a reason to
-narrow acceptance, not automatically to allocate more reviewer context.
-Use `review-start` when the review might need a second bounded turn. If its wall-time
-ceiling expires after useful inspection, use `review-resume` with a short prompt that
-names the remaining question or requests the verdict; do not restart discovery in a
-fresh context. Use `review-fresh` for a deliberately single-turn independent pass.
+A timeout or `needs-information` verdict ends the review stage. The steward narrows or
+repairs the packet; it does not grant repository tools, increase the turn count, or move
+test implementation into the reviewer session. One correction pass may address
+concrete blockers. Residual risks are recorded without creating an acceptance loop.
 
 ### Antigravity implementation agent
 
@@ -591,16 +556,16 @@ Write `docs/NEXT-SPRINT.md`. Resolve ambiguity before test or implementation wor
 
 ### Step 3: approve the acceptance outline
 
-Run the read-only acceptance author. Confirm that its proposed evidence level,
-fixtures, oracle, mutations, and expected red defect are the minimum needed for the
-claim. Narrow the sprint or outline before authorizing edits.
+Run one bounded, tool-free acceptance review over the steward's proposed evidence
+packet. Confirm that the fixtures, authority, mutations, and expected red defect are the
+minimum needed for the claim. Narrow the sprint or outline before authorizing edits.
 
 ### Step 4: author acceptance
 
-The independent test author creates public-boundary tests, fixtures, oracle code,
-mutation probes, and the gate. The first checkpoint is a durable red test and diff.
-The steward reviews epistemic strength, runs the expected red result, and freezes the
-acceptance commit.
+The acceptance owner creates public-boundary tests, fixtures, oracle code, mutation
+probes, and the gate. The first checkpoint is a durable red test and diff. The steward
+reviews epistemic strength, runs the expected red result, and freezes the acceptance
+commit.
 
 ### Step 5: implement
 
@@ -703,9 +668,9 @@ the next forward-looking contract and update the README documentation index in t
 same change. If no reviewed sprint contract exists, implementation work stops while
 read-only research and acceptance design may continue.
 
-Claude and Antigravity use the separated acceptance-author and implementation-agent
-roles defined above. The steward records the exact tool versions, model identities,
-worktrees, and commits for every cycle.
+Claude provides bounded, tool-free review; the steward owns acceptance; Antigravity
+implements within the frozen boundary. The steward records the exact tool versions,
+model identities, worktrees, and commits for every cycle.
 
 ## 11. Documentation lifecycle
 
