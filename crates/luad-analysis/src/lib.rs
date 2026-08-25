@@ -1,6 +1,7 @@
 //! Analysis engine for CFG, Dominators, Xrefs, Query, Chunk Diffing, and Callee Resolution.
 
 pub mod callees;
+pub mod callgraph;
 pub mod cfg;
 pub mod diff;
 pub mod origins;
@@ -11,6 +12,10 @@ pub use callees::{
     analyze_callees, analyze_chunk_callees, CalleeAnalysis, CalleeFact, CalleeResolution,
     CalleeUnresolvedReason, CaptureEnvironment, CaptureValue, ChunkCalleeAnalysis,
     SymbolicPathBasis,
+};
+pub use callgraph::{
+    analyze_chunk_call_relations, CallRelationAnalysis, CallRelationBasis, CallRelationFact,
+    CallRelationResolution, CallRelationUnresolvedReason, ChunkCallRelationAnalysis,
 };
 pub use cfg::{BasicBlock, CfgEdge, CfgEdgeKind, ControlFlowGraph};
 pub use diff::{diff_chunks, ChunkDiff, InstructionDiff, ProtoDiff};

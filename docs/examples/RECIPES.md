@@ -99,7 +99,8 @@ call instruction ID as the join key:
 
 ```bash
 luad export firmware/*.lua --format jsonl | jq -c '
-  select(.record_type == "callee" or .record_type == "origin") |
+  select(.record_type == "callee" or .record_type == "origin" or
+         .record_type == "call_relation") |
   {file: .context.input_identity.path,
    call: .data.call_id,
    fact: .record_type,
@@ -123,7 +124,30 @@ luad origins firmware/controller.lua --format json | jq -c '
 
 ---
 
-## 6. Reconstructing a Multi-Hop Upvalue Binding Chain
+## 6. Navigating Provable Caller-to-Prototype Relations
+
+List every exact relation and every explicit stop reason without interpreting either as
+runtime reachability:
+
+```bash
+luad callgraph firmware/controller.lua --format json | jq -c '
+  .data.prototypes[].calls[] |
+  {call: .call_id, caller, resolution}'
+```
+
+Find all bytecode-local callers of one prototype through the shared xref index:
+
+```bash
+luad xrefs firmware/controller.lua --to 'proto:0/5' --format json | jq -c '
+  .data.entries[] | select(.relation == "calls")'
+```
+
+A `unique-global-store` basis means the analyzed chunk contains one compatible literal
+global store. It does not claim the global cannot be replaced by code outside the chunk.
+
+---
+
+## 7. Reconstructing a Multi-Hop Upvalue Binding Chain
 
 Trace the capture of local variables and parent upvalues into nested closure upvalues across prototype boundaries:
 
@@ -141,7 +165,7 @@ Output:
 
 ---
 
-## 7. Indexing Batch Exports in an External Database (e.g. SQLite)
+## 8. Indexing Batch Exports in an External Database (e.g. SQLite)
 
 Stream fact records directly into an SQLite database for SQL-based graph queries:
 
@@ -165,7 +189,7 @@ luad export firmware/*.luac --format jsonl | jq -r '
 
 ---
 
-## 8. Comparing Exports from Two Firmware Trees Externally
+## 9. Comparing Exports from Two Firmware Trees Externally
 
 Compare instruction inventories and sha256 digests between two firmware builds:
 
@@ -177,7 +201,7 @@ diff -u \
 
 ---
 
-## 9. Pagination with Context-Bound Cursors
+## 10. Pagination with Context-Bound Cursors
 
 Run paginated queries and fetch consecutive chunks:
 
@@ -201,7 +225,7 @@ fi
 
 ---
 
-## 10. Validating Live Output Against Schemas
+## 11. Validating Live Output Against Schemas
 
 Validate live output against canonical JSON Schemas using standard validation tooling:
 
@@ -211,6 +235,9 @@ luad inspect sample.luac --format json | jsonschema -i - chunk.schema.json
 
 luad schema callees > callees.schema.json
 luad callees sample.luac --format json | jsonschema -i - callees.schema.json
+
+luad schema callgraph > callgraph.schema.json
+luad callgraph sample.luac --format json | jsonschema -i - callgraph.schema.json
 
 luad schema origins > origins.schema.json
 luad origins sample.luac --format json | jsonschema -i - origins.schema.json

@@ -57,6 +57,12 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Machine interface
 
+- Added `callgraph` text/JSON/JSONL output, recursive `call_relation` export facts, and
+  `calls` xrefs with one exact or explicitly unresolved caller-to-prototype result per
+  Lua 5.1 call.
+- Literal-global relations preserve the closure value present at each store instruction,
+  reject multiple or non-closure stores, and retain auditable evidence across direct,
+  aliased, CFG-agreed, and safely captured closure values.
 - Added `origins` text/JSON/JSONL output and recursive `origin` export facts with one
   bounded expression per fixed Lua 5.1 call argument, explicit open windows, eager
   alias-safe operands, owner-qualified parameters, conservative captures, and typed

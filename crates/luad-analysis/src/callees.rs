@@ -115,6 +115,27 @@ pub enum CaptureValue {
 pub type CaptureEnvironment = BTreeMap<u8, CaptureValue>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum GlobalStoreValue {
+    Closure {
+        prototype: ProtoPath,
+        evidence: Vec<StableId>,
+    },
+    NonClosure {
+        evidence: Vec<StableId>,
+    },
+    Unknown {
+        reason: CalleeUnresolvedReason,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GlobalStoreFact {
+    pub name_raw: Vec<u8>,
+    pub store_id: StableId,
+    pub value: GlobalStoreValue,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum ValueKind {
     SymbolicPath {
         basis: SymbolicPathBasis,
@@ -122,6 +143,7 @@ enum ValueKind {
     },
     LiteralString(String),
     Closure(ProtoPath),
+    NonClosure,
 }
 
 struct DataflowResult {
@@ -324,13 +346,17 @@ fn transfer(
 
     match inst.mnemonic.as_str() {
         "LOADK" => {
-            if let (Some(dest), Some(value)) = (register_operand(inst, 0), string_operand(inst)) {
-                set_known(
-                    state,
-                    dest,
-                    ValueKind::LiteralString(value),
-                    [inst.id.clone()],
-                );
+            if let Some(dest) = register_operand(inst, 0) {
+                if let Some(value) = string_operand(inst) {
+                    set_known(
+                        state,
+                        dest,
+                        ValueKind::LiteralString(value),
+                        [inst.id.clone()],
+                    );
+                } else if has_constant_operand(inst) {
+                    set_known(state, dest, ValueKind::NonClosure, [inst.id.clone()]);
+                }
             }
         }
         "GETGLOBAL" => {
@@ -690,6 +716,12 @@ fn fact_from_state(
             prototype,
             evidence: evidence.into_iter().collect(),
         },
+        FlowValue::Known(KnownValue {
+            kind: ValueKind::NonClosure,
+            ..
+        }) => CalleeResolution::Unresolved {
+            reason: CalleeUnresolvedReason::UnsupportedValue,
+        },
         FlowValue::Unknown(reason) => CalleeResolution::Unresolved { reason },
         _ => CalleeResolution::Unresolved {
             reason: CalleeUnresolvedReason::MissingDefinition,
@@ -744,15 +776,25 @@ fn prototype_operand(inst: &SemanticInstruction) -> Option<ProtoPath> {
 }
 
 fn string_operand(inst: &SemanticInstruction) -> Option<String> {
+    lua_string_operand(inst).map(|value| value.display.clone())
+}
+
+fn lua_string_operand(inst: &SemanticInstruction) -> Option<&luad_core::model::LuaString> {
     inst.operands.iter().find_map(|operand| match operand {
         TypedOperand::Constant {
             value:
                 luad_core::model::ConstantValue::ShortString(value)
                 | luad_core::model::ConstantValue::LongString(value),
             ..
-        } => Some(value.display.clone()),
+        } => Some(value),
         _ => None,
     })
+}
+
+fn has_constant_operand(inst: &SemanticInstruction) -> bool {
+    inst.operands
+        .iter()
+        .any(|operand| matches!(operand, TypedOperand::Constant { .. }))
 }
 
 fn flow_from_capture(value: &CaptureValue) -> FlowValue {
@@ -864,6 +906,150 @@ pub fn analyze_chunk_callees(chunk: &luad_core::model::Chunk) -> ChunkCalleeAnal
         &mut prototypes,
     );
     ChunkCalleeAnalysis { prototypes }
+}
+
+pub(crate) fn analyze_chunk_global_stores(chunk: &luad_core::model::Chunk) -> Vec<GlobalStoreFact> {
+    let mut stores = Vec::new();
+    collect_global_stores_tree(
+        &chunk.dialect,
+        &chunk.main_proto,
+        &CaptureEnvironment::new(),
+        &mut stores,
+    );
+    stores.sort_by(|left, right| left.store_id.cmp(&right.store_id));
+    stores
+}
+
+pub(crate) fn analyze_chunk_global_lookups(
+    chunk: &luad_core::model::Chunk,
+) -> BTreeMap<StableId, Vec<u8>> {
+    fn collect(
+        dialect: &str,
+        proto: &luad_core::model::Prototype,
+        lookups: &mut BTreeMap<StableId, Vec<u8>>,
+    ) {
+        for instruction in crate::lift_proto_for_dialect(dialect, proto) {
+            if instruction.mnemonic == "GETGLOBAL" {
+                if let Some(name) = lua_string_operand(&instruction) {
+                    lookups.insert(instruction.id.clone(), name.raw_bytes.clone());
+                }
+            }
+        }
+        for child in &proto.protos {
+            collect(dialect, child, lookups);
+        }
+    }
+
+    let mut lookups = BTreeMap::new();
+    collect(&chunk.dialect, &chunk.main_proto, &mut lookups);
+    lookups
+}
+
+fn collect_global_stores_tree(
+    dialect: &str,
+    proto: &luad_core::model::Prototype,
+    captures: &CaptureEnvironment,
+    stores: &mut Vec<GlobalStoreFact>,
+) {
+    let instructions = crate::lift_proto_for_dialect(dialect, proto);
+    let cfg = ControlFlowGraph::build(proto, &instructions);
+    let dataflow = run_dataflow(proto.maxstacksize, &instructions, &cfg, captures);
+
+    if dataflow.exhausted {
+        stores.extend(
+            instructions
+                .iter()
+                .filter(|instruction| instruction.mnemonic == "SETGLOBAL")
+                .filter_map(|instruction| {
+                    lua_string_operand(instruction).map(|name| GlobalStoreFact {
+                        name_raw: name.raw_bytes.clone(),
+                        store_id: instruction.id.clone(),
+                        value: GlobalStoreValue::Unknown {
+                            reason: CalleeUnresolvedReason::AnalysisLimit,
+                        },
+                    })
+                }),
+        );
+    } else {
+        collect_reachable_global_stores(
+            proto,
+            &instructions,
+            &cfg,
+            &dataflow.in_states,
+            captures,
+            stores,
+        );
+    }
+
+    let child_captures = derive_child_captures(proto, &instructions, &cfg, &dataflow, captures);
+    for (index, child) in proto.protos.iter().enumerate() {
+        let environment = child_captures
+            .get(&index)
+            .cloned()
+            .unwrap_or_else(|| unknown_capture_environment(child));
+        collect_global_stores_tree(dialect, child, &environment, stores);
+    }
+}
+
+fn collect_reachable_global_stores(
+    proto: &luad_core::model::Prototype,
+    instructions: &[SemanticInstruction],
+    cfg: &ControlFlowGraph,
+    in_states: &[RegisterState],
+    captures: &CaptureEnvironment,
+    stores: &mut Vec<GlobalStoreFact>,
+) {
+    for block in cfg.blocks.iter().filter(|block| block.is_reachable) {
+        let mut state = in_states[block.index].clone();
+        for &pc in &block.instruction_pcs {
+            let Some(instruction) = instructions.get(pc) else {
+                continue;
+            };
+            if instruction.mnemonic == "SETGLOBAL" {
+                if let (Some(name), Some(source)) = (
+                    lua_string_operand(instruction),
+                    register_operand(instruction, 0),
+                ) {
+                    stores.push(GlobalStoreFact {
+                        name_raw: name.raw_bytes.clone(),
+                        store_id: instruction.id.clone(),
+                        value: global_store_value(get_register(&state, source), instruction),
+                    });
+                }
+            }
+            transfer(
+                instruction,
+                &mut state,
+                captures,
+                proto.maxstacksize as usize,
+            );
+        }
+    }
+}
+
+fn global_store_value(value: FlowValue, store: &SemanticInstruction) -> GlobalStoreValue {
+    match value {
+        FlowValue::Known(KnownValue {
+            kind: ValueKind::Closure(prototype),
+            mut evidence,
+        }) => {
+            evidence.insert(store.id.clone());
+            GlobalStoreValue::Closure {
+                prototype,
+                evidence: evidence.into_iter().collect(),
+            }
+        }
+        FlowValue::Known(KnownValue { mut evidence, .. }) => {
+            evidence.insert(store.id.clone());
+            GlobalStoreValue::NonClosure {
+                evidence: evidence.into_iter().collect(),
+            }
+        }
+        FlowValue::Unknown(reason) => GlobalStoreValue::Unknown { reason },
+        FlowValue::Bottom => GlobalStoreValue::Unknown {
+            reason: CalleeUnresolvedReason::MissingDefinition,
+        },
+    }
 }
 
 fn analyze_proto_tree(
@@ -1093,6 +1279,12 @@ fn capture_from_flow(value: FlowValue) -> CaptureValue {
         }) => CaptureValue::Closure {
             prototype,
             evidence: evidence.into_iter().collect(),
+        },
+        FlowValue::Known(KnownValue {
+            kind: ValueKind::NonClosure,
+            ..
+        }) => CaptureValue::Unknown {
+            reason: CalleeUnresolvedReason::UnsupportedValue,
         },
         FlowValue::Unknown(reason) => CaptureValue::Unknown { reason },
         FlowValue::Bottom => CaptureValue::Unknown {

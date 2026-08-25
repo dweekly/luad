@@ -1,0 +1,44 @@
+{
+  "schema_version": 2,
+  "gate_id": "gate-call-relations-lua51",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_call_relations_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_call_relation_killer_mutations_are_rejected",
+    "test_call_relation_matrix_histogram_and_cardinality_are_pinned",
+    "test_callgraph_schema_capability_and_lnum_profile_are_public",
+    "test_every_call_has_one_relation_and_every_resolved_relation_has_one_xref",
+    "test_export_relations_equal_direct_command",
+    "test_public_callgraph_json_jsonl_and_text_agree",
+    "test_store_time_targets_and_multihop_capture_are_exact"
+  ],
+  "required_compiler_version": "Lua 5.1.5",
+  "required_compiler_sha256": {
+    "linux-x86_64": "e2ba74327f3a4662689b9e58909b410af8635add51a35b951021d0b1d90c6000",
+    "macos-aarch64": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239"
+  },
+  "required_fixtures": [
+    {
+      "path": "tests/fixtures/call_relations.lua",
+      "sha256": "47768ceb403aec6ad3d00168b2d43b092bbd5296fd647f28045b81465c8c2cc9"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua51_lnum32/hello.luac",
+      "sha256": "8376be37ec3042d3b0a87aa39db7d7396fb54ae390abe346d885e1527d23e353"
+    }
+  ],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-symbolic-callees-lua51"
+  ],
+  "allowed_capability_mutations": []
+}
