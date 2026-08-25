@@ -34,6 +34,14 @@ changes. It will record the exact target compiler, flags, environment, patch ord
 and build command. A compiler-binary SHA-256 identifies one build artifact only; source,
 patch, configuration, and output identities establish the portable authority.
 
+The authority compiler will use the patched source tree's static `luac-host` target on
+a little-endian build host. OpenWrt patch `030-archindependent-bytecode.patch` serializes
+string lengths as 32-bit `unsigned int` rather than host `size_t`; the LNUM patches select
+32-bit `lua_Integer` and double `lua_Number`. The authority therefore does not require a
+32-bit host ABI, `-m32`, QEMU, or execution of a target binary. The builder will verify
+the emitted `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4` header and tag-9
+integer encoding rather than infer portability from build-host properties.
+
 If this upstream recipe cannot generate the target header and constant encoding exactly,
 the sprint stops at a failed authority result. It must not alter `luad` or relabel a
 nearby profile to make the fixture fit.
@@ -50,9 +58,9 @@ Redistributable Lua sources will exercise:
 - stripped and debug-bearing output where the compiler supports both deterministically.
 
 Every generated chunk will record source, bytecode, upstream revision, patch-series,
-configuration, compiler build, command, profile, layout, and content hashes. At least
-one cross-profile negative fixture will prove that stock Lua 5.1 cannot accept the
-LNUM32 interpretation.
+configuration, compiler build, command, profile, layout, and content hashes. Interpreting
+the same authenticated LNUM32 fixture under stock Lua 5.1 supplies the cross-profile
+negative case; no duplicate fixture is required.
 
 ## Independent acceptance
 
@@ -62,25 +70,65 @@ Acceptance will establish, through the public CLI and independent oracle:
 - exact agreement between compiler listing, the independent Lua 5.1/LNUM decoder, and
   live `luad` JSON for the generated fixture family;
 - automatic and explicit selection of `lua5.1-lnum32` with the complete interpretation
-  identity in every response and stream;
+  identity in the claimed command envelopes and the batch `file_start` record;
 - zero validation diagnostics for valid fixtures and exact rejection under stock
   profile substitution;
 - deterministic reproduction from authenticated source inputs;
 - rejection of a changed archive, OpenWrt revision, patch, patch order, configuration,
   target layout, fixture, or compiler output;
-- zero skipped tests when the authority toolchain is absent or invalid.
+- zero skipped tests in the canonical authority gate: it provisions authenticated
+  inputs or fails before comparison when its network or standard native build
+  prerequisites are unavailable.
+
+Ordinary offline workspace tests authenticate the committed manifest, sources, and
+generated fixtures; they do not claim to reproduce the authority build. The canonical
+gate alone performs download, patch, native compiler construction, fixture regeneration,
+and byte-for-byte comparison in a disposable directory.
+
+The acceptance branch carries reference fixtures produced by the steward's authenticated
+feasibility build. Their hashes freeze before implementation. The implementation builder
+must reproduce those bytes and cannot regenerate, replace, or re-pin the accepted files.
+
+Existing Lua 5.1 gates are regression prerequisites, not independent evidence for the
+new profile authority. If an authenticated compiler fact disagrees with an accepted
+fixture-derived assumption, the authority gate fails and names the discrepancy. Tests
+or implementation then require a separate corrective change; the authority must not be
+weakened to preserve an earlier green gate or private-corpus result.
+
+If either accepted fixture exposes a parser, disassembler, validator, selection, or
+machine-contract defect in frozen production code, the sprint stops with that minimized
+defect. A separate bounded correction must close it before authority acceptance; the
+fixture and expected authority facts remain unchanged.
 
 The supplemental customer check will run the accepted candidate over the private
 firmware corpus and record only aggregate parse, validation, timing, and profile results.
 Private bytes and findings remain outside the repository and cannot satisfy the gate.
 
+## Platform-bound prerequisite compiler evidence
+
+The authority gate must close its prerequisite proof on every maintained CI platform.
+Native compiler executable hashes are bound to the operating system and architecture
+that produced them. A version-2 gate specification may therefore declare a closed,
+ordered map from platform/architecture identity to compiler SHA-256. Execution uses the
+current host identity; later verification uses the identity recorded in the gate result.
+Unlisted platforms, missing compilers, missing result hashes, mismatched hashes, and
+specifications that combine scalar and mapped hashes are hard failures. Version-1 gate
+specifications retain their scalar compiler-hash contract and canonical serialization.
+
+Acceptance includes allowed-platform, wrong-hash, unlisted-platform, missing-compiler,
+cross-host verification, schema-version, and unchanged-version-1-hash probes. Each
+pinned stock Lua 5.1 compiler must also regenerate the maintained public fixture family
+byte-for-byte.
+
 ## Allowed scope and roles
 
 The acceptance author may add the authority manifest, fixture sources, generated
-fixtures, an independent comparison module, acceptance tests, and the sprint gate. The
-implementation agent may add a hermetic authority-builder script and the smallest
-oracle integration needed to expose the generated compiler. Production parser,
-disassembler, validator, analysis, query, and capability code are frozen.
+fixtures, a narrowly scoped independent constant/layout reader inside the acceptance
+test, acceptance tests, and the sprint gate. The implementation agent may add the
+pinned authenticated authority-builder script and one CI invocation of the canonical
+gate. The steward may add the bounded platform-aware compiler-identity contract and its
+proof-harness regressions described above. Production parser, disassembler, validator,
+analysis, query, capability, and shared oracle code are frozen.
 
 The steward owns upstream pin review, fixture provenance, mutation sufficiency, the
 canonical run, and the supplemental customer check. Opus supplies one bounded

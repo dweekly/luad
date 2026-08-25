@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -16,11 +17,21 @@ pub struct GateSpec {
     pub command_argv: Vec<String>,
     pub expected_tests: Vec<String>,
     pub required_compiler_version: Option<String>,
-    pub required_compiler_sha256: Option<String>,
+    pub required_compiler_sha256: Option<CompilerHashRequirement>,
     pub required_fixtures: Vec<FixtureRequirement>,
     pub required_profile: Option<String>,
     pub prerequisite_gates: Vec<String>,
     pub allowed_capability_mutations: Vec<String>,
+}
+
+/// Compiler binary identity required by a gate specification.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum CompilerHashRequirement {
+    /// One exact compiler artifact for a version-1 gate.
+    Single(String),
+    /// Exact compiler artifacts for the maintained platform/architecture builders.
+    ByPlatform(BTreeMap<String, String>),
 }
 
 impl GateSpec {
@@ -154,6 +165,8 @@ pub enum GateRunnerError {
     WrongCompilerVersion { expected: String, actual: String },
     #[error("Wrong compiler binary hash: expected {expected}, got {actual}")]
     WrongCompilerBinary { expected: String, actual: String },
+    #[error("No compiler binary hash is pinned for platform '{platform}-{arch}'")]
+    CompilerHashUnpinned { platform: String, arch: String },
     #[error("Profile mismatch in result '{gate_id}': expected {expected:?}, got {actual:?}")]
     ProfileMismatch {
         gate_id: String,
@@ -200,12 +213,7 @@ pub fn execute_gate_spec(
         return Err(GateRunnerError::MissingCommand(spec.gate_id.clone()));
     }
 
-    if spec.schema_version != 1 {
-        return Err(GateRunnerError::TamperDetected(
-            spec.gate_id.clone(),
-            format!("Unsupported spec schema version: {}", spec.schema_version),
-        ));
-    }
+    validate_gate_spec_schema(spec)?;
 
     // 1. Verify required fixtures before running tests
     let mut recorded_fixture_hashes = Vec::new();
@@ -288,7 +296,9 @@ pub fn execute_gate_spec(
         let actual_sha = format!("{:x}", hasher.finalize());
         comp_sha = Some(actual_sha.clone());
 
-        if let Some(expected_sha) = &spec.required_compiler_sha256 {
+        if let Some(expected_sha) =
+            required_compiler_sha256(spec, std::env::consts::OS, std::env::consts::ARCH)?
+        {
             if &actual_sha != expected_sha {
                 return Err(GateRunnerError::WrongCompilerBinary {
                     expected: expected_sha.clone(),
@@ -296,7 +306,7 @@ pub fn execute_gate_spec(
                 });
             }
         }
-    } else if spec.required_compiler_version.is_some() {
+    } else if spec.required_compiler_version.is_some() || spec.required_compiler_sha256.is_some() {
         return Err(GateRunnerError::CompilerMissing(
             "Compiler required but no compiler path provided".to_string(),
         ));
@@ -542,15 +552,16 @@ pub fn verify_gate_result(
     expected_git_commit: Option<&str>,
     require_clean: bool,
 ) -> Result<(), GateRunnerError> {
-    if result.schema_version != 1 || spec.schema_version != 1 {
+    if result.schema_version != 1 {
         return Err(GateRunnerError::TamperDetected(
             result.gate_id.clone(),
             format!(
-                "Unsupported schema version: result={}, spec={}",
+                "Unsupported result schema version: result={}, spec={}",
                 result.schema_version, spec.schema_version
             ),
         ));
     }
+    validate_gate_spec_schema(spec)?;
 
     if result.gate_id != spec.gate_id {
         return Err(GateRunnerError::TamperDetected(
@@ -688,8 +699,10 @@ pub fn verify_gate_result(
         }
     }
 
-    if let Some(exp_comp_sha) = &spec.required_compiler_sha256 {
-        let actual_sha = result.compiler_sha256.as_deref().unwrap_or("");
+    if let Some(exp_comp_sha) = required_compiler_sha256(spec, &result.platform, &result.arch)? {
+        let actual_sha = result.compiler_sha256.as_deref().ok_or_else(|| {
+            GateRunnerError::CompilerMissing("Gate result has no compiler SHA-256".to_string())
+        })?;
         if actual_sha != exp_comp_sha {
             return Err(GateRunnerError::WrongCompilerBinary {
                 expected: exp_comp_sha.clone(),
@@ -699,6 +712,59 @@ pub fn verify_gate_result(
     }
 
     Ok(())
+}
+
+fn validate_gate_spec_schema(spec: &GateSpec) -> Result<(), GateRunnerError> {
+    let invalid = match spec.schema_version {
+        1 => matches!(
+            spec.required_compiler_sha256,
+            Some(CompilerHashRequirement::ByPlatform(_))
+        ),
+        2 => !matches!(
+            spec.required_compiler_sha256,
+            Some(CompilerHashRequirement::ByPlatform(ref hashes)) if !hashes.is_empty()
+        ),
+        _ => true,
+    };
+    if invalid {
+        return Err(GateRunnerError::TamperDetected(
+            spec.gate_id.clone(),
+            format!(
+                "Invalid gate specification schema/compiler identity contract for version {}",
+                spec.schema_version
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn required_compiler_sha256<'a>(
+    spec: &'a GateSpec,
+    platform: &str,
+    arch: &str,
+) -> Result<Option<&'a String>, GateRunnerError> {
+    if spec.schema_version == 1 {
+        return Ok(match spec.required_compiler_sha256.as_ref() {
+            Some(CompilerHashRequirement::Single(hash)) => Some(hash),
+            _ => None,
+        });
+    }
+
+    let key = format!("{platform}-{arch}");
+    let CompilerHashRequirement::ByPlatform(hashes) = spec
+        .required_compiler_sha256
+        .as_ref()
+        .expect("validated version-2 compiler map")
+    else {
+        unreachable!("validated version-2 compiler map")
+    };
+    hashes
+        .get(&key)
+        .map(Some)
+        .ok_or_else(|| GateRunnerError::CompilerHashUnpinned {
+            platform: platform.to_string(),
+            arch: arch.to_string(),
+        })
 }
 
 /// Assemble a ReleaseManifest from validated prerequisite GateResults.
@@ -1014,8 +1080,9 @@ pub fn record_all_adversarial_probes(
     // Probe 6: Wrong compiler binary SHA-256
     let fake_res6 = mock_valid_result("probe-6-wrong-comp-sha");
     let mut spec6 = mock_valid_spec("probe-6-wrong-comp-sha");
-    spec6.required_compiler_sha256 =
-        Some("1111111111111111111111111111111111111111111111111111111111111111".to_string());
+    spec6.required_compiler_sha256 = Some(CompilerHashRequirement::Single(
+        "1111111111111111111111111111111111111111111111111111111111111111".to_string(),
+    ));
     let mut fake_res6_mut = fake_res6.clone();
     fake_res6_mut.spec_hash = spec6.compute_hash();
     fake_res6_mut.compiler_sha256 =
