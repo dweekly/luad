@@ -755,7 +755,7 @@ fn meet(left: &Fact, right: &Fact, flags: ModelFlags) -> Fact {
                 ev: rev,
             },
         ) if lb == rb && ls == rs => Fact::Path {
-            basis: *lb,
+            basis: lb,
             segments: ls.clone(),
             ev: lev.union(rev).cloned().collect(),
         },
@@ -774,7 +774,7 @@ fn meet(left: &Fact, right: &Fact, flags: ModelFlags) -> Fact {
             }
         }
         (Fact::NonClosure, Fact::NonClosure) => Fact::NonClosure,
-        (Fact::Unknown(a), Fact::Unknown(b)) if a == b => Fact::Unknown(*a),
+        (Fact::Unknown(a), Fact::Unknown(b)) if a == b => Fact::Unknown(a),
         _ => Fact::Unknown(STOP_CONTROL_FLOW_CONFLICT),
     }
 }
@@ -1028,7 +1028,7 @@ impl<'a> ModelProto<'a> {
                                 let mut ev = ev.clone();
                                 ev.insert(id.clone());
                                 Fact::Path {
-                                    basis: *basis,
+                                    basis,
                                     segments,
                                     ev,
                                 }
@@ -2955,9 +2955,19 @@ fn test_lookup_label_bounds_and_stop_reasons_stay_explicit() {
         let chunk = parse_chunk(&build_chunk(&row.root));
 
         // A budget that is never reached must reproduce the default analysis exactly.
-        assert_eq!(
+        // Compared as canonical machine values rather than by derived equality: a NaN key
+        // is not equal to itself under `PartialEq`, while its published encoding (a `null`
+        // `val` beside the exact `raw_hex` payload) is still compared byte-for-byte, so any
+        // real difference in any field is still detected.
+        let unreached = serde_json::to_value(
             luad_analysis::analyze_chunk_callees_with_mutation_budget(&chunk, usize::MAX),
-            luad_analysis::analyze_chunk_callees(&chunk),
+        )
+        .expect("serialize unreached-budget analysis");
+        let default = serde_json::to_value(luad_analysis::analyze_chunk_callees(&chunk))
+            .expect("serialize default analysis");
+        assert_eq!(
+            canonical(&unreached),
+            canonical(&default),
             "{}: an unreached bound must not change the answer",
             row.name
         );

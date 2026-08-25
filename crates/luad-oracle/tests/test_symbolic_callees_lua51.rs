@@ -62,6 +62,7 @@ fn test_callee_resolution_fixture_histogram_is_pinned() {
         let key = match &fact.resolution {
             CalleeResolution::ResolvedPath { basis, .. } => format!("path:{basis:?}"),
             CalleeResolution::ResolvedPrototype { .. } => "prototype".to_string(),
+            CalleeResolution::LookupLabel { .. } => "lookup-label".to_string(),
             CalleeResolution::Unresolved { reason } => format!("unresolved:{reason:?}"),
         };
         *histogram.entry(key).or_insert(0usize) += 1;

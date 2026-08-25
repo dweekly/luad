@@ -244,7 +244,8 @@
         "missing-prototype-store",
         "multiple-prototype-stores",
         "non-closure-store",
-        "ambiguous-store-value"
+        "ambiguous-store-value",
+        "lookup-label-only"
       ]
     },
     "ChunkCallRelationAnalysis": {

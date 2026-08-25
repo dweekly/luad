@@ -47,6 +47,7 @@ pub enum CallRelationUnresolvedReason {
     MultiplePrototypeStores,
     NonClosureStore,
     AmbiguousStoreValue,
+    LookupLabelOnly,
 }
 
 impl From<CalleeUnresolvedReason> for CallRelationUnresolvedReason {
@@ -148,6 +149,9 @@ fn resolve_relation(
     lookups: &BTreeMap<StableId, Vec<u8>>,
 ) -> CallRelationResolution {
     match callee {
+        CalleeResolution::LookupLabel { evidence, .. } => {
+            unresolved(CallRelationUnresolvedReason::LookupLabelOnly, evidence)
+        }
         CalleeResolution::ResolvedPrototype {
             prototype,
             evidence,

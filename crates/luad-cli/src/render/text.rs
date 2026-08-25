@@ -460,6 +460,34 @@ pub fn render_callees(analysis: &luad_analysis::ChunkCalleeAnalysis) {
     for prototype in &analysis.prototypes {
         for fact in &prototype.calls {
             let resolution = match &fact.resolution {
+                luad_analysis::CalleeResolution::LookupLabel {
+                    lookup_kind,
+                    key,
+                    evidence,
+                } => {
+                    let kind_str = match lookup_kind {
+                        luad_analysis::CalleeLookupKind::Gettable => "gettable",
+                        luad_analysis::CalleeLookupKind::SelfOp => "self",
+                    };
+                    let key_str = match key {
+                        luad_core::model::ConstantValue::ShortString(s)
+                        | luad_core::model::ConstantValue::LongString(s) => {
+                            format!("\"{}\"", s.display)
+                        }
+                        luad_core::model::ConstantValue::Nil => "nil".to_string(),
+                        luad_core::model::ConstantValue::Boolean(b) => b.to_string(),
+                        luad_core::model::ConstantValue::Integer { val, .. } => val.to_string(),
+                        luad_core::model::ConstantValue::Float { val, .. } => format!("{val:?}"),
+                    };
+                    format!(
+                        "lookup:{kind_str}:{key_str} [{}]",
+                        evidence
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                }
                 luad_analysis::CalleeResolution::ResolvedPath {
                     basis,
                     segments,

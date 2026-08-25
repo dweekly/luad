@@ -12,8 +12,8 @@ pub mod xrefs;
 
 pub use callees::{
     analyze_callees, analyze_chunk_callees, analyze_chunk_callees_with_mutation_budget,
-    CalleeAnalysis, CalleeFact, CalleeResolution, CalleeUnresolvedReason, CaptureEnvironment,
-    CaptureValue, ChunkCalleeAnalysis, SymbolicPathBasis,
+    CalleeAnalysis, CalleeFact, CalleeLookupKind, CalleeResolution, CalleeUnresolvedReason,
+    CaptureEnvironment, CaptureValue, ChunkCalleeAnalysis, SymbolicPathBasis,
 };
 pub use callgraph::{
     analyze_chunk_call_relations, CallRelationAnalysis, CallRelationBasis, CallRelationFact,
