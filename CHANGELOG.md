@@ -8,6 +8,8 @@ All notable changes will be documented here. The project has not yet made a prod
   Lua 5.1.5 LNUM32 compiler and made the compiler comparison mandatory.
 - Release evidence now rejects noncanonical Lua 5.1 profile/layout pairs and
   prerequisites bound to a different concrete profile.
+- Gate prerequisites resolve and authenticate their own compiler authority instead of
+  inheriting a target-specific compiler selected for the enclosing gate.
 - Closed Lua 5.1 validator and diagnostic authority with a manifest-pinned,
   redistributable firmware-shaped stress fixture and a canonical prerequisite gate.
 - Added canonical gates for RK-B, nested RK ownership, SELF, numeric-for,
