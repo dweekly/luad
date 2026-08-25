@@ -82,6 +82,11 @@ Steward-owned gate and planning paths:
 - `scripts/gates/gate-validator-count-spans-lua51.sh`;
 - `docs/NEXT-SPRINT.md` and the documentation index freshness entry.
 
+The steward may align the existing scalar-domain control in
+`crates/luad-oracle/tests/test_validator_rk_b_lua51.rs` so `CALL.B = 256`
+continues to prove that `B` is neither an RK constant nor a direct register while
+requiring the count-derived register span to be rejected.
+
 Implementation agent:
 
 - `crates/luad-dialect-lua51/src/validator.rs`;
