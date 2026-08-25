@@ -398,7 +398,9 @@ No verdict is named `safe`, because structural validation does not establish beh
   loader call without asserting the runtime identity of the returned object.
 - **FR-AN-014:** Build a bounded, cycle-safe value-expression origin graph for selected
   registers and call arguments, resolving aliased source operands at the writing
-  instruction and exposing every traversal cutoff.
+  instruction and exposing every traversal cutoff. Lua 5.1 origin semantics preserve
+  both concatenation and the LuCI string-format idiom compiled through `MOD`, while
+  distinguishing a computed value from an analysis cutoff.
 - **FR-AN-015:** Emit a caller-to-prototype relation only when the target is unique under
   validated construction, reaching-definition, storage, and invocation facts.
 - **FR-AN-016:** Compute a versioned prototype content identity from a documented
@@ -416,6 +418,9 @@ No verdict is named `safe`, because structural validation does not establish beh
 - **FR-EXP-008:** Reserve `fact` for claims guaranteed by the selected format and
   validated bytes; algorithmic call and value relationships are `derived` and identify
   their preconditions, evidence, ambiguity, and cutoffs.
+- **FR-EXP-009:** Every prototype reference in a summary or explanation retains the
+  owning prototype path and agrees with the corresponding typed operand, xref, and
+  exported fact.
 
 ### 5.7 Search, query, and comparison
 
@@ -480,7 +485,9 @@ luad help          Show conceptual and task-oriented help
 luad version       Print tool and schema versions
 ```
 
-Commands not yet implemented must not appear as silently nonfunctional placeholders. `capabilities` reports the actual build's features.
+Commands not yet implemented must not appear as silently nonfunctional placeholders.
+`capabilities` reports the actual build's commands, schemas, diagnostic catalog, and
+features.
 
 ### 6.3 Common invocation examples
 

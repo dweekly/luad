@@ -26,10 +26,12 @@ The roadmap answers **what matters next**. The sprint answers **what exact claim
 eligible for acceptance now**. Neither document may claim that unverified work is
 already supported.
 
-A sprint normally owns one physical field, diagnostic family, output record, or other
-single semantic distinction. If its claim needs multiple independent matrices,
-diagnostic families, or public commands that could be accepted separately, split it
-before acceptance work begins.
+A sprint owns one independently useful claim. Enumerable variants governed by one
+authority and algorithm—such as every member of an operand family, stream-record union,
+or value-origin node union—belong in one table-driven semantic matrix. Split only where
+the authority, algorithm, compatibility boundary, or customer outcome can be accepted
+independently. Do not create one sprint per field or opcode merely because each row can
+be named separately.
 
 ### Delivery lanes
 

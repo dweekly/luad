@@ -137,6 +137,9 @@ upvalue → nested-child upvalue while keeping each hop tied to an exact closure
 - Operand origins are captured at the writing instruction. A destination that aliases
   an input, including `CONCAT A A C`, cannot recurse into its newly written value or
   silently degrade a known operand to unknown.
+- Lua 5.1 `MOD` preserves operand provenance for the LuCI string-format convention
+  `"format" % {arguments}` without treating every runtime modulo operation as string
+  formatting or hiding its contributing operands.
 - Recursive provenance identifies the leaf origins of an expression; the opcode
   `CONCAT` alone does not imply parameter dependence.
 - Statically provable call edges link exact caller instructions to exact callee

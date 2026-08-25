@@ -10,8 +10,8 @@ Lua 5.4.8 public disassembly has normalized typed agreement with the official
 listing and an independent decoder. Embedded Lua 5.1 profile selection,
 disassembly, operand-role validation, bounded register spans, closure captures,
 prototype identity, public diagnostics, queries, and machine output close under the
-Area 1 validator-and-diagnostic gate. Exact Lua 5.1 target promotion remains roadmap
-work.
+Area 1 validator-and-diagnostic gate. The OpenWrt-derived Lua 5.1.5 LNUM32 compiler
+authority is publicly reproducible; exact target promotion remains pending.
 
 All stock-Lua dialects remain **experimental** unless an exact release artifact
 for the current revision and profile says otherwise. Internal library gates do not
@@ -32,17 +32,17 @@ delete the document in the same change and update this index.
 
 | Document | Purpose | Fresh as of | Revalidate or delete when |
 |---|---|---:|---|
-| [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-08-24 | Public scope, support status, setup, primary commands, or the documentation set changes. |
+| [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-08-25 | Public scope, support status, setup, primary commands, or the documentation set changes. |
 | [`AGENTS.md`](AGENTS.md) | Binding repository instructions and safety constraints for coding agents. | 2026-08-24 | Development workflow, proof policy, current priority, or repository invariants change. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-23 | Crates, ownership boundaries, core representations, or evidence layers change. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of unreleased and released user-visible changes. | 2026-08-24 | Every user-visible change or release; never use it as a forward plan. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor setup, test taxonomy, fixture provenance, and definition of done. | 2026-08-24 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
-| [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-08-24 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
+| [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-08-25 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-23 | Support policy, reporting channel, trust boundary, or threat model changes. |
-| [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-guided, evidence-gated planning, proportional role separation, sprint lifecycle, and agent orchestration. | 2026-08-24 | Planning artifacts, customer checkpoints, agent roles, gate policy, or supported orchestration interfaces change. |
-| [`ROADMAP.md`](ROADMAP.md) | Customer-led path from exact embedded-target authority through composable factual analysis and stable release. | 2026-08-24 | Product priorities, dependencies, customer evidence, qualification order, or exclusions change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | The sole active sprint contract for one measurable, independently gated unit of work. | 2026-08-24 | The sprint is accepted, respecified, or replaced; delete obsolete sprint content rather than retaining history. |
-| [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-24 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
+| [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-guided, evidence-gated planning, proportional role separation, sprint lifecycle, and agent orchestration. | 2026-08-25 | Planning artifacts, customer checkpoints, agent roles, gate policy, or supported orchestration interfaces change. |
+| [`ROADMAP.md`](ROADMAP.md) | Customer-led path from exact embedded-target authority through composable factual analysis and stable release. | 2026-08-25 | Product priorities, dependencies, customer evidence, qualification order, or exclusions change. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | The sole active sprint contract for one measurable, independently gated unit of work. | 2026-08-25 | The sprint is accepted, respecified, or replaced; delete obsolete sprint content rather than retaining history. |
+| [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-25 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-24 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
 | [`docs/RELEASING.md`](docs/RELEASING.md) | Exact-target authority prerequisites, real-customer validation, evidence bundle, versioning, and publication policy. | 2026-08-24 | Release gates, target authority, customer-validation boundary, artifact channels, version policy, signing, or publication procedure changes. |
 | [`docs/examples/RECIPES.md`](docs/examples/RECIPES.md) | Practical command-line and composition recipes for consuming machine JSON and JSONL output. | 2026-08-23 | Machine interface envelopes, export records, or CLI subcommands change. |
@@ -68,7 +68,7 @@ This table describes code present in the repository, not verified support status
 
 | Dialect | Opcode table | Parser/lifter present | Current evidence status |
 |---|---:|---|---|
-| Lua 5.1 | 38 | Yes | Experimental; validator and diagnostic authority closes over public profile, operand, span, prototype-identity, catalog, and firmware-shaped stress evidence; exact target promotion remains pending |
+| Lua 5.1 | 38 | Yes | Experimental; public LNUM32 compiler authority plus validator and diagnostic evidence exists; exact target promotion remains pending |
 | Lua 5.2 | 40 | Yes | Experimental; proof gates incomplete |
 | Lua 5.3 | 47 | Yes | Experimental; proof gates incomplete |
 | Lua 5.4 | 83 | Yes | Experimental; public disassembly, validation, analysis, lossless, and machine-contract evidence exists; exact target promotion remains pending |
