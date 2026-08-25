@@ -1,70 +1,127 @@
-# Active sprint: Lua 5.1 `CALL` argument-register span
+# Active sprint: Lua 5.1 count-encoded register windows
 
-Lane: patch. Target: one focused public regression and one pull request.
+Lane: semantic matrix. Target: one frozen acceptance commit, one implementation
+commit, and one canonical gate.
 
 ## Claim and researcher value
 
-Lua 5.1 `CALL` validates its fixed argument window `R(A)..R(A+B-1)` when `B > 0`
-against the owning prototype's register file. A valid function register and scalar
-argument count cannot conceal an out-of-range argument register. The public diagnostic
-retains exact instruction identity and physical bytes.
+Lua 5.1 validation treats `CALL`, `TAILCALL`, `RETURN`, `SETLIST`, and `VARARG`
+count fields as scalar counts while validating every statically bounded register
+window those counts describe. Fixed argument, result, return-value, table-source, and
+vararg-result endpoints must remain below the owning prototype's `maxstacksize`.
+Open-ended count value zero remains explicitly unbounded and receives no invented
+static endpoint.
 
-## Focused public regression
+This closes the remaining count-encoded register spans without making `B` or `C`
+look like direct registers in diagnostics or machine disassembly.
 
-Use the pinned `control_flow.luac` fixture, whose root prototype has
-`maxstacksize = 6`. At PC 0 and byte offset 69, replace the instruction word with an
-official Lua 5.1 iABC `CALL` word using `A = 1`, a scalar argument-window count in `B`,
-and `C = 1` so the call produces no result registers. Prove two public cases:
+## Semantic authority
 
-- `B = 5` produces no `L51-REG-SPAN-001` because the function/argument window ends at
-  `R(5)`;
-- changing only `B` to 6 reports exactly one `L51-REG-SPAN-001` because the window
-  ends at `R(6)`.
+Acceptance derives each row from the executed Lua 5.1.5 VM rule and independently
+encodes the iABC word. With a prototype bound of six registers and `A = 1`, prove:
 
-Pin the fixture hash and derive the root bound from live `inspect` JSON. Validate live
-`validate` and selected-prototype `disasm` JSON against their schemas. Prove the exact
-mnemonic, typed `A` register, scalar `B` and `C` counts, raw word, stable instruction
-ID, source offset and length, raw hex, and a message naming `CALL`, `R(1)..R(6)`, and
-the bound. Assert that the words differ only in encoded field `B`, and that neither
-case misclassifies `B` as a direct register or emits `L51-REG-002`.
+| Instruction role | Fixed window | Last valid count | First invalid count |
+|---|---|---:|---:|
+| `CALL.B` arguments, including function | `R(A)..R(A+B-1)` | 5 | 6 |
+| `CALL.C` results | `R(A)..R(A+C-2)` when `C > 1` | 6 | 7 |
+| `TAILCALL.B` arguments, including function | `R(A)..R(A+B-1)` | 5 | 6 |
+| `RETURN.B` returned values | `R(A)..R(A+B-2)` when `B > 1` | 6 | 7 |
+| `SETLIST.B` table sources | `R(A+1)..R(A+B)` when `B > 0` | 4 | 5 |
+| `VARARG.B` results | `R(A)..R(A+B-2)` when `B > 1` | 6 | 7 |
 
-Acceptance/support code is capped at 220 formatted lines and production code at 25
-formatted lines.
+For each fixed row, changing only the named count across the boundary produces
+exactly one `L51-REG-SPAN-001` with the mnemonic, exact window, owning bound,
+instruction stable ID, source offset, source length, and raw bytes in validation JSON,
+with the matching physical word and typed operands in disassembly JSON.
+The valid boundary produces none. `CALL` proves its argument and result windows in
+separate cases with the other field held valid. The two violations are not combined
+because structurally identical public diagnostics are deduplicated.
+
+For every applicable zero-count form, prove that validation does not invent a static
+span. Prove the empty fixed forms `CALL.B = 1`, `CALL.C = 1`, `RETURN.B = 1`, and
+`VARARG.B = 1` cannot underflow an endpoint calculation. Prove that `TAILCALL.C` and
+`SETLIST.C` remain non-register fields even at their
+largest encoded value. No matrix case may emit `L51-REG-002` or `L51-REG-003` for a
+count field.
+
+The acceptance comparator must reject at least these mutations: omitted expected
+span, wrong endpoint formula, wrong owner bound or target ID, scalar count retyped as
+a register, and a diagnostic invented for an open-ended count.
+
+## Public boundary and fixtures
+
+Use the manifest-pinned Lua 5.1 `control_flow.luac` fixture and derive its root
+`maxstacksize` through live `inspect --format json`. Mutate one root instruction word
+at its recorded byte location while preserving the rest of the chunk. Exercise live
+`validate --format json` and selected-prototype `disasm --format json`, validate both
+documents against their published schemas, and pin the fixture hash.
+
+The frozen acceptance module is
+`crates/luad-oracle/tests/test_validator_count_spans_lua51.rs`. The canonical gate is
+`gate-validator-count-spans-lua51`, comprising:
+
+- `tests/gates/gate-validator-count-spans-lua51.json`;
+- `scripts/gates/gate-validator-count-spans-lua51.sh`;
+- the exact non-skipping acceptance tests enumerated by the gate specification;
+- `gate-proof-harness`, `gate-public-disasm-lua51`,
+  `gate-validation-null-hypothesis`, and
+  `gate-validator-reference-operands-lua51` as prerequisites.
+
+The gate pins Lua 5.1.5 compiler identity and the fixture hash. A missing compiler,
+fixture, test, boundary row, mutation, or schema check is a hard failure.
 
 ## Allowed scope
 
-- one focused module at
-  `crates/luad-oracle/tests/test_validator_call_argument_span_lua51.rs`;
-- `crates/luad-dialect-lua51/src/validator.rs`;
-- `CHANGELOG.md`, `README.md`, `ROADMAP.md`, and the next forward-looking sprint handoff
-  after acceptance.
+Acceptance author:
 
-Use the existing fixture, schemas, diagnostic, CLI selectors, and decoded instruction
-facts unchanged. Do not add a fixture, schema, gate, shared test framework, or general
-range-analysis abstraction.
+- `crates/luad-oracle/tests/test_validator_count_spans_lua51.rs`.
+
+Steward-owned gate and planning paths:
+
+- `tests/gates/gate-validator-count-spans-lua51.json`;
+- `scripts/gates/gate-validator-count-spans-lua51.sh`;
+- `docs/NEXT-SPRINT.md` and the documentation index freshness entry.
+
+The steward may align the existing scalar-domain control in
+`crates/luad-oracle/tests/test_validator_rk_b_lua51.rs` so `CALL.B = 256`
+continues to prove that `B` is neither an RK constant nor a direct register while
+requiring the count-derived register span to be rejected.
+
+Implementation agent:
+
+- `crates/luad-dialect-lua51/src/validator.rs`;
+- ordinary validator unit tests in that file only when they clarify the production
+  helper independently of the frozen public acceptance module.
+
+The implementation may introduce one small dialect-local helper for expressing
+statically bounded windows. The helper must accept the semantic start register so
+`SETLIST` reports `R(A+1)` rather than reusing `R(A)`. It may not change disassembly,
+lifting, schemas, fixture
+bytes, the diagnostic shape, or frozen acceptance and gate files.
 
 ## Non-goals
 
-Open `B = 0` calls; `CALL` result registers; `TAILCALL`; fixed or generic-for spans;
-`LOADNIL`, `CONCAT`, `RETURN`, `SETLIST`, or `VARARG` spans; disassembly effects; CFG
-changes; diagnostic-catalog publication; capability changes; and target promotion are
-outside this patch.
+`LOADNIL` and `CONCAT` already carry direct endpoint operands and are outside this
+count-field matrix. `SETLIST.C = 0` and its following raw block-number word are outside
+this matrix; `SETLIST` rows use a nonzero `C`. Dynamic top-of-stack inference for
+zero-count forms, register
+provenance, CFG changes, diagnostic-catalog publication, capability promotion, and
+other Lua dialects are outside this sprint.
 
 ## Verification and stop condition
 
-The implementation agent stops after a reviewable diff. The steward runs only:
+Freeze the acceptance commit only after the focused test fails for the absent span
+behavior while all comparator mutations are demonstrably live. The steward then runs:
 
 ```console
 cargo build -p luad-cli --bin luad
-cargo test -p luad-oracle --test test_validator_call_argument_span_lua51
+cargo test -p luad-oracle --test test_validator_count_spans_lua51
+bash scripts/gates/gate-validator-count-spans-lua51.sh /tmp/luad-gate-count-spans
+bash scripts/check.sh
 ```
 
-The steward reviews the official `CALL` VM rule, isolated iABC encoding, fixed-count
-argument semantics, exact diagnostic and provenance, stable ID, and typed public
-operands, then pushes one pull request. GitHub CI supplies the aggregate repository
-run. One bounded correction is available; exceeding ten delegated minutes, 220
-acceptance lines, 25 production lines, or the allowed paths stops the turn for
-respecification.
-
-After green CI, merge, verify clean `main == origin/main`, replace this document with
-the next forward-looking patch, and remove the temporary branch and worktree.
+Acceptance requires a clean candidate revision, zero skipped or ignored tests, a
+tamper-evident gate artifact, unchanged frozen acceptance files during implementation,
+and exact public diagnostics for every matrix boundary. After merge and remote
+verification, replace this document with the diagnostic-discoverability sprint and
+remove the temporary branches and worktrees.

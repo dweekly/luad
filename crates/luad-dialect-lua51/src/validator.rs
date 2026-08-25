@@ -172,30 +172,38 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
             diags.push(diag);
         }
 
-        // SELF, numeric-for, and generic-for instructions use register windows from R(A).
-        let span_end_delta = match op {
-            crate::opcodes::Opcode51::SelfOp => Some(1),
-            crate::opcodes::Opcode51::ForPrep | crate::opcodes::Opcode51::ForLoop => Some(3),
-            crate::opcodes::Opcode51::TForLoop => Some(2 + raw.c as usize),
-            _ => None,
-        };
-        if let Some(end_delta) = span_end_delta {
-            if raw.a as usize + end_delta >= max_reg {
-                let diag = Diagnostic::error(
-                    "L51-REG-SPAN-001",
-                    DiagnosticCategory::Instruction,
-                    inst.id.clone(),
-                    format!(
-                        "{} register window R({})..R({}) exceeds maxstacksize ({}) at PC {pc}",
-                        op.name(),
-                        raw.a,
-                        raw.a as usize + end_delta,
-                        max_reg
-                    ),
-                )
-                .with_source(inst.source.clone());
-                diags.push(diag);
+        // Register window bounds validation (SELF, FOR loops, and count-encoded windows)
+        let a = raw.a as usize;
+        let b = raw.b as usize;
+        let c = raw.c as usize;
+        match op {
+            crate::opcodes::Opcode51::SelfOp => {
+                validate_register_span(diags, inst, op, a, a + 1, max_reg, pc);
             }
+            crate::opcodes::Opcode51::ForPrep | crate::opcodes::Opcode51::ForLoop => {
+                validate_register_span(diags, inst, op, a, a + 3, max_reg, pc);
+            }
+            crate::opcodes::Opcode51::TForLoop => {
+                validate_register_span(diags, inst, op, a, a + 2 + c, max_reg, pc);
+            }
+            crate::opcodes::Opcode51::Call => {
+                if raw.b > 0 {
+                    validate_register_span(diags, inst, op, a, a + b - 1, max_reg, pc);
+                }
+                if raw.c > 1 {
+                    validate_register_span(diags, inst, op, a, a + c - 2, max_reg, pc);
+                }
+            }
+            crate::opcodes::Opcode51::TailCall if raw.b > 0 => {
+                validate_register_span(diags, inst, op, a, a + b - 1, max_reg, pc);
+            }
+            crate::opcodes::Opcode51::Return | crate::opcodes::Opcode51::VarArg if raw.b > 1 => {
+                validate_register_span(diags, inst, op, a, a + b - 2, max_reg, pc);
+            }
+            crate::opcodes::Opcode51::SetList if raw.b > 0 => {
+                validate_register_span(diags, inst, op, a + 1, a + b, max_reg, pc);
+            }
+            _ => {}
         }
 
         // Register bounds validation (field B)
@@ -323,6 +331,30 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
 
     for child in &proto.protos {
         validate_proto(child, diags);
+    }
+}
+
+fn validate_register_span(
+    diags: &mut Vec<Diagnostic>,
+    inst: &luad_core::model::InstructionWord,
+    op: Opcode51,
+    start: usize,
+    end: usize,
+    max_reg: usize,
+    pc: usize,
+) {
+    if end >= max_reg {
+        let diag = Diagnostic::error(
+            "L51-REG-SPAN-001",
+            DiagnosticCategory::Instruction,
+            inst.id.clone(),
+            format!(
+                "{} register window R({start})..R({end}) exceeds maxstacksize ({max_reg}) at PC {pc}",
+                op.name()
+            ),
+        )
+        .with_source(inst.source.clone());
+        diags.push(diag);
     }
 }
 
@@ -802,6 +834,87 @@ mod tests {
                 !d_k.iter().any(|d| d.code == "L51-REG-003"),
                 "{:?} with C=256 must not report L51-REG-003",
                 op
+            );
+        }
+    }
+
+    #[test]
+    fn test_validator_count_encoded_register_spans() {
+        // maxstacksize = 6, A = 1
+        let matrix_cases = [
+            (Opcode51::Call, 1, 5, 1, 6, 1, "CALL", 1, 6),
+            (Opcode51::Call, 1, 1, 6, 1, 7, "CALL", 1, 6),
+            (Opcode51::TailCall, 1, 5, 0, 6, 0, "TAILCALL", 1, 6),
+            (Opcode51::Return, 1, 6, 0, 7, 0, "RETURN", 1, 6),
+            (Opcode51::SetList, 1, 4, 1, 5, 1, "SETLIST", 2, 6),
+            (Opcode51::VarArg, 1, 6, 0, 7, 0, "VARARG", 1, 6),
+        ];
+
+        for (op, a, vb, vc, ib, ic, name, start, end) in matrix_cases {
+            // Valid boundary produces no diagnostics
+            let valid_inst = RawInstruction51::encode_iabc(op, a, vb, vc);
+            let mut proto_v = make_test_proto(vec![valid_inst], 0, 0);
+            proto_v.maxstacksize = 6;
+            let (verdict_v, diags_v) = validate_chunk_lua51(&make_test_chunk(proto_v));
+            assert_eq!(
+                verdict_v,
+                Verdict::ValidForParser,
+                "{name} valid boundary failed: {diags_v:?}"
+            );
+            assert!(
+                diags_v.is_empty(),
+                "{name} valid produced diags: {diags_v:?}"
+            );
+
+            // Invalid boundary produces exactly one L51-REG-SPAN-001
+            let invalid_inst = RawInstruction51::encode_iabc(op, a, ib, ic);
+            let mut proto_i = make_test_proto(vec![invalid_inst], 0, 0);
+            proto_i.maxstacksize = 6;
+            let (verdict_i, diags_i) = validate_chunk_lua51(&make_test_chunk(proto_i));
+            assert_eq!(
+                verdict_i,
+                Verdict::Invalid,
+                "{name} invalid was not rejected"
+            );
+            let span_diags: Vec<_> = diags_i
+                .iter()
+                .filter(|d| d.code == "L51-REG-SPAN-001")
+                .collect();
+            assert_eq!(
+                span_diags.len(),
+                1,
+                "{name} expected 1 span diag, got: {diags_i:?}"
+            );
+            assert_eq!(
+                span_diags[0].message,
+                format!(
+                    "{name} register window R({start})..R({end}) exceeds maxstacksize (6) at PC 0"
+                )
+            );
+        }
+
+        // Open-ended (0) and empty (1) forms must produce no static span diagnostics
+        let open_and_empty = [
+            RawInstruction51::encode_iabc(Opcode51::Call, 1, 0, 1),
+            RawInstruction51::encode_iabc(Opcode51::Call, 1, 1, 0),
+            RawInstruction51::encode_iabc(Opcode51::Call, 1, 1, 1),
+            RawInstruction51::encode_iabc(Opcode51::TailCall, 1, 0, 0),
+            RawInstruction51::encode_iabc(Opcode51::TailCall, 1, 1, 0),
+            RawInstruction51::encode_iabc(Opcode51::Return, 1, 0, 0),
+            RawInstruction51::encode_iabc(Opcode51::Return, 1, 1, 0),
+            RawInstruction51::encode_iabc(Opcode51::SetList, 1, 0, 1),
+            RawInstruction51::encode_iabc(Opcode51::VarArg, 1, 0, 0),
+            RawInstruction51::encode_iabc(Opcode51::VarArg, 1, 1, 0),
+        ];
+        for inst in open_and_empty {
+            let mut proto = make_test_proto(vec![inst], 0, 0);
+            proto.maxstacksize = 6;
+            let (verdict, diags) = validate_chunk_lua51(&make_test_chunk(proto));
+            assert_eq!(verdict, Verdict::ValidForParser);
+            assert!(
+                !diags.iter().any(|d| d.code == "L51-REG-SPAN-001"),
+                "inst 0x{:08x} must not produce L51-REG-SPAN-001: {diags:?}",
+                inst
             );
         }
     }

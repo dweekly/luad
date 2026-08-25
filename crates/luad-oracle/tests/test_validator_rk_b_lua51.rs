@@ -355,21 +355,28 @@ fn test_rk_b_zero_constant_owner() {
 
 #[test]
 fn test_high_bit_scalar_control_does_not_enter_constant_domain() {
-    // High-bit scalar controls: non-RK B fields with bit 8 set (B = 256)
-    // NEWTABLE (op 10): B is array size hint -> scalar, neither register nor constant
-    // CALL (op 28): B is nparams + 1 -> scalar, neither register nor constant
-    for (op, name) in [(10_u8, "NEWTABLE"), (28_u8, "CALL")] {
-        let chunk_zero = zero_constant_chunk(iabc(op, 0, 256, 0), 2);
-        let doc_zero = validate_bytes(&chunk_zero);
-        assert_eq!(
-            doc_zero.data.verdict,
-            Verdict::ValidForParser,
-            "{name} B=256 must not enter constant domain: {:?}",
-            doc_zero.data.diagnostics
-        );
-        assert!(findings(&doc_zero, CONST_B_CODE).is_empty());
-        assert!(findings(&doc_zero, REG_B_CODE).is_empty());
-    }
+    // NEWTABLE.B is a scalar size hint with no register-window meaning.
+    let newtable = validate_bytes(&zero_constant_chunk(iabc(10, 0, 256, 0), 2));
+    assert_eq!(newtable.data.verdict, Verdict::ValidForParser);
+    assert!(findings(&newtable, CONST_B_CODE).is_empty());
+    assert!(findings(&newtable, REG_B_CODE).is_empty());
+
+    // CALL.B is a scalar count whose semantic window can exceed the register file.
+    let call = validate_bytes(&zero_constant_chunk(iabc(28, 0, 256, 0), 2));
+    assert_eq!(call.data.verdict, Verdict::Invalid);
+    assert!(findings(&call, CONST_B_CODE).is_empty());
+    assert!(findings(&call, REG_B_CODE).is_empty());
+    let spans: Vec<_> = call
+        .data
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.code == "L51-REG-SPAN-001")
+        .collect();
+    assert_eq!(spans.len(), 1);
+    assert_eq!(
+        spans[0].message,
+        "CALL register window R(0)..R(255) exceeds maxstacksize (2) at PC 0"
+    );
 
     // MOVE (op 0): fixed register -> reports L51-REG-002, never L51-CONST-004
     let chunk_move = zero_constant_chunk(iabc(0, 0, 256, 0), 2);
