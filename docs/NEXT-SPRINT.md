@@ -8,7 +8,7 @@ commit, and one canonical gate.
 Lua 5.1 validation treats `CALL`, `TAILCALL`, `RETURN`, `SETLIST`, and `VARARG`
 count fields as scalar counts while validating every statically bounded register
 window those counts describe. Fixed argument, result, return-value, table-source, and
-vararg-result windows cannot extend beyond the owning prototype's `maxstacksize`.
+vararg-result endpoints must remain below the owning prototype's `maxstacksize`.
 Open-ended count value zero remains explicitly unbounded and receives no invented
 static endpoint.
 
@@ -31,12 +31,16 @@ encodes the iABC word. With a prototype bound of six registers and `A = 1`, prov
 
 For each fixed row, changing only the named count across the boundary produces
 exactly one `L51-REG-SPAN-001` with the mnemonic, exact window, owning bound,
-instruction stable ID, physical word, source offset, source length, and raw bytes.
-The valid boundary produces none. `CALL` proves its argument and result windows
-independently so one field cannot mask the other.
+instruction stable ID, source offset, source length, and raw bytes in validation JSON,
+with the matching physical word and typed operands in disassembly JSON.
+The valid boundary produces none. `CALL` proves its argument and result windows in
+separate cases with the other field held valid. The two violations are not combined
+because structurally identical public diagnostics are deduplicated.
 
 For every applicable zero-count form, prove that validation does not invent a static
-span. Prove that `TAILCALL.C` and `SETLIST.C` remain non-register fields even at their
+span. Prove the empty fixed forms `CALL.B = 1`, `CALL.C = 1`, `RETURN.B = 1`, and
+`VARARG.B = 1` cannot underflow an endpoint calculation. Prove that `TAILCALL.C` and
+`SETLIST.C` remain non-register fields even at their
 largest encoded value. No matrix case may emit `L51-REG-002` or `L51-REG-003` for a
 count field.
 
@@ -59,7 +63,8 @@ The frozen acceptance module is
 - `tests/gates/gate-validator-count-spans-lua51.json`;
 - `scripts/gates/gate-validator-count-spans-lua51.sh`;
 - the exact non-skipping acceptance tests enumerated by the gate specification;
-- `gate-proof-harness`, `gate-public-disasm-lua51`, and
+- `gate-proof-harness`, `gate-public-disasm-lua51`,
+  `gate-validation-null-hypothesis`, and
   `gate-validator-reference-operands-lua51` as prerequisites.
 
 The gate pins Lua 5.1.5 compiler identity and the fixture hash. A missing compiler,
@@ -84,13 +89,17 @@ Implementation agent:
   helper independently of the frozen public acceptance module.
 
 The implementation may introduce one small dialect-local helper for expressing
-statically bounded windows. It may not change disassembly, lifting, schemas, fixture
+statically bounded windows. The helper must accept the semantic start register so
+`SETLIST` reports `R(A+1)` rather than reusing `R(A)`. It may not change disassembly,
+lifting, schemas, fixture
 bytes, the diagnostic shape, or frozen acceptance and gate files.
 
 ## Non-goals
 
 `LOADNIL` and `CONCAT` already carry direct endpoint operands and are outside this
-count-field matrix. Dynamic top-of-stack inference for zero-count forms, register
+count-field matrix. `SETLIST.C = 0` and its following raw block-number word are outside
+this matrix; `SETLIST` rows use a nonzero `C`. Dynamic top-of-stack inference for
+zero-count forms, register
 provenance, CFG changes, diagnostic-catalog publication, capability promotion, and
 other Lua dialects are outside this sprint.
 
