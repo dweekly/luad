@@ -108,6 +108,10 @@ Common deficiencies include:
 - It distinguishes parse validity, structural validity, VM validity, and heuristic-analysis confidence.
 - It produces deterministic human-readable and machine-readable output.
 - It can answer focused cross-reference and data-flow questions without requiring consumers to reimplement the analyzer.
+- It treats a firmware tree as a first-class batch workflow and makes every streamed
+  fact independently joinable to its input and interpretation.
+- It exposes symbolic call paths, value origins, and partial call relations only when
+  their evidence is auditable, with explicit unresolved and cutoff states.
 - Its correctness is continuously compared against official tools and official VM behavior.
 - Every supported opcode and format feature is covered by a focused fixture.
 - Fuzzing and adversarial regression tests demonstrate parser robustness.
@@ -117,9 +121,15 @@ Common deficiencies include:
 
 The primary product should be a self-documenting CLI rather than a GUI or TUI. The CLI is the common denominator for both human researchers and AI agents; it is composable, automatable, testable, remotely usable, and capable of producing durable artifacts. A stable JSON interface is as important as the human text interface.
 
-Development proceeds through complete, public-boundary vertical slices rather than broad parser presence. The first release candidate proves official Lua 5.4.8 public disassembly and the embedded Lua 5.1 layouts and workflows that motivated field use. Analysis, losslessness, closure captures, constant resolution, and release claims each retain independent gates.
+Development proceeds through customer-visible, public-boundary vertical slices rather
+than broad parser presence. The first release path qualifies the exact
+OpenWrt-derived Lua 5.1 LNUM32 target, stabilizes firmware-tree machine output, and adds
+only the deterministic call and value facts repeatedly required by external consumers.
 
-Additional dialects follow only after that release boundary is met and the product chooses between stock-Lua breadth and prevalent reverse-engineering ecosystems such as LuaJIT and Luau. Dynamic tracing, assembly, SSA, and decompilation remain separate, evidence-gated layers over the disassembly foundation. Section 12 gives the product-level sequence; the coding-agent plan defines executable checkpoints.
+Additional dialects follow only after that release boundary. Dynamic tracing,
+assembly, SSA, decompilation, persistent research state, and security judgment remain
+separate layers over the factual substrate. The roadmap defines product-level sequence;
+the active sprint defines the sole executable checkpoint.
 
 ## 2. Product definition
 
@@ -155,6 +165,11 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 8. **Dialects are explicit.** Separate VM families use separate front ends; ambiguity is reported rather than guessed away.
 9. **Useful partial results beat opaque failure.** Permissive forensic recovery is available, but never silently treated as a valid parse.
 10. **The CLI teaches its own use.** Help, schemas, examples, diagnostics, and suggested next actions are available locally.
+11. **Facts and judgment are different products.** Deterministic VM relationships belong
+    in `luad`; sink, taint, authentication, and exploitability policy belong outside.
+12. **Unresolved is a useful answer.** Derived analysis reports ambiguity, unsupported
+    boundaries, cycles, and resource cutoffs explicitly instead of returning a broad
+    plausible classification.
 
 ### 2.4 Terminology
 
@@ -170,20 +185,37 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 - **Dialect:** A bytecode family or modification requiring format, opcode, or semantic differences from a stock Lua release.
 - **Strict mode:** Reject input at the first condition that violates the selected specification.
 - **Permissive mode:** Preserve valid regions and emit explicit recovery diagnostics where possible.
+- **Symbolic callee path:** An evidence-linked sequence of literal lookups, aliases,
+  captures, or module-loader labels established by bytecode; it does not assert the
+  identity of the runtime object stored at that path.
+- **Value-expression origin:** A bounded derived graph linking a register value to the
+  instructions, constants, parameters, captures, and calls that may produce it.
+- **Provable call relation:** A caller-to-prototype edge established unambiguously by
+  bytecode construction, storage, and invocation facts.
+- **Interpretation identity:** The input, dialect, profile, layout, parse mode, and
+  analysis configuration under which a fact has meaning.
 
 ## 3. Goals and non-goals
 
 ### 3.1 Version 1 goals
 
-- Safely parse stock Lua 5.1, 5.2, 5.3, 5.4, and 5.5 binary chunks.
-- Automatically identify stock versions when the header is intact.
-- Detect relevant platform/numeric characteristics present in each version's header.
+- Qualify the exact OpenWrt-derived Lua 5.1.5 LNUM32 profile and its 32-bit serialized
+  string layout through a public, reproducible compiler authority.
+- Preserve experimental parsing surfaces for other dialects without promoting them
+  through the version-1 claim.
+- Detect and report the exact dialect, profile, layout, and selection evidence.
 - Produce faithful text and versioned JSON representations.
 - Decode all instructions and semantically type all operands.
 - Show nested prototypes, constants, upvalues, debug metadata, offsets, and raw instruction words.
 - Validate structural and important VM invariants.
 - Construct basic blocks and control-flow graphs.
 - Provide instruction-level use/definition effects and common cross-references.
+- Produce self-identifying, deterministic JSONL over firmware-scale mixed file sets.
+- Resolve evidence-backed symbolic callee paths with explicit unresolved reasons.
+- Expose bounded, cycle-safe value-expression origins for call arguments and selected
+  registers without assigning taint or safety labels.
+- Expose only statically provable call relations and versioned prototype content
+  identities for cross-firmware joins.
 - Explain instructions in context.
 - Compare two chunks structurally and semantically.
 - Support stripped chunks without treating absent debug data as an error.
@@ -192,6 +224,7 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 
 ### 3.2 Post-version-1 goals
 
+- Independent qualification of stock Lua 5.1 and other exact stock Lua releases.
 - LuaJIT 2.0/2.1 and significant maintained forks as separate dialect modules.
 - Configurable vendor chunk profiles and opcode mappings.
 - Richer data flow, liveness, reaching definitions, backward slicing, and SSA.
@@ -213,29 +246,40 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 - Debugging native code generated by LuaJIT.
 - Inferring author intent from bytecode without clearly marked uncertainty.
 - Acting as a malware sandbox.
+- Classifying dangerous sinks, taint, sanitization, attacker control, authentication,
+  exploitability, or behavioral safety.
+- Building a complete runtime call graph across dynamic Lua dispatch, native code, IPC,
+  framework routing, or a firmware filesystem.
+- Persisting researcher names, annotations, hypotheses, project state, or agent memory.
 
 ## 4. Users and primary workflows
 
 ### 4.1 Security researcher workflow
 
-1. Receive an unknown `.luac`, embedded blob, or file with a misleading extension.
-2. Run a bounded format inspection.
-3. Determine likely VM family, version, platform characteristics, and confidence.
-4. Validate the chunk without executing it.
-5. List strings, constants, prototypes, imports/global references, and suspicious operations.
-6. Navigate from a finding to instructions, blocks, callers, and data dependencies.
-7. Compare the chunk with another sample or known clean build.
-8. Export deterministic JSON and graph artifacts for a report or downstream automation.
-9. Preserve diagnostics and tool/version metadata sufficient to reproduce the analysis.
+1. Supply an explicit firmware file set or a bounded discovered tree.
+2. Classify each input as supported bytecode, source, malformed, ambiguous, or
+   unsupported and retain an outcome for every file.
+3. Determine the exact VM family, profile, layout, and interpretation evidence.
+4. Validate chunks without executing them and enumerate constants, prototypes,
+   captures, symbolic call paths, and unresolved calls.
+5. Follow selected call arguments through bounded value-expression origins.
+6. Navigate from a finding to instructions, blocks, captures, and provable callers.
+7. Join prototype content identities across firmware versions.
+8. Apply investigation-specific sink, trust, reachability, and exploitability policy in
+   a thin external layer.
+9. Preserve machine output, diagnostics, tool identity, schemas, and commands sufficient
+   to reproduce the analysis.
 
 ### 4.2 AI-agent workflow
 
 1. Run `luad capabilities --format json` to discover supported dialects, commands, schemas, and limits.
-2. Run `luad inspect sample.luac --format json --summary` to obtain bounded metadata.
-3. Request only relevant prototypes, instructions, references, or diagnostics.
-4. Follow stable IDs returned in one response in subsequent commands.
-5. Ask for an explanation or backward slice for a selected instruction/value.
-6. Export a deterministic analysis bundle that another agent or human can reproduce.
+2. Export a bounded, self-identifying JSONL stream for the selected firmware inputs.
+3. Query only relevant prototypes, instructions, callees, value origins, references, or
+   diagnostics.
+4. Follow stable structural IDs within an artifact and content IDs across builds.
+5. Treat unresolved reasons and analysis cutoffs as required branches in its reasoning.
+6. Apply its research policy outside `luad` and export a deterministic evidence bundle
+   that another agent or human can reproduce.
 
 ### 4.3 Lua VM learner workflow
 
@@ -267,6 +311,9 @@ Requirement identifiers are stable references for design, implementation, tests,
 - **FR-INPUT-006:** Permit an explicit dialect/version override without suppressing mismatch diagnostics.
 - **FR-INPUT-007:** Support an explicit base offset for chunks extracted from containers.
 - **FR-INPUT-008:** Never infer validity solely from filename or extension.
+- **FR-INPUT-009:** Accept an explicit input list and bounded recursive discovery while
+  emitting one structured per-file outcome for source, supported bytecode, malformed,
+  ambiguous, and unsupported inputs.
 
 ### 5.2 Lossless chunk parsing
 
@@ -285,6 +332,8 @@ Requirement identifiers are stable references for design, implementation, tests,
 - **FR-PARSE-013:** Represent stock, LNUM, and other vendor constant/layout behavior through an explicit resolved profile with provenance; accepting one vendor tag must not silently broaden the stock dialect.
 - **FR-PARSE-014:** Preserve the deepest offending byte offset when adding prototype and field context to a diagnostic.
 - **FR-PARSE-015:** Include the selected layout/profile and parse mode in the interpretation identity used to scope persistent artifact references.
+- **FR-PARSE-016:** Attach the input and interpretation identity to every exported fact
+  directly or through a stable reference that remains valid in interleaved streams.
 
 ### 5.3 Instruction decoding
 
@@ -342,6 +391,18 @@ No verdict is named `safe`, because structural validation does not establish beh
 - **FR-AN-009:** Label natural-loop candidates and other structured regions as derived facts, with supporting edges.
 - **FR-AN-010:** Support backward slicing as a post-version-1 analysis without changing the lossless core IR.
 - **FR-AN-011:** Build forward and inverse capture cross-references between a parent register/upvalue at a specific closure PC and the corresponding child upvalue slot.
+- **FR-AN-012:** Resolve an evidence-linked symbolic callee path for `CALL` and
+  `TAILCALL` when literal lookups, deterministic aliases, or closure bindings establish
+  one; otherwise emit a typed unresolved reason.
+- **FR-AN-013:** Preserve whether a module-labeled symbolic path originates in a literal
+  loader call without asserting the runtime identity of the returned object.
+- **FR-AN-014:** Build a bounded, cycle-safe value-expression origin graph for selected
+  registers and call arguments, resolving aliased source operands at the writing
+  instruction and exposing every traversal cutoff.
+- **FR-AN-015:** Emit a caller-to-prototype relation only when the target is unique under
+  validated construction, reaching-definition, storage, and invocation facts.
+- **FR-AN-016:** Compute a versioned prototype content identity from a documented
+  normalization while preserving artifact-local structural identity.
 
 ### 5.6 Explanation and provenance
 
@@ -352,6 +413,9 @@ No verdict is named `safe`, because structural validation does not establish beh
 - **FR-EXP-005:** Never use recovered debug names when they are absent; generated names must be explicitly marked synthetic.
 - **FR-EXP-006:** Expose the tool's uncertainty rather than choosing an arbitrary interpretation.
 - **FR-EXP-007:** Show resolved constants and closure captures in instruction explanations without requiring the researcher to manually join constant or child-prototype tables.
+- **FR-EXP-008:** Reserve `fact` for claims guaranteed by the selected format and
+  validated bytes; algorithmic call and value relationships are `derived` and identify
+  their preconditions, evidence, ambiguity, and cutoffs.
 
 ### 5.7 Search, query, and comparison
 
@@ -360,10 +424,17 @@ No verdict is named `safe`, because structural validation does not establish beh
 - **FR-QUERY-003:** Support bounded result counts, cursors, and explicit truncation metadata.
 - **FR-QUERY-004:** Provide a documented expression grammar for queries; do not evaluate arbitrary host-language code.
 - **FR-QUERY-005:** Permit bounded forward and inverse queries over closure-capture relations, preserving the closure site required to identify a parent register value.
+- **FR-QUERY-006:** Query symbolic callee components, resolution basis, unresolved
+  reason, value-origin node kind, call relation, interpretation identity, and prototype
+  content identity without prose parsing.
+- **FR-QUERY-007:** Reject unknown fields, unsupported operators, malformed selectors,
+  and any predicate whose supplied operand is not applied.
 - **FR-DIFF-001:** Compare chunk headers, prototype trees, constants, instructions, debug data, validation results, and CFGs.
 - **FR-DIFF-002:** Support raw-index comparison and normalized semantic comparison.
 - **FR-DIFF-003:** Report when alignment is uncertain, especially after instruction insertions or prototype reordering.
 - **FR-DIFF-004:** Produce stable JSON diff objects suitable for automation.
+- **FR-DIFF-005:** Support cross-firmware joins and comparisons over versioned prototype
+  content identities without treating a hash match as source-level identity.
 
 ### 5.8 Optional compiler-laboratory workflow
 
@@ -521,6 +592,11 @@ diagnostic:L54-JUMP-003:proto:0/2:pc:37
 
 IDs based on content hashes may also be emitted for cross-build matching, but must not replace structural IDs until collision and normalization behavior is specified.
 
+Every stream record also carries an input reference and interpretation reference. A
+consumer may join a record correctly without relying on record order or retaining the
+most recent file envelope. Content identities use an explicit normalization version and
+never replace structural IDs used for navigation.
+
 ### 7.2 Provenance record
 
 Every parsed or derived artifact exposes:
@@ -541,6 +617,8 @@ Every parsed or derived artifact exposes:
 ```
 
 Derived objects list the stable IDs from which they were computed. Heuristic objects additionally report an algorithm identifier and confidence rationale.
+Derived call paths, value origins, and call relations also report analysis preconditions,
+typed unresolved or cutoff reasons, and the exact evidence edges included in the result.
 
 ### 7.3 Schema evolution
 
@@ -578,7 +656,8 @@ Input bytes
                  │    └─> Normalized semantic IR
                  │         ├─> Basic blocks and CFG
                  │         ├─> Cross-references and effects
-                 │         └─> Later: liveness, SSA, slicing
+                 │         ├─> Symbolic call paths and value origins
+                 │         └─> Provable call relations and content identity
                  └─> Renderers
                       ├─> Text
                       ├─> JSON / JSONL
@@ -614,6 +693,12 @@ The validator is layered so researchers can see whether a failure is a malformed
 #### Analyzers
 
 Analyzers consume validated semantic IR and declare their preconditions. If preconditions fail, they emit `incomplete` results with reasons rather than producing plausible-looking graphs.
+
+Value analysis snapshots source operands at each physical write, computes reaching
+definitions only within declared bounds, and preserves ambiguity rather than selecting
+one definition. Symbolic paths describe bytecode lookup structure, not runtime object
+identity. Security policy cannot enter this layer through names such as `sink`, `taint`,
+`safe`, or `sanitized`.
 
 #### Renderers
 
@@ -798,6 +883,9 @@ The CLI exposes this through `luad capabilities --evidence`.
 - **PERF-005:** Query operations over an already constructed model do not reparse the chunk.
 - **PERF-006:** Cancellation or process interruption does not leave partial output files presented as complete.
 - **PERF-007:** Benchmarks include small startup-sensitive chunks, large instruction vectors, deep prototypes, many constants, and long strings.
+- **PERF-008:** A documented firmware-scale mixed corpus benchmark covers batch parsing,
+  validation, fact export, symbolic call resolution, and bounded value-origin analysis;
+  each stage publishes throughput and peak-memory results independently.
 
 Exact thresholds must be calibrated on the release-candidate fixture matrix and a documented reference machine. Correctness and bounded behavior take priority over optimizing headline throughput.
 
@@ -807,15 +895,16 @@ The [product roadmap](ROADMAP.md) defines capability order and broad exit outcom
 The [active sprint](docs/NEXT-SPRINT.md) defines the one eligible implementation
 claim, including gate commands, killer probes, and checkpoint handoff.
 
-Every work package follows the same proof pattern:
+Delivery uses the least expensive evidence lane that can falsify the claim. Localized
+corrections use one focused regression and one pull request. New semantic facts use an
+independent public-boundary acceptance test and only the mutation probes needed to
+distinguish ambiguity, aliasing, or cutoff defects. Target promotion uses complete
+authority, provenance, prerequisite, and release evidence.
 
-1. define the public fact or behavior being claimed;
-2. write a public-boundary adversarial probe and record its failure;
-3. implement the smallest reusable production representation;
-4. compare it with an independent authority;
-5. prove that intentional mutations fail;
-6. emit a verified, tamper-checked gate result;
-7. review the checkpoint before advancing dependent work.
+Customer assignments occur at roadmap boundaries rather than after every patch. Their
+repeated workarounds prioritize deterministic facts; their security conclusions remain
+outside the acceptance oracle. Downstream gates reference accepted prerequisite results
+instead of reproducing their internal semantic suites.
 
 ## 13. Release criteria
 
@@ -823,14 +912,18 @@ Every work package follows the same proof pattern:
 
 The first release candidate requires:
 
-- exact Lua 5.4.8 public disassembly evidence;
-- the advertised Lua 5.1 layout/profile, closure, operand, and field-evidence gates;
+- a public, reproducible OpenWrt-derived Lua 5.1.5 LNUM32 compiler authority;
+- an exact release manifest for the advertised embedded Lua 5.1 profile and layout;
 - reviewed CFG/precondition and lossless-model checkpoints;
-- deterministic public text and machine output;
+- deterministic, self-identifying public text and machine output over firmware-scale
+  mixed inputs;
+- evidence-backed symbolic callees, bounded value origins, provable call relations, and
+  prototype content identities with explicit unresolved states;
 - capability status derived from one verified release manifest;
 - no required skipped probe;
 - bounded malformed-input behavior and maintained fuzz coverage;
-- all unproved dialects and runtime semantic effects labeled experimental.
+- all unproved dialects and runtime semantic effects labeled experimental;
+- a successful uncoached customer investigation using a thin external judgment layer.
 
 ### 13.2 Version 1.0
 
@@ -862,13 +955,20 @@ dilute exact evidence for the support scope actually advertised.
 - A new user can identify, validate, and obtain a scoped disassembly using only `luad --help` and local help topics.
 - Common triage output fits within a documented bounded summary without requiring a full listing.
 - Every human-facing finding has a corresponding machine-readable representation.
-- At least 90% of sampled researcher questions in the initial query taxonomy can be answered by one command or one command plus a stable-ID follow-up.
+- The reference corpus workflows require no consumer-side instruction decoder or
+  stateful file-envelope adapter.
+- Symbolic callee, value-origin, and provable-caller questions can be answered by one
+  command or one command plus a stable-ID follow-up.
 
 ### 14.3 Agent metrics
 
 - A reference agent completes the standard workflow with zero human-text scraping.
 - All large responses can be bounded and resumed.
 - Stable-ID follow-up queries resolve unambiguously.
+- Interleaved firmware-tree facts join to their input and interpretation without
+  stream-position state.
+- Unresolved relationships and resource cutoffs become explicit branches rather than
+  confident negative answers.
 - Equivalent invocations produce identical JSON across repeated runs and supported hosts, excluding declared environment metadata.
 
 ### 14.4 Adoption signals
@@ -898,6 +998,9 @@ Adoption is secondary to correctness, but useful signals include:
 | Numeric/string rendering is lossy | Round trips and comparisons become incorrect | Preserve raw bytes/bits and make text formatting a derived view |
 | CFG on invalid bytecode is misleading | Higher-level analysis appears credible | Analyzers declare validation preconditions and return incomplete results when unmet |
 | CLI becomes a collection of inconsistent commands | Human and agent discoverability degrades | Shared selectors, output rules, IDs, diagnostics, and generated command documentation |
+| Every consumer rebuilds register provenance differently | Silent aliasing, cutoff, and constant-expression errors recur | Own one bounded evidence-linked value-origin graph with explicit unresolved states |
+| Symbolic paths are mistaken for runtime identities | Findings overstate what bytecode proves | Name the resolution basis, retain evidence, and separate symbolic lookup from runtime object identity |
+| Customer feedback drives policy into the core | One investigation's assumptions become product behavior | Admit deterministic facts only; keep sink, taint, authentication, and exploitability outside |
 
 ## 16. Product decisions and open questions
 
@@ -906,12 +1009,19 @@ Adoption is secondary to correctness, but useful signals include:
 - The primary deliverable is a CLI, not a GUI or TUI.
 - Versioned JSON/JSONL is the initial stable programmatic interface.
 - Static analysis never executes an input chunk.
-- The first release candidate targets exact Lua 5.4.8 public disassembly and explicitly advertised embedded Lua 5.1 layouts/profiles.
-- Lua 5.2, 5.3, and 5.5 remain experimental until independently gated; version 1.0 does not require artificial stock-version breadth.
+- The first release candidate targets the exact OpenWrt-derived Lua 5.1.5 LNUM32
+  profile and firmware-tree workflow.
+- Lua 5.2, 5.3, 5.4, and 5.5 remain experimental until independently promoted; version
+  1.0 does not require artificial stock-version breadth.
 - LuaJIT and Luau require separate dialect families and an explicit post-release prioritization decision.
 - Decompilation is not part of version 1.
 - Losslessness, provenance, validation, and determinism are release requirements rather than optional polish.
 - Persistent researcher state, interpretations, hypotheses, and agent planning remain outside `luad`.
+- Symbolic callee paths, bounded value-expression origins, provable partial call
+  relations, cross-file identities, and prototype content identities are in scope as
+  derived facts.
+- Sink, taint, safety, authentication, reachability, and exploitability classifications
+  remain external policy.
 
 ### 16.2 Decisions required before expanding the release scope
 
@@ -973,6 +1083,7 @@ The following primary or project-owned sources informed this PRD and should rema
 - [Lua 5.5 official listing implementation](https://www.lua.org/source/5.5/luac.c.html)
 - [Lua 5.5 virtual machine](https://www.lua.org/source/5.5/lvm.c.html)
 - [Lua 5.1 binary loader and architecture-dependent header](https://www.lua.org/source/5.1/lundump.c.html)
+- [OpenWrt 19.07 Lua 5.1 package and ordered patch series](https://github.com/openwrt/openwrt/tree/1da2e82c1182a3fd681da5760be96821213afadd/package/utils/lua)
 - [Lua Workshop: Mitigating the Danger of Malicious Bytecode](https://www.lua.org/wshop11/Cawley.pdf)
 - [LuaJIT bytecode dump format](https://github.com/LuaJIT/LuaJIT/blob/v2.1/src/lj_bcdump.h)
 - [LuaJIT bytecode definitions](https://github.com/LuaJIT/LuaJIT/blob/v2.1/src/lj_bc.h)

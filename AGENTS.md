@@ -35,6 +35,12 @@ inference-heavy analysis unless the active sprint explicitly owns them.
 - Machine stdout must remain deterministic and free of commentary.
 - Treat fixture binaries and evidence manifests as generated evidence with recorded provenance.
 - A gate's acceptance criteria must map to exact executable commands and assertions before implementation; source-text test-name presence and self-declared evidence are not proof.
+- A downstream gate references accepted prerequisite results instead of duplicating
+  their internal semantic suites unless it owns a new interaction those gates cannot
+  falsify.
+- Customer firmware reports prioritize reproducible correctness and composition gaps;
+  private samples and investigation-specific security judgments never substitute for
+  public fixtures or authorize policy inside the core.
 
 
 ## Verification

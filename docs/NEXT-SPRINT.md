@@ -1,113 +1,113 @@
-# Active sprint: exact Lua 5.1.5 stock64 release qualification
+# Active sprint: public OpenWrt Lua 5.1 LNUM32 authority
 
-Lane: exact-target qualification. Target: one frozen acceptance commit, one
-implementation commit, and one canonical release gate.
+Lane: qualification. Target: one immutable upstream authority manifest, one
+redistributable fixture family, and one canonical authority gate. This sprint does not
+promote a capability.
 
-## Claim and user value
+## Claim and researcher value
 
-A release manifest can qualify the exact target tuple Lua 5.1.5, stock numeric
-profile, little-endian 64-bit `size_t` layout for public parsing, disassembly, and
-validation. The manifest is the only authority that may move this target from
-experimental to supported. It must not promote 32-bit `size_t`, LNUM32, another Lua
-patch release, another host architecture, or an analysis surface outside this sprint.
+A reproducible public compiler authority can generate the exact Lua 5.1.5
+OpenWrt-derived LNUM32 bytecode profile used by the embedded target: little-endian,
+32-bit serialized string lengths, 32-bit integer constants, double-precision numeric
+constants, and integer constant tag 9.
 
-This target gives users one reproducible supported baseline while embedded 32-bit and
-LNUM32 profiles retain independent qualification boundaries.
+This authority gives the next target-promotion sprint an independent oracle that does
+not depend on private TP-Link firmware or a host-specific compiler executable hash.
 
-## Exact target
+## Immutable upstream boundary
 
-The sprint pins:
+The authority starts from:
 
-- dialect release: `Lua 5.1.5`;
-- compiler archive:
+- PUC-Rio Lua 5.1.5 archive
   `https://www.lua.org/ftp/lua-5.1.5.tar.gz`;
-- compiler archive SHA-256:
+- archive SHA-256
   `2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333`;
-- compiler binary SHA-256:
-  `eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239`;
-- profile: `lua5.1`;
-- layout:
-  `int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0`;
-- public surfaces: `inspect`, `disasm`, and `validate`;
-- fixture matrix: debug and stripped forms of `hello`, `control_flow`,
-  `closures`, `tables`, and `numerics`.
+- official OpenWrt repository revision
+  `1da2e82c1182a3fd681da5760be96821213afadd` from the `openwrt-19.07`
+  branch;
+- package recipe and complete ordered patch series under
+  `package/utils/lua/` at that revision.
 
-Every binary and source hash comes from the canonical fixture provenance manifest.
-The compiler is mandatory; absence or hash mismatch is a hard failure.
+The manifest will record SHA-256 hashes for the package recipe and every applied patch,
+including the LNUM numeric model, integer tag, and architecture-independent bytecode
+changes. It will record the exact target compiler, flags, environment, patch order,
+and build command. A compiler-binary SHA-256 identifies one build artifact only; source,
+patch, configuration, and output identities establish the portable authority.
 
-## Public and release contract
+If this upstream recipe cannot generate the target header and constant encoding exactly,
+the sprint stops at a failed authority result. It must not alter `luad` or relabel a
+nearby profile to make the fixture fit.
 
-Acceptance invokes every claimed public surface through the live CLI under automatic
-and explicit dialect selection. JSON output validates against the live schema, text
-output is deterministic, and validation returns no diagnostics for the complete
-fixture matrix.
+## Public fixture family
 
-The release manifest records the exact dialect release, profile, layout, compiler,
-fixture hashes, source revision, dirty state, platform, architecture, prerequisite gate
-results, and capability mutations. Promotion applies only when all evidence comes from
-one clean revision and every prerequisite result matches its frozen GateSpec hash.
+Redistributable Lua sources will exercise:
 
-`luad capabilities --format json --evidence` may report the exact stock64 target as
-supported only when presented with or built from the verified release evidence defined
-by this sprint. The base string `lua5.1` must not imply support for other layouts or
-vendor profiles.
+- integer constants at zero, signed boundaries, and values distinct from floats;
+- floating-point constants;
+- short and long strings that prove 32-bit serialized lengths;
+- nested prototypes and both closure-capture descriptor forms;
+- representative RK, global/table, call, branch, and loop instructions;
+- stripped and debug-bearing output where the compiler supports both deterministically.
+
+Every generated chunk will record source, bytecode, upstream revision, patch-series,
+configuration, compiler build, command, profile, layout, and content hashes. At least
+one cross-profile negative fixture will prove that stock Lua 5.1 cannot accept the
+LNUM32 interpretation.
 
 ## Independent acceptance
 
-The acceptance module will prove:
+Acceptance will establish, through the public CLI and independent oracle:
 
-- exact three-way public disassembly agreement across all ten fixtures;
-- zero-diagnostic public validation across all ten fixtures;
-- deterministic, schema-valid `inspect`, `disasm`, and `validate` responses;
-- exact target identity in the release manifest;
-- rejection of a dirty revision, stale commit, compiler substitution, fixture
-  substitution, omitted prerequisite, failed prerequisite, profile substitution,
-  layout substitution, Lua 5.4 evidence, and an unclaimed capability mutation;
-- rejection of attempts to use the stock64 manifest for the 32-bit or LNUM32 targets;
-- capability status remains experimental when the verified manifest is absent.
+- exact header, layout, integer-tag, constant, prototype, instruction, and debug facts;
+- exact agreement between compiler listing, the independent Lua 5.1/LNUM decoder, and
+  live `luad` JSON for the generated fixture family;
+- automatic and explicit selection of `lua5.1-lnum32` with the complete interpretation
+  identity in every response and stream;
+- zero validation diagnostics for valid fixtures and exact rejection under stock
+  profile substitution;
+- deterministic reproduction from authenticated source inputs;
+- rejection of a changed archive, OpenWrt revision, patch, patch order, configuration,
+  target layout, fixture, or compiler output;
+- zero skipped tests when the authority toolchain is absent or invalid.
 
-Comparator killer probes mutate one fact at a time and must demonstrate rejection.
-No test may skip because an authority, compiler, fixture, schema, or gate artifact is
-missing.
+The supplemental customer check will run the accepted candidate over the private
+firmware corpus and record only aggregate parse, validation, timing, and profile results.
+Private bytes and findings remain outside the repository and cannot satisfy the gate.
 
-## Gate boundary
+## Allowed scope and roles
 
-The canonical gate will be `gate-release-lua51-stock64`. Its prerequisite closure
-must include the Area 1 validator-and-diagnostic gate plus the exact parser, profile
-selection, public disassembly, closure, resolved-constant, machine-contract, and proof
-harness gates required by the three claimed public surfaces.
+The acceptance author may add the authority manifest, fixture sources, generated
+fixtures, an independent comparison module, acceptance tests, and the sprint gate. The
+implementation agent may add a hermetic authority-builder script and the smallest
+oracle integration needed to expose the generated compiler. Production parser,
+disassembler, validator, analysis, query, and capability code are frozen.
 
-The gate emits a tamper-evident proof package containing the frozen GateSpec, GateResult,
-release manifest, stdout/stderr hashes, compiler identity, fixture hashes, git revision,
-dirty flag, platform, architecture, and adversarial rejection report.
+The steward owns upstream pin review, fixture provenance, mutation sufficiency, the
+canonical run, and the supplemental customer check. Opus supplies one bounded
+read-only acceptance outline and, after approval, the independent acceptance edit.
+Gemini Flash High implements only the builder and allowed oracle integration from the
+frozen acceptance commit.
 
-No capability mutation is allowed before the release manifest verifies. The release
-gate alone owns the narrowly scoped stock64 promotion.
+## Non-goals
 
-## Allowed scope
+This sprint does not:
 
-Acceptance work may add one Lua 5.1 stock64 release test module. Steward work may add
-the gate spec and script, update the active sprint and documentation freshness index,
-and pin the exact prerequisite graph. Implementation work may change release-manifest
-assembly, capability evidence ingestion, and the smallest public metadata surface
-needed for the exact target.
+- mark LNUM32, stock64, or base `lua5.1` as supported;
+- add or change bytecode semantics;
+- qualify a TP-Link-specific opcode permutation or another OpenWrt revision;
+- add symbolic callee paths, value origins, call relations, prototype hashes, or schema
+  fields;
+- build firmware, execute target bytecode, or include private corpus artifacts;
+- create a release manifest.
 
-The sprint may not change parsing, instruction semantics, validator rules, schemas
-unrelated to release evidence, other dialects, the LNUM32 profile, the 32-bit
-`size_t` layout, analysis algorithms, or persistent state.
+## Gate and stop condition
 
-## Verification and stop condition
+The canonical gate will be `gate-authority-lua51-openwrt-lnum32`. It will own only the
+authority-builder, fixture-reproduction, three-way comparison, selection, provenance,
+and substitution claims above. Existing parser, profile, public-disassembly, machine,
+and proof-harness results will be referenced as prerequisites rather than reimplemented.
 
-Acceptance requires:
-
-```console
-cargo test -p luad-oracle --test test_release_lua51_stock64
-bash scripts/gates/gate-release-lua51-stock64.sh /tmp/luad-gate-release-lua51-stock64
-bash scripts/check.sh
-```
-
-The accepted revision is clean, all required tests execute with zero failures and zero
-ignored tests, the official compiler and all fixture hashes match, every killer
-mutation is rejected, the proof package verifies, CI is green, and local `main`
-matches `origin/main`. Work on another target or roadmap capability begins only
-after this checkpoint is merged and preserved remotely.
+Acceptance requires the focused authority tests, the canonical clean-revision gate,
+`bash scripts/check.sh`, green CI, a clean merged revision, and local `main` equal to
+`origin/main`. The next sprint will use this authority to promote the exact embedded
+target; no target promotion or downstream roadmap work begins inside this sprint.

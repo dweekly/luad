@@ -129,6 +129,19 @@ The steward performs final acceptance in a fresh context. A separate review mode
 be consulted, but it cannot promote the sprint. The reviewer starts with black-box CLI
 behavior and only then inspects implementation details and test coverage.
 
+### Customer research agent
+
+The customer agent evaluates product usefulness through a normal reverse-engineering
+objective against representative firmware. It receives the candidate CLI, public
+documentation, and the research question—not the implementation diff, internal gate
+checklist, or expected feature ranking. It reports commands, elapsed work, custom
+adapters, incorrect or ambiguous answers, and questions the tool could not answer.
+
+Customer evidence prioritizes the roadmap and validates composition. It does not
+replace a redistributable fixture, independent oracle, schema assertion, or release
+gate. The steward converts reproducible correctness failures into minimized public
+regressions; security judgments and private firmware bytes remain outside the repo.
+
 ## 3. Required sprint contract
 
 Every `docs/NEXT-SPRINT.md` must be short enough to review as a single contract and name
@@ -238,6 +251,13 @@ It must:
 - keep compiler absence, fixture absence, and unsupported profiles as hard failures;
 - make target profile/layout identity explicit in release evidence;
 - avoid treating `scripts/check.sh` as semantic proof.
+
+A downstream gate references accepted prerequisite results and their frozen
+specification hashes. It does not duplicate their internal comparators, fixture
+matrices, or mutation suites unless the downstream claim introduces a new interaction
+that those prerequisites cannot falsify. Release closure proves identity, completeness,
+and authorized promotion rather than becoming a second implementation of every
+prerequisite.
 
 Development artifacts may live in a fresh temporary directory. An accepted gate's
 result, specification, hashes, and command log must be retained by a pull request, CI
@@ -495,6 +515,24 @@ not make shared build products concurrency-safe.
 
 ## 8. Sprint lifecycle
 
+### Customer-guided assignment flow
+
+Customer checkpoints occur at roadmap boundaries rather than after every patch:
+
+1. The steward gives the customer agent one natural, outcome-oriented firmware task.
+2. The agent works through public CLI surfaces and records its commands and any thin
+   external analysis it needed.
+3. The steward classifies each result as a correctness defect, machine-interface
+   friction, missing deterministic fact, or investigation-specific judgment.
+4. The steward selects the smallest roadmap fact that removes the highest-cost repeated
+   workaround and assigns it to the cheapest evidence lane that can falsify it.
+5. Related sprints proceed serially until the roadmap checkpoint is coherent; the same
+   customer task or a nearby objective then tests the combined product behavior.
+
+A customer report may interrupt sequencing for a silent incorrect answer. A usability
+request does not automatically authorize a new command or analysis subsystem, and a
+successful private-corpus run does not promote a target.
+
 ### Patch fast path
 
 For a patch-lane sprint, the lifecycle is:
@@ -579,13 +617,13 @@ authorization.
 After acceptance, update `ROADMAP.md`, replace `docs/NEXT-SPRINT.md` with the next
 contract, and begin again from the newly accepted revision.
 
-When the remaining roadmap exit outcomes form a release candidate, pause sprint
-selection for an independent real-customer workflow against representative firmware.
-The customer agent receives the candidate CLI and its normal research objective, not
-the internal acceptance implementation. Reproducible correctness defects become
-minimized fixtures and gated roadmap work before release; usability requests are
-ranked against the product boundary and may remain external composition work. Private
-firmware evidence supplements but never replaces redistributable release gates.
+At each customer checkpoint named by the roadmap, pause sprint selection for an
+independent real-customer workflow against representative firmware. The formal release
+checkpoint uses a new firmware version or research objective and remains uncoached.
+Reproducible correctness defects become minimized fixtures and gated roadmap work;
+usability requests are ranked against the product boundary and may remain external
+composition work. Private firmware evidence supplements but never replaces
+redistributable release gates.
 
 Record a short process retrospective at every accepted sprint: what created evidence,
 what created delay, where an agent or permission boundary failed, and whether the

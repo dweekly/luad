@@ -38,6 +38,13 @@ machine-consumable answers for these questions:
    the predicate?
 7. Can the same facts be consumed deterministically by a human and an AI agent across a
    firmware-scale batch?
+8. Which literal global, table, local-alias, or closure-bound path names a call target,
+   and which exact instructions establish that symbolic path?
+9. Is a call argument a constant-leaf expression, parameter-dependent expression,
+   upvalue, call result, other computation, or explicitly unresolved value?
+10. Which statically provable prototype calls another, and which relationships remain
+    ambiguous?
+11. Which prototype bodies remain identical or change across firmware versions?
 
 `luad` supplies deterministic facts for this workflow. Security classification,
 attacker-control judgments, hypotheses, naming, and cross-session research state remain
@@ -104,11 +111,52 @@ upvalue → nested-child upvalue while keeping each hop tied to an exact closure
   decoding operands.
 - Batch export accepts explicit file sets or bounded recursive discovery, produces one
   deterministic record sequence, identifies each input, and reports per-file outcomes.
+- Every exported fact carries or directly references an input and interpretation
+  identity, so interleaved records are joinable without retaining envelope state.
+- Prototype records expose both artifact-local navigation identity and a versioned,
+  documented content identity suitable for cross-firmware joins.
 - A failed file cannot disappear from batch output or be converted into overall success.
 - Output ordering, pagination, limits, exit status, stdout, and stderr behavior remain
   stable and documented.
 - Capability output distinguishes code presence, experimental surfaces, and exact
   release evidence. A fixture-only library result cannot imply firmware readiness.
+
+## Required factual resolution
+
+- `CALL` and `TAILCALL` records expose an evidence-linked symbolic callee path when
+  bytecode lookup, alias, and closure-binding facts establish one unambiguously.
+- A literal module-loader call may label a symbolic path with its constant argument,
+  but the record identifies that basis and does not claim which runtime object the
+  loader returns.
+- Callee resolution through upvalues preserves every parent-to-child binding hop. A
+  dynamic key, conflicting definition, unsupported boundary, or analysis limit yields
+  an explicit unresolved reason rather than a guessed name.
+- Selected registers and call arguments link to a bounded value-expression graph that
+  distinguishes constants, parameters, upvalues, call results, concatenations, other
+  computations, cycles, and explicit cutoffs.
+- Operand origins are captured at the writing instruction. A destination that aliases
+  an input, including `CONCAT A A C`, cannot recurse into its newly written value or
+  silently degrade a known operand to unknown.
+- Recursive provenance identifies the leaf origins of an expression; the opcode
+  `CONCAT` alone does not imply parameter dependence.
+- Statically provable call edges link exact caller instructions to exact callee
+  prototypes and their evidence. Dynamic dispatch, framework reachability,
+  authentication, attacker control, and dangerous-sink labels remain caller judgments.
+- All traversal and output have explicit depth, node, and size bounds. Exhaustion
+  produces a machine-visible cutoff and never a plausible complete classification.
+
+## Required LNUM32 public authority
+
+The embedded profile requires a public compiler authority derived from Lua 5.1.5 and
+an immutable revision of the official OpenWrt Lua package recipe and ordered patch
+series. The authority manifest pins every bytecode-affecting input, including numeric
+mode, integer tag, serialized string-width behavior, compiler flags, target toolchain,
+and build command.
+
+Source archive, OpenWrt revision, patches, configuration, and generated output establish
+portable provenance. A native compiler executable hash identifies only that particular
+platform/toolchain build. Private TP-Link chunks supplement compatibility evidence but
+cannot define the format or promote the target.
 
 ## Public evidence requirements
 
@@ -135,10 +183,10 @@ batch records, and stale or cross-revision evidence.
 
 ## Adjacent workflows
 
-Corpus-wide search, call-graph inference, sink classification, register provenance,
-firmware-tree diffing, pseudo-code structuring, interpreter-semantic recovery,
-cross-language taint, native SRE synchronization, and persistent research sessions may
-be valuable external layers. `luad` may exchange provenance-bound mappings and factual
-schemas with those layers without owning their execution or judgments. They do not
-enter the embedded Lua 5.1 release claim unless a future sprint gives one of them a
-separate public contract and independent proof gate.
+Whole-system reachability, sink classification, attacker-control analysis,
+pseudo-code structuring, interpreter-semantic recovery, cross-language taint, native
+SRE synchronization, and persistent research sessions may be valuable external layers.
+`luad` may exchange provenance-bound mappings and factual schemas with those layers
+without owning their execution or judgments. They do not enter the embedded Lua 5.1
+release claim unless a future sprint gives a narrower deterministic fact its own public
+contract and independent proof gate.
