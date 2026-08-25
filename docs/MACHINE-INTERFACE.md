@@ -26,6 +26,7 @@ luad diagnostics --format json
 luad schema capabilities
 luad schema diagnostics
 luad schema callees
+luad schema callgraph
 luad schema origins
 luad schema export
 ```
@@ -40,6 +41,7 @@ Available schema names are:
 - `validate`
 - `cfg`
 - `callees`
+- `callgraph`
 - `origins`
 - `xrefs`
 - `query`
@@ -170,6 +172,25 @@ unreachable calls, ambiguity, and analysis bounds are reported rather than omitt
 JSON uses the `callees` schema. JSONL emits self-identifying `callee` facts followed by
 a summary. Text is a human rendering of the same typed facts.
 
+### `callgraph`
+
+Emits exactly one caller-to-prototype result for every physical Lua 5.1 `CALL` and
+`TAILCALL`. A `resolved` result carries an exact child-prototype path, a closed
+resolution basis, and sorted stable instruction evidence. An `unresolved` result carries
+a typed stop reason and the available evidence; symbolic names without a unique
+prototype store do not become edges.
+
+`closure-value` relations retain direct, aliased, CFG-agreed, and safely captured
+closure identities. `unique-global-store` relations join a literal global lookup to one
+closure-valued store in the analyzed chunk using the register value present at that
+store instruction. Multiple stores, non-closure values, conflicts, mutable captures,
+open windows, unsupported boundaries, and limits remain explicit.
+
+Resolved records also appear as `calls` xrefs from the call instruction to the child
+prototype. JSON uses the `callgraph` schema. JSONL and recursive export use
+`call_relation` records. These bytecode-local relations do not assert runtime
+reachability, execution order, or immunity from unobserved external mutation.
+
 ### `origins`
 
 Emits one call-origin fact for every physical Lua 5.1 `CALL` and `TAILCALL`. A fixed
@@ -214,8 +235,9 @@ JSON format returns a top-level `DiagnosticCatalogResponse` (`schema_version`, `
 
 Batch exports firmware artifacts in streaming JSONL format.
 `--max-facts-per-file N` bounds the number of counted fact records (`prototype`,
-`instruction`, `constant`, `upvalue`, `xref`, `callee`, `origin`) emitted per input file while
-preserving stream framing, diagnostics, and per-file truncation metadata.
+`instruction`, `constant`, `upvalue`, `xref`, `callee`, `origin`, `call_relation`)
+emitted per input file while preserving stream framing, diagnostics, and per-file
+truncation metadata.
 
 Every data record has a required `context` object. Successful facts carry
 `input_identity` and `interpretation`; parse-failure diagnostics carry identity with a

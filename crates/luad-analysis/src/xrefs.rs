@@ -66,6 +66,30 @@ impl XrefIndex {
     pub fn build(chunk: &Chunk) -> Self {
         let mut index = Self::default();
         index.index_proto(&chunk.dialect, &chunk.main_proto);
+        if chunk.dialect.starts_with("lua5.1") {
+            let call_relations = crate::analyze_chunk_call_relations(chunk);
+            for fact in call_relations
+                .prototypes
+                .into_iter()
+                .flat_map(|prototype| prototype.calls)
+            {
+                if let crate::CallRelationResolution::Resolved { callee, .. } = fact.resolution {
+                    index.entries.push(XrefEntry {
+                        source: fact.call_id,
+                        target: StableId::proto(callee),
+                        relation: XrefRelation::Calls,
+                    });
+                }
+            }
+        }
+        index.entries.sort_by(|left, right| {
+            (&left.source, &left.target, left.relation).cmp(&(
+                &right.source,
+                &right.target,
+                right.relation,
+            ))
+        });
+        index.entries.dedup();
         index
     }
 

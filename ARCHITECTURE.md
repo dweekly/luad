@@ -36,8 +36,9 @@ Each decoder must construct a validated, immutable `ChunkLayout` from the chunk 
 ### `luad-analysis`
 
 Consumes the shared model and semantic instructions to produce CFGs, dominators, xrefs,
-queries, diffs, symbolic callee facts, and call-argument origin expressions. It must not
-reparse bytecode or silently select a default dialect.
+queries, diffs, symbolic callee facts, call-argument origin expressions, and
+caller-to-prototype relations. It must not reparse bytecode or silently select a default
+dialect.
 
 Every analysis must state or enforce its preconditions. Invalid registers, jumps, stack
 references, or instruction modes can make analysis unavailable rather than merely less

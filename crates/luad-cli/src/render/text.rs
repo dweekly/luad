@@ -497,6 +497,39 @@ pub fn render_callees(analysis: &luad_analysis::ChunkCalleeAnalysis) {
     }
 }
 
+/// Render one line per physical call with an exact relation or stop reason.
+pub fn render_callgraph(analysis: &luad_analysis::ChunkCallRelationAnalysis) {
+    for prototype in &analysis.prototypes {
+        for fact in &prototype.calls {
+            let resolution = match &fact.resolution {
+                luad_analysis::CallRelationResolution::Resolved {
+                    callee,
+                    basis,
+                    evidence,
+                } => format!(
+                    "proto:{callee} basis:{basis:?} [{}]",
+                    evidence
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                luad_analysis::CallRelationResolution::Unresolved { reason, evidence } => {
+                    format!(
+                        "unresolved:{reason:?} [{}]",
+                        evidence
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                }
+            };
+            println!("{} {:<8} {}", fact.call_id, fact.call_kind, resolution);
+        }
+    }
+}
+
 /// Render bounded call-argument origin expressions.
 pub fn render_origins(analysis: &luad_analysis::ChunkOriginAnalysis) {
     for prototype in &analysis.prototypes {

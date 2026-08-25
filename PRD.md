@@ -314,6 +314,11 @@ Requirement identifiers are stable references for design, implementation, tests,
 - **FR-INPUT-009:** Accept an explicit input list and bounded recursive discovery while
   emitting one structured per-file outcome for source, supported bytecode, malformed,
   ambiguous, and unsupported inputs.
+- **FR-INPUT-010:** Qualify every batch-input diagnostic with its exact input path and
+  distinguish readable unsupported inputs from unreadable inputs.
+- **FR-INPUT-011:** Treat a mixed batch with at least one complete successful export as
+  process success by default while reporting skipped inputs; provide a strict mode and
+  fail when no input succeeds or fatal I/O prevents a complete stream.
 
 ### 5.2 Lossless chunk parsing
 
@@ -474,6 +479,7 @@ luad disasm        Produce a faithful instruction and metadata listing
 luad validate      Validate format and VM invariants
 luad cfg           List or export control-flow graphs
 luad callees       Resolve symbolic labels for every call instruction
+luad callgraph     Resolve bytecode-local caller-to-prototype relations
 luad origins       Trace bounded value-expression origins for call arguments
 luad xrefs         Query references to and from an artifact
 luad explain       Explain a field, prototype, instruction, block, or diagnostic
@@ -514,6 +520,9 @@ luad cfg sample.luac --proto 'proto:0/2' --format dot
 
 # Enumerate resolved and unresolved symbolic callees
 luad callees sample.luac --format jsonl
+
+# Enumerate exact caller-to-prototype relations and explicit stop reasons
+luad callgraph sample.luac --format jsonl
 
 # Trace eager, bounded call-argument expressions without applying sink policy
 luad origins sample.luac --format jsonl

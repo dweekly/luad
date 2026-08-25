@@ -214,6 +214,28 @@
           "$ref": "#/definitions/JsonlRecordContext"
         },
         "data": {
+          "$ref": "#/definitions/CallRelationFact"
+        },
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "call_relation"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "context",
+        "data",
+        "record_type"
+      ],
+      "properties": {
+        "context": {
+          "$ref": "#/definitions/JsonlRecordContext"
+        },
+        "data": {
           "$ref": "#/definitions/CallOriginFact"
         },
         "record_type": {
@@ -421,6 +443,138 @@
           "$ref": "#/definitions/ProtoPath"
         }
       }
+    },
+    "CallRelationBasis": {
+      "description": "Closed evidence bases for a resolved caller-to-prototype relation.",
+      "oneOf": [
+        {
+          "description": "The callee value is an exact closure constructed in the caller's value flow.",
+          "type": "string",
+          "enum": [
+            "closure-value"
+          ]
+        },
+        {
+          "description": "A literal global path has one closure-valued store in the analyzed chunk.",
+          "type": "string",
+          "enum": [
+            "unique-global-store"
+          ]
+        }
+      ]
+    },
+    "CallRelationFact": {
+      "description": "One total caller-to-prototype result for a physical call instruction.",
+      "type": "object",
+      "required": [
+        "call_id",
+        "call_kind",
+        "caller",
+        "pc",
+        "resolution"
+      ],
+      "properties": {
+        "call_id": {
+          "$ref": "#/definitions/StableId"
+        },
+        "call_kind": {
+          "type": "string"
+        },
+        "caller": {
+          "$ref": "#/definitions/ProtoPath"
+        },
+        "pc": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "resolution": {
+          "$ref": "#/definitions/CallRelationResolution"
+        }
+      }
+    },
+    "CallRelationResolution": {
+      "description": "Resolution attached to one physical call instruction.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "basis",
+            "callee",
+            "evidence",
+            "status"
+          ],
+          "properties": {
+            "basis": {
+              "$ref": "#/definitions/CallRelationBasis"
+            },
+            "callee": {
+              "$ref": "#/definitions/ProtoPath"
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/StableId"
+              }
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "resolved"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "evidence",
+            "reason",
+            "status"
+          ],
+          "properties": {
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/StableId"
+              }
+            },
+            "reason": {
+              "$ref": "#/definitions/CallRelationUnresolvedReason"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "unresolved"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "CallRelationUnresolvedReason": {
+      "description": "Closed reasons why no unique prototype relation is available.",
+      "type": "string",
+      "enum": [
+        "missing-definition",
+        "control-flow-conflict",
+        "dynamic-key",
+        "overwritten",
+        "call-result",
+        "open-register-window",
+        "unsupported-value",
+        "unsupported-instruction",
+        "mutable-capture",
+        "ambiguous-capture",
+        "path-limit",
+        "analysis-limit",
+        "unreachable",
+        "symbolic-path-only",
+        "missing-prototype-store",
+        "multiple-prototype-stores",
+        "non-closure-store",
+        "ambiguous-store-value"
+      ]
     },
     "CalleeFact": {
       "description": "One auditable callee result for a `CALL` or `TAILCALL` instruction.",

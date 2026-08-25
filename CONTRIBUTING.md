@@ -44,7 +44,7 @@ The compilers are installed beneath `/tmp/lua-tools/bin`. Canonical gates must v
 |---|---|
 | `crates/luad-core` | Shared models, stable IDs, provenance, diagnostics, limits, safe reader |
 | `crates/luad-dialect-lua5*` | Version-specific detection, parsing, opcodes, lifting, validation |
-| `crates/luad-analysis` | CFGs, dominators, xrefs, queries, diffs, symbolic callees, argument origins |
+| `crates/luad-analysis` | CFGs, dominators, xrefs, queries, diffs, symbolic callees, argument origins, call relations |
 | `crates/luad-cli` | CLI contracts, input handling, exit behavior, rendering, schemas |
 | `crates/luad-oracle` | Official-compiler harness, listing parser, differential assertions |
 | `tests/fixtures` | Source corpus and bundled compiled chunks |

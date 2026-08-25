@@ -23,7 +23,8 @@
         "disasm",
         "validate",
         "symbolic callees (experimental)",
-        "call-argument origins (experimental)"
+        "call-argument origins (experimental)",
+        "provable call relations (experimental)"
       ],
       "status": "experimental",
       "required_gates": [
@@ -32,7 +33,8 @@
         "gate-closures-lua51",
         "gate-resolved-constants-lua51",
         "gate-symbolic-callees-lua51",
-        "gate-argument-origins-lua51"
+        "gate-argument-origins-lua51",
+        "gate-call-relations-lua51"
       ],
       "completed_gates": [],
       "evidence": []

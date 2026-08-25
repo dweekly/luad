@@ -42,6 +42,9 @@ pub enum Commands {
     /// Resolve symbolic labels for every call instruction.
     Callees(CalleesArgs),
 
+    /// Resolve bytecode-local caller-to-prototype relations.
+    Callgraph(CallgraphArgs),
+
     /// Trace bounded value-expression origins for call arguments.
     Origins(OriginsArgs),
 
@@ -170,6 +173,20 @@ pub struct CfgArgs {
 
 #[derive(Args, Debug)]
 pub struct CalleesArgs {
+    /// Path to compiled Lua bytecode file.
+    pub file: String,
+
+    /// Output format (text, json, or jsonl).
+    #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+
+    /// Explicit Lua 5.1 dialect/profile override.
+    #[arg(short, long)]
+    pub dialect: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct CallgraphArgs {
     /// Path to compiled Lua bytecode file.
     pub file: String,
 
