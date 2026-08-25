@@ -34,6 +34,14 @@ changes. It will record the exact target compiler, flags, environment, patch ord
 and build command. A compiler-binary SHA-256 identifies one build artifact only; source,
 patch, configuration, and output identities establish the portable authority.
 
+The authority compiler will use the patched source tree's static `luac-host` target on
+a little-endian build host. OpenWrt patch `030-archindependent-bytecode.patch` serializes
+string lengths as 32-bit `unsigned int` rather than host `size_t`; the LNUM patches select
+32-bit `lua_Integer` and double `lua_Number`. The authority therefore does not require a
+32-bit host ABI, `-m32`, QEMU, or execution of a target binary. The builder will verify
+the emitted `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4` header and tag-9
+integer encoding rather than infer portability from build-host properties.
+
 If this upstream recipe cannot generate the target header and constant encoding exactly,
 the sprint stops at a failed authority result. It must not alter `luad` or relabel a
 nearby profile to make the fixture fit.
@@ -68,7 +76,20 @@ Acceptance will establish, through the public CLI and independent oracle:
 - deterministic reproduction from authenticated source inputs;
 - rejection of a changed archive, OpenWrt revision, patch, patch order, configuration,
   target layout, fixture, or compiler output;
-- zero skipped tests when the authority toolchain is absent or invalid.
+- zero skipped tests in the canonical authority gate: it provisions authenticated
+  inputs or fails before comparison when its network or standard native build
+  prerequisites are unavailable.
+
+Ordinary offline workspace tests authenticate the committed manifest, sources, and
+generated fixtures; they do not claim to reproduce the authority build. The canonical
+gate alone performs download, patch, native compiler construction, fixture regeneration,
+and byte-for-byte comparison in a disposable directory.
+
+Existing Lua 5.1 gates are regression prerequisites, not independent evidence for the
+new profile authority. If an authenticated compiler fact disagrees with an accepted
+fixture-derived assumption, the authority gate fails and names the discrepancy. Tests
+or implementation then require a separate corrective change; the authority must not be
+weakened to preserve an earlier green gate or private-corpus result.
 
 The supplemental customer check will run the accepted candidate over the private
 firmware corpus and record only aggregate parse, validation, timing, and profile results.
