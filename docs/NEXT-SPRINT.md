@@ -58,9 +58,9 @@ Redistributable Lua sources will exercise:
 - stripped and debug-bearing output where the compiler supports both deterministically.
 
 Every generated chunk will record source, bytecode, upstream revision, patch-series,
-configuration, compiler build, command, profile, layout, and content hashes. At least
-one cross-profile negative fixture will prove that stock Lua 5.1 cannot accept the
-LNUM32 interpretation.
+configuration, compiler build, command, profile, layout, and content hashes. Interpreting
+the same authenticated LNUM32 fixture under stock Lua 5.1 supplies the cross-profile
+negative case; no duplicate fixture is required.
 
 ## Independent acceptance
 
@@ -70,7 +70,7 @@ Acceptance will establish, through the public CLI and independent oracle:
 - exact agreement between compiler listing, the independent Lua 5.1/LNUM decoder, and
   live `luad` JSON for the generated fixture family;
 - automatic and explicit selection of `lua5.1-lnum32` with the complete interpretation
-  identity in every response and stream;
+  identity in the claimed command envelopes and the batch `file_start` record;
 - zero validation diagnostics for valid fixtures and exact rejection under stock
   profile substitution;
 - deterministic reproduction from authenticated source inputs;
@@ -85,11 +85,20 @@ generated fixtures; they do not claim to reproduce the authority build. The cano
 gate alone performs download, patch, native compiler construction, fixture regeneration,
 and byte-for-byte comparison in a disposable directory.
 
+The acceptance branch carries reference fixtures produced by the steward's authenticated
+feasibility build. Their hashes freeze before implementation. The implementation builder
+must reproduce those bytes and cannot regenerate, replace, or re-pin the accepted files.
+
 Existing Lua 5.1 gates are regression prerequisites, not independent evidence for the
 new profile authority. If an authenticated compiler fact disagrees with an accepted
 fixture-derived assumption, the authority gate fails and names the discrepancy. Tests
 or implementation then require a separate corrective change; the authority must not be
 weakened to preserve an earlier green gate or private-corpus result.
+
+If either accepted fixture exposes a parser, disassembler, validator, selection, or
+machine-contract defect in frozen production code, the sprint stops with that minimized
+defect. A separate bounded correction must close it before authority acceptance; the
+fixture and expected authority facts remain unchanged.
 
 The supplemental customer check will run the accepted candidate over the private
 firmware corpus and record only aggregate parse, validation, timing, and profile results.
@@ -98,10 +107,11 @@ Private bytes and findings remain outside the repository and cannot satisfy the 
 ## Allowed scope and roles
 
 The acceptance author may add the authority manifest, fixture sources, generated
-fixtures, an independent comparison module, acceptance tests, and the sprint gate. The
-implementation agent may add a hermetic authority-builder script and the smallest
-oracle integration needed to expose the generated compiler. Production parser,
-disassembler, validator, analysis, query, and capability code are frozen.
+fixtures, a narrowly scoped independent constant/layout reader inside the acceptance
+test, acceptance tests, and the sprint gate. The implementation agent may add the
+pinned authenticated authority-builder script and one CI invocation of the canonical
+gate. Production parser, disassembler, validator, analysis, query, capability, shared
+oracle, and proof-harness code are frozen.
 
 The steward owns upstream pin review, fixture provenance, mutation sufficiency, the
 canonical run, and the supplemental customer check. Opus supplies one bounded
