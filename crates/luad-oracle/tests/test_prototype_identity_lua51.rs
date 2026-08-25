@@ -5,7 +5,8 @@ use std::io::Write;
 use std::process::Command;
 
 use luad_analysis::{
-    analyze_chunk_prototype_identities, PrototypeIdentityFact, PROTOTYPE_IDENTITY_SCHEME_V1,
+    analyze_chunk_prototype_identities, analyze_chunk_prototype_identities_v1,
+    PrototypeIdentityFact, PROTOTYPE_IDENTITY_SCHEME_V2,
 };
 use luad_core::limits::{ParseMode, ResourceLimits};
 use luad_core::model::{Chunk, ConstantValue, UpvalueDesc};
@@ -43,6 +44,16 @@ fn root_digest(chunk: &Chunk) -> String {
         .into_iter()
         .next()
         .expect("root identity")
+        .digest
+}
+
+fn v1_root_digest(chunk: &Chunk) -> String {
+    analyze_chunk_prototype_identities_v1(chunk)
+        .expect("v1 compatibility identity analysis")
+        .prototypes
+        .into_iter()
+        .next()
+        .expect("root v1 identity")
         .digest
 }
 
@@ -109,8 +120,8 @@ fn test_identity_golden_and_debug_invariance() {
     let with_debug = fixture("hello", false);
     let stripped = fixture("hello", true);
     let expected = "sha256:c5c865906c6cb306ef43694f504a01a191e588a04f595b6c5c1ba964be27da29";
-    assert_eq!(root_digest(&with_debug), expected);
-    assert_eq!(root_digest(&stripped), expected);
+    assert_eq!(v1_root_digest(&with_debug), expected);
+    assert_eq!(v1_root_digest(&stripped), expected);
 
     let mut relocated = with_debug.clone();
     relocated.sha256 = "different-artifact".to_string();
@@ -126,7 +137,7 @@ fn test_identity_golden_and_debug_invariance() {
     relocated.main_proto.constants[0].source.raw_hex = "00".to_string();
     relocated.main_proto.id = StableId::proto(ProtoPath(vec![99]));
     relocated.main_proto.path = ProtoPath(vec![99]);
-    assert_eq!(root_digest(&relocated), expected);
+    assert_eq!(v1_root_digest(&relocated), expected);
 }
 
 #[test]
@@ -352,7 +363,7 @@ fn test_identity_schema_capability_and_format_are_public() {
         .any(|feature| feature == "prototype subtree identity (experimental)"));
 
     let fact = identities(&fixture("hello", false)).remove(0);
-    assert_eq!(fact.scheme, PROTOTYPE_IDENTITY_SCHEME_V1);
+    assert_eq!(fact.scheme, PROTOTYPE_IDENTITY_SCHEME_V2);
     assert_eq!(fact.digest.len(), "sha256:".len() + 64);
     assert!(fact.digest.starts_with("sha256:"));
     assert!(fact.digest["sha256:".len()..]

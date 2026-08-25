@@ -180,12 +180,17 @@ struct DataflowResult {
 /// Analyze every prototype in structural order with conservative closure captures.
 #[must_use]
 pub fn analyze_chunk_origins(chunk: &luad_core::model::Chunk) -> ChunkOriginAnalysis {
+    let summary = crate::capture_mutation::CaptureMutationSummary::build(
+        chunk,
+        crate::callees::DEFAULT_CAPTURE_MUTATION_BUDGET,
+    );
     let mut prototypes = Vec::new();
     let root_captures = root_capture_environment(&chunk.main_proto);
     analyze_proto_tree(
         &chunk.dialect,
         &chunk.main_proto,
         &root_captures,
+        &summary,
         &mut prototypes,
     );
     ChunkOriginAnalysis { prototypes }
@@ -195,6 +200,7 @@ fn analyze_proto_tree(
     dialect: &str,
     proto: &Prototype,
     captures: &CaptureEnvironment,
+    summary: &crate::capture_mutation::CaptureMutationSummary,
     results: &mut Vec<OriginAnalysis>,
 ) {
     let instructions = crate::lift_proto_for_dialect(dialect, proto);
@@ -210,13 +216,13 @@ fn analyze_proto_tree(
         calls,
     });
 
-    let children = derive_child_captures(proto, &instructions, &cfg, &dataflow, captures);
+    let children = derive_child_captures(proto, &instructions, &cfg, &dataflow, captures, summary);
     for (index, child) in proto.protos.iter().enumerate() {
         let environment = children
             .get(&index)
             .cloned()
             .unwrap_or_else(|| unknown_capture_environment(child));
-        analyze_proto_tree(dialect, child, &environment, results);
+        analyze_proto_tree(dialect, child, &environment, summary, results);
     }
 }
 
@@ -1022,6 +1028,7 @@ fn derive_child_captures(
     cfg: &ControlFlowGraph,
     dataflow: &DataflowResult,
     parent_captures: &CaptureEnvironment,
+    summary: &crate::capture_mutation::CaptureMutationSummary,
 ) -> BTreeMap<usize, CaptureEnvironment> {
     if dataflow.exhausted {
         return BTreeMap::new();
@@ -1073,6 +1080,7 @@ fn derive_child_captures(
                         instructions,
                         cfg,
                         parent_captures,
+                        summary,
                     )
                 })
                 .unwrap_or_else(|| {
@@ -1109,9 +1117,10 @@ fn capture_from_descriptor(
     parent_instructions: &[SemanticInstruction],
     parent_cfg: &ControlFlowGraph,
     parent_captures: &CaptureEnvironment,
+    summary: &crate::capture_mutation::CaptureMutationSummary,
 ) -> OriginExpression {
     let child_id = StableId::upvalue(child.path.clone(), slot as usize);
-    if capture_slot_is_mutated(child, slot) || !is_closure_binding(descriptor) {
+    if summary.is_child_slot_mutated(&child.path, slot) || !is_closure_binding(descriptor) {
         return unknown(
             OriginUnknownReason::MutableCapture,
             [child_id, closure.id.clone(), descriptor.id.clone()],
@@ -1120,7 +1129,7 @@ fn capture_from_descriptor(
     let value = match descriptor.reads.first() {
         Some(EffectTarget::Register { index }) => {
             if Some(*index) == closure_destination
-                || local_capture_is_mutated(parent, parent_instructions, *index)
+                || summary.is_local_register_mutated(&parent.path, *index)
                 || effect_may_be_written_after(
                     parent_instructions,
                     parent_cfg,
@@ -1134,7 +1143,7 @@ fn capture_from_descriptor(
             }
         }
         Some(EffectTarget::Upvalue { index, .. }) => {
-            if capture_slot_is_mutated(parent, *index)
+            if summary.is_upvalue_slot_mutated(&parent.path, *index)
                 || effect_may_be_written_after(
                     parent_instructions,
                     parent_cfg,
@@ -1162,39 +1171,6 @@ fn capture_from_descriptor(
         );
     }
     add_expression_evidence(value, [child_id, closure.id.clone(), descriptor.id.clone()])
-}
-
-fn local_capture_is_mutated(
-    parent: &Prototype,
-    instructions: &[SemanticInstruction],
-    register: u8,
-) -> bool {
-    instructions
-        .iter()
-        .filter(|instruction| instruction.mnemonic == "CLOSURE")
-        .any(|closure| {
-            let Some(child_index) = closure.operands.iter().find_map(|operand| match operand {
-                TypedOperand::Prototype { index, .. } => Some(*index),
-                _ => None,
-            }) else {
-                return false;
-            };
-            let Some(child) = parent.protos.get(child_index) else {
-                return true;
-            };
-            (0..child.upvalues.len()).any(|slot| {
-                instructions
-                    .get(closure.pc + 1 + slot)
-                    .is_some_and(|descriptor| {
-                        is_closure_binding(descriptor)
-                            && matches!(
-                                descriptor.reads.first(),
-                                Some(EffectTarget::Register { index }) if *index == register
-                            )
-                            && capture_slot_is_mutated(child, slot as u8)
-                    })
-            })
-        })
 }
 
 fn state_before_pc(
@@ -1254,22 +1230,6 @@ fn unknown_capture_environment(proto: &Prototype) -> CaptureEnvironment {
             )
         })
         .collect()
-}
-
-fn capture_slot_is_mutated(proto: &Prototype, slot: u8) -> bool {
-    let instructions = luad_dialect_lua51::lift_proto_lua51(proto);
-    instructions.iter().any(|instruction| {
-        instruction
-            .writes
-            .iter()
-            .any(|write| matches!(write, EffectTarget::Upvalue { index, .. } if *index == slot))
-    }) || proto.protos.iter().any(|child| {
-        child.upvalues.iter().any(|capture| {
-            capture.instack == 0
-                && capture.idx == slot
-                && capture_slot_is_mutated(child, capture.index as u8)
-        })
-    })
 }
 
 fn effect_may_be_written_after(

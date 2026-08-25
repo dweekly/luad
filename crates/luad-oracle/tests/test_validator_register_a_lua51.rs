@@ -451,9 +451,13 @@ fn iasbx(op: u8, a: u8, sbx: i32) -> u32 {
     iabx(op, a, (sbx + 131_071) as u32)
 }
 
-/// Encodes `row` with the given `A` and otherwise-zero operands.
+/// Encodes `row` with the given `A` and inert operands that keep each probe
+/// structurally independent of the following word.
 fn probe(row: &OpRow, a: u8) -> u32 {
     match row.fmt {
+        // SETLIST with C == 0 consumes the following physical word as data.
+        // C == 1 keeps the opcode-matrix fixture a sequence of instructions.
+        Fmt::Abc if row.code == 34 => iabc(row.code, a, 0, 1),
         Fmt::Abc => iabc(row.code, a, 0, 0),
         Fmt::Abx => iabx(row.code, a, 0),
         Fmt::Asbx => iasbx(row.code, a, 0),

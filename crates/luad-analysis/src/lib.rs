@@ -2,6 +2,7 @@
 
 pub mod callees;
 pub mod callgraph;
+pub mod capture_mutation;
 pub mod cfg;
 pub mod diff;
 pub mod origins;
@@ -10,9 +11,9 @@ pub mod query;
 pub mod xrefs;
 
 pub use callees::{
-    analyze_callees, analyze_chunk_callees, CalleeAnalysis, CalleeFact, CalleeResolution,
-    CalleeUnresolvedReason, CaptureEnvironment, CaptureValue, ChunkCalleeAnalysis,
-    SymbolicPathBasis,
+    analyze_callees, analyze_chunk_callees, analyze_chunk_callees_with_mutation_budget,
+    CalleeAnalysis, CalleeFact, CalleeResolution, CalleeUnresolvedReason, CaptureEnvironment,
+    CaptureValue, ChunkCalleeAnalysis, SymbolicPathBasis,
 };
 pub use callgraph::{
     analyze_chunk_call_relations, CallRelationAnalysis, CallRelationBasis, CallRelationFact,
@@ -26,8 +27,9 @@ pub use origins::{
     OriginUnknownReason,
 };
 pub use prototype_identity::{
-    analyze_chunk_prototype_identities, ChunkPrototypeIdentityAnalysis, PrototypeIdentityError,
-    PrototypeIdentityFact, PROTOTYPE_IDENTITY_SCHEME_V1,
+    analyze_chunk_prototype_identities, analyze_chunk_prototype_identities_v1,
+    ChunkPrototypeIdentityAnalysis, PrototypeIdentityError, PrototypeIdentityFact,
+    PROTOTYPE_IDENTITY_SCHEME_V1, PROTOTYPE_IDENTITY_SCHEME_V2,
 };
 pub use query::{
     execute_query, QueryError, QueryExpr, QueryField, QueryMatch, QueryOp, QueryResponse,

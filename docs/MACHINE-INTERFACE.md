@@ -117,15 +117,42 @@ Successful Lua 5.1 export emits one `prototype_identity` fact per prototype in
 structural preorder:
 
 ```json
-{"proto_id":"proto:0/2","scheme":"luad-prototype-v1","digest":"sha256:<64 lowercase hex>"}
+{"proto_id":"proto:0/2","scheme":"luad-prototype-v2","digest":"sha256:<64 lowercase hex>"}
 ```
 
 The digest commits to decoded subtree content, not source identity or behavioral
-equivalence. Equal v1 digests mean that the two records have equal v1 preimages. Unequal
-digests do not prove different runtime behavior. Artifact-local `proto_id` remains the
-navigation key.
+equivalence. Equal digests under the same scheme mean that the two records have equal
+canonical preimages. Unequal digests do not prove different runtime behavior.
+Artifact-local `proto_id` remains the navigation key.
 
-The v1 preimage starts with ASCII `luad-prototype-v1` and a zero byte. Integers use
+The current scheme is `luad-prototype-v2`. Its canonical instruction stream uses the
+shared Lua 5.1 physical-role classification: ordinary executable words use
+`instruction`, closure capture descriptors use `closure_binding`, and the raw word
+following executable `SETLIST C == 0` uses `setlist_extra`. The extra word is encoded
+with mnemonic `setlist_extra`, one raw `value` operand containing the complete `u32`,
+and no opcode semantics. This prevents opcode-shaped list data from aliasing executable
+prototype content.
+
+The v2 preimage starts with ASCII `luad-prototype-v2` and a zero byte. The remaining
+encoding, record tags, field order, and exclusions are the common contract specified
+below. The normative empty-prototype preimage is 68 bytes:
+
+```text
+6c7561642d70726f746f747970652d7632000100000000000000066c7561352e310000020000000000000000000000000000000000000000000000000000000000000000
+```
+
+Its identity is:
+
+```text
+sha256:a4f418350f217b5477b6dc79e956e7b7b8ba248466fd720955d8324c0f0b0573
+```
+
+`luad-prototype-v1` is a compatibility scheme with a frozen encoder and normative
+vector. Its role vocabulary is exactly `instruction` and `closure_binding`; a physical
+word after `SETLIST C == 0` is encoded according to its low six bits. Consumers that
+require the current physical-role semantics use v2.
+
+Integers use
 big-endian fixed widths; collection counts and byte-string lengths use `u64`. The tagged
 prototype record contains, in order: length-prefixed base dialect `lua5.1`, `numparams`,
 the exact Lua 5.1 vararg byte, `maxstacksize`, physical-PC-ordered typed disassembly
@@ -135,8 +162,7 @@ only owner-local indices, target PCs, or metamethod bytes. Lua 5.1 closure captu
 descriptors use the `closure_binding` role; synthesized generic upvalue descriptor fields
 are not encoded.
 
-The v1 role vocabulary is exactly `instruction` and `closure_binding`. The v1 base
-mnemonic vocabulary is exactly:
+The base executable mnemonic vocabulary is exactly:
 
 ```text
 MOVE LOADK LOADBOOL LOADNIL GETUPVAL GETGLOBAL GETTABLE SETGLOBAL
@@ -181,9 +207,9 @@ so integer and float representations, signed zero, and NaN payloads remain diffe
 The preimage excludes artifact identity, structural paths, stable IDs, source/debug
 metadata, byte offsets, raw words, display text, comments, diagnostics, and confidence.
 Any encoding or decoded-fact mapping change that alters the preimage requires a new
-scheme identifier; v1 never changes meaning.
+scheme identifier; v1 and v2 each retain their defined meaning.
 
-The complete normative vector below is an empty Lua 5.1 prototype with zero parameters,
+The v1 normative vector below is an empty Lua 5.1 prototype with zero parameters,
 the exact vararg byte `0x00`, a maximum stack size of two, and no instructions,
 constants, upvalues, or children. The preimage is 68 bytes:
 
@@ -207,11 +233,15 @@ Returns chunk identity, dialect detection, header, prototype tree, diagnostics, 
 
 Selects a prototype and renders physical instruction words. `--raw`, `--debug-info`, and `--effects` affect text presentation. Check command help and schema before assuming the JSON representation contains semantic effects.
 
-The contract distinguishes a physical word from its semantic role. In Lua
-5.1, the words following `CLOSURE` that bind child upvalues must be exposed as
-ordered closure-binding records, not as independently executed `MOVE` or `GETUPVAL`
-instructions. Closure descriptors remain experimental evidence and are excluded from
-standalone effects and executable CFG nodes.
+The contract distinguishes a physical word from its semantic role. In Lua 5.1, the
+words following `CLOSURE` that bind child upvalues are ordered closure-binding records,
+not independently executed `MOVE` or `GETUPVAL` instructions. The word following an
+executable `SETLIST C == 0` is a `setlist_extra` data record with one raw `u32` value,
+not an opcode. These companion roles remain experimental evidence and are excluded
+from standalone effects, executable CFG nodes, call enumeration, and branch semantics.
+Owner instructions link forward to their companions; companion records link backward
+to their owner. CFG block bounds remain physical while `instruction_pcs` lists only
+executable PCs.
 
 For Lua 5.1 `CLOSURE`, the structured operand's `resolved.id`, instruction `comment`,
 text suffix, and `instantiates` xref identify the same owner-relative child prototype.

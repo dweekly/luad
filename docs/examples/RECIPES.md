@@ -222,7 +222,7 @@ luad export firmware_v2/*.luac --format jsonl | jq -r '
 join -t $'\t' -1 1 -2 1 firmware_v1.prototypes.tsv firmware_v2.prototypes.tsv
 ```
 
-Equal `luad-prototype-v1` digests establish equal canonical content. A missing or changed
+Equal `luad-prototype-v2` digests establish equal canonical content. A missing or changed
 digest is a triage signal only; it does not by itself prove a behavioral change.
 The scheme commits exact constant bytes and is intended for joins within the same Lua
 5.1 profile. Equivalent source compiled for stock and LNUM32 number layouts is not

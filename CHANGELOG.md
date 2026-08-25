@@ -4,6 +4,15 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+- Lua 5.1 now classifies closure bindings and `SETLIST C == 0` payload words through
+  one physical-role pass. Non-executable companions retain raw words, owner links, and
+  physical PCs while remaining absent from effects, calls, and CFG execution.
+- Lua 5.1 validation now rejects truncated SETLIST payloads and control transfers into
+  closure-binding or SETLIST companion words.
+- Callee and argument-origin analysis now share a bounded whole-tree capture-mutation
+  summary that detects sibling and transitive writes to the same captured cell.
+- Recursive Lua 5.1 export now emits `luad-prototype-v2` content identities that commit
+  physical companion roles; the v1 encoder remains available as a compatibility API.
 - Added versioned `luad-prototype-v1` subtree-content identities to Lua 5.1 recursive
   export, with a normative binary encoding, debug/path invariance, ordered child
   commitment, exact constant bytes, public schema/capability discovery, and a dedicated

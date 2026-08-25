@@ -405,11 +405,10 @@ fn expected_block_shapes(words: &[u32], map: &RoleMap) -> Vec<BlockShape> {
 
     let mut leaders: BTreeSet<usize> = BTreeSet::new();
     leaders.insert(0);
-    for pc in 0..count {
+    for (pc, word) in words.iter().copied().enumerate() {
         if !map.roles[pc].is_executable() {
             continue;
         }
-        let word = words[pc];
         let targets = transfer_targets(word, pc);
         if !targets.is_empty() {
             for (target, _) in &targets {
@@ -465,11 +464,8 @@ fn expected_block_shapes(words: &[u32], map: &RoleMap) -> Vec<BlockShape> {
         .map(|(index, shape)| (shape.start_pc, index))
         .collect();
 
-    for index in 0..shapes.len() {
-        let terminator = *shapes[index]
-            .instruction_pcs
-            .last()
-            .expect("non-empty block");
+    for shape in &mut shapes {
+        let terminator = *shape.instruction_pcs.last().expect("non-empty block");
         let word = words[terminator];
         let mut successors: BTreeSet<usize> = BTreeSet::new();
         let opcode = opcode_of(word);
@@ -487,7 +483,7 @@ fn expected_block_shapes(words: &[u32], map: &RoleMap) -> Vec<BlockShape> {
                 successors.insert(next);
             }
         }
-        shapes[index].successor_start_pcs = successors;
+        shape.successor_start_pcs = successors;
     }
 
     // Successor PCs are block leaders by construction; map them to block starts.
@@ -1515,8 +1511,8 @@ fn test_setlist_extra_matrix_is_data_not_program() {
         assert_eq!(extra_instruction.raw_word, shape.word, "{label}: raw word");
         assert_eq!(
             extra_instruction.raw_hex,
-            hex::encode(shape.word.to_le_bytes()),
-            "{label}: raw bytes"
+            format!("0x{:08x}", shape.word),
+            "{label}: numeric raw word"
         );
         assert_eq!(
             extra_instruction.companion_pc,

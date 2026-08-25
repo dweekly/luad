@@ -13,6 +13,9 @@ use thiserror::Error;
 pub const PROTOTYPE_IDENTITY_SCHEME_V1: &str = "luad-prototype-v1";
 const DOMAIN_V1: &[u8] = b"luad-prototype-v1\0";
 
+pub const PROTOTYPE_IDENTITY_SCHEME_V2: &str = "luad-prototype-v2";
+const DOMAIN_V2: &[u8] = b"luad-prototype-v2\0";
+
 const TAG_RECORD_PROTOTYPE: u8 = 0x01;
 const TAG_RECORD_INSTRUCTION: u8 = 0x02;
 const TAG_RECORD_OPERAND: u8 = 0x03;
@@ -103,6 +106,31 @@ struct TreeIdentity {
 }
 
 /// Compute one v1 subtree-content identity for every prototype in structural order.
+pub fn analyze_chunk_prototype_identities_v1(
+    chunk: &Chunk,
+) -> Result<ChunkPrototypeIdentityAnalysis, PrototypeIdentityError> {
+    if !matches!(
+        chunk.dialect.as_str(),
+        "lua5.1" | "lua5.1-stock32" | "lua5.1-lnum32"
+    ) {
+        return Err(PrototypeIdentityError::UnsupportedDialect(
+            chunk.dialect.clone(),
+        ));
+    }
+
+    let disassembly = luad_dialect_lua51::disassemble_proto_lua51_v1(&chunk.main_proto);
+    let tree = encode_tree(
+        &chunk.main_proto,
+        &disassembly,
+        PROTOTYPE_IDENTITY_SCHEME_V1,
+        DOMAIN_V1,
+    )?;
+    Ok(ChunkPrototypeIdentityAnalysis {
+        prototypes: tree.facts,
+    })
+}
+
+/// Compute one v2 subtree-content identity for every prototype in structural order.
 pub fn analyze_chunk_prototype_identities(
     chunk: &Chunk,
 ) -> Result<ChunkPrototypeIdentityAnalysis, PrototypeIdentityError> {
@@ -116,7 +144,12 @@ pub fn analyze_chunk_prototype_identities(
     }
 
     let disassembly = luad_dialect_lua51::disassemble_proto_lua51(&chunk.main_proto);
-    let tree = encode_tree(&chunk.main_proto, &disassembly)?;
+    let tree = encode_tree(
+        &chunk.main_proto,
+        &disassembly,
+        PROTOTYPE_IDENTITY_SCHEME_V2,
+        DOMAIN_V2,
+    )?;
     Ok(ChunkPrototypeIdentityAnalysis {
         prototypes: tree.facts,
     })
@@ -125,6 +158,8 @@ pub fn analyze_chunk_prototype_identities(
 fn encode_tree(
     proto: &Prototype,
     disassembly: &DisassembledPrototype,
+    scheme: &str,
+    domain: &[u8],
 ) -> Result<TreeIdentity, PrototypeIdentityError> {
     if proto.protos.len() != disassembly.child_protos.len() {
         return Err(PrototypeIdentityError::ChildCountMismatch {
@@ -136,11 +171,11 @@ fn encode_tree(
         .protos
         .iter()
         .zip(&disassembly.child_protos)
-        .map(|(child, child_disassembly)| encode_tree(child, child_disassembly))
+        .map(|(child, child_disassembly)| encode_tree(child, child_disassembly, scheme, domain))
         .collect::<Result<Vec<_>, _>>()?;
 
     let mut encoder = Encoder::default();
-    encoder.bytes.extend_from_slice(DOMAIN_V1);
+    encoder.bytes.extend_from_slice(domain);
     encoder.tagged(TAG_RECORD_PROTOTYPE);
     encoder.bytes(b"lua5.1");
     encoder.u8(proto.numparams);
@@ -167,7 +202,7 @@ fn encode_tree(
     let raw_digest: [u8; 32] = Sha256::digest(&encoder.bytes).into();
     let fact = PrototypeIdentityFact {
         proto_id: proto.id.clone(),
-        scheme: PROTOTYPE_IDENTITY_SCHEME_V1.to_string(),
+        scheme: scheme.to_string(),
         digest: format!("sha256:{}", hex::encode(raw_digest)),
     };
     let mut facts = Vec::with_capacity(
@@ -293,7 +328,10 @@ mod tests {
     use luad_core::{ProtoPath, SourceLocation, StableId};
     use sha2::{Digest, Sha256};
 
-    use super::encode_tree;
+    use super::{
+        encode_tree, DOMAIN_V1, DOMAIN_V2, PROTOTYPE_IDENTITY_SCHEME_V1,
+        PROTOTYPE_IDENTITY_SCHEME_V2,
+    };
 
     #[test]
     fn empty_prototype_matches_normative_preimage_vector() {
@@ -347,10 +385,81 @@ mod tests {
             "b5568c02c95499f55261b286ab13e7f86b2beab5b113ee15c7d0d47dbecfea50"
         );
 
-        let identity = encode_tree(&prototype, &disassembly).expect("identity");
+        let identity = encode_tree(
+            &prototype,
+            &disassembly,
+            PROTOTYPE_IDENTITY_SCHEME_V1,
+            DOMAIN_V1,
+        )
+        .expect("identity");
         assert_eq!(
             identity.facts[0].digest,
             "sha256:b5568c02c95499f55261b286ab13e7f86b2beab5b113ee15c7d0d47dbecfea50"
+        );
+    }
+
+    #[test]
+    fn empty_prototype_matches_normative_v2_preimage_vector() {
+        let path = ProtoPath::root();
+        let prototype = Prototype {
+            id: StableId::proto(path.clone()),
+            path,
+            source_name: None,
+            line_defined: 0,
+            last_line_defined: 0,
+            numparams: 0,
+            is_vararg: 0,
+            maxstacksize: 2,
+            instructions: vec![],
+            constants: vec![],
+            upvalues: vec![],
+            protos: vec![],
+            line_info: vec![],
+            abs_line_info: vec![],
+            loc_vars: vec![],
+            upvalue_names: vec![],
+            source: SourceLocation::new(0, &[]),
+        };
+        let disassembly = luad_core::DisassembledPrototype {
+            id: prototype.id.clone(),
+            source_name: None,
+            line_defined: 0,
+            last_line_defined: 0,
+            numparams: 0,
+            is_vararg: false,
+            maxstacksize: 2,
+            instructions: vec![],
+            diagnostics: vec![],
+            child_protos: vec![],
+        };
+        let normative_preimage = hex::decode(concat!(
+            "6c7561642d70726f746f747970652d763200",
+            "01",
+            "0000000000000006",
+            "6c7561352e31",
+            "000002",
+            "0000000000000000",
+            "0000000000000000",
+            "0000000000000000",
+            "0000000000000000",
+        ))
+        .expect("normative hex vector");
+        assert_eq!(normative_preimage.len(), 68);
+        assert_eq!(
+            hex::encode(Sha256::digest(&normative_preimage)),
+            "a4f418350f217b5477b6dc79e956e7b7b8ba248466fd720955d8324c0f0b0573"
+        );
+
+        let identity = encode_tree(
+            &prototype,
+            &disassembly,
+            PROTOTYPE_IDENTITY_SCHEME_V2,
+            DOMAIN_V2,
+        )
+        .expect("identity");
+        assert_eq!(
+            identity.facts[0].digest,
+            "sha256:a4f418350f217b5477b6dc79e956e7b7b8ba248466fd720955d8324c0f0b0573"
         );
     }
 }

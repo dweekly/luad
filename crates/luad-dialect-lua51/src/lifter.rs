@@ -6,32 +6,13 @@ use luad_core::model::{ConstantValue, Prototype};
 use luad_core::provenance::Confidence;
 
 use crate::opcodes::{Opcode51, RawInstruction51};
-
-use std::collections::BTreeMap;
+use crate::roles::{discover_roles_lua51, Lua51PhysicalRole};
 
 /// Lift an entire prototype's instructions into normalized semantic IR.
 #[must_use]
 pub fn lift_proto_lua51(proto: &Prototype) -> Vec<SemanticInstruction> {
     let mut lifted = Vec::with_capacity(proto.instructions.len());
-
-    // 1. Identify all closure binding descriptor PCs
-    let mut binding_descriptors: BTreeMap<usize, (usize, usize)> = BTreeMap::new();
-    for (pc, inst) in proto.instructions.iter().enumerate() {
-        let raw = RawInstruction51::decode(inst.raw_word);
-        if raw.opcode == Some(Opcode51::Closure) {
-            let child_bx = raw.bx as usize;
-            let nups = proto
-                .protos
-                .get(child_bx)
-                .map(|p| p.upvalues.len())
-                .unwrap_or(0);
-            for (j, b_pc) in (0..nups).zip(pc + 1..) {
-                if b_pc < proto.instructions.len() {
-                    binding_descriptors.insert(b_pc, (pc, j));
-                }
-            }
-        }
-    }
+    let role_map = discover_roles_lua51(proto);
 
     for (pc, inst) in proto.instructions.iter().enumerate() {
         let raw = RawInstruction51::decode(inst.raw_word);
@@ -48,9 +29,8 @@ pub fn lift_proto_lua51(proto: &Prototype) -> Vec<SemanticInstruction> {
             None
         };
 
-        let binding_info = binding_descriptors.get(&pc).copied();
-        let semantic =
-            lift_instruction_51(proto, pc, inst, raw, next_word, prev_word, binding_info);
+        let role = role_map.get(pc);
+        let semantic = lift_instruction_51(proto, pc, inst, raw, next_word, prev_word, role);
         lifted.push(semantic);
     }
 
@@ -64,7 +44,7 @@ fn lift_instruction_51(
     raw: RawInstruction51,
     _next: Option<RawInstruction51>,
     _prev: Option<RawInstruction51>,
-    binding_info: Option<(usize, usize)>,
+    role: Lua51PhysicalRole,
 ) -> SemanticInstruction {
     let id = StableId::instruction(proto.path.clone(), pc);
 
@@ -101,6 +81,7 @@ fn lift_instruction_51(
     let mut operands = Vec::new();
     let mut citations = Vec::new();
     let mut jump_target = None;
+    let mut companion_pc = None;
     let explanation;
 
     let get_k_val = |idx: usize| -> ConstantValue {
@@ -517,6 +498,13 @@ fn lift_instruction_51(
                 end: raw.a + (if raw.b == 0 { 1 } else { raw.b as u8 }),
             });
             writes.push(EffectTarget::Register { index: raw.a });
+            if raw.c == 0 && pc + 1 < proto.instructions.len() {
+                companion_pc = Some(pc + 1);
+                implicit_effects.push(ImplicitEffect::CompanionPair {
+                    companion_pc: pc + 1,
+                    companion_role: "setlist_extra".to_string(),
+                });
+            }
             explanation = format!("Set list elements into table R({})", raw.a);
             citations.push("lua-5.1.5:src/lvm.c:1390".to_string());
         }
@@ -587,7 +575,37 @@ fn lift_instruction_51(
         }
     }
 
-    if let Some((closure_pc, upval_idx)) = binding_info {
+    if let Lua51PhysicalRole::SetlistExtra { owner_pc } = role {
+        return SemanticInstruction {
+            id,
+            pc,
+            raw_word,
+            raw_hex,
+            mnemonic: "setlist_extra".to_string(),
+            explanation: format!(
+                "Extra list-batch argument {raw_word} for SETLIST at PC {owner_pc}"
+            ),
+            operands: vec![TypedOperand::ExtraArg { value: raw_word }],
+            reads: vec![],
+            writes: vec![],
+            metamethod_fallbacks: vec![],
+            implicit_effects: vec![ImplicitEffect::CompanionPair {
+                companion_pc: owner_pc,
+                companion_role: "setlist_extra".to_string(),
+            }],
+            jump_target: None,
+            companion_pc: Some(owner_pc),
+            confidence: Confidence::Reviewed,
+            source_citations: vec!["lua-5.1.5:src/lvm.c:1390".to_string()],
+            source,
+        };
+    }
+
+    if let Lua51PhysicalRole::ClosureBinding {
+        owner_pc,
+        upvalue_index,
+    } = role
+    {
         let is_move = op == Opcode51::Move;
         let capture_kind = if is_move { "local register" } else { "upvalue" };
         let mut desc_reads = Vec::new();
@@ -607,26 +625,25 @@ fn lift_instruction_51(
             raw_hex,
             mnemonic: format!("{} (binding descriptor)", op.name()),
             explanation: format!(
-                "Closure-binding descriptor for closure at PC {closure_pc}: captures {capture_kind} {} into child upvalue {upval_idx}",
+                "Closure-binding descriptor for closure at PC {owner_pc}: captures {capture_kind} {} into child upvalue {upvalue_index}",
                 raw.b
             ),
             operands: vec![
                 TypedOperand::Register { index: raw.b as u8 },
                 TypedOperand::Count {
-                    value: upval_idx,
+                    value: upvalue_index,
                     is_variable: false,
                 },
             ],
-
             reads: desc_reads,
-            writes: vec![], // CRITICAL: Binding descriptors do not execute or write registers!
+            writes: vec![],
             metamethod_fallbacks: vec![],
             implicit_effects: vec![ImplicitEffect::CompanionPair {
-                companion_pc: closure_pc,
+                companion_pc: owner_pc,
                 companion_role: "closure_binding".to_string(),
             }],
             jump_target: None,
-            companion_pc: Some(closure_pc),
+            companion_pc: Some(owner_pc),
             confidence: Confidence::Reviewed,
             source_citations: vec!["lua-5.1.5:src/lvm.c:1402".to_string()],
             source,
@@ -646,7 +663,7 @@ fn lift_instruction_51(
         metamethod_fallbacks: metamethods,
         implicit_effects,
         jump_target,
-        companion_pc: None,
+        companion_pc,
         source_citations: citations,
         confidence: Confidence::Reviewed,
         source,
