@@ -34,12 +34,16 @@ environment may preserve a value only when all relevant mutation checks agree:
 The callee and call-relation analyses use the same conservative mutation facts already
 required by origin analysis. A rejected capture emits the existing `mutable-capture`
 reason. It never degrades into a different plausible target. Unresolved relations never
-emit a `calls` xref.
+emit a `calls` xref. The implementation builds one bounded mutation summary for each
+top-level prototype tree per analysis invocation and reuses the shared summary logic
+across callee, origin, and call-relation analysis. Reaching the bound produces the
+existing `analysis-limit` outcome rather than a preserved value.
 
 ## Shared physical-role contract
 
-Physical-role discovery scans executable Lua 5.1 code in PC order and classifies
-non-executable companions before lifting or analysis:
+Physical-role discovery makes one forward pass in ascending physical-PC order. The
+first unclaimed executable owner claims its complete companion range. A claimed word
+is never reconsidered as an owner, regardless of the opcode bits it resembles:
 
 - `CLOSURE` owns exactly the child prototype's declared number of following
   `closure_binding` descriptor words.
@@ -47,17 +51,21 @@ non-executable companions before lifting or analysis:
   complete raw `u32` value is the list-batch operand.
 - A word already classified as a non-executable companion cannot itself own companions,
   regardless of the opcode bits it resembles.
-- Missing, overlapping, or branch-targeted companion words are validation errors rather
-  than guessed execution.
+- A companion range that extends past the code vector is a validation error.
+- Any executable control transfer into a companion is a validation error. This includes
+  explicit jump targets and the `pc + 2` target of conditional-skip instructions.
 
 Disassembly and semantic IR preserve the extra word's physical PC and raw bytes, give it
 the `setlist_extra` role, link it to its owning `SETLIST`, and expose its raw value as
 data. It has no executable reads, writes, jump target, conditional skip, metamethod,
 call kind, or standalone opcode explanation.
 
-CFG remains physically auditable while deriving leaders, terminators, successors,
-reachability, and dataflow only from executable instructions. Analysis enumeration uses
-the shared role rather than re-decoding low opcode bits.
+CFG remains physically auditable: block `start_pc` and `end_pc` retain physical bounds,
+while `instruction_pcs` contains executable PCs only and may therefore be noncontiguous.
+The last executable PC determines the terminator, `is_exit`, and outgoing edges.
+Companions are never leaders, terminators, or edge endpoints. Reachability and dataflow
+operate only on executable instructions. Analysis enumeration uses the shared role
+rather than re-decoding low opcode bits.
 
 ## Public surface
 
@@ -69,6 +77,13 @@ The existing Lua 5.1 closure-binding representation remains unchanged except tha
 discovery cannot be confused by opcode-shaped companion data. No new command or security
 classification is added.
 
+`luad-prototype-v1` remains byte-for-byte frozen with its existing canonical vectors.
+Because v1 hashes the instruction role and mnemonic, corrected companion semantics use
+`luad-prototype-v2`; recursive export emits v2 as the current identity scheme for Lua
+5.1. The v1 encoder and golden vector remain available as a compatibility definition,
+and the v2 contract differs only where physical-role normalization changes canonical
+instruction content. The identity schema continues to carry an explicit `scheme` value.
+
 ## Acceptance matrix
 
 One table-driven corrective family will prove capture safety for:
@@ -77,6 +92,7 @@ One table-driven corrective family will prove capture safety for:
 - the same shape through a parent upvalue across an additional nesting level;
 - mutation before versus after the relevant closure site;
 - a non-mutating sibling, equal safe captures, and direct local closure flow;
+- a bounded-summary exhaustion case producing `analysis-limit`;
 - callee `mutable-capture`, unresolved call relation, and absence of a `calls` xref;
 - agreement with origin analysis on the same shared-cell mutation shapes.
 
@@ -90,21 +106,25 @@ It will prove:
 - the real instruction after the extra word remains reachable and executes normally;
 - a closure-binding word that resembles `SETLIST C == 0` does not consume another word;
 - an extra word that resembles `CLOSURE` does not create closure bindings;
-- missing, overlapping, and branch-targeted companions fail validation with stable
-  diagnostics;
+- `SETLIST A 0 0` preserves its open value window while owning exactly one extra word;
+- truncated companion ranges, explicit jumps into companions, and conditional skips
+  into companions fail validation with stable diagnostics;
+- the frozen v1 canonical vector is unchanged and v2 is emitted with corrected roles;
 - text, JSON, JSONL, explain, CFG, and recursive export agree.
 
-Independent acceptance enumerates executable calls from the physical-role contract, not
-from the production lifter. Killer mutations remove the sibling scan, skip the
-parent-upvalue scan, retain the stale prototype target, emit an unresolved `calls`
-xref, execute the extra word, derive a branch from its bits, or let companion data own
-another companion.
+Independent acceptance implements its own raw-word and parsed-prototype role enumerator
+inside the oracle test crate. It does not call production role discovery, lifting, or
+disassembly when deciding which PCs are executable. Killer mutations remove the sibling
+scan, skip the parent-upvalue scan, retain the stale prototype target, emit an unresolved
+`calls` xref, execute the extra word, derive a branch from its bits, or let companion
+data own another companion.
 
 ## Allowed production paths
 
 - shared Lua 5.1 physical-role discovery, disassembly, lifter, and validator
 - CFG handling of non-executable roles
 - callee capture-safety logic and shared helpers used by origins/call relations
+- prototype identity v2 encoding while preserving the frozen v1 definition
 - existing explain/query/xref/export rendering only where shared role propagation
   requires it
 - focused redistributable fixtures or synthesized chunks, corrective oracle tests,
