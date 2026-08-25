@@ -79,6 +79,9 @@ if ! grep -Eq '"authMethod"[[:space:]]*:[[:space:]]*"claude.ai"' <<<"$auth_json"
 fi
 
 prompt=$(<"$prompt_file")
+if [[ "$stage" == "design-review" ]]; then
+  prompt=$'This is a no-tools review. Analyze only the supplied prompt. Do not claim to inspect a repository, invoke tools, delegate work, or invent missing implementation details. Treat missing context as an explicit ambiguity.\n\n'"$prompt"
+fi
 started_at=$(date +%s)
 debug_file=${LUAD_CLAUDE_DEBUG_FILE:-/tmp/luad-claude-${started_at}.debug.log}
 prompt_sha256=$(shasum -a 256 "$prompt_file" | awk '{print $1}')
