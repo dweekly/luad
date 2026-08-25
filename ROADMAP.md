@@ -22,17 +22,7 @@ an exact release, profile, layout, public surface, and evidence manifest.
 
 ## Delivery sequence
 
-### 1. Make mixed-tree export operationally trustworthy
-
-Batch export will distinguish usable partial corpus results from total failure. Every
-failed input will be attributable by path in structured records and human diagnostics,
-and the terminal summary plus exit status will let shell pipelines distinguish skipped
-non-bytecode inputs from an unusable or interrupted run.
-
-Exit outcome: callers can export ordinary mixed firmware trees under `set -e` while
-retaining exact skipped-input evidence and detecting runs that produced no usable facts.
-
-### 2. Add prototype content identity
+### 1. Add prototype content identity
 
 Each prototype will receive a versioned identity derived from documented normalized
 instructions, constants, captures, and child relationships. Artifact-local paths remain
@@ -41,7 +31,7 @@ the navigation identity; content identities enable ordinary cross-firmware joins
 Exit outcome: callers can identify unchanged and changed prototype bodies across
 firmware releases without treating content equality as source-level identity.
 
-### 3. Close queries, recipes, and the stable release
+### 2. Close queries, recipes, and the stable release
 
 Queries will cover callee paths, unresolved reasons, origin shapes, call relations,
 interpretation identity, and prototype content identity. Every predicate applies its
@@ -59,7 +49,7 @@ become minimized public regressions.
 Exit outcome: a human or AI agent can complete the reference firmware workflows with
 the supported CLI and a thin external judgment layer.
 
-### 4. Qualify additional targets independently
+### 3. Qualify additional targets independently
 
 Stock Lua layouts, Lua 5.2, 5.3, 5.4, 5.5, LuaJIT, and vendor mappings advance one exact
 target at a time. Vendor qualification may consume a provenance-bound mapping recovered
@@ -69,9 +59,8 @@ remain external.
 ## Dependency order
 
 ```text
-mixed-tree export trust
-  -> content identity
-       -> query/recipe closure + stable release evidence
+content identity
+  -> query/recipe closure + stable release evidence
 ```
 
 ## Customer checkpoints
