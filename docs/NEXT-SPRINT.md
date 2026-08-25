@@ -1,161 +1,52 @@
-# Active sprint: public OpenWrt Lua 5.1 LNUM32 authority
+# Active sprint: owner-relative Lua 5.1 query prototype identity
 
-Lane: qualification. Target: one immutable upstream authority manifest, one
-redistributable fixture family, and one canonical authority gate. This sprint does not
-promote a capability.
+Lane: patch. Target: one silent factual error in query summaries.
 
 ## Claim and researcher value
 
-A reproducible public compiler authority can generate the exact Lua 5.1.5
-OpenWrt-derived LNUM32 bytecode profile used by the embedded target: little-endian,
-32-bit serialized string lengths, 32-bit integer constants, double-precision numeric
-constants, and integer constant tag 9.
+For every Lua 5.1 `CLOSURE`, `luad query` will name the same owner-relative child
+prototype as disassembly, xrefs, export, and the typed prototype operand. A query result
+must not format the local `Bx` child index as a root prototype path.
 
-This authority gives the next target-promotion sprint an independent oracle that does
-not depend on private TP-Link firmware or a host-specific compiler executable hash.
+This prevents a researcher or agent from following a plausible identifier to a real but
+unrelated function.
 
-## Immutable upstream boundary
+## Affected boundary and regression
 
-The authority starts from:
+The affected public boundary is the instruction `summary` returned by `luad query` for
+Lua 5.1 closure instructions. The focused regression uses the maintained nested-closure
+fixture and independently derives each child path from the owning instruction ID plus
+the encoded local child index. It compares every `proto:` reference reported by query
+with the typed disassembly fact and xref target at the same physical instruction.
 
-- PUC-Rio Lua 5.1.5 archive
-  `https://www.lua.org/ftp/lua-5.1.5.tar.gz`;
-- archive SHA-256
-  `2640fc56a795f29d28ef15e13c34a47e223960b0240e8cb0a82d9b0738695333`;
-- official OpenWrt repository revision
-  `1da2e82c1182a3fd681da5760be96821213afadd` from the `openwrt-19.07`
-  branch;
-- package recipe and complete ordered patch series under
-  `package/utils/lua/` at that revision.
+The expected failing case includes at least two nesting levels and repeated local child
+index zero, where `proto:0/0`, `proto:0/0/0`, and `proto:0/0/0/0` must remain distinct.
 
-The manifest will record SHA-256 hashes for the package recipe and every applied patch,
-including the LNUM numeric model, integer tag, and architecture-independent bytecode
-changes. It will record the exact target compiler, flags, environment, patch order,
-and build command. A compiler-binary SHA-256 identifies one build artifact only; source,
-patch, configuration, and output identities establish the portable authority.
+## Allowed paths
 
-The authority compiler will use the patched source tree's static `luac-host` target on
-a little-endian build host. OpenWrt patch `030-archindependent-bytecode.patch` serializes
-string lengths as 32-bit `unsigned int` rather than host `size_t`; the LNUM patches select
-32-bit `lua_Integer` and double `lua_Number`. The authority therefore does not require a
-32-bit host ABI, `-m32`, QEMU, or execution of a target binary. The builder will verify
-the emitted `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4` header and tag-9
-integer encoding rather than infer portability from build-host properties.
+- `crates/luad-dialect-lua51/src/lifter.rs`
+- `crates/luad-oracle/tests/test_closure_prototype_identity_lua51.rs`
+- `CHANGELOG.md`
 
-If this upstream recipe cannot generate the target header and constant encoding exactly,
-the sprint stops at a failed authority result. It must not alter `luad` or relabel a
-nearby profile to make the fixture fit.
-
-## Public fixture family
-
-Redistributable Lua sources will exercise:
-
-- integer constants at zero, signed boundaries, and values distinct from floats;
-- floating-point constants;
-- short and long strings that prove 32-bit serialized lengths;
-- nested prototypes and both closure-capture descriptor forms;
-- representative RK, global/table, call, branch, and loop instructions;
-- stripped and debug-bearing output where the compiler supports both deterministically.
-
-Every generated chunk will record source, bytecode, upstream revision, patch-series,
-configuration, compiler build, command, profile, layout, and content hashes. Interpreting
-the same authenticated LNUM32 fixture under stock Lua 5.1 supplies the cross-profile
-negative case; no duplicate fixture is required.
-
-## Independent acceptance
-
-Acceptance will establish, through the public CLI and independent oracle:
-
-- exact header, layout, integer-tag, constant, prototype, instruction, and debug facts;
-- exact agreement between compiler listing, the independent Lua 5.1/LNUM decoder, and
-  live `luad` JSON for the generated fixture family;
-- automatic and explicit selection of `lua5.1-lnum32` with the complete interpretation
-  identity in the claimed command envelopes and the batch `file_start` record;
-- zero validation diagnostics for valid fixtures and exact rejection under stock
-  profile substitution;
-- deterministic reproduction from authenticated source inputs;
-- rejection of a changed archive, OpenWrt revision, patch, patch order, configuration,
-  target layout, fixture, or compiler output;
-- zero skipped tests in the canonical authority gate: it provisions authenticated
-  inputs or fails before comparison when its network or standard native build
-  prerequisites are unavailable.
-
-Ordinary offline workspace tests authenticate the committed manifest, sources, and
-generated fixtures; they do not claim to reproduce the authority build. The canonical
-gate alone performs download, patch, native compiler construction, fixture regeneration,
-and byte-for-byte comparison in a disposable directory.
-
-The acceptance branch carries reference fixtures produced by the steward's authenticated
-feasibility build. Their hashes freeze before implementation. The implementation builder
-must reproduce those bytes and cannot regenerate, replace, or re-pin the accepted files.
-
-Existing Lua 5.1 gates are regression prerequisites, not independent evidence for the
-new profile authority. If an authenticated compiler fact disagrees with an accepted
-fixture-derived assumption, the authority gate fails and names the discrepancy. Tests
-or implementation then require a separate corrective change; the authority must not be
-weakened to preserve an earlier green gate or private-corpus result.
-
-If either accepted fixture exposes a parser, disassembler, validator, selection, or
-machine-contract defect in frozen production code, the sprint stops with that minimized
-defect. A separate bounded correction must close it before authority acceptance; the
-fixture and expected authority facts remain unchanged.
-
-The supplemental customer check will run the accepted candidate over the private
-firmware corpus and record only aggregate parse, validation, timing, and profile results.
-Private bytes and findings remain outside the repository and cannot satisfy the gate.
-
-## Platform-bound prerequisite compiler evidence
-
-The authority gate must close its prerequisite proof on every maintained CI platform.
-Native compiler executable hashes are bound to the operating system and architecture
-that produced them. A version-2 gate specification may therefore declare a closed,
-ordered map from platform/architecture identity to compiler SHA-256. Execution uses the
-current host identity; later verification uses the identity recorded in the gate result.
-Unlisted platforms, missing compilers, missing result hashes, mismatched hashes, and
-specifications that combine scalar and mapped hashes are hard failures. Version-1 gate
-specifications retain their scalar compiler-hash contract and canonical serialization.
-
-Acceptance includes allowed-platform, wrong-hash, unlisted-platform, missing-compiler,
-cross-host verification, schema-version, and unchanged-version-1-hash probes. Each
-pinned stock Lua 5.1 compiler must also regenerate the maintained public fixture family
-byte-for-byte.
-
-## Allowed scope and roles
-
-The acceptance author may add the authority manifest, fixture sources, generated
-fixtures, a narrowly scoped independent constant/layout reader inside the acceptance
-test, acceptance tests, and the sprint gate. The implementation agent may add the
-pinned authenticated authority-builder script and one CI invocation of the canonical
-gate. The steward may add the bounded platform-aware compiler-identity contract and its
-proof-harness regressions described above. Production parser, disassembler, validator,
-analysis, query, capability, and shared oracle code are frozen.
-
-The steward owns upstream pin review, fixture provenance, mutation sufficiency, the
-canonical run, and the supplemental customer check. Opus supplies one bounded
-read-only acceptance outline and, after approval, the independent acceptance edit.
-Gemini Flash High implements only the builder and allowed oracle integration from the
-frozen acceptance commit.
+The implementation must derive the summary from the existing typed owner-relative
+prototype operand or equivalent prototype-path fact. It must not add a second chunk-tree
+walk, parser, schema field, command, or analysis pass.
 
 ## Non-goals
 
-This sprint does not:
+This sprint does not change parsing, encoded operands, stable IDs, xrefs, export,
+non-closure summaries, other dialects, target support status, or schema versions. It
+does not include opcode-authority documentation, capability discovery, symbolic callee
+resolution, or value provenance.
 
-- mark LNUM32, stock64, or base `lua5.1` as supported;
-- add or change bytecode semantics;
-- qualify a TP-Link-specific opcode permutation or another OpenWrt revision;
-- add symbolic callee paths, value origins, call relations, prototype hashes, or schema
-  fields;
-- build firmware, execute target bytecode, or include private corpus artifacts;
-- create a release manifest.
+## Verification and stop condition
 
-## Gate and stop condition
+Focused verification:
 
-The canonical gate will be `gate-authority-lua51-openwrt-lnum32`. It will own only the
-authority-builder, fixture-reproduction, three-way comparison, selection, provenance,
-and substitution claims above. Existing parser, profile, public-disassembly, machine,
-and proof-harness results will be referenced as prerequisites rather than reimplemented.
+```console
+cargo test -p luad-oracle --test test_closure_prototype_identity_lua51 -- --nocapture
+```
 
-Acceptance requires the focused authority tests, the canonical clean-revision gate,
-`bash scripts/check.sh`, green CI, a clean merged revision, and local `main` equal to
-`origin/main`. The next sprint will use this authority to promote the exact embedded
-target; no target promotion or downstream roadmap work begins inside this sprint.
+Acceptance requires the focused regression, a production diff within the patch lane,
+green pull-request CI, a clean merged revision, and local `main` equal to `origin/main`.
+No target-promotion work begins inside this sprint.
