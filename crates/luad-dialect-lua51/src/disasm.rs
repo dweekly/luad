@@ -14,6 +14,7 @@ use luad_core::model::{ConstantValue, Prototype};
 use luad_core::provenance::{Confidence, SourceLocation};
 
 use crate::opcodes::{Opcode51, RawInstruction51};
+use crate::roles::{discover_roles_lua51, Lua51PhysicalRole};
 
 /// Produce structured, typed disassembly for a Lua 5.1 prototype and all child prototypes.
 #[must_use]
@@ -22,28 +23,11 @@ pub fn disassemble_proto_lua51(proto: &Prototype) -> DisassembledPrototype {
     let mut instructions = Vec::with_capacity(proto.instructions.len());
     let mut proto_diagnostics = Vec::new();
 
-    // Map closure binding descriptor PCs -> (closure_pc, upvalue_index)
-    let mut binding_descriptors: BTreeMap<usize, (usize, usize)> = BTreeMap::new();
-    for (pc, inst) in proto.instructions.iter().enumerate() {
-        let raw = RawInstruction51::decode(inst.raw_word);
-        if raw.opcode == Some(Opcode51::Closure) {
-            let child_bx = raw.bx as usize;
-            let nups = proto
-                .protos
-                .get(child_bx)
-                .map(|p| p.upvalues.len())
-                .unwrap_or(0);
-            for (j, b_pc) in (0..nups).zip(pc + 1..) {
-                if b_pc < proto.instructions.len() {
-                    binding_descriptors.insert(b_pc, (pc, j));
-                }
-            }
-        }
-    }
+    let role_map = discover_roles_lua51(proto);
 
     for (pc, inst) in proto.instructions.iter().enumerate() {
-        let binding_info = binding_descriptors.get(&pc).copied();
-        let d_inst = disassemble_instruction_lua51(proto, pc, inst.raw_word, binding_info);
+        let role = role_map.get(pc);
+        let d_inst = disassemble_instruction_lua51(proto, pc, inst.raw_word, role);
         proto_diagnostics.extend(d_inst.diagnostics.clone());
         instructions.push(d_inst);
     }
@@ -69,13 +53,73 @@ pub fn disassemble_proto_lua51(proto: &Prototype) -> DisassembledPrototype {
     }
 }
 
+/// Produce structured, typed disassembly according to the v1 scheme where only closure bindings are companions.
+#[must_use]
+pub fn disassemble_proto_lua51_v1(proto: &Prototype) -> DisassembledPrototype {
+    let source_name = proto.source_name.as_ref().map(|s| s.display.clone());
+    let mut instructions = Vec::with_capacity(proto.instructions.len());
+    let mut proto_diagnostics = Vec::new();
+
+    let mut binding_descriptors: BTreeMap<usize, (usize, usize)> = BTreeMap::new();
+    for (pc, inst) in proto.instructions.iter().enumerate() {
+        let raw = RawInstruction51::decode(inst.raw_word);
+        if raw.opcode == Some(Opcode51::Closure) {
+            let child_bx = raw.bx as usize;
+            let nups = proto
+                .protos
+                .get(child_bx)
+                .map(|p| p.upvalues.len())
+                .unwrap_or(0);
+            for (j, b_pc) in (0..nups).zip(pc + 1..) {
+                if b_pc < proto.instructions.len() {
+                    binding_descriptors.insert(b_pc, (pc, j));
+                }
+            }
+        }
+    }
+
+    for (pc, inst) in proto.instructions.iter().enumerate() {
+        let role = if let Some(&(owner_pc, upvalue_index)) = binding_descriptors.get(&pc) {
+            Lua51PhysicalRole::ClosureBinding {
+                owner_pc,
+                upvalue_index,
+            }
+        } else {
+            Lua51PhysicalRole::Instruction
+        };
+        let d_inst = disassemble_instruction_lua51(proto, pc, inst.raw_word, role);
+        proto_diagnostics.extend(d_inst.diagnostics.clone());
+        instructions.push(d_inst);
+    }
+
+    let mut child_protos = Vec::with_capacity(proto.protos.len());
+    for child in &proto.protos {
+        let child_disasm = disassemble_proto_lua51_v1(child);
+        proto_diagnostics.extend(child_disasm.diagnostics.clone());
+        child_protos.push(child_disasm);
+    }
+
+    DisassembledPrototype {
+        id: proto.id.clone(),
+        source_name,
+        line_defined: proto.line_defined,
+        last_line_defined: proto.last_line_defined,
+        numparams: proto.numparams,
+        is_vararg: proto.is_vararg != 0,
+        maxstacksize: proto.maxstacksize,
+        instructions,
+        diagnostics: proto_diagnostics,
+        child_protos,
+    }
+}
+
 /// Disassemble a single Lua 5.1 instruction word within its owning prototype context.
 #[must_use]
 pub fn disassemble_instruction_lua51(
     proto: &Prototype,
     pc: usize,
     raw_word: u32,
-    binding_info: Option<(usize, usize)>,
+    role: Lua51PhysicalRole,
 ) -> DisassembledInstruction {
     let raw = RawInstruction51::decode(raw_word);
     let raw_hex = format!("0x{:08x}", raw_word);
@@ -114,6 +158,99 @@ pub fn disassemble_instruction_lua51(
         sc: 0,
         sj: 0,
     };
+
+    if let Lua51PhysicalRole::SetlistExtra { owner_pc } = role {
+        let operands = vec![DisassembledOperand {
+            name: "value".to_string(),
+            kind: OperandKind::Raw {
+                value: raw_word as u64,
+            },
+            display: format!("{raw_word} (0x{raw_word:08x})"),
+            resolved: None,
+        }];
+
+        return DisassembledInstruction {
+            id: inst_id,
+            pc,
+            raw_word,
+            raw_hex,
+            mnemonic: "setlist_extra".to_string(),
+            opcode_num: raw.opcode_num,
+            role: "setlist_extra".to_string(),
+            encoded_operands,
+            line,
+            operands,
+            jump_target: None,
+            companion_pc: Some(owner_pc),
+            metamethod: None,
+            comment: Some(format!("setlist_extra {raw_word} (0x{raw_word:08x})")),
+            confidence: Confidence::Fact,
+            source,
+            diagnostics: vec![],
+        };
+    }
+
+    if let Lua51PhysicalRole::ClosureBinding {
+        owner_pc,
+        upvalue_index,
+    } = role
+    {
+        let is_move = raw.opcode == Some(Opcode51::Move);
+        let role_str = "closure_binding".to_string();
+        let mnemonic = match raw.opcode {
+            Some(op) => format!("{} (binding descriptor)", op.name()),
+            None => format!("OP_UNKNOWN_0x{:02x} (binding descriptor)", raw.opcode_num),
+        };
+        let parent_desc = if is_move {
+            format!("parent R({})", raw.b)
+        } else {
+            format!("parent upvalue[{}]", raw.b)
+        };
+
+        let mut operands = Vec::new();
+        operands.push(DisassembledOperand {
+            name: "upvalue_index".to_string(),
+            kind: OperandKind::ImmediateUnsigned {
+                value: upvalue_index as u64,
+            },
+            display: format!("upvalue[{upvalue_index}]"),
+            resolved: None,
+        });
+        operands.push(DisassembledOperand {
+            name: "source".to_string(),
+            kind: if is_move {
+                OperandKind::Register { index: raw.b as u8 }
+            } else {
+                OperandKind::ImmediateUnsigned {
+                    value: raw.b as u64,
+                }
+            },
+            display: parent_desc.clone(),
+            resolved: None,
+        });
+
+        let comment = Some(format!("upvalue[{upvalue_index}] <- {parent_desc}"));
+
+        return DisassembledInstruction {
+            id: inst_id,
+            pc,
+            raw_word,
+            raw_hex,
+            mnemonic,
+            opcode_num: raw.opcode_num,
+            role: role_str,
+            encoded_operands,
+            line,
+            operands,
+            jump_target: None,
+            companion_pc: Some(owner_pc),
+            metamethod: None,
+            comment,
+            confidence: Confidence::Fact,
+            source,
+            diagnostics: vec![],
+        };
+    }
 
     let Some(op) = raw.opcode else {
         return DisassembledInstruction {
@@ -204,62 +341,6 @@ pub fn disassemble_instruction_lua51(
             });
         }
     };
-
-    // If this instruction is a closure-binding descriptor
-    if let Some((c_pc, upval_idx)) = binding_info {
-        let is_move = op == Opcode51::Move;
-        let role = "closure_binding".to_string();
-        companion_pc = Some(c_pc);
-
-        let parent_desc = if is_move {
-            format!("parent R({})", raw.b)
-        } else {
-            format!("parent upvalue[{}]", raw.b)
-        };
-
-        operands.push(DisassembledOperand {
-            name: "upvalue_index".to_string(),
-            kind: OperandKind::ImmediateUnsigned {
-                value: upval_idx as u64,
-            },
-            display: format!("upvalue[{upval_idx}]"),
-            resolved: None,
-        });
-        operands.push(DisassembledOperand {
-            name: "source".to_string(),
-            kind: if is_move {
-                OperandKind::Register { index: raw.b as u8 }
-            } else {
-                OperandKind::ImmediateUnsigned {
-                    value: raw.b as u64,
-                }
-            },
-            display: parent_desc.clone(),
-            resolved: None,
-        });
-
-        comment = Some(format!("upvalue[{upval_idx}] <- {parent_desc}"));
-
-        return DisassembledInstruction {
-            id: inst_id,
-            pc,
-            raw_word,
-            raw_hex,
-            mnemonic: format!("{} (binding descriptor)", op.name()),
-            opcode_num: raw.opcode_num,
-            role,
-            encoded_operands,
-            line,
-            operands,
-            jump_target: None,
-            companion_pc,
-            metamethod: None,
-            comment,
-            confidence: Confidence::Fact,
-            source,
-            diagnostics,
-        };
-    }
 
     match op {
         Opcode51::Move => {
@@ -680,6 +761,9 @@ pub fn disassemble_instruction_lua51(
                 display: raw.c.to_string(),
                 resolved: None,
             });
+            if raw.c == 0 && pc + 1 < proto.instructions.len() {
+                companion_pc = Some(pc + 1);
+            }
         }
         Opcode51::Close => {
             operands.push(DisassembledOperand {

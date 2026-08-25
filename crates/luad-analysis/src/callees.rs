@@ -895,25 +895,68 @@ fn invalidate_all(state: &mut RegisterState, frame_size: usize, reason: CalleeUn
     }
 }
 
-/// Analyze every prototype in structural order with conservative closure captures.
+pub const DEFAULT_CAPTURE_MUTATION_BUDGET: usize = 100_000;
+
+/// Analyze every prototype in structural order with conservative closure captures under a finite mutation budget.
 #[must_use]
-pub fn analyze_chunk_callees(chunk: &luad_core::model::Chunk) -> ChunkCalleeAnalysis {
+pub fn analyze_chunk_callees_with_mutation_budget(
+    chunk: &luad_core::model::Chunk,
+    budget: usize,
+) -> ChunkCalleeAnalysis {
+    let summary = crate::capture_mutation::CaptureMutationSummary::build(chunk, budget);
+    if summary.exhausted {
+        let mut prototypes = Vec::new();
+        fail_closed_callees(&chunk.dialect, &chunk.main_proto, &mut prototypes);
+        return ChunkCalleeAnalysis { prototypes };
+    }
+
     let mut prototypes = Vec::new();
     analyze_proto_tree(
         &chunk.dialect,
         &chunk.main_proto,
         &CaptureEnvironment::new(),
+        &summary,
         &mut prototypes,
     );
     ChunkCalleeAnalysis { prototypes }
 }
 
+/// Analyze every prototype in structural order with conservative closure captures.
+#[must_use]
+pub fn analyze_chunk_callees(chunk: &luad_core::model::Chunk) -> ChunkCalleeAnalysis {
+    analyze_chunk_callees_with_mutation_budget(chunk, DEFAULT_CAPTURE_MUTATION_BUDGET)
+}
+
+fn fail_closed_callees(
+    dialect: &str,
+    proto: &luad_core::model::Prototype,
+    results: &mut Vec<CalleeAnalysis>,
+) {
+    let instructions = crate::lift_proto_for_dialect(dialect, proto);
+    results.push(CalleeAnalysis {
+        proto_id: proto.id.clone(),
+        calls: enumerate_with_reason(
+            &proto.path,
+            &instructions,
+            CalleeUnresolvedReason::AnalysisLimit,
+        ),
+    });
+    for child in &proto.protos {
+        fail_closed_callees(dialect, child, results);
+    }
+}
+
 pub(crate) fn analyze_chunk_global_stores(chunk: &luad_core::model::Chunk) -> Vec<GlobalStoreFact> {
+    let summary = crate::capture_mutation::CaptureMutationSummary::build(
+        chunk,
+        DEFAULT_CAPTURE_MUTATION_BUDGET,
+    );
     let mut stores = Vec::new();
     collect_global_stores_tree(
         &chunk.dialect,
         &chunk.main_proto,
         &CaptureEnvironment::new(),
+        &summary,
         &mut stores,
     );
     stores.sort_by(|left, right| left.store_id.cmp(&right.store_id));
@@ -949,6 +992,7 @@ fn collect_global_stores_tree(
     dialect: &str,
     proto: &luad_core::model::Prototype,
     captures: &CaptureEnvironment,
+    summary: &crate::capture_mutation::CaptureMutationSummary,
     stores: &mut Vec<GlobalStoreFact>,
 ) {
     let instructions = crate::lift_proto_for_dialect(dialect, proto);
@@ -981,13 +1025,14 @@ fn collect_global_stores_tree(
         );
     }
 
-    let child_captures = derive_child_captures(proto, &instructions, &cfg, &dataflow, captures);
+    let child_captures =
+        derive_child_captures(proto, &instructions, &cfg, &dataflow, captures, summary);
     for (index, child) in proto.protos.iter().enumerate() {
         let environment = child_captures
             .get(&index)
             .cloned()
             .unwrap_or_else(|| unknown_capture_environment(child));
-        collect_global_stores_tree(dialect, child, &environment, stores);
+        collect_global_stores_tree(dialect, child, &environment, summary, stores);
     }
 }
 
@@ -1056,6 +1101,7 @@ fn analyze_proto_tree(
     dialect: &str,
     proto: &luad_core::model::Prototype,
     captures: &CaptureEnvironment,
+    summary: &crate::capture_mutation::CaptureMutationSummary,
     results: &mut Vec<CalleeAnalysis>,
 ) {
     let instructions = crate::lift_proto_for_dialect(dialect, proto);
@@ -1085,13 +1131,14 @@ fn analyze_proto_tree(
     };
     results.push(analysis);
 
-    let child_captures = derive_child_captures(proto, &instructions, &cfg, &dataflow, captures);
+    let child_captures =
+        derive_child_captures(proto, &instructions, &cfg, &dataflow, captures, summary);
     for (index, child) in proto.protos.iter().enumerate() {
         let environment = child_captures
             .get(&index)
             .cloned()
             .unwrap_or_else(|| unknown_capture_environment(child));
-        analyze_proto_tree(dialect, child, &environment, results);
+        analyze_proto_tree(dialect, child, &environment, summary, results);
     }
 }
 
@@ -1101,6 +1148,7 @@ fn derive_child_captures(
     cfg: &ControlFlowGraph,
     dataflow: &DataflowResult,
     parent_captures: &CaptureEnvironment,
+    summary: &crate::capture_mutation::CaptureMutationSummary,
 ) -> BTreeMap<usize, CaptureEnvironment> {
     if dataflow.exhausted {
         return BTreeMap::new();
@@ -1144,6 +1192,7 @@ fn derive_child_captures(
             parent_captures,
         };
         let candidate = environments.entry(child_index).or_default();
+        let child_path = proto.path.child(child_index);
 
         for slot in 0..child.upvalues.len() {
             let descriptor_pc = closure.pc + 1 + slot;
@@ -1153,7 +1202,9 @@ fn derive_child_captures(
                     capture_from_descriptor(
                         descriptor,
                         &derivation,
-                        capture_slot_is_mutated(child, slot as u8),
+                        summary.is_child_slot_mutated(&child_path, slot as u8),
+                        summary,
+                        &proto.path,
                     )
                 })
                 .unwrap_or(CaptureValue::Unknown {
@@ -1201,6 +1252,8 @@ fn capture_from_descriptor(
     descriptor: &SemanticInstruction,
     context: &CaptureDerivation<'_>,
     child_mutates_capture: bool,
+    summary: &crate::capture_mutation::CaptureMutationSummary,
+    parent_path: &luad_core::ProtoPath,
 ) -> CaptureValue {
     if child_mutates_capture || !is_closure_binding(descriptor) {
         return CaptureValue::Unknown {
@@ -1210,6 +1263,7 @@ fn capture_from_descriptor(
     let mut value = match descriptor.reads.first() {
         Some(EffectTarget::Register { index }) => {
             if Some(*index) == context.closure_dest
+                || summary.is_local_register_mutated(parent_path, *index)
                 || effect_may_be_written_after(
                     context.parent_instructions,
                     context.parent_cfg,
@@ -1225,15 +1279,17 @@ fn capture_from_descriptor(
             }
         }
         Some(EffectTarget::Upvalue { index, .. }) => {
-            if effect_may_be_written_after(
-                context.parent_instructions,
-                context.parent_cfg,
-                context.closure.pc,
-                &EffectTarget::Upvalue {
-                    index: *index,
-                    name: None,
-                },
-            ) {
+            if summary.is_upvalue_slot_mutated(parent_path, *index)
+                || effect_may_be_written_after(
+                    context.parent_instructions,
+                    context.parent_cfg,
+                    context.closure.pc,
+                    &EffectTarget::Upvalue {
+                        index: *index,
+                        name: None,
+                    },
+                )
+            {
                 CaptureValue::Unknown {
                     reason: CalleeUnresolvedReason::MutableCapture,
                 }
@@ -1441,21 +1497,6 @@ fn write_overlaps(writes: &[EffectTarget], target: &EffectTarget) -> bool {
             written == index
         }
         _ => false,
-    })
-}
-
-fn capture_slot_is_mutated(proto: &luad_core::model::Prototype, slot: u8) -> bool {
-    let instructions = luad_dialect_lua51::lift_proto_lua51(proto);
-    instructions.iter().any(|inst| {
-        inst.writes
-            .iter()
-            .any(|write| matches!(write, EffectTarget::Upvalue { index, .. } if *index == slot))
-    }) || proto.protos.iter().any(|child| {
-        child.upvalues.iter().any(|capture| {
-            capture.instack == 0
-                && capture.idx == slot
-                && capture_slot_is_mutated(child, capture.index as u8)
-        })
     })
 }
 

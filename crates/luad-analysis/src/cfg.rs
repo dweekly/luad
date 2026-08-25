@@ -80,6 +80,21 @@ pub struct ControlFlowGraph {
     pub instruction_count: usize,
 }
 
+fn is_companion(inst: &SemanticInstruction) -> bool {
+    inst.companion_pc.is_some_and(|owner_pc| owner_pc < inst.pc)
+        && inst.implicit_effects.iter().any(|effect| {
+            matches!(
+                effect,
+                luad_core::ir::ImplicitEffect::CompanionPair { companion_role, .. }
+                    if companion_role == "closure_binding" || companion_role == "setlist_extra"
+            )
+        })
+}
+
+fn next_executable_pc(instructions: &[SemanticInstruction], from_pc: usize) -> Option<usize> {
+    (from_pc..instructions.len()).find(|&pc| !is_companion(&instructions[pc]))
+}
+
 impl ControlFlowGraph {
     /// Build a control-flow graph from lifted semantic instructions of a prototype.
     #[must_use]
@@ -97,34 +112,43 @@ impl ControlFlowGraph {
 
         // 1. Identify block leaders (entry PCs of basic blocks)
         let mut leaders = BTreeSet::new();
-        leaders.insert(0); // PC 0 is always a leader
+        if let Some(first_pc) = next_executable_pc(instructions, 0) {
+            leaders.insert(first_pc);
+        }
 
         for (pc, inst) in instructions.iter().enumerate() {
+            if is_companion(inst) {
+                continue;
+            }
+
             // If instruction branches or jumps, target is a leader and fallthrough PC is a leader
             if let Some(target_pc) = inst.jump_target {
-                if target_pc < num_insts {
+                if target_pc < num_insts && !is_companion(&instructions[target_pc]) {
                     leaders.insert(target_pc);
                 }
-                if pc + 1 < num_insts {
-                    leaders.insert(pc + 1);
+                if let Some(next_exec) = next_executable_pc(instructions, pc + 1) {
+                    leaders.insert(next_exec);
                 }
             }
 
             // If instruction conditionally skips (e.g. TEST, LFALSESKIP)
             for effect in &inst.implicit_effects {
                 if let luad_core::ImplicitEffect::ConditionalSkip { skip_target_pc } = effect {
-                    if *skip_target_pc < num_insts {
+                    if *skip_target_pc < num_insts && !is_companion(&instructions[*skip_target_pc])
+                    {
                         leaders.insert(*skip_target_pc);
                     }
-                    if pc + 1 < num_insts {
-                        leaders.insert(pc + 1);
+                    if let Some(next_exec) = next_executable_pc(instructions, pc + 1) {
+                        leaders.insert(next_exec);
                     }
                 }
             }
 
             // Return instructions terminate blocks
-            if inst.mnemonic.starts_with("RETURN") && pc + 1 < num_insts {
-                leaders.insert(pc + 1);
+            if inst.mnemonic.starts_with("RETURN") {
+                if let Some(next_exec) = next_executable_pc(instructions, pc + 1) {
+                    leaders.insert(next_exec);
+                }
             }
         }
 
@@ -132,7 +156,7 @@ impl ControlFlowGraph {
         let mut pc_to_block = BTreeMap::new();
         let mut blocks = Vec::with_capacity(leader_vec.len());
 
-        // 2. Partition into contiguous BasicBlocks
+        // 2. Partition into BasicBlocks
         for (b_idx, &start_pc) in leader_vec.iter().enumerate() {
             let end_pc = if b_idx + 1 < leader_vec.len() {
                 leader_vec[b_idx + 1] - 1
@@ -142,12 +166,16 @@ impl ControlFlowGraph {
 
             let mut pcs = Vec::new();
             for pc in start_pc..=end_pc {
-                pcs.push(pc);
                 pc_to_block.insert(pc, b_idx);
+                if !is_companion(&instructions[pc]) {
+                    pcs.push(pc);
+                }
             }
 
-            let last_inst = &instructions[end_pc];
-            let is_exit = last_inst.mnemonic.starts_with("RETURN");
+            let term_inst = pcs.last().map(|&pc| &instructions[pc]);
+            let is_exit = term_inst
+                .map(|i| i.mnemonic.starts_with("RETURN"))
+                .unwrap_or(false);
 
             blocks.push(BasicBlock {
                 id: StableId::block(proto.path.clone(), b_idx),
@@ -166,13 +194,19 @@ impl ControlFlowGraph {
 
         // 3. Connect control-flow edges
         for b_idx in 0..blocks.len() {
-            let end_pc = blocks[b_idx].end_pc;
-            let last_inst = &instructions[end_pc];
+            let term_inst = blocks[b_idx]
+                .instruction_pcs
+                .last()
+                .map(|&pc| &instructions[pc]);
+
+            let Some(last_inst) = term_inst else {
+                continue;
+            };
 
             // A. Jump instruction
             if let Some(target_pc) = last_inst.jump_target {
                 if let Some(&dest_b_idx) = pc_to_block.get(&target_pc) {
-                    let edge_kind = if target_pc <= end_pc {
+                    let edge_kind = if target_pc <= blocks[b_idx].end_pc {
                         CfgEdgeKind::LoopBack
                     } else if last_inst.mnemonic == "JMP" {
                         CfgEdgeKind::UnconditionalJump
@@ -203,7 +237,7 @@ impl ControlFlowGraph {
 
             // C. Fallthrough to next block (unless unconditional jump or return)
             if !last_inst.mnemonic.starts_with("RETURN") && last_inst.mnemonic != "JMP" {
-                let next_pc = end_pc + 1;
+                let next_pc = blocks[b_idx].end_pc + 1;
                 if let Some(&next_b_idx) = pc_to_block.get(&next_pc) {
                     if next_b_idx != b_idx
                         && !blocks[b_idx]

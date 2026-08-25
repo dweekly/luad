@@ -222,6 +222,13 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         suggested_action: "Verify jump offset sBx and ensure target PC falls within the valid instruction range.",
     },
     StaticDiagnosticDescriptor {
+        code: "L51-JMP-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::ControlFlow,
+        semantics: "Control flow transfers to a non-executable companion word.",
+        suggested_action: "Ensure jump and branch destinations target valid executable instructions, not companion words.",
+    },
+    StaticDiagnosticDescriptor {
         code: "L51-OP-001",
         severity: Severity::Error,
         category: DiagnosticCategory::Instruction,
@@ -269,6 +276,13 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         category: DiagnosticCategory::Instruction,
         semantics: "A statically bounded instruction register window reaches beyond the owning prototype's maxstacksize.",
         suggested_action: "Inspect the instruction counts and owning prototype stack bound.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-SETLIST-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Instruction,
+        semantics: "Lua 5.1 SETLIST instruction with C == 0 lacks the required follow-up list-batch operand word.",
+        suggested_action: "Ensure SETLIST with C == 0 is followed by a raw data continuation word.",
     },
     StaticDiagnosticDescriptor {
         code: "L51-STACK-001",

@@ -7,7 +7,7 @@ belong only in [the active sprint](docs/NEXT-SPRINT.md).
 
 `luad` will be a deterministic, stateless fact tool that lets a human researcher or
 external agent move from a firmware tree to reproducible answers about bytecode
-identity, constants, symbolic call paths, captures, value origins, control flow, and
+identity, constants, symbolic call selection, captures, value origins, control flow, and
 change across firmware versions. Every answer will carry the artifact interpretation
 and instruction evidence needed to audit it. Machine consumers will join and query
 those facts without decoding Lua instructions or retaining hidden stream state.
@@ -22,36 +22,27 @@ an exact release, profile, layout, public surface, and evidence manifest.
 
 ## Delivery sequence
 
-### 1. Close Lua 5.1 companion-word and capture safety
+### 1. Expose constant-key call labels
 
-Lua 5.1 non-executable words will be classified from executable context, including
-closure-binding descriptors and the raw list-batch word following `SETLIST C == 0`.
-CFG, effects, callees, origins, and call relations will consume those shared roles rather
-than treating data as instructions. Closure values will remain resolvable only when no
-parent, descendant, or sibling closure can mutate the shared captured cell.
-
-Exit outcome: public analyses cannot invent execution from data words or retain a stale
-prototype identity through a shared mutable upvalue.
-
-### 2. Close constant-key call labels
-
-Constant-key `GETTABLE` and `SELF` lookups will retain a typed lookup-label basis when
-the receiver does not have a provable global or module path. The label will state only
-the bytecode-selected key and evidence; it will not claim receiver identity, method
-implementation, or runtime reachability. Stronger global, module, and exact-prototype
-facts remain distinct.
+Constant-key `GETTABLE` and `SELF` lookups will retain a typed lookup label when the
+receiver does not have a provable global or module path. The label will state only the
+bytecode-selected key, lookup form, and instruction evidence. It will not claim receiver
+identity, method implementation, exact callee identity, or runtime reachability.
+Stronger global, module, and exact-prototype facts remain distinct.
 
 Exit outcome: external researchers can retrieve calls selected by a literal method or
 field name without `luad` guessing which runtime object supplies that member.
 
-### 3. Freeze retrieval and machine contracts
+### 2. Freeze retrieval and machine contracts
 
-Queries will cover callee paths, unresolved reasons, origin shapes, call relations,
-interpretation identity, and prototype content identity. Every predicate applies its
-complete operand or fails. Tested recipes will cover corpus constant search, capture
-traversal, call-site enumeration, argument-origin triage, caller navigation, and
-cross-version comparison. A dedicated constant-search verb is eligible only if it
-materially improves the tested export/query recipe without creating parallel semantics.
+Queries will cover callee paths and lookup labels, unresolved reasons, origin shapes,
+call relations, interpretation identity, and prototype content identity. Every
+predicate applies its complete operand or fails. Capture xrefs will remain tied to the
+physical closure site when one child prototype is instantiated more than once with
+different binders. Tested recipes will cover corpus constant search, capture traversal,
+call-site enumeration, argument-origin triage, caller navigation, and cross-version
+comparison. A dedicated constant-search verb is eligible only if it materially improves
+the tested export/query recipe without creating parallel semantics.
 
 Machine compatibility rules will define whether extensible analysis vocabularies are
 open within a schema major, and command documentation will state verdict-to-exit-code
@@ -61,7 +52,7 @@ surface unless its complete trusted-compiler contract is independently implement
 Exit outcome: a human or AI consumer can retrieve every release-critical fact without
 reimplementing bytecode decoding or relying on undocumented enum and process behavior.
 
-### 4. Qualify the stable LNUM32 release
+### 3. Qualify the stable LNUM32 release
 
 The release candidate will freeze the schema major, publish exact target artifacts,
 derive the `lua5.1-lnum32` support tier from the verified release evidence bundle, and
@@ -74,7 +65,7 @@ arm64 and Linux x86_64.
 Exit outcome: a human or AI agent can complete the reference firmware workflows with
 the supported CLI and a thin external judgment layer.
 
-### 5. Qualify additional targets independently
+### 4. Qualify additional targets independently
 
 Stock Lua layouts, Lua 5.2, 5.3, 5.4, 5.5, LuaJIT, and vendor mappings advance one exact
 target at a time. Vendor qualification may consume a provenance-bound mapping recovered
@@ -84,21 +75,20 @@ remain external.
 ## Dependency order
 
 ```text
-companion-word and capture safety
-  -> constant-key call labels
+constant-key call labels
   -> retrieval and machine-contract freeze
   -> stable LNUM32 release evidence
+  -> independently qualified additional targets
 ```
 
 ## Customer checkpoints
 
-- After companion-word and capture safety: rerun the combined public-area review with
-  independent call enumeration that does not reuse the production lifter.
 - After constant-key call labels: repeat the firmware-scale call-site survey and trace
   representative format/concatenation arguments, caller relationships, and
   cross-version matches while leaving reachability and sink policy external.
-- Before schema freeze: review callees, origins, and call relations as one public area,
-  then exercise every retrieval recipe against representative firmware.
+- Before schema freeze: review callees, origins, call relations, capture xrefs, and
+  queries as one public area, then exercise every retrieval recipe against
+  representative firmware.
 - Before release: investigate a different firmware version or objective without
   implementation guidance and obtain one outside-human trial on different vendor
   firmware.
@@ -106,18 +96,6 @@ companion-word and capture safety
 Silent incorrect answers interrupt the sequence. Friction routes to the nearest factual
 matrix. A private or externally downloaded corpus supplements but never replaces
 redistributable evidence.
-
-## Delivery roles
-
-- The steward owns roadmap scope, algorithmic review, gate execution, and promotion.
-- A fast implementation model handles bounded edits in an isolated worktree.
-- A model-diverse acceptance author is used for new semantic primitives and
-  qualification, not routine corrections.
-- A portfolio-level reviewer critiques the roadmap after a batch of stages and before
-  stable release planning.
-
-Serial work remains the default. Parallel work becomes eligible only when production,
-acceptance, gates, worktrees, and integration order are demonstrably independent.
 
 ## Persistent exclusions
 

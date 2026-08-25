@@ -41,11 +41,14 @@ caller-to-prototype relations, and versioned prototype subtree identities. It mu
 reparse bytecode or silently select a default dialect.
 
 Every analysis must state or enforce its preconditions. Invalid registers, jumps, stack
-references, or instruction modes can make analysis unavailable rather than merely less
-precise. Dataflow analyses are bounded and emit typed unresolved or unknown results when
-the evidence is ambiguous, unsupported, unreachable, or exceeds a declared resource
-limit. Provenance evidence uses stable instruction and object identifiers; it does not
-make security, reachability, or attacker-control judgments.
+references, instruction modes, truncated companion ranges, or control transfers into
+non-executable words can make analysis unavailable rather than merely less precise.
+Dataflow analyses are bounded and emit typed unresolved or unknown results when the
+evidence is ambiguous, unsupported, unreachable, or exceeds a declared resource limit.
+Lua 5.1 callee and origin analysis share one bounded, whole-tree capture-mutation
+summary so sibling and transitive writes to the same captured cell cannot preserve a
+stale value. Provenance evidence uses stable instruction and object identifiers; it
+does not make security, reachability, or attacker-control judgments.
 
 ### `luad-cli`
 
@@ -68,7 +71,13 @@ Owns test-only integration with official Lua compilers and canonical listings. I
 - Preserve every physical instruction word even when the dialect assigns it a non-executable role.
 - Never overwrite factual fields with external names or interpretations.
 
-For example, the words following a Lua 5.1 `CLOSURE` describe how child upvalues bind to parent registers or parent upvalues. They occupy physical PCs but are not independently executed `MOVE` or `GETUPVAL` operations. The shared model must retain the words and provenance, assign an explicit `closure_binding` role, attach the ordered capture relation to the owning closure, and exclude the descriptor words from standalone effects and control-flow semantics.
+For Lua 5.1, one ascending physical-role pass classifies words from executable owner
+context. The words following `CLOSURE` describe how child upvalues bind to parent
+registers or parent upvalues; the word following executable `SETLIST C == 0` is a raw
+list-batch operand. These companions retain physical PCs, raw words, provenance, owner
+links, and explicit `closure_binding` or `setlist_extra` roles, but have no standalone
+effects or control-flow semantics. A claimed companion is never reconsidered as an
+owner based on opcode-shaped data bits.
 
 ### Provenance is structural
 
@@ -80,8 +89,10 @@ A `StableId` is stable only within one exact artifact and selected parse interpr
 
 Prototype subtree identities are a separate, versioned content-join key. Their canonical
 preimage excludes artifact and structural identity while committing to decoded Lua 5.1
-instruction content, exact constants, capture shape, and ordered child identities. They
-do not replace artifact-local paths and do not assert source or behavioral equivalence.
+instruction content, exact constants, capture shape, and ordered child identities. The
+current v2 scheme commits the shared physical-role classification; the frozen v1
+encoder remains an explicit compatibility definition. Neither scheme replaces
+artifact-local paths or asserts source or behavioral equivalence.
 
 ### Invalid states fail closed
 

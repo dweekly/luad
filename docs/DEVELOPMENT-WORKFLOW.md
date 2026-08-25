@@ -512,7 +512,9 @@ The wrappers pin model variant, authentication, sandbox, workspace grant, permis
 mode, and output defaults. Antigravity receives `gemini-3.7-flash-high` with explicit
 `--effort high`. `scripts/agents/agy-gemini.sh config` reports the High model
 variant, mandatory worktree/sandbox controls, edit-only execution, and steward-owned
-verification without starting inference.
+verification without starting inference. Non-interactive turns allow ten minutes by
+default; set `LUAD_AGY_PRINT_TIMEOUT` to an `agy --print-timeout` duration when a
+different bounded window is appropriate.
 The wrappers fail closed instead of silently falling back from Claude subscription
 authentication to Console credentials. The Antigravity wrapper records both source and
 effective prompt identities, wall time, and its log path at session exit. Provider

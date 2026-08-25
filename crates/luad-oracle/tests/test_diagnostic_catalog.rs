@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 
 use serde_json::{json, Value};
 
-const PINNED_CODES: [&str; 110] = [
+const PINNED_CODES: [&str; 112] = [
     "CORE-LIMIT-001",
     "CORE-LIMIT-002",
     "CORE-OVERFLOW-001",
@@ -31,6 +31,7 @@ const PINNED_CODES: [&str; 110] = [
     "L51-HEADER-002",
     "L51-HEADER-003",
     "L51-JMP-001",
+    "L51-JMP-002",
     "L51-OP-001",
     "L51-PROTO-001",
     "L51-PROTO-002",
@@ -38,6 +39,7 @@ const PINNED_CODES: [&str; 110] = [
     "L51-REG-002",
     "L51-REG-003",
     "L51-REG-SPAN-001",
+    "L51-SETLIST-001",
     "L51-STACK-001",
     "L51-UPVAL-001",
     "L52-CHUNK-001",
@@ -159,8 +161,9 @@ const WARNING_CODES: [&str; 14] = [
     "L55-STACK-001",
 ];
 
-const CONTROL_FLOW_CODES: [&str; 5] = [
+const CONTROL_FLOW_CODES: [&str; 6] = [
     "L51-JMP-001",
+    "L51-JMP-002",
     "L52-JMP-001",
     "L53-JMP-001",
     "L54-VAL-JUMP-001",
@@ -203,7 +206,7 @@ const STRUCTURE_CODES: [&str; 31] = [
     "L55-STACK-001",
 ];
 
-const INSTRUCTION_CODES: [&str; 27] = [
+const INSTRUCTION_CODES: [&str; 28] = [
     "L51-BOOL-001",
     "L51-CLOSURE-001",
     "L51-CLOSURE-002",
@@ -218,6 +221,7 @@ const INSTRUCTION_CODES: [&str; 27] = [
     "L51-REG-002",
     "L51-REG-003",
     "L51-REG-SPAN-001",
+    "L51-SETLIST-001",
     "L51-UPVAL-001",
     "L52-OP-001",
     "L53-OP-001",

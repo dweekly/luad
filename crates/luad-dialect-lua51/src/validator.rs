@@ -1,11 +1,10 @@
 //! Structural and VM invariant validator for Lua 5.1 bytecode chunks.
 
-use std::collections::BTreeSet;
-
 use luad_core::diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
 use luad_core::model::{Chunk, Prototype};
 
 use crate::opcodes::{OpMode51, Opcode51, RawInstruction51};
+use crate::roles::{discover_roles_lua51, Lua51RoleFault};
 
 /// Validate Lua 5.1 chunk invariants.
 pub fn validate_chunk_lua51(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
@@ -31,22 +30,34 @@ pub fn validate_chunk_lua51(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
 
 fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
     let num_insts = proto.instructions.len();
+    let role_map = discover_roles_lua51(proto);
 
-    // Map closure binding descriptor PCs
-    let mut binding_descriptors = BTreeSet::new();
-    for (pc, inst) in proto.instructions.iter().enumerate() {
-        let raw = RawInstruction51::decode(inst.raw_word);
-        if raw.opcode == Some(Opcode51::Closure) {
-            let child_bx = raw.bx as usize;
-            let nups = proto
-                .protos
-                .get(child_bx)
-                .map(|p| p.upvalues.len())
-                .unwrap_or(0);
-            for b_pc in (pc + 1)..=(pc + nups) {
-                if b_pc < num_insts {
-                    binding_descriptors.insert(b_pc);
-                }
+    // Report role map faults (truncated companion ranges)
+    for fault in &role_map.faults {
+        match fault {
+            Lua51RoleFault::TruncatedClosure { owner_pc, .. } => {
+                let inst = &proto.instructions[*owner_pc];
+                let diag = Diagnostic::error(
+                    "L51-CLOSURE-001",
+                    DiagnosticCategory::Instruction,
+                    inst.id.clone(),
+                    format!("Missing closure binding descriptor for closure at PC {owner_pc}"),
+                )
+                .with_source(inst.source.clone());
+                diags.push(diag);
+            }
+            Lua51RoleFault::TruncatedSetlist { owner_pc } => {
+                let inst = &proto.instructions[*owner_pc];
+                let diag = Diagnostic::error(
+                    "L51-SETLIST-001",
+                    DiagnosticCategory::Instruction,
+                    inst.id.clone(),
+                    format!(
+                        "Missing SETLIST extra argument for SETLIST with C == 0 at PC {owner_pc}"
+                    ),
+                )
+                .with_source(inst.source.clone());
+                diags.push(diag);
             }
         }
     }
@@ -65,6 +76,10 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
 
     // 2. Validate instructions
     for (pc, inst) in proto.instructions.iter().enumerate() {
+        if !role_map.is_executable(pc) {
+            continue;
+        }
+
         let raw = RawInstruction51::decode(inst.raw_word);
 
         let Some(op) = raw.opcode else {
@@ -80,15 +95,54 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
             continue;
         };
 
-        // Jump target bounds check
+        // Jump target bounds check and companion destination check
         if op.mode() == OpMode51::IAsBx {
-            let dest_pc = (pc as i32 + 1 + raw.sbx) as usize;
-            if dest_pc >= num_insts {
+            let target_offset = pc as i32 + 1 + raw.sbx;
+            if target_offset < 0 || target_offset as usize >= num_insts {
                 let diag = Diagnostic::error(
                     "L51-JMP-001",
                     DiagnosticCategory::ControlFlow,
                     inst.id.clone(),
-                    format!("Jump destination PC {dest_pc} out of bounds (total instructions: {num_insts})"),
+                    format!("Jump destination PC {target_offset} out of bounds (total instructions: {num_insts})"),
+                )
+                .with_source(inst.source.clone());
+                diags.push(diag);
+            } else {
+                let dest_pc = target_offset as usize;
+                if !role_map.is_executable(dest_pc) {
+                    let diag = Diagnostic::error(
+                        "L51-JMP-002",
+                        DiagnosticCategory::ControlFlow,
+                        inst.id.clone(),
+                        format!(
+                            "Jump destination PC {dest_pc} targets a non-executable companion word"
+                        ),
+                    )
+                    .with_source(inst.source.clone());
+                    diags.push(diag);
+                }
+            }
+        }
+
+        // Conditional skip checks
+        let is_conditional_skip = match op {
+            Opcode51::Eq
+            | Opcode51::Lt
+            | Opcode51::Le
+            | Opcode51::Test
+            | Opcode51::TestSet
+            | Opcode51::TForLoop => true,
+            Opcode51::LoadBool => raw.c != 0,
+            _ => false,
+        };
+        if is_conditional_skip {
+            let skip_pc = pc + 2;
+            if skip_pc < num_insts && !role_map.is_executable(skip_pc) {
+                let diag = Diagnostic::error(
+                    "L51-JMP-002",
+                    DiagnosticCategory::ControlFlow,
+                    inst.id.clone(),
+                    format!("Conditional skip from PC {pc} targets a non-executable companion word at PC {skip_pc}"),
                 )
                 .with_source(inst.source.clone());
                 diags.push(diag);
@@ -157,8 +211,7 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
 
         // Register bounds validation (field A)
         let max_reg = proto.maxstacksize as usize;
-        let is_binding_descriptor = binding_descriptors.contains(&pc);
-        if !is_binding_descriptor && op.a_is_register() && raw.a as usize >= max_reg {
+        if op.a_is_register() && raw.a as usize >= max_reg {
             let diag = Diagnostic::error(
                 "L51-REG-001",
                 DiagnosticCategory::Instruction,
@@ -208,10 +261,7 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
 
         // Register bounds validation (field B)
         let is_reg_b = op.b_is_fixed_register() || (op.b_is_rk() && !raw.is_b_k());
-        // MOVE binding descriptors read B from this parent's register file.
-        let checks_reg_b =
-            is_reg_b && (!is_binding_descriptor || op == crate::opcodes::Opcode51::Move);
-        if checks_reg_b && raw.b as usize >= max_reg {
+        if is_reg_b && raw.b as usize >= max_reg {
             let diag = Diagnostic::error(
                 "L51-REG-002",
                 DiagnosticCategory::Instruction,
@@ -227,7 +277,7 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
 
         // Register bounds validation (field C)
         let is_reg_c = op.c_is_fixed_register() || (op.c_is_rk() && !raw.is_c_k());
-        if !is_binding_descriptor && is_reg_c && raw.c as usize >= max_reg {
+        if is_reg_c && raw.c as usize >= max_reg {
             let diag = Diagnostic::error(
                 "L51-REG-003",
                 DiagnosticCategory::Instruction,
@@ -296,16 +346,7 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
                 let nups = child.upvalues.len();
                 for j in 1..=nups {
                     let desc_pc = pc + j;
-                    if desc_pc >= num_insts {
-                        let diag = Diagnostic::error(
-                            "L51-CLOSURE-001",
-                            DiagnosticCategory::Instruction,
-                            inst.id.clone(),
-                            format!("Missing closure binding descriptor at PC {desc_pc} for closure at PC {pc}"),
-                        )
-                        .with_source(inst.source.clone());
-                        diags.push(diag);
-                    } else {
+                    if desc_pc < num_insts {
                         let desc_word = proto.instructions[desc_pc].raw_word;
                         let desc_raw = RawInstruction51::decode(desc_word);
                         if desc_raw.opcode != Some(crate::opcodes::Opcode51::Move)
@@ -318,6 +359,35 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
                                 format!(
                                     "Invalid closure binding opcode at PC {desc_pc}: expected MOVE or GETUPVAL, found {:?}",
                                     desc_raw.opcode
+                                ),
+                            )
+                            .with_source(proto.instructions[desc_pc].source.clone());
+                            diags.push(diag);
+                        } else if desc_raw.opcode == Some(crate::opcodes::Opcode51::Move)
+                            && desc_raw.b as usize >= proto.maxstacksize as usize
+                        {
+                            let diag = Diagnostic::error(
+                                "L51-REG-002",
+                                DiagnosticCategory::Instruction,
+                                proto.instructions[desc_pc].id.clone(),
+                                format!(
+                                    "Closure binding parent register B ({}) exceeds maxstacksize ({}) at PC {desc_pc}",
+                                    desc_raw.b, proto.maxstacksize
+                                ),
+                            )
+                            .with_source(proto.instructions[desc_pc].source.clone());
+                            diags.push(diag);
+                        } else if desc_raw.opcode == Some(crate::opcodes::Opcode51::GetUpval)
+                            && desc_raw.b as usize >= proto.upvalues.len()
+                        {
+                            let diag = Diagnostic::error(
+                                "L51-UPVAL-001",
+                                DiagnosticCategory::Instruction,
+                                proto.instructions[desc_pc].id.clone(),
+                                format!(
+                                    "Closure binding parent upvalue B ({}) exceeds declared upvalues ({}) at PC {desc_pc}",
+                                    desc_raw.b,
+                                    proto.upvalues.len()
                                 ),
                             )
                             .with_source(proto.instructions[desc_pc].source.clone());

@@ -26,6 +26,12 @@ as explicit skips, reports every input path, and returns default success when a 
 firmware tree produces at least one complete file result.
 Lua 5.1 prototype records also carry a versioned subtree-content identity for ordinary
 cross-firmware joins without conflating the digest with source or runtime identity.
+Lua 5.1 physical words are classified once from executable context: closure bindings
+and `SETLIST C == 0` list-batch data remain physically auditable but cannot become CFG
+nodes or invented calls. Callee and origin analysis share a bounded whole-tree capture
+mutation summary, so a sibling or descendant write prevents stale closure resolution.
+Recursive export emits the `luad-prototype-v2` identity scheme, which commits these
+physical roles; the v1 encoder remains available as a compatibility definition.
 
 All stock-Lua dialects remain **experimental** unless an exact release artifact
 for the current revision and profile says otherwise. Internal library gates do not

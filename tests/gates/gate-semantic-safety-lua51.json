@@ -1,0 +1,41 @@
+{
+  "schema_version": 2,
+  "gate_id": "gate-semantic-safety-lua51",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_semantic_safety_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_companion_precedence_open_window_and_block_shape_matrix",
+    "test_companion_range_and_control_transfer_validation_matrix",
+    "test_physical_role_enumerator_and_comparator_reject_killer_mutations",
+    "test_prototype_identity_v1_frozen_and_v2_current_matrix",
+    "test_public_companion_surfaces_agree_matrix",
+    "test_setlist_extra_matrix_is_data_not_program",
+    "test_shared_capture_killer_mutations_are_rejected",
+    "test_shared_capture_mutation_matrix",
+    "test_shared_capture_summary_exhaustion_returns_analysis_limit"
+  ],
+  "required_compiler_version": "Lua 5.1.5",
+  "required_compiler_sha256": {
+    "linux-x86_64": "e2ba74327f3a4662689b9e58909b410af8635add51a35b951021d0b1d90c6000",
+    "macos-aarch64": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239"
+  },
+  "required_fixtures": [
+    {
+      "path": "tests/fixtures/precompiled/lua51/hello.luac",
+      "sha256": "d64567d2d41ff584b86602f98fff5906f58f101f6faf98598f3662bac6e96a4f"
+    }
+  ],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness"
+  ],
+  "allowed_capability_mutations": []
+}

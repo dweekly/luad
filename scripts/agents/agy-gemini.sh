@@ -19,9 +19,11 @@ Usage:
 Runs one Antigravity turn in the current worktree using the Gemini 3.7 Flash High
 model variant. Non-interactive results are JSON containing the conversation ID,
 duration, and token usage. Pass that ID to `resume` so later checkpoints retain the
-same conversation. The sandbox remains enabled. Wall time, source/effective prompt
-hashes, and the Antigravity log path are printed to stderr when the turn exits. Set
-LUAD_AGY_LOG_FILE to choose the log location.
+same conversation. Non-interactive turns allow ten minutes by default; set
+LUAD_AGY_PRINT_TIMEOUT to an `agy --print-timeout` duration to override it. The sandbox
+remains enabled. Wall time, source/effective prompt hashes, and the Antigravity log path
+are printed to stderr when the turn exits. Set LUAD_AGY_LOG_FILE to choose the log
+location.
 
 The `propose` stage is a no-tools turn over a self-contained prompt; the steward applies
 useful edits. Interactive stages preserve the same model variant, mode, sandbox, and
@@ -37,6 +39,7 @@ EOF
 
 model=gemini-3.7-flash-high
 reasoning=high-model-variant
+print_timeout=${LUAD_AGY_PRINT_TIMEOUT:-10m}
 
 if [[ ${1:-} == "--help" || ${1:-} == "-h" ]]; then
   usage
@@ -147,5 +150,5 @@ common=(
 if [[ "$interactive" == true ]]; then
   agy "${common[@]}" --prompt-interactive "$prompt"
 else
-  agy "${common[@]}" --print "$prompt" --output-format json
+  agy "${common[@]}" --print "$prompt" --print-timeout "$print_timeout" --output-format json
 fi
