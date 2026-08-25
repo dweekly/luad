@@ -31,3 +31,7 @@ jobs:
 
     - name: Run Contributor Checks
       run: ./scripts/check.sh
+
+    - name: Run OpenWrt Lua 5.1 LNUM32 Authority Gate
+      if: runner.os == 'Linux'
+      run: ./scripts/gates/gate-authority-lua51-openwrt-lnum32.sh /tmp/gate-authority-lua51-openwrt-lnum32
