@@ -104,6 +104,22 @@ luad export firmware/*.lua --format jsonl | jq -c '
 Treat `global-label` and `module-label` as bytecode-derived lookup labels. Apply sink
 classification and attacker-control policy in the consuming research layer.
 
+Select calls directly by a resolved symbolic path or a typed lookup key:
+
+```bash
+luad query firmware/main.lua --where 'callee.path contains "luci.sys"' --format json
+luad query firmware/main.lua --where 'callee.lookup.key == "execute"' --format json
+```
+
+Group explicit unresolved outcomes without treating omitted calls as benign:
+
+```bash
+luad export firmware/*.lua --format jsonl | jq -r '
+  select(.record_type == "call_relation" and
+         .data.resolution.status == "unresolved") |
+  .data.resolution.reason' | sort | uniq -c
+```
+
 ---
 
 ## 5. Inspecting Call-Argument Origins Without Embedding Sink Policy
@@ -135,6 +151,14 @@ luad origins firmware/controller.lua --format json | jq -c '
 
 `CONCAT` and `table` nodes retain their contributing expressions recursively.
 `unknown` nodes retain the reason analysis stopped or refused to invent a merge.
+
+Group fixed arguments by their top-level origin shape:
+
+```bash
+luad export firmware/*.lua --format jsonl | jq -r '
+  select(.record_type == "origin" and .data.argument_window.kind == "fixed") |
+  .data.argument_window.arguments[].origin.kind' | sort | uniq -c
+```
 
 ---
 
@@ -175,6 +199,15 @@ Output:
 ```json
 {"source":"proto:0/0:local:1","target":"proto:0/0/0:upvalue:0","relation":"binds"}
 {"source":"proto:0/0/0:upvalue:0","target":"proto:0/0/0/0:upvalue:0","relation":"binds"}
+```
+
+For a repeated closure instantiation, start from its physical descriptor. The descriptor
+has both a `reads` edge to the site-specific parent source and a `binds` edge to the
+child slot; the preceding closure owner has its own `binds` edge to that slot:
+
+```bash
+luad xrefs closures.luac --from 'proto:0:pc:18' --format json | jq -c \
+  '.data.entries[] | select(.relation == "reads" or .relation == "binds")'
 ```
 
 ---
@@ -227,6 +260,15 @@ digest is a triage signal only; it does not by itself prove a behavioral change.
 The scheme commits exact constant bytes and is intended for joins within the same Lua
 5.1 profile. Equivalent source compiled for stock and LNUM32 number layouts is not
 expected to produce equal digests.
+
+Inventory the interpretation beside each digest before comparing artifacts:
+
+```bash
+luad export firmware/*.lua --format jsonl | jq -r '
+  select(.record_type == "prototype_identity") |
+  [.context.interpretation.profile, .data.scheme, .data.digest,
+   .context.input_identity.path, .data.proto_id] | @tsv'
+```
 
 ---
 

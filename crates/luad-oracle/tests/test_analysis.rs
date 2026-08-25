@@ -126,7 +126,7 @@ fn test_query_fail_closed_syntax_and_operators() {
 }
 
 #[test]
-fn test_query_cursor_bounds_and_exact_end_cursor() {
+fn test_query_cursors_are_context_bound_and_tamper_evident() {
     let raw_bytes = get_fixture_bytes("lua5.4", "closures", false).expect("fixture failed");
     let mut reader = SafeReader::new(&raw_bytes);
     let chunk = luad_dialect_lua54::decode_chunk_lua54(&mut reader).expect("parse failed");
@@ -175,18 +175,14 @@ fn test_query_cursor_bounds_and_exact_end_cursor() {
     assert!(!page2.is_truncated);
     assert!(page2.next_cursor.is_none());
 
-    // Exact end integer cursor succeeds with empty page (0..=total contract)
-    let end_int_cursor =
-        execute_query(&chunk, Some("opcode == \"OP_CALL\""), 10, Some("3")).unwrap();
-    assert_eq!(end_int_cursor.count, 0);
-    assert!(!end_int_cursor.is_truncated);
-    assert!(end_int_cursor.next_cursor.is_none());
+    // Bare integer offsets never bypass context binding.
+    let bare_cursor = execute_query(&chunk, Some("opcode == \"OP_CALL\""), 10, Some("3"));
+    assert!(bare_cursor.is_err());
 
-    // Out of bounds integer cursor fails
     let oob_cursor = execute_query(&chunk, Some("opcode == \"OP_CALL\""), 10, Some("999"));
     assert!(oob_cursor.is_err());
 
-    // Non-signed/non-integer cursor fails
+    // Arbitrary tokens fail.
     let bad_cursor = execute_query(&chunk, Some("opcode == \"OP_CALL\""), 10, Some("abc"));
     assert!(bad_cursor.is_err());
 }

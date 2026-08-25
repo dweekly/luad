@@ -192,17 +192,13 @@ fn test_cli_exit_codes_contract() {
         .expect("luad inspect must run");
     assert_eq!(unsupported.status.code(), Some(4));
 
-    // 3. Compile command fails closed with Exit code 4 (UnsupportedFormat)
+    // 3. Removed compile command is an unknown-command usage error.
     let compile_run = Command::new(&luad)
-        .args([
-            "compile",
-            "--compiler",
-            "/bin/echo",
-            temp_file.path().to_str().unwrap(),
-        ])
+        .args(["compile", temp_file.path().to_str().unwrap()])
         .output()
         .expect("luad compile must run");
-    assert_eq!(compile_run.status.code(), Some(4));
+    assert_eq!(compile_run.status.code(), Some(2));
+    assert!(compile_run.stdout.is_empty());
 
     // 4. Invalid prototype selector -> Exit code 2 (UsageError)
     let raw_54 = luad_oracle::get_fixture_bytes("lua5.4", "hello", false).unwrap();

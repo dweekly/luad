@@ -152,7 +152,7 @@ luad export firmware/*.lua --format jsonl --max-facts-per-file 10000
 luad diagnostics L51-REG-SPAN-001
 ```
 
-The `compile` command is present in the CLI surface but intentionally returns an unsupported-format error; `luad` does not currently execute an external compiler through that command.
+`luad` analyzes bytecode as data and does not invoke external compilers.
 
 ## Machine interface
 

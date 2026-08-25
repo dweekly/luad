@@ -63,9 +63,6 @@ pub enum Commands {
     /// Deterministic batch export of firmware artifacts in streaming JSONL format.
     Export(ExportArgs),
 
-    /// Compile trusted Lua source with an explicit external compiler.
-    Compile(CompileArgs),
-
     /// Describe commands, dialects, features, limits, and schemas.
     Capabilities(CapabilitiesArgs),
 
@@ -323,20 +320,6 @@ pub struct ExportArgs {
     /// Strict fail-fast parsing mode.
     #[arg(long)]
     pub strict: bool,
-}
-
-#[derive(Args, Debug)]
-pub struct CompileArgs {
-    /// Trusted source file to compile.
-    pub source_file: String,
-
-    /// Explicit path to external compiler binary (e.g. '/opt/homebrew/opt/lua@5.4/bin/luac').
-    #[arg(long)]
-    pub compiler: String,
-
-    /// Compiler arguments.
-    #[arg(long, allow_hyphen_values = true)]
-    pub args: Option<String>,
 }
 
 #[derive(Args, Debug)]

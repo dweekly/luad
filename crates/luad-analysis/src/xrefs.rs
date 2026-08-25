@@ -145,47 +145,90 @@ impl XrefIndex {
                         });
 
                         if let Some(child_proto) = proto.protos.get(*child_idx) {
-                            for (upval_idx, u) in child_proto.upvalues.iter().enumerate() {
-                                let child_upval_id =
-                                    StableId::upvalue(child_proto.path.clone(), upval_idx);
-                                if u.instack == 1 {
-                                    // Capture from parent local register
-                                    let parent_loc_id =
-                                        StableId::local(proto.path.clone(), u.idx as usize);
-                                    self.entries.push(XrefEntry {
-                                        source: parent_loc_id,
-                                        target: child_upval_id.clone(),
-                                        relation: XrefRelation::Binds,
-                                    });
-                                } else {
-                                    // Capture from parent upvalue
-                                    let parent_upval_id =
-                                        StableId::upvalue(proto.path.clone(), u.idx as usize);
-                                    self.entries.push(XrefEntry {
-                                        source: parent_upval_id,
-                                        target: child_upval_id.clone(),
-                                        relation: XrefRelation::Binds,
-                                    });
-                                }
-                                if dialect.starts_with("lua5.1") {
+                            if dialect.starts_with("lua5.1") {
+                                for upval_idx in 0..child_proto.upvalues.len() {
+                                    let child_upval_id =
+                                        StableId::upvalue(child_proto.path.clone(), upval_idx);
                                     let desc_pc = sem.pc + 1 + upval_idx;
-                                    if desc_pc < proto.instructions.len() {
+                                    if let Some(descriptor) = lifted.get(desc_pc).filter(|desc| {
+                                        desc.companion_pc == Some(sem.pc)
+                                            && desc.implicit_effects.iter().any(|effect| {
+                                                matches!(
+                                                    effect,
+                                                    luad_core::ImplicitEffect::CompanionPair {
+                                                        companion_role,
+                                                        ..
+                                                    } if companion_role == "closure_binding"
+                                                )
+                                            })
+                                    }) {
+                                        if let Some(parent_id) =
+                                            descriptor.reads.first().and_then(|read| match read {
+                                                EffectTarget::Register { index } => {
+                                                    Some(StableId::local(
+                                                        proto.path.clone(),
+                                                        *index as usize,
+                                                    ))
+                                                }
+                                                EffectTarget::Upvalue { index, .. } => {
+                                                    Some(StableId::upvalue(
+                                                        proto.path.clone(),
+                                                        *index as usize,
+                                                    ))
+                                                }
+                                                _ => None,
+                                            })
+                                        {
+                                            self.entries.push(XrefEntry {
+                                                source: parent_id.clone(),
+                                                target: child_upval_id.clone(),
+                                                relation: XrefRelation::Binds,
+                                            });
+                                            self.entries.push(XrefEntry {
+                                                source: descriptor.id.clone(),
+                                                target: parent_id,
+                                                relation: XrefRelation::Reads,
+                                            });
+                                        }
                                         self.entries.push(XrefEntry {
-                                            source: StableId::instruction(
-                                                proto.path.clone(),
-                                                desc_pc,
-                                            ),
+                                            source: descriptor.id.clone(),
                                             target: child_upval_id.clone(),
                                             relation: XrefRelation::Binds,
                                         });
                                     }
+                                    self.entries.push(XrefEntry {
+                                        source: src_id.clone(),
+                                        target: child_upval_id,
+                                        relation: XrefRelation::Binds,
+                                    });
                                 }
-                                // Closure instantiation link
-                                self.entries.push(XrefEntry {
-                                    source: src_id.clone(),
-                                    target: child_upval_id,
-                                    relation: XrefRelation::Binds,
-                                });
+                            } else {
+                                for (upval_idx, u) in child_proto.upvalues.iter().enumerate() {
+                                    let child_upval_id =
+                                        StableId::upvalue(child_proto.path.clone(), upval_idx);
+                                    if u.instack == 1 {
+                                        let parent_loc_id =
+                                            StableId::local(proto.path.clone(), u.idx as usize);
+                                        self.entries.push(XrefEntry {
+                                            source: parent_loc_id,
+                                            target: child_upval_id.clone(),
+                                            relation: XrefRelation::Binds,
+                                        });
+                                    } else {
+                                        let parent_upval_id =
+                                            StableId::upvalue(proto.path.clone(), u.idx as usize);
+                                        self.entries.push(XrefEntry {
+                                            source: parent_upval_id,
+                                            target: child_upval_id.clone(),
+                                            relation: XrefRelation::Binds,
+                                        });
+                                    }
+                                    self.entries.push(XrefEntry {
+                                        source: src_id.clone(),
+                                        target: child_upval_id,
+                                        relation: XrefRelation::Binds,
+                                    });
+                                }
                             }
                         }
                     }

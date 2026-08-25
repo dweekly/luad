@@ -235,7 +235,7 @@ fn test_table_driven_cli_selection_conformance() {
             expected_exit_code: 0,
             stderr_substring: "",
         },
-        // 5. Positive cases -> Exit 0
+        // 5. Remaining query boundary cases.
         CliTestCase {
             name: "query_valid_exact_match_success",
             args: vec![
@@ -250,7 +250,7 @@ fn test_table_driven_cli_selection_conformance() {
             stderr_substring: "",
         },
         CliTestCase {
-            name: "query_valid_integer_cursor_zero_accepted",
+            name: "query_bare_integer_cursor_zero_rejected",
             args: vec![
                 "query".into(),
                 f.clone(),
@@ -261,8 +261,8 @@ fn test_table_driven_cli_selection_conformance() {
                 "--format".into(),
                 "json".into(),
             ],
-            expected_exit_code: 0,
-            stderr_substring: "",
+            expected_exit_code: 2,
+            stderr_substring: "Invalid cursor",
         },
     ];
 
@@ -395,22 +395,13 @@ fn test_cli_selection_stock_and_lnum32_automatic_and_explicit() {
 }
 
 #[test]
-fn test_cli_query_cursor_offset_tampering_and_integer_contract() {
+fn test_cli_query_cursor_binding_and_tampering_contract() {
     let luad = get_luad_bin();
     let root = luad_oracle::find_workspace_root();
     let fixture = root.join("tests/fixtures/precompiled/lua54/hello.luac");
     let f = fixture.to_str().unwrap();
 
-    // Query full results to get exact total_matches count
-    let full_out = Command::new(&luad)
-        .args(["query", f, "--format", "json"])
-        .output()
-        .expect("full query failed");
-    assert_eq!(full_out.status.code(), Some(0));
-    let full_doc: serde_json::Value = serde_json::from_slice(&full_out.stdout).unwrap();
-    let total_matches = full_doc["data"]["count"].as_u64().unwrap() as usize;
-
-    // 1. Get initial page with limit 1
+    // 1. Get initial page with limit 1.
     let page1_output = Command::new(&luad)
         .args(["query", f, "--limit", "1", "--format", "json"])
         .output()
@@ -456,41 +447,13 @@ fn test_cli_query_cursor_offset_tampering_and_integer_contract() {
         .expect("tampered cursor query");
     assert_eq!(tampered_output.status.code(), Some(2));
 
-    // 4. Exact end cursor must return empty page (Exit 0, count: 0, is_truncated: false)
-    let end_cursor = format!("{total_matches}");
-    let end_output = Command::new(&luad)
+    // 4. Bare offsets cannot bypass the input-and-predicate binding.
+    let bare_output = Command::new(&luad)
         .args([
-            "query",
-            f,
-            "--limit",
-            "5",
-            "--cursor",
-            &end_cursor,
-            "--format",
-            "json",
+            "query", f, "--limit", "5", "--cursor", "1", "--format", "json",
         ])
         .output()
-        .expect("end cursor query");
-    assert_eq!(end_output.status.code(), Some(0));
-    let end_doc: serde_json::Value = serde_json::from_slice(&end_output.stdout).unwrap();
-    assert_eq!(end_doc["data"]["count"], 0);
-    assert_eq!(end_doc["data"]["is_truncated"], false);
-    assert_eq!(end_doc["data"]["next_cursor"], serde_json::Value::Null);
-
-    // 5. Cursor past total matches fails (Exit 2)
-    let oob_cursor = format!("{}", total_matches + 1);
-    let oob_output = Command::new(&luad)
-        .args([
-            "query",
-            f,
-            "--limit",
-            "5",
-            "--cursor",
-            &oob_cursor,
-            "--format",
-            "json",
-        ])
-        .output()
-        .expect("oob cursor query");
-    assert_eq!(oob_output.status.code(), Some(2));
+        .expect("bare cursor query");
+    assert_eq!(bare_output.status.code(), Some(2));
+    assert!(bare_output.stdout.is_empty());
 }
