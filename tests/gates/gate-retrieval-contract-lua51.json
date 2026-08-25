@@ -1,0 +1,41 @@
+{
+  "schema_version": 2,
+  "gate_id": "gate-retrieval-contract-lua51",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_retrieval_contract_lua51",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_capture_xrefs_stay_site_accurate_across_repeated_closure_sites",
+    "test_cli_outcome_table_pins_exit_codes_and_output_channels",
+    "test_compile_surface_is_removed_and_rejected_as_an_unknown_command",
+    "test_composition_recipes_execute_the_seven_documented_workflows",
+    "test_live_killer_controls_reject_plausible_wrong_retrieval_engines",
+    "test_retrieval_pagination_binds_cursors_and_bounds_resources",
+    "test_retrieval_predicates_fail_closed_on_operands_they_cannot_apply",
+    "test_retrieval_predicates_select_exact_records_with_deterministic_order",
+    "test_schema_major_one_closed_variants_and_open_vocabularies"
+  ],
+  "required_compiler_version": "Lua 5.1.5",
+  "required_compiler_sha256": {
+    "linux-x86_64": "e2ba74327f3a4662689b9e58909b410af8635add51a35b951021d0b1d90c6000",
+    "macos-aarch64": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239"
+  },
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-machine-contract",
+    "gate-symbolic-callees-lua51",
+    "gate-call-relations-lua51",
+    "gate-argument-origins-lua51",
+    "gate-prototype-identity-lua51"
+  ],
+  "allowed_capability_mutations": []
+}
