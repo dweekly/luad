@@ -14,7 +14,7 @@
   ],
   "required_compiler_version": "Lua 5.1.5",
   "required_compiler_sha256": {
-    "linux-x86_64": "0000000000000000000000000000000000000000000000000000000000000000",
+    "linux-x86_64": "b1bbe0c28cad4f2608ac3ba70401ae4c8849bee1fbcf9040c5a63ad6e148f091",
     "macos-aarch64": "5d09175860c339307da8a0c81338c7e6ef57dbe5fe0497774bc6ac3e1c256575"
   },
   "required_fixtures": [
