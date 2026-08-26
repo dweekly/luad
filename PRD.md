@@ -398,7 +398,9 @@ No verdict is named `safe`, because structural validation does not establish beh
 - **FR-AN-011:** Build forward and inverse capture cross-references between a parent register/upvalue at a specific closure PC and the corresponding child upvalue slot.
 - **FR-AN-012:** Resolve an evidence-linked symbolic callee path for `CALL` and
   `TAILCALL` when literal lookups, deterministic aliases, or closure bindings establish
-  one; otherwise emit a typed unresolved reason.
+  one; otherwise emit a typed unresolved reason. Callee-register resolution is
+  independent of fixed or open argument and result cardinality, and a top-dependent
+  write invalidates only the register range it can affect.
 - **FR-AN-013:** Preserve whether a module-labeled symbolic path originates in a literal
   loader call without asserting the runtime identity of the returned object.
 - **FR-AN-014:** Build a bounded, cycle-safe value-expression origin graph for selected
@@ -410,6 +412,12 @@ No verdict is named `safe`, because structural validation does not establish beh
   validated construction, reaching-definition, storage, and invocation facts.
 - **FR-AN-016:** Compute a versioned prototype content identity from a documented
   normalization while preserving artifact-local structural identity.
+- **FR-AN-017:** Preserve bounded, evidence-linked alternatives when multiple
+  individually resolved definitions reach a selected value; identify the predecessor
+  or defining instruction for each option and do not present their union as one
+  path-specific fact.
+- **FR-AN-018:** Represent bounded constant-key table construction as a table-literal
+  value origin whose fields retain their individual origins and instruction evidence.
 
 ### 5.6 Explanation and provenance
 
@@ -439,6 +447,11 @@ No verdict is named `safe`, because structural validation does not establish beh
   content identity without prose parsing.
 - **FR-QUERY-007:** Reject unknown fields, unsupported operators, malformed selectors,
   and any predicate whose supplied operand is not applied.
+- **FR-QUERY-008:** Apply one bounded structured query to an explicit input list while
+  preserving per-file identity, outcomes, diagnostics, ordering, and cursor context.
+- **FR-QUERY-009:** Let recursive export select fact-record families while preserving
+  the control, identity, diagnostic, truncation, and terminal records required to
+  interpret the selected stream.
 - **FR-DIFF-001:** Compare chunk headers, prototype trees, constants, instructions, debug data, validation results, and CFGs.
 - **FR-DIFF-002:** Support raw-index comparison and normalized semantic comparison.
 - **FR-DIFF-003:** Report when alignment is uncertain, especially after instruction insertions or prototype reordering.
@@ -909,10 +922,10 @@ The [product roadmap](ROADMAP.md) defines capability order and broad exit outcom
 The [active sprint](docs/NEXT-SPRINT.md) defines the one eligible implementation
 claim, including gate commands, killer probes, and checkpoint handoff.
 
-Delivery uses the least expensive evidence lane that can falsify the claim. Localized
-corrections use one focused regression and one pull request. New semantic facts use an
-independent public-boundary acceptance test and only the mutation probes needed to
-distinguish ambiguity, aliasing, or cutoff defects. Target promotion uses complete
+Delivery uses the least expensive evidence lane that can falsify the claim. Product
+batches implement one coherent researcher outcome and ordinary tests in one pull
+request, using existing authorities and gates wherever possible. Independent review
+and separated acceptance are risk-triggered. Target promotion uses complete
 authority, provenance, prerequisite, and release evidence.
 
 Customer assignments occur at roadmap boundaries rather than after every patch. Their
@@ -973,6 +986,8 @@ dilute exact evidence for the support scope actually advertised.
   stateful file-envelope adapter.
 - Symbolic callee, value-origin, and provable-caller questions can be answered by one
   command or one command plus a stable-ID follow-up.
+- Open argument forwarding never erases a callee proved in an unaffected register;
+  argument openness and callee identity remain independently consumable facts.
 
 ### 14.3 Agent metrics
 

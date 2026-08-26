@@ -1,35 +1,46 @@
-# Active checkpoint: independent customer transfer
+# Active product batch: open-window callee independence
 
-Lane: customer validation. Target: determine whether the exact Lua 5.1 LNUM32
-candidate can support real firmware investigation without implementation guidance.
+Lane: product. Outcome: a researcher can identify a statically resolvable Lua 5.1
+callee even when the same call forwards an open vararg argument window.
 
-## Inputs
+## Public claim
 
-- candidate evidence index and macOS/Linux archives from CI run `32919471567`;
-- one different TP-Link firmware version or investigation objective;
-- one outside-human trial using different-vendor Lua firmware;
-- the workflows in [`LUA51-LNUM32-CANDIDATE.md`](LUA51-LNUM32-CANDIDATE.md).
+For every reachable Lua 5.1 `CALL` or `TAILCALL`, `callees` derives the callee from the
+value in register `A` at that program point independently of argument and result
+cardinality. A preceding `VARARG` or another top-dependent write invalidates only the
+register range it can write; it does not erase a proved callee below that range.
 
-Each trial records the candidate archive and binary SHA-256, firmware context, commands
-attempted, workflow outcomes, incorrect answers, blocking friction, and minimized
-redistributable reproductions. Private firmware and extracted secrets stay outside this
-repository.
+An open argument window remains explicit in `origins`. Open cardinality alone is never
+the unresolved reason for a callee whose register value is otherwise proved. Text,
+JSON, JSONL, recursive export, query, and call-relation consumers agree on the same
+callee fact without a schema-major change.
 
-## Acceptance
+## Evidence
 
-Both investigators must be able to inventory files, confirm profile/layout identity,
-search constants, inspect symbolic callees and unresolved reasons, inspect argument
-origins, follow closure captures, and preserve deterministic machine output.
+- Add one Lua 5.1 fixture shape equivalent to `local function f(...) return g(...) end`
+  with a resolvable global or module callee.
+- Assert that `callees` resolves `g` with instruction evidence while `origins` reports
+  an open argument window for the same call.
+- Assert that a genuinely dynamic open-window callee remains unresolved for the reason
+  established by callee-register analysis.
+- Assert that query and recursive export preserve the resolved callee.
+- Run the focused `test_symbolic_callees_lua51` suite and the existing
+  `gate-symbolic-callees-lua51` gate. Reuse its compiler authority, fixture policy,
+  comparator, and gate runner.
 
-A silent or incorrect factual answer blocks acceptance. It becomes a minimized public
-fixture and a product fix before the candidate is rebuilt. Usability feedback blocks
-only when it prevents a required workflow; other friction feeds the product backlog.
+## Scope
 
-No new release, attestation, gate, schema, or orchestration mechanism is part of this
-checkpoint.
+Production work is limited to Lua 5.1 callee dataflow. Ordinary focused tests and the
+minimum fixture/source manifest changes are allowed. The batch adds no new command,
+schema major, oracle, gate, release manifest, or proof harness.
 
-## Exit
+Path-sensitive origin alternatives, table-literal origins, corpus-wide queries,
+selective export, cross-chunk module conventions, caller-union substitution, sink
+classification, and taint policy are non-goals.
 
-After both trials satisfy the acceptance criteria, the next sprint may promote only the
-exact `lua5.1-lnum32` target and publish its verified artifacts. The base `lua5.1`
-dialect and all other targets remain experimental.
+## Stop condition
+
+Stop after one reviewable production-and-test diff demonstrates the focused regression.
+The steward runs the existing gate, aggregate CI, integration, candidate rebuild, and
+customer replay. Promotion remains blocked until the replay and outside-human trial
+satisfy the customer-transfer checkpoint.

@@ -34,6 +34,11 @@ mutation summary, so a sibling or descendant write prevents stale closure resolu
 Recursive export emits the `luad-prototype-v2` identity scheme, which commits these
 physical roles; the v1 encoder remains available as a compatibility definition.
 
+The current LNUM32 candidate is not eligible for promotion while open vararg windows
+can erase an otherwise proved callee below the written register range. The active
+product batch corrects that release-blocking incompleteness before customer transfer
+resumes.
+
 All stock-Lua dialects remain **experimental** unless an exact release artifact
 for the current revision and profile says otherwise. Internal library gates do not
 substitute for public CLI and schema evidence.

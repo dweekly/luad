@@ -6,9 +6,10 @@ direction and the [active sprint](NEXT-SPRINT.md) owns exact gates and sequencin
 
 ## Reference use case
 
-The reference corpus is TP-Link Deco X55 V1.2 firmware 1.4.6, build 20250211. Its Lua
-surface contains 260 `.lua` files: 252 stripped Lua 5.1 bytecode chunks from the LuCI
-administration stack and eight source files. The bytecode uses:
+The primary reference corpus is TP-Link Deco X55 V1.2 firmware 1.4.6, build 20250211.
+Repeated audit evidence also covers Deco M4R 1.8.2. The X55 Lua surface contains 260
+`.lua` files: 252 stripped Lua 5.1 bytecode chunks from the LuCI administration stack
+and eight source files. The bytecode uses:
 
 - little-endian Lua 5.1 encoding;
 - a header-declared 32-bit `size_t`;
@@ -19,10 +20,10 @@ The private corpus supplies supplemental field evidence only. Every release clai
 requires minimized redistributable fixtures, recorded provenance, and public-boundary
 tests independent of the private files.
 
-The reference investigation surface includes 1,011 dispatch endpoints and 4,770
-security-sensitive call sites across the firmware tree. Product prioritization follows
-the repeated factual joins required by that workload: symbolic callees, recursive
-argument origins, provable call relations, corpus search, and content identity.
+The current reference investigation surface includes 993 dispatch endpoints and 38,862
+physical call sites across the firmware tree. Product prioritization follows the
+repeated factual joins required by that workload: symbolic callees, recursive argument
+origins, provable call relations, corpus search, and content identity.
 
 Vendor key material, credential hashes, and extracted secrets remain outside this
 repository. Examples use placeholders or safely bounded prefixes and hashes.
@@ -34,21 +35,23 @@ files, explicitly skips eight source files, and emits one terminal result for ev
 input. The 252 chunks contain 344,120 physical instructions, 6,058 prototypes, and
 38,862 physical `CALL` or `TAILCALL` sites.
 
-The present callee fact distribution is 22,946 resolved symbolic paths, 3,690 resolved
-prototype values, and 12,226 explicit unresolved results. Thus 68.5% of all calls have
-a symbolic-path or exact-prototype fact. `overwritten` accounts for 8,710 (71.2%) of the
-unresolved results. At least 1,825 of those calls are immediately preceded by a
-constant-key `SELF`, making receiver-independent lookup labels a concrete factual
-coverage opportunity rather than a reason to infer receiver identity.
+The present callee analysis resolves 37,590 of 38,862 calls to a symbolic label or exact
+prototype. The remaining 1,272 calls report `open-register-window`; 1,220 of those have
+a callee-register definition already handled by the analysis, concentrated in
+`GETTABLE`, `GETGLOBAL`, `SELF`, `GETUPVAL`, and `MOVE`. Open vararg forwarding is
+therefore a callee-completeness defect rather than evidence that the target is dynamic.
 
-Argument-origin output contains 37,663 fixed and 1,199 open call windows. Call relations
-contain 5,138 exact prototype edges and 33,724 explicit unresolved outcomes; the low edge
-fraction is expected because symbolic lookup labels do not establish prototype identity.
+The present call graph contains 3,662 provable relations. Origin analysis reports 2,940
+`control-flow-conflict` values, including 89 sink arguments, and 2,394
+`unsupported-value` values. Constant-key table repacking is the dominant bounded shape
+inside the latter category. These are coverage measurements, not permission to infer
+taint, sink danger, or path feasibility.
 
-On the current macOS arm64 reference machine, a release build exporting all facts to a
-sink completes in 53.83 seconds with a 167,641,088-byte maximum resident set size. A
-materialized JSONL stream is approximately 731 MiB. This is an end-to-end sizing point,
-not the independent per-stage benchmark required by PERF-008 and not release evidence.
+A materialized all-facts JSONL stream is approximately 776 MB; instruction and xref
+records account for about 76% of it. Consumers commonly need only callee, origin,
+relation, and prototype facts. No current independently repeatable per-stage timing and
+peak-memory benchmark is recorded; PERF-008 requires that evidence before a performance
+claim can be promoted.
 
 ## Research outcome
 
@@ -73,6 +76,8 @@ machine-consumable answers for these questions:
 10. Which statically provable prototype calls another, and which relationships remain
     ambiguous?
 11. Which prototype bodies remain identical or change across firmware versions?
+12. Which bounded alternative definitions can reach a value at a control-flow join,
+    and which exact predecessor path supplies each alternative?
 
 `luad` supplies deterministic facts for this workflow. Security classification,
 attacker-control judgments, hypotheses, naming, and cross-session research state remain
@@ -139,6 +144,10 @@ upvalue → nested-child upvalue while keeping each hop tied to an exact closure
   decoding operands.
 - Batch export accepts explicit file sets or bounded recursive discovery, produces one
   deterministic record sequence, identifies each input, and reports per-file outcomes.
+- Batch export can select required fact families without changing the identity,
+  ordering, diagnostic, truncation, or per-file outcome contract of the retained facts.
+- Structured query can apply one expression to an explicit file list and retain the
+  same per-input identity and failure accounting as export.
 - Every exported fact carries or directly references an input and interpretation
   identity, so interleaved records are joinable without retaining envelope state.
 - Prototype records expose both artifact-local navigation identity and a versioned,
@@ -153,6 +162,10 @@ upvalue → nested-child upvalue while keeping each hop tied to an exact closure
 
 - `CALL` and `TAILCALL` records expose an evidence-linked symbolic callee path when
   bytecode lookup, alias, and closure-binding facts establish one unambiguously.
+- Callee identity is resolved from the callee register independently of fixed or open
+  argument and result windows. Top-dependent writes invalidate only registers they can
+  write; an open argument window remains an origin fact and cannot erase an unaffected
+  callee value.
 - A literal module-loader call may label a symbolic path with its constant argument,
   but the record identifies that basis and does not claim which runtime object the
   loader returns.
@@ -162,6 +175,11 @@ upvalue → nested-child upvalue while keeping each hop tied to an exact closure
 - Selected registers and call arguments link to a bounded value-expression graph that
   distinguishes constants, parameters, upvalues, call results, concatenations, other
   computations, cycles, and explicit cutoffs.
+- When multiple individually bounded definitions reach one use, the origin graph
+  preserves evidence-linked alternatives rather than replacing the entire set with a
+  plausible complete negative answer.
+- A bounded `NEWTABLE` plus constant-key field-write sequence can expose a table-literal
+  origin whose field values retain their own origins and instruction evidence.
 - Operand origins are captured at the writing instruction. A destination that aliases
   an input, including `CONCAT A A C`, cannot recurse into its newly written value or
   silently degrade a known operand to unknown.
@@ -202,6 +220,9 @@ The redistributable fixture matrix must include:
 - valid and invalid query operands;
 - exact diagnostic-offset cases;
 - a mixed source, valid-bytecode, malformed-bytecode, and unsupported-file batch.
+- redistributable stripped LNUM fixtures reproducing the relevant layouts from each
+  architecture family claimed by CI; private vendor chunks require explicit
+  redistribution authority and never enter the repository by implication.
 
 Each fixture records source provenance, source and output hashes, compiler or patch
 identity, compiler arguments, platform, endianness, integer and number widths, and
