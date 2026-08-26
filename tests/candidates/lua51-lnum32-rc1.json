@@ -54,12 +54,12 @@
     {
       "gate_id": "gate-public-disasm-lua51",
       "spec_path": "tests/gates/gate-public-disasm-lua51.json",
-      "file_sha256": "5cbf5a737622966254c1218ae08ff3d4536131000350694cbca9bf2e9eed70d8"
+      "file_sha256": "5e88fe8be626175884cacda22b650d693aa7bb2f42ffa6144b764e579979623e"
     },
     {
       "gate_id": "gate-retrieval-contract-lua51",
       "spec_path": "tests/gates/gate-retrieval-contract-lua51.json",
-      "file_sha256": "b053a74ebde9f866a16d59687f9c5e20583706b4c79e1ec989999754a9d8663a"
+      "file_sha256": "3048c6c5601f7f3986725be50b8d58b7f85521460222033879d727dc48845289"
     }
   ],
   "required_fixtures": [

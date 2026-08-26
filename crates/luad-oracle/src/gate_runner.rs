@@ -31,7 +31,26 @@ pub enum CompilerHashRequirement {
     /// One exact compiler artifact for a version-1 gate.
     Single(String),
     /// Exact compiler artifacts for the maintained platform/architecture builders.
-    ByPlatform(BTreeMap<String, String>),
+    ByPlatform(BTreeMap<String, CompilerHashSet>),
+}
+
+/// Exact compiler artifacts accepted for one platform/architecture builder.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum CompilerHashSet {
+    /// One exact compiler artifact.
+    One(String),
+    /// A finite set of exact compiler artifacts.
+    AnyOf(Vec<String>),
+}
+
+impl CompilerHashSet {
+    fn hashes(&self) -> &[String] {
+        match self {
+            Self::One(hash) => std::slice::from_ref(hash),
+            Self::AnyOf(hashes) => hashes,
+        }
+    }
 }
 
 impl GateSpec {
@@ -307,12 +326,12 @@ pub fn execute_gate_spec(
         let actual_sha = format!("{:x}", hasher.finalize());
         comp_sha = Some(actual_sha.clone());
 
-        if let Some(expected_sha) =
+        if let Some(expected_hashes) =
             required_compiler_sha256(spec, std::env::consts::OS, std::env::consts::ARCH)?
         {
-            if &actual_sha != expected_sha {
+            if !expected_hashes.iter().any(|hash| hash == &actual_sha) {
                 return Err(GateRunnerError::WrongCompilerBinary {
-                    expected: expected_sha.clone(),
+                    expected: expected_hashes.join(" or "),
                     actual: actual_sha,
                 });
             }
@@ -722,13 +741,13 @@ pub fn verify_gate_result(
         }
     }
 
-    if let Some(exp_comp_sha) = required_compiler_sha256(spec, &result.platform, &result.arch)? {
+    if let Some(expected_hashes) = required_compiler_sha256(spec, &result.platform, &result.arch)? {
         let actual_sha = result.compiler_sha256.as_deref().ok_or_else(|| {
             GateRunnerError::CompilerMissing("Gate result has no compiler SHA-256".to_string())
         })?;
-        if actual_sha != exp_comp_sha {
+        if !expected_hashes.iter().any(|hash| hash == actual_sha) {
             return Err(GateRunnerError::WrongCompilerBinary {
-                expected: exp_comp_sha.clone(),
+                expected: expected_hashes.join(" or "),
                 actual: actual_sha.to_string(),
             });
         }
@@ -798,10 +817,16 @@ fn validate_gate_spec_schema(spec: &GateSpec) -> Result<(), GateRunnerError> {
             spec.required_compiler_sha256,
             Some(CompilerHashRequirement::ByPlatform(_))
         ),
-        2 => !matches!(
-            spec.required_compiler_sha256,
-            Some(CompilerHashRequirement::ByPlatform(ref hashes)) if !hashes.is_empty()
-        ),
+        2 => match &spec.required_compiler_sha256 {
+            Some(CompilerHashRequirement::ByPlatform(hashes)) => {
+                hashes.is_empty()
+                    || hashes.values().any(|accepted| {
+                        accepted.hashes().is_empty()
+                            || accepted.hashes().iter().any(String::is_empty)
+                    })
+            }
+            _ => true,
+        },
         _ => true,
     };
     if invalid {
@@ -820,10 +845,10 @@ fn required_compiler_sha256<'a>(
     spec: &'a GateSpec,
     platform: &str,
     arch: &str,
-) -> Result<Option<&'a String>, GateRunnerError> {
+) -> Result<Option<&'a [String]>, GateRunnerError> {
     if spec.schema_version == 1 {
         return Ok(match spec.required_compiler_sha256.as_ref() {
-            Some(CompilerHashRequirement::Single(hash)) => Some(hash),
+            Some(CompilerHashRequirement::Single(hash)) => Some(std::slice::from_ref(hash)),
             _ => None,
         });
     }
@@ -838,7 +863,7 @@ fn required_compiler_sha256<'a>(
     };
     hashes
         .get(&key)
-        .map(Some)
+        .map(|accepted| Some(accepted.hashes()))
         .ok_or_else(|| GateRunnerError::CompilerHashUnpinned {
             platform: platform.to_string(),
             arch: arch.to_string(),
