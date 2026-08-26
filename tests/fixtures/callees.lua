@@ -43,3 +43,13 @@ local range_target = print
 local first, last
 first, range_target, last = unknown()
 range_target("range")
+
+local function forward(...)
+  return print(...)
+end
+forward("open")
+
+local function forward_dynamic(callee, ...)
+  return callee(...)
+end
+forward_dynamic(print, "dynamic")

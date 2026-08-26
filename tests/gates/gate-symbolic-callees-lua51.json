@@ -32,7 +32,7 @@
   "required_fixtures": [
     {
       "path": "tests/fixtures/callees.lua",
-      "sha256": "22e3e344c0cca21221083a34c362c6a213604a654254ea8ce52e0eafa51994a1"
+      "sha256": "23c4e2265ae253c05ab5861d48c243aa876bb8f5d0060eae880443e23d7fc80a"
     },
     {
       "path": "tests/fixtures/lua51_cfg_skips.lua",

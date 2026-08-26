@@ -4,6 +4,11 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+### Analysis
+
+- Lua 5.1 symbolic callee analysis now preserves a proved callee below an open vararg or
+  result write range while retaining explicit open argument-origin windows.
+
 ### Development process
 
 - Replaced per-increment model committees with customer-outcome product batches: one
