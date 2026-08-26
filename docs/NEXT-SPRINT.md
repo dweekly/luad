@@ -1,71 +1,68 @@
-# Active product batch: uniform serialized-string limits
+# Active product batch: executed hostile-input safety baseline
 
-Lane: product. Roadmap position: Stage 1 exact disassembly and the cross-cutting
-hostile-input robustness workstream.
+Lane: product. Roadmap position: cross-cutting robustness and release evidence.
 
 ## Public claim
 
-`ResourceLimits::max_string_bytes` bounds every newly serialized Lua string before its
-payload is read or retained by the Lua 5.1, 5.2, 5.3, 5.4, and 5.5 chunk parsers. The
-limit applies consistently to source names, string constants, local-variable names,
-upvalue names, and Lua 5.5 string-table insertions.
+The repository will enforce its memory-safety boundary and execute, rather than merely
+compile, a bounded hostile-input fuzz smoke suite in Linux CI. Every maintained stock-Lua
+detection and parser target will run, and successfully parsed Lua 5.1 and Lua 5.4 inputs
+will continue through the deterministic disassembly and analysis surfaces used by the
+public tool.
 
-The bound measures string content bytes, excluding a format's serialized terminator or
-length marker. A string exactly at the configured limit is accepted. A declared string
-one byte over the limit fails before a truncation or end-of-input error can mask the
-violated limit. The stable diagnostics are `L51-STR-001`, `L52-STR-001`,
-`L53-STR-001`, the existing `L54-STR-001`, and `L55-STR-002` (`L55-STR-001`
-continues to identify an invalid reuse-table index).
-
-This batch hardens existing parser paths. It does not promote a dialect, profile,
-layout, command, or support tier.
+No production crate may compile `unsafe` code. A missing fuzz toolchain, target, seed
+corpus, or successful target execution is a hard CI failure rather than a skip.
 
 ## Acceptance matrix
 
-Exercise all five stock-Lua parser families through their ordinary chunk decode path:
+### Safety enforcement
 
-| Target | Length encoding that must be covered |
-|---|---|
-| Lua 5.1 | Header-declared 32-bit and 64-bit `size_t` |
-| Lua 5.2 | Header-declared 32-bit and 64-bit `size_t` |
-| Lua 5.3 | Short one-byte length and `0xff` extended `size_t` length |
-| Lua 5.4 | Variable-length integer |
-| Lua 5.5 | Variable-length integer and insertion into the string-reuse table |
+- Apply a workspace-owned `unsafe_code = "forbid"` policy to `luad-core`, every dialect,
+  `luad-analysis`, and `luad-cli` without local opt-outs.
+- Keep the fuzz and oracle crates under the same policy unless a documented external
+  harness boundary makes an exception unavoidable; any exception remains outside
+  production crates and names the exact dependency boundary.
+- Add a negative control proving that a temporary `unsafe` block is rejected by the
+  repository's ordinary lint command.
 
-For each target, acceptance proves:
+### Executed fuzz surfaces
 
-- the encoded size is normalized to content bytes according to that exact format;
-- content length equal to the configured limit parses;
-- content length one byte over the limit returns that dialect's pinned diagnostic;
-- a declared over-limit length with no payload returns the limit diagnostic rather than
-  an end-of-input diagnostic;
-- every string-bearing field uses the same bounded loader rather than a parallel
-  unbounded read path;
-- Lua 5.5 validates a new string before inserting it into the reuse table, while a reuse
-  reference can only retrieve a string that passed the bound when first decoded;
-- default-limit parsing of maintained valid fixtures is unchanged.
+- Run the existing detection target and all five stock-Lua parser targets with their
+  maintained seed corpora.
+- Add one Lua 5.1 and one Lua 5.4 post-parse target. On successful decode, each target
+  traverses every prototype, constructs public disassembly facts, exercises validation
+  and the applicable CFG/xref analysis, and serializes the resulting fact records to
+  JSON. Invalid inputs remain ordinary rejected data.
+- Seed the post-parse targets from the maintained exact-target fixtures so a smoke run
+  cannot spend its entire budget outside successful parse paths.
+- Keep each target deterministic and independently runnable through one documented
+  script. The script owns a fixed run-count and maximum-input-size budget plus an outer
+  timeout, reports per-target executions, and fails unless all eight targets complete.
 
-One table-driven suite may cover format variants. Reuse existing parser fixtures,
-diagnostic machinery, and hostile-input test infrastructure. Do not create a gate per
-dialect or per string-bearing field.
+### CI and evidence
+
+- Add one Linux fuzz-smoke job using an explicitly pinned Rust and `cargo-fuzz`
+  toolchain. The job invokes the same repository script contributors use locally.
+- Preserve the complete target list, tool versions, run budgets, exit statuses, and
+  corpus identities in the CI log or uploaded compact artifact.
+- Add an ordinary contract test that rejects target-list omission, zero executions,
+  success inferred from missing output, and an unpinned toolchain.
+- Run the smoke command once from a clean candidate and retain its compact evidence.
+  Run the aggregate repository check separately.
 
 ## Scope
 
-Production work is limited to serialized-string length enforcement and the minimum
-shared reader support needed to implement it once. Stable diagnostics, focused tests,
-diagnostic documentation, and the aggregate check are in scope.
+Production changes are limited to crate-level safety policy and the minimum reusable
+analysis entry points needed by the two post-parse fuzz drivers. Fuzz targets, corpus
+wiring, one runner script, CI configuration, focused contract tests, contributor and
+security documentation, and the aggregate check are in scope.
 
-CLI limit flags, input-size policy, collection-count limits, recursion limits, fuzz
-infrastructure, capability-manifest wiring, release publication, query behavior,
-analysis semantics, and opcode validation are non-goals.
+New bytecode semantics, parser recovery behavior, public commands or schemas, support
+promotion, broad benchmark infrastructure, sanitizer matrices, coverage percentages,
+continuous long-running campaigns, and release publication are non-goals.
 
-## Evidence and stop condition
+## Stop condition
 
-Run the focused cross-dialect string-limit suite, one
-`gate-string-limits-stock-lua` gate carrying the complete matrix, and the aggregate
-repository check. The gate includes a mutation probe demonstrating that bypassing a
-dialect's length check is rejected, enumerates the exact test set, and permits no skipped
-or ignored matrix rows.
-
-Stop after one reviewable production-and-test diff proves the full matrix. A failure in
-one dialect is a failure of the batch; it does not become a follow-on dialect sprint.
+Stop after one reviewable batch makes all eight targets execute under the pinned bounded
+smoke command and proves the unsafe-code policy. Do not split parser targets into
+separate sprints, and do not turn the smoke baseline into a general fuzzing platform.

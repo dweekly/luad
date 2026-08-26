@@ -342,7 +342,10 @@ is a diagnostic for process imbalance, not a target.
 
 ## 12. Preservation, documentation, and escalation
 
-After acceptance, push and merge the reviewed work, push `main`, and run
+After local acceptance, replace `docs/NEXT-SPRINT.md` with the next forward-looking
+batch on the same candidate branch before opening its final pull request. The pull
+request and changelog retain the completed claim; `main` never needs a separate cleanup
+change for a stale sprint. Then push and merge the reviewed work, push `main`, and run
 `scripts/verify-main-pushed.sh`. Temporary work is not accepted evidence until its
 required artifacts are retained by CI, a pull request, or release storage.
 
