@@ -34,10 +34,8 @@ mutation summary, so a sibling or descendant write prevents stale closure resolu
 Recursive export emits the `luad-prototype-v2` identity scheme, which commits these
 physical roles; the v1 encoder remains available as a compatibility definition.
 
-The current LNUM32 candidate is not eligible for promotion while open vararg windows
-can erase an otherwise proved callee below the written register range. The active
-product batch corrects that release-blocking incompleteness before customer transfer
-resumes.
+Lua 5.1 callee analysis preserves a proved callee below an open argument or result
+window while keeping that open cardinality explicit in value-origin facts.
 
 All stock-Lua dialects remain **experimental** unless an exact release artifact
 for the current revision and profile says otherwise. Internal library gates do not
@@ -66,8 +64,8 @@ delete the document in the same change and update this index.
 | [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-08-25 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-23 | Support policy, reporting channel, trust boundary, or threat model changes. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, risk-triggered model diversity, proportional qualification, process budgets, and agent orchestration. | 2026-08-25 | Planning artifacts, customer cadence, agent roles, evidence policy, process budgets, or provider interfaces change. |
-| [`ROADMAP.md`](ROADMAP.md) | Customer-led path through composable factual analysis and stable release. | 2026-08-25 | Product priorities, dependencies, customer evidence, qualification order, or exclusions change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | The sole active sprint contract for one measurable, independently gated unit of work. | 2026-08-25 | The sprint is accepted, respecified, or replaced; delete obsolete sprint content rather than retaining history. |
+| [`ROADMAP.md`](ROADMAP.md) | Stack-ranked path to an exact, deterministic, robust, and obtainable Lua disassembler, with hard research tracks sized explicitly. | 2026-08-25 | Product targets, stage order, mountain sizing, version-1 acceptance, or exclusions change. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | The sole active sprint contract: uniform serialized-string resource limits across every stock-Lua parser family. | 2026-08-25 | The sprint is accepted, respecified, or replaced; delete obsolete sprint content rather than retaining history. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-25 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-25 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
 | [`docs/RELEASING.md`](docs/RELEASING.md) | Exact-target authority prerequisites, independent customer validation, evidence bundle, versioning, and publication policy. | 2026-08-25 | Release gates, target authority, customer-validation boundary, artifact channels, version policy, signing, or publication procedure changes. |
