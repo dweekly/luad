@@ -604,6 +604,7 @@ fn transfer(
                 set_known(state, dest, ValueKind::Closure(path), [inst.id.clone()]);
             }
         }
+        "VARARG" => transfer_vararg(inst, state, frame_size),
         _ => {}
     }
 }
@@ -753,9 +754,33 @@ fn transfer_require(
                 );
             }
         }
-    } else if counts.iter().any(|(_, variable)| *variable) {
-        invalidate_all(
+    } else if let Some((_, true)) = counts.get(1) {
+        invalidate_from(
             state,
+            base,
+            frame_size,
+            CalleeUnresolvedReason::OpenRegisterWindow,
+        );
+    }
+}
+
+fn transfer_vararg(inst: &SemanticInstruction, state: &mut RegisterState, frame_size: usize) {
+    let Some(base) = register_operand(inst, 0) else {
+        return;
+    };
+    let is_variable = inst.operands.iter().any(|operand| {
+        matches!(
+            operand,
+            TypedOperand::Count {
+                is_variable: true,
+                ..
+            }
+        )
+    });
+    if is_variable {
+        invalidate_from(
+            state,
+            base,
             frame_size,
             CalleeUnresolvedReason::OpenRegisterWindow,
         );
@@ -788,29 +813,15 @@ fn invalidate_writes(inst: &SemanticInstruction, state: &mut RegisterState, fram
                 }
             }
             EffectTarget::RegisterRangeToTop { start } => {
-                for slot in state.iter_mut().take(frame_size).skip(usize::from(*start)) {
-                    *slot = FlowValue::Unknown(CalleeUnresolvedReason::OpenRegisterWindow);
-                }
+                invalidate_from(
+                    state,
+                    *start,
+                    frame_size,
+                    CalleeUnresolvedReason::OpenRegisterWindow,
+                );
             }
             _ => {}
         }
-    }
-    if matches!(inst.mnemonic.as_str(), "CALL" | "VARARG")
-        && inst.operands.iter().any(|operand| {
-            matches!(
-                operand,
-                TypedOperand::Count {
-                    is_variable: true,
-                    ..
-                }
-            )
-        })
-    {
-        invalidate_all(
-            state,
-            frame_size,
-            CalleeUnresolvedReason::OpenRegisterWindow,
-        );
     }
 }
 
@@ -1144,6 +1155,17 @@ fn set_path(
 
 fn invalidate_all(state: &mut RegisterState, frame_size: usize, reason: CalleeUnresolvedReason) {
     for slot in state.iter_mut().take(frame_size) {
+        *slot = FlowValue::Unknown(reason);
+    }
+}
+
+fn invalidate_from(
+    state: &mut RegisterState,
+    start: u8,
+    frame_size: usize,
+    reason: CalleeUnresolvedReason,
+) {
+    for slot in state.iter_mut().take(frame_size).skip(usize::from(start)) {
         *slot = FlowValue::Unknown(reason);
     }
 }

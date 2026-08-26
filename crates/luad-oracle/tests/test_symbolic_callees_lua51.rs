@@ -70,10 +70,11 @@ fn test_callee_resolution_fixture_histogram_is_pinned() {
     assert_eq!(
         histogram,
         BTreeMap::from([
-            ("path:GlobalLabel".to_string(), 4),
+            ("path:GlobalLabel".to_string(), 5),
             ("path:ModuleLabel".to_string(), 3),
-            ("prototype".to_string(), 2),
+            ("prototype".to_string(), 4),
             ("unresolved:ControlFlowConflict".to_string(), 1),
+            ("unresolved:MissingDefinition".to_string(), 1),
             ("unresolved:MutableCapture".to_string(), 1),
             ("unresolved:Overwritten".to_string(), 2),
         ])
@@ -82,7 +83,8 @@ fn test_callee_resolution_fixture_histogram_is_pinned() {
 
 #[test]
 fn test_callee_resolution_proves_paths_joins_and_multihop_captures() {
-    let analysis = analyze_chunk_callees(&fixture_chunk());
+    let chunk = fixture_chunk();
+    let analysis = analyze_chunk_callees(&chunk);
     let facts = all_facts(&analysis);
 
     let module_paths: Vec<_> = facts
@@ -130,6 +132,81 @@ fn test_callee_resolution_proves_paths_joins_and_multihop_captures() {
             reason: CalleeUnresolvedReason::MutableCapture
         }
     )));
+
+    let origins = luad_analysis::analyze_chunk_origins(&chunk);
+    let origin_facts: Vec<_> = origins
+        .prototypes
+        .iter()
+        .flat_map(|proto| &proto.calls)
+        .collect();
+
+    let forward_call = facts
+        .iter()
+        .find(|fact| {
+            matches!(
+                &fact.resolution,
+                CalleeResolution::ResolvedPath {
+                    basis: SymbolicPathBasis::GlobalLabel,
+                    segments,
+                    ..
+                } if segments == &["print"]
+            ) && fact.proto_path.to_string() != "0"
+        })
+        .expect("forward(...) print callee must resolve");
+
+    let CalleeResolution::ResolvedPath {
+        basis: SymbolicPathBasis::GlobalLabel,
+        segments,
+        evidence,
+    } = &forward_call.resolution
+    else {
+        unreachable!()
+    };
+    assert_eq!(segments, &["print"]);
+    assert!(
+        !evidence.is_empty(),
+        "forwarded callee must retain instruction evidence"
+    );
+
+    let forward_origin = origin_facts
+        .iter()
+        .find(|origin| origin.call_id == forward_call.call_id)
+        .expect("forward origin fact must exist");
+    assert!(
+        matches!(
+            forward_origin.argument_window,
+            luad_analysis::CallArgumentWindow::Open {
+                reason: luad_analysis::OriginUnknownReason::OpenArgumentWindow
+            }
+        ),
+        "forwarded call origin must retain an open argument window"
+    );
+
+    let dynamic_call = facts
+        .iter()
+        .find(|fact| {
+            matches!(
+                fact.resolution,
+                CalleeResolution::Unresolved {
+                    reason: CalleeUnresolvedReason::MissingDefinition
+                }
+            ) && fact.proto_path.to_string() != "0"
+        })
+        .expect("dynamic forwarder callee must remain unresolved due to missing definition");
+
+    let dynamic_origin = origin_facts
+        .iter()
+        .find(|origin| origin.call_id == dynamic_call.call_id)
+        .expect("dynamic forwarder origin fact must exist");
+    assert!(
+        matches!(
+            dynamic_origin.argument_window,
+            luad_analysis::CallArgumentWindow::Open {
+                reason: luad_analysis::OriginUnknownReason::OpenArgumentWindow
+            }
+        ),
+        "dynamic forwarder call origin must retain an open argument window"
+    );
 }
 
 #[test]
@@ -254,13 +331,23 @@ fn test_public_callees_json_jsonl_and_text_agree() {
 fn test_export_emits_self_identifying_callee_facts() {
     let luad = get_luad_bin();
     let fixture = compiled_fixture_file();
+    let path = fixture.path().to_str().expect("path");
+    let expected_analysis = analyze_chunk_callees(&fixture_chunk());
+    let expected_call_id = all_facts(&expected_analysis)
+        .into_iter()
+        .find_map(|fact| match &fact.resolution {
+            CalleeResolution::ResolvedPath {
+                basis: SymbolicPathBasis::GlobalLabel,
+                segments,
+                ..
+            } if segments == &["print"] && fact.proto_path.to_string() != "0" => {
+                Some(fact.call_id.to_string())
+            }
+            _ => None,
+        })
+        .expect("open-window forwarded print call");
     let output = Command::new(&luad)
-        .args([
-            "export",
-            fixture.path().to_str().expect("path"),
-            "--format",
-            "jsonl",
-        ])
+        .args(["export", path, "--format", "jsonl"])
         .output()
         .expect("export");
     assert!(output.status.success());
@@ -271,11 +358,36 @@ fn test_export_emits_self_identifying_callee_facts() {
         .map(|line| serde_json::from_slice(line).expect("jsonl"))
         .filter(|record: &serde_json::Value| record["record_type"] == "callee")
         .collect();
-    assert_eq!(callees.len(), 13);
+    assert_eq!(callees.len(), 17);
     assert!(callees.iter().all(|record| {
         record["context"]["input_identity"]["sha256"].is_string()
             && record["context"]["interpretation"]["profile"].is_string()
     }));
+    assert!(callees
+        .iter()
+        .any(|record| record["data"]["call_id"] == expected_call_id));
+
+    let query_output = Command::new(&luad)
+        .args([
+            "query",
+            path,
+            "--where",
+            "callee.path == \"print\"",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("query");
+    assert!(query_output.status.success());
+    let query_doc: serde_json::Value =
+        serde_json::from_slice(&query_output.stdout).expect("query json");
+    let matches = query_doc["data"]["matches"].as_array().expect("matches");
+    assert!(
+        matches
+            .iter()
+            .any(|query_match| query_match["id"] == expected_call_id),
+        "query must retain the exact open-window forwarded print callee"
+    );
 }
 
 #[test]

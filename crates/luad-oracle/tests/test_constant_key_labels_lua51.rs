@@ -906,13 +906,13 @@ impl<'a> ModelProto<'a> {
         })
     }
 
-    /// Whether the word at `pc` opens the register window past the frame.
-    fn opens_register_window(&self, pc: usize) -> bool {
+    /// First register overwritten by an open-ended result window.
+    fn open_write_start(&self, pc: usize) -> Option<u8> {
         let word = self.spec.code[pc];
         match opcode_of(word) {
-            OP_CALL => field_b(word) == 0 || field_c(word) == 0,
-            OP_VARARG => field_b(word) == 0,
-            _ => false,
+            OP_CALL if field_c(word) == 0 => Some(field_a(word)),
+            OP_VARARG if field_b(word) == 0 => Some(field_a(word)),
+            _ => None,
         }
     }
 
@@ -942,8 +942,8 @@ impl<'a> ModelProto<'a> {
         for register in writes {
             set(&mut after, register, Fact::Unknown(STOP_OVERWRITTEN), frame);
         }
-        if self.opens_register_window(pc) {
-            for slot in after.iter_mut().take(frame) {
+        if let Some(start) = self.open_write_start(pc) {
+            for slot in after.iter_mut().take(frame).skip(usize::from(start)) {
                 *slot = Fact::Unknown(STOP_OPEN_REGISTER_WINDOW);
             }
         }
@@ -1769,12 +1769,29 @@ fn flow_rows() -> Vec<Row> {
             )],
         },
         Row {
-            name: "open-register-window",
+            name: "open-register-window-preserves-lower-callee",
             root: ProtoSpec::root(
                 3,
                 vec![
                     gettable(1, 0, 0),
                     iabc(OP_VARARG, 2, 0, 0),
+                    iabc(OP_CALL, 1, 1, 1),
+                    iabc(OP_RETURN, 0, 1, 0),
+                ],
+                vec![KEY_EXECUTE],
+            ),
+            expect: vec![(
+                call_id("0", 2),
+                Expected::label(LookupKind::GetTable, KEY_EXECUTE, ev(&[("0", 0)])),
+            )],
+        },
+        Row {
+            name: "open-register-window-overwrites-callee",
+            root: ProtoSpec::root(
+                2,
+                vec![
+                    gettable(1, 0, 0),
+                    iabc(OP_VARARG, 1, 0, 0),
                     iabc(OP_CALL, 1, 1, 1),
                     iabc(OP_RETURN, 0, 1, 0),
                 ],
