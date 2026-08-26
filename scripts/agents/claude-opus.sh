@@ -13,11 +13,13 @@ Usage:
 
 Runs Claude Opus through the logged-in claude.ai subscription. Console API
 credentials are removed from the child environment so they cannot silently
-override the subscription. Every stage is a bounded, tool-free review over the
-self-contained prompt packet. Output is one Claude Code JSON result carrying the
-structured verdict and cumulative session usage. Set LUAD_CLAUDE_DEBUG_FILE to
-choose the detailed CLI debug log. The default wall-time ceiling is 600 seconds;
-set LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS to a positive integer to change it.
+override the subscription. Claude's server-side advisor is disabled so sprint
+reviews remain Opus-only; Fable is reserved for roadmap-scale review. Every stage
+is a bounded, tool-free review over the self-contained prompt packet. Output is one
+Claude Code JSON result carrying the structured verdict and cumulative session
+usage. Set LUAD_CLAUDE_DEBUG_FILE to choose the detailed CLI debug log. The default
+wall-time ceiling is 600 seconds; set LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS to a
+positive integer to change it.
 
 review-fresh       Independent one-shot review with no persisted session.
 review-start       Start a persistent, bounded review of a curated packet.
@@ -130,7 +132,13 @@ common=(
   --output-format json
   --json-schema "$review_schema"
 )
-clean_env=(env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL)
+clean_env=(
+  env
+  -u ANTHROPIC_API_KEY
+  -u ANTHROPIC_AUTH_TOKEN
+  -u ANTHROPIC_BASE_URL
+  CLAUDE_CODE_DISABLE_ADVISOR_TOOL=1
+)
 
 review_timeout_seconds=${LUAD_CLAUDE_REVIEW_TIMEOUT_SECONDS:-600}
 if [[ ! "$review_timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then

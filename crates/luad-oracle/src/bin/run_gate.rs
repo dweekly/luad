@@ -41,6 +41,16 @@ fn resolve_compiler_path_for_spec(
     None
 }
 
+fn resolve_prerequisite_compiler_path(spec: &GateSpec) -> Option<PathBuf> {
+    if spec.required_profile.as_deref() == Some("lua5.1-lnum32") {
+        return std::env::var_os("LUAD_LNUM32_LUAC")
+            .filter(|path| !path.is_empty())
+            .map(PathBuf::from);
+    }
+
+    resolve_compiler_path_for_spec(spec, None)
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut spec_path: Option<PathBuf> = None;
@@ -209,7 +219,7 @@ fn main() {
 
         let prereq_temp_dir = tempfile::tempdir().unwrap();
         let prereq_result_path = prereq_temp_dir.path().join("gate-result.json");
-        let prereq_comp = resolve_compiler_path_for_spec(&prereq_spec, None);
+        let prereq_comp = resolve_prerequisite_compiler_path(&prereq_spec);
         let prereq_comp_ref: Option<&Path> = prereq_comp.as_deref();
 
         let prereq_result = match execute_gate_spec(

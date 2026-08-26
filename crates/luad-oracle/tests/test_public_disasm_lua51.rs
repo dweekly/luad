@@ -11,24 +11,11 @@ use luad_oracle::{
 };
 
 fn get_luad_bin() -> String {
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
-        return path;
-    }
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let mut path = std::path::PathBuf::from(manifest_dir);
-    path.pop();
-    path.pop();
-    let root = path.clone();
-    path.push("target");
-    path.push("debug");
-    path.push("luad");
-
-    let _ = Command::new("cargo")
-        .args(["build", "-p", "luad-cli", "--bin", "luad"])
-        .current_dir(&root)
-        .output();
-
-    path.to_str().unwrap().to_string()
+    luad_oracle::resolve_test_binary()
+        .expect("resolve luad test binary")
+        .to_str()
+        .unwrap()
+        .to_string()
 }
 
 #[test]

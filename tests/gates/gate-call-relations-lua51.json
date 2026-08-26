@@ -23,7 +23,10 @@
   "required_compiler_version": "Lua 5.1.5",
   "required_compiler_sha256": {
     "linux-x86_64": "e2ba74327f3a4662689b9e58909b410af8635add51a35b951021d0b1d90c6000",
-    "macos-aarch64": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239"
+    "macos-aarch64": [
+      "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
+      "b7f80fd88b683a3e8ebe5b98f50c57e17659b56f659a37149fd81f752bcc48e8"
+    ]
   },
   "required_fixtures": [
     {

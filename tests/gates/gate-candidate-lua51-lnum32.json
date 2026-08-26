@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-candidate-lua51-lnum32",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_candidate_lua51_lnum32",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_candidate_binary_resolver_fail_closed_contract",
+    "test_candidate_gate_non_promotion_and_experimental_invariants",
+    "test_candidate_spec_and_provenance_schema",
+    "test_candidate_tool_assemble_and_verify_index_table_driven",
+    "test_candidate_tool_pack_deterministic_archive_and_ledger",
+    "test_candidate_tool_verify_platform_attestation_table_driven",
+    "test_packaged_binary_smoke_and_checked_transcript"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [
+    {
+      "path": "tests/fixtures/authority/lua51-openwrt-lnum32/AUTHORITY.json",
+      "sha256": "3a7a5142c6a317f747723402ad56969b234d23d593feab26f45bf4dad358c402"
+    },
+    {
+      "path": "tests/fixtures/authority/lua51-openwrt-lnum32/authority_lnum32.luac",
+      "sha256": "21b751768c37a930607c8a04e803206554887ef9b8a6f9c415a8cba6a8be4a3c"
+    },
+    {
+      "path": "tests/fixtures/authority/lua51-openwrt-lnum32/authority_lnum32_stripped.luac",
+      "sha256": "3ad36ac1e1b7d94fbfa6f4171c8c1257b80e1813780e258ca139b0b1601e223d"
+    }
+  ],
+  "required_profile": "lua5.1-lnum32",
+  "prerequisite_gates": [
+    "gate-authority-lua51-openwrt-lnum32",
+    "gate-machine-contract",
+    "gate-public-disasm-lua51",
+    "gate-retrieval-contract-lua51"
+  ],
+  "allowed_capability_mutations": []
+}
