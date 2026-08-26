@@ -8,6 +8,12 @@ rust-version = "1.97.1"
 [package.metadata]
 cargo-fuzz = true
 
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[lints]
+workspace = true
+
 [dependencies]
 libfuzzer-sys = "0.4"
 luad-core = { path = "../crates/luad-core" }
@@ -16,6 +22,8 @@ luad-dialect-lua52 = { path = "../crates/luad-dialect-lua52" }
 luad-dialect-lua53 = { path = "../crates/luad-dialect-lua53" }
 luad-dialect-lua54 = { path = "../crates/luad-dialect-lua54" }
 luad-dialect-lua55 = { path = "../crates/luad-dialect-lua55" }
+luad-analysis = { path = "../crates/luad-analysis" }
+serde_json = "1.0"
 
 [[bin]]
 name = "fuzz_lua51"
@@ -50,6 +58,18 @@ doc = false
 [[bin]]
 name = "fuzz_detect"
 path = "fuzz_targets/fuzz_detect.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_lua51_analysis"
+path = "fuzz_targets/fuzz_lua51_analysis.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_lua54_analysis"
+path = "fuzz_targets/fuzz_lua54_analysis.rs"
 test = false
 doc = false
 

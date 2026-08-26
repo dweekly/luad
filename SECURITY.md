@@ -25,7 +25,8 @@ In scope:
 - panics, memory exhaustion, excessive CPU, or unbounded output from crafted chunks;
 - operand misdecoding or validation that incorrectly blesses hostile input;
 - terminal, JSON, or DOT injection through bytecode strings or future overlays;
-- unsafe-code undefined behavior;
+- unsafe-code undefined behavior (mitigated by workspace-level `unsafe_code = "forbid"` across all shipped packages with negative-control proof);
+- unhandled malformed or adversarial inputs across detection, parsing, disassembly, validation, CFG, and xref analysis (continuously exercised by an 8-target fuzz smoke suite with pinned seed corpora);
 - evidence claims that materially misrepresent verified behavior;
 - supply-chain risks in scripts that download oracle compilers.
 

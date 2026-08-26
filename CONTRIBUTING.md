@@ -29,6 +29,21 @@ bash scripts/check.sh
 
 `scripts/check.sh` runs the aggregate repository checks. It is necessary before handoff, but it is not proof that oracle-backed claims are correct; each work package must also pass its canonical gate.
 
+The bounded hostile-input campaign uses an independently pinned nightly and
+`cargo-fuzz` release:
+
+```console
+rustup toolchain install nightly-2026-08-25
+cargo install cargo-fuzz --version 0.13.2 --locked
+scripts/fuzz_smoke.sh artifacts/fuzz-smoke
+```
+
+The runner requires GNU `timeout` (`coreutils` on macOS), executes every canonical
+target with fixed deterministic budgets under a pinned detection envelope (`address`
+sanitizer, 512 MB RSS, 128 MB allocation), and writes its evidence beneath the selected
+persistent output directory. The budgets, envelope, and toolchain pins live in the
+runner alone; CI invokes the same script rather than restating its flags.
+
 ### Official Lua compilers
 
 Parser fixtures can run from bundled bytecode, but differential proof requires exact official compilers:
@@ -49,7 +64,7 @@ The compilers are installed beneath `/tmp/lua-tools/bin`. Canonical gates must v
 | `crates/luad-cli` | CLI contracts, input handling, exit behavior, rendering, schemas |
 | `crates/luad-oracle` | Official-compiler harness, listing parser, differential assertions |
 | `tests/fixtures` | Source corpus and bundled compiled chunks |
-| `fuzz` | Coverage-guided parser and detector targets |
+| `fuzz` | Coverage-guided detection, stock parser, and post-parse analysis targets (8 canonical targets) |
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for data flow and invariants.
 
@@ -63,6 +78,7 @@ Not all green tests prove the same thing.
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps`
 - `cargo check --manifest-path fuzz/Cargo.toml`
+- Workspace-level `unsafe_code = "forbid"` enforced across every package with an executable negative control.
 
 ### Structural and hostile-input tests
 
@@ -70,7 +86,8 @@ Not all green tests prove the same thing.
 - every-byte truncation tests;
 - resource-limit and adversarial-count tests;
 - property tests over arbitrary bytes;
-- persistent coverage-guided fuzzing.
+- bounded hostile-input fuzz smoke suite across all 8 canonical targets via `scripts/fuzz_smoke.sh` (detection, 5 stock parsers, and Lua 5.1/5.4 post-parse analysis) generating compact JSON evidence artifacts;
+- persistent coverage-guided fuzzing with maintained seed corpora.
 
 These establish safety properties, not semantic correctness.
 

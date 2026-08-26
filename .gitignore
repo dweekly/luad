@@ -1,9 +1,9 @@
 target/
 /artifacts/
 fuzz/target/
+fuzz/artifacts/
 **/*.rs.bk
 *.luac
 !tests/fixtures/precompiled/**
 *.out
 .DS_Store
-

@@ -6,6 +6,9 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 luad-core = { workspace = true }
 luad-dialect-lua54 = { workspace = true }

@@ -36,6 +36,30 @@ jobs:
       if: runner.os == 'Linux'
       run: ./scripts/gates/gate-authority-lua51-openwrt-lnum32.sh /tmp/gate-authority-lua51-openwrt-lnum32
 
+  fuzz-smoke:
+    name: Hostile Input Fuzz Smoke (Linux)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Rust Nightly
+      uses: dtolnay/rust-toolchain@nightly
+      with:
+        toolchain: nightly-2026-08-25
+        components: llvm-tools-preview
+
+    - name: Install cargo-fuzz
+      run: cargo +nightly-2026-08-25 install cargo-fuzz --version 0.13.2 --locked
+
+    - name: Run Hostile-Input Fuzz Smoke Suite
+      run: ./scripts/fuzz_smoke.sh artifacts/fuzz-smoke
+
+    - name: Upload Fuzz Smoke Evidence
+      uses: actions/upload-artifact@v4
+      with:
+        name: fuzz-smoke-evidence
+        path: artifacts/fuzz-smoke/
+
   qualify-candidate-platform:
     name: Qualify Candidate (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}

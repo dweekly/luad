@@ -1,68 +1,72 @@
-# Active product batch: executed hostile-input safety baseline
+# Active product batch: deterministic scalar rendering on exact targets
 
-Lane: product. Roadmap position: cross-cutting robustness and release evidence.
+Lane: product. Roadmap position: exactness of the public disassembly surface.
 
 ## Public claim
 
-The repository will enforce its memory-safety boundary and execute, rather than merely
-compile, a bounded hostile-input fuzz smoke suite in Linux CI. Every maintained stock-Lua
-detection and parser target will run, and successfully parsed Lua 5.1 and Lua 5.4 inputs
-will continue through the deterministic disassembly and analysis surfaces used by the
-public tool.
+Every scalar the disassembler shows a user renders identically for the same bytes, on
+every supported platform, through both the text listing and the typed machine facts.
+One rendering authority owns integers, byte strings, escapes, finite floats, signed
+zero, infinities, and NaN classification. No dialect carries its own scalar formatter.
 
-No production crate may compile `unsafe` code. A missing fuzz toolchain, target, seed
-corpus, or successful target execution is a hard CI failure rather than a skip.
+The claim is limited to the exact targets: Lua 5.1.5 and Lua 5.4.8. It is a rendering
+claim, not a semantic one. Bytes decide the output; nothing is inferred about what a
+value means to a running interpreter.
 
 ## Acceptance matrix
 
-### Safety enforcement
+### One rendering authority
 
-- Apply a workspace-owned `unsafe_code = "forbid"` policy to `luad-core`, every dialect,
-  `luad-analysis`, and `luad-cli` without local opt-outs.
-- Keep the fuzz and oracle crates under the same policy unless a documented external
-  harness boundary makes an exception unavoidable; any exception remains outside
-  production crates and names the exact dependency boundary.
-- Add a negative control proving that a temporary `unsafe` block is rejected by the
-  repository's ordinary lint command.
+- Move scalar rendering into a single owned module and delete the per-dialect scalar
+  formatters that currently disagree. Today `luad-dialect-lua51` renders a float with
+  the debug formatter while `luad-dialect-lua54` carries a private `format_float`, so
+  the same bit pattern reaches a user as `NaN` from one target and `nan` from the other.
+- The text listing and the typed machine facts must call the same authority. A field
+  that appears in both must be produced once, not formatted twice.
+- Rendering takes the preserved value, including its exact raw bytes, and returns a
+  string. It performs no lookup, no dialect branch, and no width-dependent behavior.
 
-### Executed fuzz surfaces
+### Scalar coverage
 
-- Run the existing detection target and all five stock-Lua parser targets with their
-  maintained seed corpora.
-- Add one Lua 5.1 and one Lua 5.4 post-parse target. On successful decode, each target
-  traverses every prototype, constructs public disassembly facts, exercises validation
-  and the applicable CFG/xref analysis, and serializes the resulting fact records to
-  JSON. Invalid inputs remain ordinary rejected data.
-- Seed the post-parse targets from the maintained exact-target fixtures so a smoke run
-  cannot spend its entire budget outside successful parse paths.
-- Keep each target deterministic and independently runnable through one documented
-  script. The script owns a fixed run-count and maximum-input-size budget plus an outer
-  timeout, reports per-target executions, and fails unless all eight targets complete.
+- Canonical integers across the full signed 64-bit range, including both boundary
+  values, rendered without separators or width padding.
+- Byte strings rendered from exact bytes with one escape policy: a defined escape for
+  each byte that is not printable ASCII, a defined quoting rule, and a defined
+  truncation rule stated in characters or bytes but not silently in both. Truncation
+  must be reversible to the untruncated value through the typed facts.
+- Finite floats rendered so that the printed form reads back to the identical bit
+  pattern. Integral-valued floats stay visibly floats.
+- Signed zero distinguishes `0.0` from `-0.0`.
+- Positive and negative infinity render distinctly.
+- NaN renders as one spelling and carries its classification in the typed facts. The
+  preserved payload stays available; the rendered form does not vary with it.
 
-### CI and evidence
+### Proof
 
-- Add one Linux fuzz-smoke job using an explicitly pinned Rust and `cargo-fuzz`
-  toolchain. The job invokes the same repository script contributors use locally.
-- Preserve the complete target list, tool versions, run budgets, exit statuses, and
-  corpus identities in the CI log or uploaded compact artifact.
-- Add an ordinary contract test that rejects target-list omission, zero executions,
-  success inferred from missing output, and an unpinned toolchain.
-- Run the smoke command once from a clean candidate and retain its compact evidence.
-  Run the aggregate repository check separately.
+- Byte-for-byte goldens for both exact targets, produced on Linux and macOS from the
+  same fixtures and asserted equal to each other. A platform difference is a failure,
+  not a golden variant.
+- One golden per scalar class above, driven by maintained exact-target fixtures.
+- Mutation controls that fail when a scalar class regresses: at minimum, swap signed
+  zero for unsigned zero, alter one NaN spelling, drop a float's decimal point, change
+  one escape, and reintroduce a per-dialect formatter. Each mutation must break a named
+  test rather than merely shift a golden.
+- A test that fails if any dialect crate regains a private scalar formatting function.
 
 ## Scope
 
-Production changes are limited to crate-level safety policy and the minimum reusable
-analysis entry points needed by the two post-parse fuzz drivers. Fuzz targets, corpus
-wiring, one runner script, CI configuration, focused contract tests, contributor and
-security documentation, and the aggregate check are in scope.
+In scope: the shared rendering module, deletion of the per-dialect scalar formatters,
+the call sites in text and typed-fact rendering for Lua 5.1.5 and Lua 5.4.8, goldens,
+mutation controls, and the changelog.
 
-New bytecode semantics, parser recovery behavior, public commands or schemas, support
-promotion, broad benchmark infrastructure, sanitizer matrices, coverage percentages,
-continuous long-running campaigns, and release publication are non-goals.
+Non-goals: decompilation, semantic inference about values, schema-major change,
+promotion of any additional dialect, a general formatting or templating framework,
+locale handling, user-configurable formats, and rendering changes on dialects outside
+the two exact targets.
 
 ## Stop condition
 
-Stop after one reviewable batch makes all eight targets execute under the pinned bounded
-smoke command and proves the unsafe-code policy. Do not split parser targets into
-separate sprints, and do not turn the smoke baseline into a general fuzzing platform.
+Stop when one rendering authority serves both exact targets in both output surfaces,
+the goldens agree byte-for-byte across Linux and macOS, and every listed mutation
+breaks a named test. Do not extend the authority to unpromoted dialects, and do not
+grow it into a configurable formatting layer.
