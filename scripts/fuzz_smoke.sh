@@ -117,8 +117,15 @@ else
     exit 1
   fi
   pinned_toolchain_bin="$(dirname "$(rustup which --toolchain "${pinned_rust_toolchain}" cargo)")"
-  if ! cargo_fuzz_version="$(cargo fuzz --version 2>&1)"; then
+  if ! cargo_fuzz_probe="$(env PATH="${pinned_toolchain_bin}:${PATH}" cargo fuzz --version 2>&1)"; then
     echo "cargo-fuzz is unavailable; install version ${pinned_cargo_fuzz_version} with --locked" >&2
+    echo "${cargo_fuzz_probe}" >&2
+    exit 1
+  fi
+  cargo_fuzz_version="$(printf '%s\n' "${cargo_fuzz_probe}" | grep -m1 '^cargo-fuzz ' || true)"
+  if [[ -z "${cargo_fuzz_version}" ]]; then
+    echo "no cargo-fuzz version banner in probe output:" >&2
+    echo "${cargo_fuzz_probe}" >&2
     exit 1
   fi
 fi

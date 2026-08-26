@@ -142,6 +142,9 @@ workspace = true
             "warnings",
         ])
         .current_dir(probe_root)
+        // The assertion reads diagnostic text, so the probe must never be colored,
+        // whatever CARGO_TERM_COLOR the surrounding environment sets.
+        .env("CARGO_TERM_COLOR", "never")
         .output()
         .expect("execute cargo clippy on the probe workspace");
 
