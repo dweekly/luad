@@ -124,9 +124,10 @@ jobs:
         const prereqs = prereqIds.map(id => {
           const res = JSON.parse(fs.readFileSync(`/tmp/results/${id}/gate-result.json`, "utf8"));
           const resHash = crypto.createHash("sha256").update(fs.readFileSync(`/tmp/results/${id}/gate-result.json`)).digest("hex");
+          const specHash = crypto.createHash("sha256").update(fs.readFileSync(`tests/gates/${id}.json`)).digest("hex");
           return {
             gate_id: id,
-            spec_hash: res.spec_hash,
+            spec_hash: specHash,
             result_sha256: resHash,
             exit_code: res.exit_code,
             success: res.success,
