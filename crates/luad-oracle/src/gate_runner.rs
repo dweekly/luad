@@ -365,6 +365,7 @@ pub fn execute_gate_spec(
     let mut list_cmd = Command::new(prog);
     list_cmd.args(&list_args);
     list_cmd.current_dir(workspace_root);
+    list_cmd.env("CARGO_TERM_COLOR", "never");
     if let Some(ref cp) = comp_path_str {
         list_cmd.env("LUAD_GATE_COMPILER_PATH", cp);
     } else {
@@ -403,6 +404,7 @@ pub fn execute_gate_spec(
     let mut cmd = Command::new(prog);
     cmd.args(args);
     cmd.current_dir(workspace_root);
+    cmd.env("CARGO_TERM_COLOR", "never");
     if let Some(ref cp) = comp_path_str {
         cmd.env("LUAD_GATE_COMPILER_PATH", cp);
     } else {
