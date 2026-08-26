@@ -6,16 +6,17 @@ Thank you for helping make Lua bytecode analysis more trustworthy. Correctness a
 
 Before changing parser, decoder, validator, analysis, evidence, or capability code, read:
 
-1. [The evidence-gated development workflow](docs/DEVELOPMENT-WORKFLOW.md)
+1. [The customer-outcome development workflow](docs/DEVELOPMENT-WORKFLOW.md)
 2. [The product roadmap](ROADMAP.md)
 3. [The active sprint](docs/NEXT-SPRINT.md)
 4. [The embedded-firmware requirements](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md)
 5. [Architecture and invariants](ARCHITECTURE.md)
 6. [The machine interface](docs/MACHINE-INTERFACE.md)
 
-Do not work outside the single active `docs/NEXT-SPRINT.md`, and do not let an
-implementation agent modify frozen acceptance tests or gate definitions without
-explicit review.
+Do not work outside the single active `docs/NEXT-SPRINT.md`. Product-lane agents write
+the bounded implementation and ordinary tests together. Qualification acceptance,
+fixture provenance, release evidence, and shared gate definitions remain frozen unless
+the steward explicitly authorizes an amendment.
 
 ## Development setup
 

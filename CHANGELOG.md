@@ -4,6 +4,29 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+### Development process
+
+- Replaced per-increment model committees with customer-outcome product batches: one
+  implementation session writes production code and ordinary tests, the steward owns
+  algorithmic review and integration, Opus review is risk-triggered, and separated
+  acceptance remains specific to qualification claims.
+- Audited the workflow experiment from commit `3e958f1` at 2026-08-23 16:24 PDT through
+  `22a632d` at 2026-08-25 18:45 PDT. Across 50 hours 21 minutes of elapsed time, or 31
+  hours 32 minutes when the two overnight inactive gaps are removed, it produced 7,788
+  net lines of customer-facing Rust after excluding standalone and inline tests,
+  documentation, qualification code, scripts, and CI. That is 155 net product lines
+  per elapsed hour or 247 per active-window hour. The final day produced 6,554 net
+  product lines in 12 hours 22 minutes, while its 1 hour 39 minute candidate-
+  qualification tail produced no customer-facing product code.
+- The same experiment produced 31,164 net test lines, 1,729 net oracle/qualification
+  lines, 1,444 net operations lines, and 1,060 net documentation lines across 35
+  pull-request-marked mainline changes. Persisted action logs record 56 Antigravity
+  wrapper invocations totaling 1 hour 57 minutes and 53 Claude wrapper invocations
+  totaling 3 hours 35 minutes. Provider runtime is now reported separately from total
+  wall time, and lines per hour remain a diagnostic rather than a target. Complete
+  full-experiment token totals were not durably retained and are recorded as
+  unavailable rather than inferred from partial results.
+
 - Implemented the complete, table-driven, fail-closed structured retrieval vocabulary
   across typed constants, callee resolutions, call relations, call argument origins,
   interpretation profiles, and prototype content identities with exact typed matching,

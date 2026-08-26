@@ -5,10 +5,10 @@ This repository analyzes potentially hostile Lua bytecode. Correctness, evidence
 ## Required context
 
 Read `docs/NEXT-SPRINT.md` and the exact production and test paths named by the task.
-For a patch-lane task, the steward's prompt supplies the relevant repository invariants;
+For a product-lane task, the steward's prompt supplies the relevant repository invariants;
 do not reread the full documentation set unless the change crosses one of its boundaries.
 
-For semantic or qualification work, also read `docs/DEVELOPMENT-WORKFLOW.md`,
+For qualification work, also read `docs/DEVELOPMENT-WORKFLOW.md`,
 `ROADMAP.md`, and the relevant architecture, machine-interface, firmware-requirement,
 contributor, or release sections identified by the sprint contract.
 
@@ -45,10 +45,11 @@ inference-heavy analysis unless the active sprint explicitly owns them.
 
 ## Verification
 
-The implementation agent stops after a reviewable candidate diff. The steward runs the
-narrowest relevant focused test, any named semantic or qualification gate, and the
-aggregate check from the clean candidate. Patch work relies on one final CI aggregate
-run after focused steward verification. For work outside these lanes, run:
+The implementation agent writes the bounded production change and ordinary tests in one
+session, then stops after a reviewable candidate diff. The steward runs the narrowest
+relevant focused test, any named gate, and one aggregate check from the clean candidate.
+Routine integration fixes belong to the steward rather than another agent round. For
+work outside these lanes, run:
 
 ```console
 bash scripts/check.sh
