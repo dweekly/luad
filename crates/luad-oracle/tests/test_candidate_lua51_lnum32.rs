@@ -13,6 +13,13 @@ use luad_oracle::gate_runner::GateSpec;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+type AttestationMutation = (&'static str, &'static str, Box<dyn Fn(&mut Value)>);
+type IndexMutation = (
+    &'static str,
+    &'static str,
+    Box<dyn Fn(&mut Value, &PathBuf)>,
+);
+
 fn sha256_digest(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
@@ -390,7 +397,7 @@ fn test_candidate_tool_verify_platform_attestation_table_driven() {
         "Clean platform attestation must pass verify-platform"
     );
 
-    let mutations: Vec<(&str, &str, Box<dyn Fn(&mut Value)>)> = vec![
+    let mutations: Vec<AttestationMutation> = vec![
         (
             "dirty source commit",
             "dirty",
@@ -702,7 +709,7 @@ fn test_candidate_tool_assemble_and_verify_index_table_driven() {
 
     let base_index: Value = serde_json::from_slice(&fs::read(&index_path).unwrap()).unwrap();
 
-    let mutations: Vec<(&str, &str, Box<dyn Fn(&mut Value, &PathBuf)>)> = vec![
+    let mutations: Vec<IndexMutation> = vec![
         (
             "missing platform in index",
             "platform",
