@@ -46,25 +46,7 @@ const RESULT_KINDS: &[&str] = &[
 ];
 
 fn luad_bin() -> PathBuf {
-    static LUAD: OnceLock<PathBuf> = OnceLock::new();
-    LUAD.get_or_init(|| {
-        if let Ok(p) = std::env::var("CARGO_BIN_EXE_luad") {
-            return p.into();
-        }
-        let root = luad_oracle::find_workspace_root();
-        let out = Command::new("cargo")
-            .args(["build", "-p", "luad-cli", "--bin", "luad"])
-            .current_dir(&root)
-            .output()
-            .expect("build");
-        assert!(
-            out.status.success(),
-            "build: {}",
-            String::from_utf8_lossy(&out.stderr)
-        );
-        root.join("target/debug/luad")
-    })
-    .clone()
+    luad_oracle::resolve_test_binary().expect("resolve luad test binary")
 }
 
 fn run(args: &[&str]) -> Output {

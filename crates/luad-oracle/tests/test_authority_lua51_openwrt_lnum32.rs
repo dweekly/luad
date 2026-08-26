@@ -154,21 +154,7 @@ fn sha(bytes: &[u8]) -> String {
 }
 
 fn luad() -> PathBuf {
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
-        return path.into();
-    }
-    let path = workspace().join("target/debug/luad");
-    let output = Command::new("cargo")
-        .args(["build", "-p", "luad-cli", "--bin", "luad"])
-        .current_dir(workspace())
-        .output()
-        .expect("build luad");
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    path
+    luad_oracle::resolve_test_binary().expect("resolve luad test binary")
 }
 
 fn run(args: &[&str]) -> Output {

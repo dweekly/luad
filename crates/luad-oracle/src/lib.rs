@@ -5,12 +5,19 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::NamedTempFile;
 
+pub mod candidate;
 pub mod differential_disasm;
 pub mod gate_runner;
 pub mod independent_lua51_oracle;
 pub mod independent_lua54_oracle;
 pub mod listing_parser;
 
+pub use candidate::{
+    decompress_gzip, parse_tar, resolve_test_binary, verify_platform_attestation,
+    BinaryResolutionDoc, BinaryResolutionError, CandidateSpec, EvidenceIndex, MemberLedger,
+    MemberLedgerEntry, PlatformArtifactEntry, PlatformAttestation, TranscriptDoc,
+    WorkflowTranscript,
+};
 pub use differential_disasm::{
     compare_chunk_tree_three_way, compare_chunk_tree_three_way_lua51, compare_proto_three_way,
     compare_proto_three_way_lua51, DisasmComparisonError, LuacProtoDumpList,
