@@ -136,6 +136,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "luad-analysis"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "luad-core",
+ "luad-dialect-lua51",
+ "luad-dialect-lua52",
+ "luad-dialect-lua53",
+ "luad-dialect-lua54",
+ "luad-dialect-lua55",
+ "schemars",
+ "serde",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
 name = "luad-core"
 version = "0.1.0"
 dependencies = [
@@ -212,12 +229,14 @@ name = "luad-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
+ "luad-analysis",
  "luad-core",
  "luad-dialect-lua51",
  "luad-dialect-lua52",
  "luad-dialect-lua53",
  "luad-dialect-lua54",
  "luad-dialect-lua55",
+ "serde_json",
 ]
 
 [[package]]

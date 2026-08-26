@@ -4,6 +4,39 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+### Safety enforcement
+
+- Established a workspace-owned `unsafe_code = "forbid"` lint inherited by `luad-core`,
+  every dialect (`lua51`, `lua52`, `lua53`, `lua54`, `lua55`), `luad-analysis`, `luad-cli`,
+  `luad-oracle`, and the fuzz workspace without local opt-outs, verified by an executable
+  negative control.
+
+### Hostile-input robustness and fuzzing
+
+- Added `fuzz_lua51_analysis` and `fuzz_lua54_analysis` fuzz targets that exercise recursive
+  typed disassembly, validation, prototype lifting, CFG construction, whole-chunk xrefs,
+  and JSON serialization on successfully decoded strict chunks.
+- Seeded all eight fuzz targets (`fuzz_detect`, five stock parser targets, and two analysis
+  targets) with maintained exact-dialect compiled fixtures.
+- Added a canonical contributor and CI smoke runner script (`scripts/fuzz_smoke.sh`) owning
+  the ordered 8-target suite, positive run budgets, per-target outer timeouts, corpus identity
+  reporting, and compact JSON evidence emission.
+- Added a Linux CI fuzz-smoke job running the canonical smoke suite under a pinned nightly
+  toolchain and locked `cargo-fuzz` release with evidence artifact uploading.
+- Pinned the resource-detection envelope the campaign relies on (`address` sanitizer, a
+  512 MB RSS limit, and a 128 MB allocation limit) in the runner and recorded it in the
+  emitted evidence, so unbounded-allocation detection no longer depends on an implicit
+  libFuzzer default. A contract test asserts the CI workflow pins agree with the runner
+  constants and that CI does not restate the runner's flags.
+- Bounded debug-table upvalue-name preallocation in the Lua 5.2, 5.3, and 5.5 parsers;
+  hostile declared counts now reach ordinary bounded rejection instead of requesting the
+  declared allocation.
+- Bounded register-effect arithmetic in the Lua 5.1 and Lua 5.4 semantic lifters. A chunk
+  encoding a maximal register operand made derived effect ranges such as `R(A)..R(A+3)`
+  overflow their `u8` index and panic; those derivations now saturate, so lifting a
+  hostile chunk yields bounded effect facts beside the preserved raw operands instead of
+  aborting. The chunk remains invalid and validation still reports it.
+
 ### Binary parsing
 
 - Enforced `ResourceLimits::max_string_bytes` across Lua 5.1, 5.2, 5.3, 5.4, and 5.5

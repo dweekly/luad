@@ -391,7 +391,7 @@ fn load_proto_55(
 
     // 10. Upvalue Names
     let (sizeupvalnames, _) = reader.read_varint_lua55()?;
-    let mut upvalue_names = Vec::with_capacity(sizeupvalnames as usize);
+    let mut upvalue_names = Vec::with_capacity(reader.safe_capacity(sizeupvalnames as usize, 1));
     for idx in 0..(sizeupvalnames as usize) {
         let name = load_string_55(reader, table)?;
         if let Some(upval) = upvalues.get_mut(idx) {

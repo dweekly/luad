@@ -314,7 +314,7 @@ fn load_proto_52(
 
     // 9. Upvalue Names
     let sizeupvalnames = reader.read_i32_le()? as usize;
-    let mut upvalue_names = Vec::with_capacity(sizeupvalnames);
+    let mut upvalue_names = Vec::with_capacity(reader.safe_capacity(sizeupvalnames, 1));
     for idx in 0..sizeupvalnames {
         let name = load_string_52(reader, sizeof_sizet)?;
 

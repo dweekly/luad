@@ -28,7 +28,8 @@ inference-heavy analysis unless the active sprint explicitly owns them.
 - Preserve raw encoded facts separately from interpreted values.
 - Never infer an artifact's layout from the build host: validate and honor declared widths and byte order, and gate vendor extensions behind explicit profiles.
 - Preserve physical words separately from executable semantics; closure-binding descriptors must not acquire standalone instruction effects.
-- Do not use `unsafe` for opcode conversion; move toward `#![forbid(unsafe_code)]`.
+- Do not write `unsafe` code. Every package inherits the workspace `unsafe_code = "forbid"`
+  policy; opcode conversion uses exhaustive generated or explicit matches.
 - Do not silently default an unknown dialect, target, schema, or analysis mode.
 - Keep input, allocation, traversal, recursion, diagnostics, and output bounded.
 - Do not update `supported` capability status without a passing named evidence gate.

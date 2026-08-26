@@ -56,16 +56,16 @@ delete the document in the same change and update this index.
 
 | Document | Purpose | Fresh as of | Revalidate or delete when |
 |---|---|---:|---|
-| [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-08-25 | Public scope, support status, setup, primary commands, or the documentation set changes. |
-| [`AGENTS.md`](AGENTS.md) | Binding repository instructions, product-batch boundaries, and safety constraints for coding agents. | 2026-08-25 | Development workflow, proof policy, current priority, or repository invariants change. |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-25 | Crates, ownership boundaries, core representations, or evidence layers change. |
-| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of unreleased and released user-visible changes. | 2026-08-25 | Every user-visible change or release; never use it as a forward plan. |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor setup, test taxonomy, fixture provenance, and definition of done. | 2026-08-25 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
+| [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-08-26 | Public scope, support status, setup, primary commands, or the documentation set changes. |
+| [`AGENTS.md`](AGENTS.md) | Binding repository instructions, product-batch boundaries, and safety constraints for coding agents. | 2026-08-26 | Development workflow, proof policy, current priority, or repository invariants change. |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-26 | Crates, ownership boundaries, core representations, or evidence layers change. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of unreleased and released user-visible changes. | 2026-08-26 | Every user-visible change or release; never use it as a forward plan. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor setup, test taxonomy, fixture provenance, and definition of done. | 2026-08-26 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
 | [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-08-25 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
-| [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-23 | Support policy, reporting channel, trust boundary, or threat model changes. |
+| [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-26 | Support policy, reporting channel, trust boundary, or threat model changes. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, risk-triggered model diversity, proportional qualification, process budgets, and agent orchestration. | 2026-08-26 | Planning artifacts, customer cadence, agent roles, evidence policy, process budgets, provider interfaces, or sprint-advance mechanics change. |
 | [`ROADMAP.md`](ROADMAP.md) | Stack-ranked path to an exact, deterministic, robust, and obtainable Lua disassembler, with hard research tracks sized explicitly. | 2026-08-25 | Product targets, stage order, mountain sizing, version-1 acceptance, or exclusions change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | The sole active sprint contract: executed hostile-input fuzz smoke and enforced unsafe-code policy across the shipped parser and analysis surface. | 2026-08-26 | The sprint is accepted, respecified, or replaced; delete obsolete sprint content rather than retaining history. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | The sole active sprint contract: one rendering authority for deterministic scalar output on the exact Lua 5.1.5 and Lua 5.4.8 targets. | 2026-08-26 | The sprint is accepted, respecified, or replaced; delete obsolete sprint content rather than retaining history. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-25 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-25 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
 | [`docs/RELEASING.md`](docs/RELEASING.md) | Exact-target authority prerequisites, independent customer validation, evidence bundle, versioning, and publication policy. | 2026-08-25 | Release gates, target authority, customer-validation boundary, artifact channels, version policy, signing, or publication procedure changes. |
@@ -104,7 +104,7 @@ The embedded Lua 5.1 release scope is driven by a 252-file TP-Link corpus: heade
 
 ## Build
 
-The repository currently pins its contributor toolchain in `rust-toolchain.toml`. The long-term MSRV has not yet been established independently of that development-toolchain pin.
+The repository currently pins its contributor toolchain in `rust-toolchain.toml`. The long-term MSRV has not yet been established independently of that development-toolchain pin. All production crates inherit the workspace's `unsafe_code = "forbid"` policy.
 
 ```console
 git clone https://github.com/dweekly/luad.git
@@ -116,6 +116,14 @@ For the complete contributor check:
 
 ```console
 bash scripts/check.sh
+```
+
+To run the bounded hostile-input fuzz smoke suite:
+
+```console
+rustup toolchain install nightly-2026-08-25
+cargo install cargo-fuzz --version 0.13.2 --locked
+scripts/fuzz_smoke.sh artifacts/fuzz-smoke
 ```
 
 The full differential suite requires the exact official Lua compilers pinned by each gate:

@@ -111,9 +111,9 @@ A diagnostic's primary byte offset identifies the field or byte where the failur
 
 For identical bytes, configuration, dialect implementation, and tool version, machine output must be byte-for-byte deterministic. Ordered maps or explicit sorting are required at serialization boundaries.
 
-### No unsafe opcode conversion
+### No unsafe code
 
-Opcode conversion should use exhaustive generated or explicit matches. The target state is `#![forbid(unsafe_code)]` across the workspace.
+The workspace owns `unsafe_code = "forbid"` and every package inherits it, so no crate can compile an `unsafe` block. Opcode conversion uses exhaustive generated or explicit matches.
 
 ## Trust and evidence layers
 
