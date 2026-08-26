@@ -38,12 +38,12 @@ tar -xzf "${PACKAGE_DIR}/candidate.tar.gz" -C "${PACKAGE_DIR}/extracted"
 export LUAD_CANDIDATE_BIN="${PACKAGE_DIR}/extracted/bin/luad"
 
 scripts/build_lua51_openwrt_lnum32.sh "${AUTHORITY_ROOT}" --reproduce
+export LUAD_LNUM32_LUAC="${AUTHORITY_ROOT}/lua-5.1.5/src/luac-host"
 
 export CARGO_TERM_COLOR=never
 cargo run -p luad-oracle --bin run_gate -- \
   --spec "${SPEC_FILE}" \
   --out-dir "${RESULT_DIR}" \
-  --compiler-path "${AUTHORITY_ROOT}/lua-5.1.5/src/luac-host" \
   --require-clean \
   --record-probes
 
