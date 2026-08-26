@@ -10,6 +10,7 @@ use luad_core::disasm::{
 use luad_core::id::StableId;
 use luad_core::model::{ConstantValue, Prototype};
 use luad_core::provenance::{Confidence, SourceLocation};
+use luad_core::scalar::render_constant;
 
 use crate::opcodes::{Opcode54, RawInstruction54};
 
@@ -777,52 +778,13 @@ fn resolve_const_tagged(
         other => other.clone(),
     };
 
-    let preview = match &c.value {
-        ConstantValue::Nil => "nil".to_string(),
-        ConstantValue::Boolean(b) => b.to_string(),
-        ConstantValue::Integer { val, .. } => format!("{val}"),
-        ConstantValue::Float { val, .. } => format_float(*val),
-        ConstantValue::ShortString(s) | ConstantValue::LongString(s) => {
-            format_string_preview(&s.display)
-        }
-    };
+    let preview = render_constant(&c.value);
     Some(ResolvedConstInfo {
         id: const_id,
         value: c.value.clone(),
         preview,
         is_k,
     })
-}
-
-fn format_string_preview(s: &str) -> String {
-    let max_len = 64;
-    if s.len() > max_len {
-        let truncated: String = s.chars().take(max_len).collect();
-        format!("\"{truncated}...\"")
-    } else {
-        format!("\"{s}\"")
-    }
-}
-
-fn format_float(val: f64) -> String {
-    if val.is_nan() {
-        "nan".to_string()
-    } else if val.is_infinite() {
-        if val > 0.0 {
-            "inf".to_string()
-        } else {
-            "-inf".to_string()
-        }
-    } else if val == 0.0 && val.is_sign_negative() {
-        "-0.0".to_string()
-    } else {
-        let s = format!("{val:?}");
-        if !s.contains('.') && !s.contains('e') && !s.contains('E') {
-            format!("{s}.0")
-        } else {
-            s
-        }
-    }
 }
 
 fn tm_name(event: u8) -> &'static str {

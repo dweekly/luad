@@ -4,6 +4,14 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+### Deterministic scalar rendering
+
+- Added one core rendering authority for the exact Lua 5.1.5 and Lua 5.4.8 targets,
+  covering canonical 64-bit integers, byte-exact escaping with a 64-input-byte preview
+  bound, round-tripping finite floats, signed zero, infinities, and payload-independent
+  NaN spelling. Typed resolved-constant previews and human disassembly now consume the
+  same rendering policy while raw scalar bytes remain available in machine facts.
+
 ### Safety enforcement
 
 - Established a workspace-owned `unsafe_code = "forbid"` lint inherited by `luad-core`,

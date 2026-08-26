@@ -12,6 +12,7 @@ use luad_core::disasm::{
 use luad_core::id::StableId;
 use luad_core::model::{ConstantValue, Prototype};
 use luad_core::provenance::{Confidence, SourceLocation};
+use luad_core::scalar::render_constant;
 
 use crate::opcodes::{Opcode51, RawInstruction51};
 use crate::roles::{discover_roles_lua51, Lua51PhysicalRole};
@@ -287,15 +288,7 @@ pub fn disassemble_instruction_lua51(
 
     let format_k = |k_idx: usize| -> (Option<ConstantValue>, String) {
         if let Some(k) = proto.constants.get(k_idx) {
-            let preview = match &k.value {
-                ConstantValue::Nil => "nil".to_string(),
-                ConstantValue::Boolean(b) => b.to_string(),
-                ConstantValue::Integer { val, .. } => val.to_string(),
-                ConstantValue::Float { val, .. } => format!("{val:?}"),
-                ConstantValue::ShortString(s) | ConstantValue::LongString(s) => {
-                    format!("\"{}\"", s.display)
-                }
-            };
+            let preview = render_constant(&k.value);
             (Some(k.value.clone()), preview)
         } else {
             (None, format!("<invalid constant index {k_idx}>"))
