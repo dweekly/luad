@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-string-limits-stock-lua",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_string_limits_stock_lua",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_default_limits_stock_lua_fixtures",
+    "test_killer_mutation_bypassed_dialect_limit_check_rejected",
+    "test_lua55_string_reuse_table_invariants",
+    "test_string_limits_all_string_bearing_fields_covered",
+    "test_string_limits_declared_over_limit_absent_payload_returns_limit_diagnostic_not_eof",
+    "test_string_limits_exact_at_limit_accepted",
+    "test_string_limits_one_byte_over_rejected_with_pinned_diagnostic"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [
+    {
+      "path": "tests/fixtures/precompiled/lua51/hello.luac",
+      "sha256": "d64567d2d41ff584b86602f98fff5906f58f101f6faf98598f3662bac6e96a4f"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua52/hello.luac",
+      "sha256": "8b8afaea45cbedecf8cb0b3fe6eec7eb546a4e715e5abb1e18d777d4870f9560"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua53/hello.luac",
+      "sha256": "1f7038f2150910c22bc11158eb17e5888f314f12118b466e42ba93f0ad612e5a"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua54/hello.luac",
+      "sha256": "a171c4c88ec40b1c871a57a888f66d7a93144e1d742f4071af286c9dc7b93575"
+    },
+    {
+      "path": "tests/fixtures/precompiled/lua55/hello.luac",
+      "sha256": "bd27699f0c49ec30449227f2ea5c7ab70374656dec0f2dd93344996b41aa1a4e"
+    }
+  ],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness",
+    "gate-machine-contract",
+    "gate-diagnostic-catalog"
+  ],
+  "allowed_capability_mutations": []
+}
