@@ -4,6 +4,12 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+### Binary parsing
+
+- Enforced `ResourceLimits::max_string_bytes` across Lua 5.1, 5.2, 5.3, 5.4, and 5.5
+  chunk loaders before string payloads are read or retained, with stable diagnostics
+  `L51-STR-001`, `L52-STR-001`, `L53-STR-001`, and `L55-STR-002`.
+
 ### Analysis
 
 - Lua 5.1 symbolic callee analysis now preserves a proved callee below an open vararg or

@@ -123,9 +123,8 @@ fn load_string_51(
     reader: &mut SafeReader,
     sizeof_sizet: u8,
 ) -> Result<Option<LuaString>, Diagnostic> {
-    // Lua 5.1 encodes string lengths as size_t, whose width is declared in the chunk
-    // header (byte 8). It is 4 on 32-bit targets, which covers virtually all embedded
-    // and router firmware. Reading a fixed u64 here desynchronises every 32-bit chunk.
+    // Lua 5.1 encodes a string's payload plus terminator in the header-declared size_t
+    // width. The terminator is serialized data and is not part of the Lua string.
     let size = if sizeof_sizet == 4 {
         reader.read_u32_le()? as usize
     } else {
@@ -134,12 +133,12 @@ fn load_string_51(
     if size == 0 {
         Ok(None)
     } else {
+        let content_len = size.saturating_sub(1);
+        reader.check_string_limit(content_len as u64, |target, message| {
+            Diagnostic::error("L51-STR-001", DiagnosticCategory::Parse, target, message)
+        })?;
         let bytes_with_null = reader.read_exact(size)?;
-        let content = if bytes_with_null.ends_with(b"\0") {
-            &bytes_with_null[..bytes_with_null.len() - 1]
-        } else {
-            bytes_with_null
-        };
+        let content = &bytes_with_null[..content_len];
         Ok(Some(LuaString::from_bytes(content)))
     }
 }

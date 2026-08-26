@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 
 use serde_json::{json, Value};
 
-const PINNED_CODES: [&str; 112] = [
+const PINNED_CODES: [&str; 116] = [
     "CORE-LIMIT-001",
     "CORE-LIMIT-002",
     "CORE-OVERFLOW-001",
@@ -41,6 +41,7 @@ const PINNED_CODES: [&str; 112] = [
     "L51-REG-SPAN-001",
     "L51-SETLIST-001",
     "L51-STACK-001",
+    "L51-STR-001",
     "L51-UPVAL-001",
     "L52-CHUNK-001",
     "L52-CODE-001",
@@ -52,6 +53,7 @@ const PINNED_CODES: [&str; 112] = [
     "L52-OP-001",
     "L52-PROTO-001",
     "L52-STACK-001",
+    "L52-STR-001",
     "L52-UPVAL-001",
     "L53-CHUNK-001",
     "L53-CODE-001",
@@ -71,6 +73,7 @@ const PINNED_CODES: [&str; 112] = [
     "L53-OP-001",
     "L53-PROTO-001",
     "L53-STACK-001",
+    "L53-STR-001",
     "L53-UPVAL-001",
     "L54-CHUNK-001",
     "L54-CODE-001",
@@ -115,6 +118,7 @@ const PINNED_CODES: [&str; 112] = [
     "L55-PROTO-001",
     "L55-STACK-001",
     "L55-STR-001",
+    "L55-STR-002",
     "L55-UPVAL-001",
     "L55-VARINT-001",
     "PARSE-001",

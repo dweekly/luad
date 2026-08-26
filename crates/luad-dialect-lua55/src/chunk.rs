@@ -140,8 +140,20 @@ fn load_string_55(
             }
         }
     } else {
-        let len = (size - 1) as usize;
-        let bytes_with_null = reader.read_exact(len + 1)?;
+        let content_len = size - 1;
+        reader.check_string_limit(content_len, |target, message| {
+            Diagnostic::error("L55-STR-002", DiagnosticCategory::Parse, target, message)
+        })?;
+        let payload_len = usize::try_from(size).map_err(|_| {
+            Diagnostic::error(
+                "CORE-OVERFLOW-001",
+                DiagnosticCategory::Parse,
+                StableId::Proto(reader.current_proto_path().clone()),
+                format!("Lua 5.5 string payload length {size} exceeds host pointer width"),
+            )
+        })?;
+        let len = payload_len - 1;
+        let bytes_with_null = reader.read_exact(payload_len)?;
         let content_bytes = &bytes_with_null[..len];
         let lua_str = LuaString::from_bytes(content_bytes);
         table.push(lua_str.clone());

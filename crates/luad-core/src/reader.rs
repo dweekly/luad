@@ -314,6 +314,29 @@ impl<'a> SafeReader<'a> {
         Ok(())
     }
 
+    /// Enforce `max_string_bytes` before reading or retaining a string payload.
+    pub fn check_string_limit<F>(
+        &mut self,
+        content_len: u64,
+        make_diagnostic: F,
+    ) -> Result<(), Diagnostic>
+    where
+        F: FnOnce(StableId, String) -> Diagnostic,
+    {
+        if content_len > self.limits.max_string_bytes as u64 {
+            let diagnostic = make_diagnostic(
+                StableId::Proto(self.current_proto_path.clone()),
+                format!(
+                    "String length {content_len} exceeds limit of {} bytes",
+                    self.limits.max_string_bytes
+                ),
+            );
+            self.record_diagnostic(diagnostic.clone())?;
+            return Err(diagnostic);
+        }
+        Ok(())
+    }
+
     /// Read a size_t encoded integer in Lua 5.4 (used for string length, table sizes, etc.).
     pub fn read_size_lua54(&mut self) -> Result<(usize, SourceLocation), Diagnostic> {
         let (val, loc) = self.read_varint_lua54()?;
@@ -341,19 +364,9 @@ impl<'a> SafeReader<'a> {
         }
 
         let content_len = size.saturating_sub(1);
-        if content_len > self.limits.max_string_bytes {
-            let diag = Diagnostic::error(
-                "L54-STR-001",
-                DiagnosticCategory::Parse,
-                StableId::Proto(self.current_proto_path.clone()),
-                format!(
-                    "String length {content_len} exceeds limit of {} bytes",
-                    self.limits.max_string_bytes
-                ),
-            );
-            self.record_diagnostic(diag.clone())?;
-            return Err(diag);
-        }
+        self.check_string_limit(content_len as u64, |target, message| {
+            Diagnostic::error("L54-STR-001", DiagnosticCategory::Parse, target, message)
+        })?;
 
         let content = self.read_exact(content_len)?;
         let raw_bytes = &self.data[start_cursor..self.cursor];

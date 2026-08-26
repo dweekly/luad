@@ -103,12 +103,12 @@ fn load_string_52(
     if size == 0 {
         Ok(None)
     } else {
+        let content_len = size.saturating_sub(1);
+        reader.check_string_limit(content_len as u64, |target, message| {
+            Diagnostic::error("L52-STR-001", DiagnosticCategory::Parse, target, message)
+        })?;
         let bytes_with_null = reader.read_exact(size)?;
-        let content = if bytes_with_null.ends_with(b"\0") {
-            &bytes_with_null[..bytes_with_null.len() - 1]
-        } else {
-            bytes_with_null
-        };
+        let content = &bytes_with_null[..content_len];
         Ok(Some(LuaString::from_bytes(content)))
     }
 }

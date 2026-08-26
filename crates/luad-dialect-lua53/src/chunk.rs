@@ -113,6 +113,9 @@ fn load_string_53(
         Ok(None)
     } else {
         let len = size - 1;
+        reader.check_string_limit(len as u64, |target, message| {
+            Diagnostic::error("L53-STR-001", DiagnosticCategory::Parse, target, message)
+        })?;
         let bytes = reader.read_exact(len)?;
         Ok(Some(LuaString::from_bytes(bytes)))
     }

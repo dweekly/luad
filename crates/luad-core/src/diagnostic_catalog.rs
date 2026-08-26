@@ -292,6 +292,13 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         suggested_action: "Inspect prototype frame allocation for potential stack exhaustion or corruption.",
     },
     StaticDiagnosticDescriptor {
+        code: "L51-STR-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Lua 5.1 string content length exceeds the configured maximum string byte limit.",
+        suggested_action: "Check string length field in chunk or increase reader max string bytes limit.",
+    },
+    StaticDiagnosticDescriptor {
         code: "L51-UPVAL-001",
         severity: Severity::Error,
         category: DiagnosticCategory::Instruction,
@@ -367,6 +374,13 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         category: DiagnosticCategory::Structure,
         semantics: "Lua 5.2 prototype declares an unusually large maxstacksize exceeding typical limits.",
         suggested_action: "Inspect prototype frame allocation for potential stack overflow or corruption.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L52-STR-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Lua 5.2 string content length exceeds the configured maximum string byte limit.",
+        suggested_action: "Check string length field in chunk or increase reader max string bytes limit.",
     },
     StaticDiagnosticDescriptor {
         code: "L52-UPVAL-001",
@@ -500,6 +514,13 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         category: DiagnosticCategory::Structure,
         semantics: "Lua 5.3 prototype declares an unusually large maxstacksize exceeding typical limits.",
         suggested_action: "Inspect prototype frame allocation for potential stack overflow or corruption.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L53-STR-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Lua 5.3 string content length exceeds the configured maximum string byte limit.",
+        suggested_action: "Check string length field in chunk or increase reader max string bytes limit.",
     },
     StaticDiagnosticDescriptor {
         code: "L53-UPVAL-001",
@@ -808,6 +829,13 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         category: DiagnosticCategory::Parse,
         semantics: "Lua 5.5 string loader referenced an invalid index in the string reuse table.",
         suggested_action: "Verify that string reuse table index refers to a previously defined string.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-STR-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Lua 5.5 string content length exceeds the configured maximum string byte limit.",
+        suggested_action: "Check string length field in chunk or increase reader max string bytes limit.",
     },
     StaticDiagnosticDescriptor {
         code: "L55-UPVAL-001",
