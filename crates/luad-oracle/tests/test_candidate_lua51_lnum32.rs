@@ -621,7 +621,11 @@ fn test_candidate_tool_assemble_and_verify_index_table_driven() {
             "target_triple": triple, "toolchain": "rustc 1.97.1",
             "build_host": if plat == "linux-x86_64" { "github-actions:ubuntu-latest" } else { "github-actions:macos-latest" },
             "archive_path": arc_name, "archive_sha256": sha256_digest(arc_bytes),
-            "binary_sha256": bin_sha, "member_ledger": [{"path": "bin/luad", "mode": 493, "sha256": bin_sha}],
+            "binary_sha256": bin_sha,
+            "member_ledger": [{
+                "path": "bin/luad", "mode": 493, "uid": 0, "gid": 0,
+                "mtime": 0, "size": 1, "sha256": bin_sha
+            }],
             "prerequisite_results": [], "aggregate_check_success": true
         })
     };
