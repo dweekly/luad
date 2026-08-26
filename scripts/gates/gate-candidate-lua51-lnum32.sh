@@ -21,21 +21,23 @@ mkdir -p "${RESULT_DIR}"
 cargo build -p luad-oracle --bin luad-candidate
 export LUAD_CANDIDATE_TOOL="${ROOT_DIR}/target/debug/luad-candidate"
 
-# Qualify an extracted deterministic archive instead of a workspace binary.
-cargo build --release -p luad-cli --bin luad
-PACKAGE_DIR="$(mktemp -d)"
-printf '{"version":"0.1.0","source_commit":"%s"}\n' "$(git rev-parse HEAD)" \
-  > "${PACKAGE_DIR}/VERSION.json"
-"${LUAD_CANDIDATE_TOOL}" pack \
-  --spec "${ROOT_DIR}/tests/candidates/lua51-lnum32-rc1.json" \
-  --binary "${ROOT_DIR}/target/release/luad" \
-  --license "${ROOT_DIR}/LICENSE" \
-  --version-info "${PACKAGE_DIR}/VERSION.json" \
-  --out-archive "${PACKAGE_DIR}/candidate.tar.gz" \
-  --out-ledger "${PACKAGE_DIR}/ledger.json"
-mkdir -p "${PACKAGE_DIR}/extracted"
-tar -xzf "${PACKAGE_DIR}/candidate.tar.gz" -C "${PACKAGE_DIR}/extracted"
-export LUAD_CANDIDATE_BIN="${PACKAGE_DIR}/extracted/bin/luad"
+# CI supplies the already extracted upload. Local runs create the same package shape.
+if [[ ! -v LUAD_CANDIDATE_BIN ]]; then
+  cargo build --release -p luad-cli --bin luad
+  PACKAGE_DIR="$(mktemp -d)"
+  printf '{"version":"0.1.0","source_commit":"%s"}\n' "$(git rev-parse HEAD)" \
+    > "${PACKAGE_DIR}/VERSION.json"
+  "${LUAD_CANDIDATE_TOOL}" pack \
+    --spec "${ROOT_DIR}/tests/candidates/lua51-lnum32-rc1.json" \
+    --binary "${ROOT_DIR}/target/release/luad" \
+    --license "${ROOT_DIR}/LICENSE" \
+    --version-info "${PACKAGE_DIR}/VERSION.json" \
+    --out-archive "${PACKAGE_DIR}/candidate.tar.gz" \
+    --out-ledger "${PACKAGE_DIR}/ledger.json"
+  mkdir -p "${PACKAGE_DIR}/extracted"
+  tar -xzf "${PACKAGE_DIR}/candidate.tar.gz" -C "${PACKAGE_DIR}/extracted"
+  export LUAD_CANDIDATE_BIN="${PACKAGE_DIR}/extracted/bin/luad"
+fi
 
 scripts/build_lua51_openwrt_lnum32.sh "${AUTHORITY_ROOT}" --reproduce
 export LUAD_LNUM32_LUAC="${AUTHORITY_ROOT}/lua-5.1.5/src/luac-host"

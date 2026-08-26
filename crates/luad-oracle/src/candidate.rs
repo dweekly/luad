@@ -135,8 +135,7 @@ pub struct PlatformAttestation {
     pub archive_sha256: String,
     pub binary_sha256: String,
     pub member_ledger: Vec<MemberLedgerEntry>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub target: Option<TargetSpec>,
+    pub target: TargetSpec,
     pub prerequisite_results: Vec<AttestationPrereqResult>,
     pub aggregate_check_success: bool,
 }
@@ -682,31 +681,29 @@ pub fn verify_platform_attestation(
         return Err("aggregate check failed".to_string());
     }
 
-    if let Some(target) = &att.target {
-        if target.profile != spec.target.profile {
-            return Err(format!(
-                "target profile mismatch: expected {}, got {}",
-                spec.target.profile, target.profile
-            ));
-        }
-        if target.layout != spec.target.layout {
-            return Err(format!(
-                "target layout mismatch: expected {}, got {}",
-                spec.target.layout, target.layout
-            ));
-        }
-        if target.dialect != spec.target.dialect {
-            return Err(format!(
-                "target dialect mismatch: expected {}, got {}",
-                spec.target.dialect, target.dialect
-            ));
-        }
-        if target.patch_version != spec.target.patch_version {
-            return Err(format!(
-                "target patch_version mismatch: expected {}, got {}",
-                spec.target.patch_version, target.patch_version
-            ));
-        }
+    if att.target.profile != spec.target.profile {
+        return Err(format!(
+            "target profile mismatch: expected {}, got {}",
+            spec.target.profile, att.target.profile
+        ));
+    }
+    if att.target.layout != spec.target.layout {
+        return Err(format!(
+            "target layout mismatch: expected {}, got {}",
+            spec.target.layout, att.target.layout
+        ));
+    }
+    if att.target.dialect != spec.target.dialect {
+        return Err(format!(
+            "target dialect mismatch: expected {}, got {}",
+            spec.target.dialect, att.target.dialect
+        ));
+    }
+    if att.target.patch_version != spec.target.patch_version {
+        return Err(format!(
+            "target patch_version mismatch: expected {}, got {}",
+            spec.target.patch_version, att.target.patch_version
+        ));
     }
 
     let archive_bytes = fs::read(archive_path)
@@ -747,14 +744,30 @@ pub fn verify_platform_attestation(
         }
     }
 
-    for (lm, tm) in att.member_ledger.iter().zip(tar_members.iter()) {
+    let required_member_paths = ["CANDIDATE.json", "LICENSE", "VERSION.json", "bin/luad"];
+    for ((lm, tm), required_path) in att
+        .member_ledger
+        .iter()
+        .zip(tar_members.iter())
+        .zip(required_member_paths)
+    {
+        if lm.path != required_path {
+            return Err(format!(
+                "unexpected archive member: expected {required_path}, got {}",
+                lm.path
+            ));
+        }
         if lm.path != tm.name {
             return Err(format!(
                 "member path mismatch: ledger={}, tar={}",
                 lm.path, tm.name
             ));
         }
-        let exp_mode = if lm.path == "bin/luad" { 493 } else { 420 };
+        let exp_mode = if lm.path == "bin/luad" {
+            spec.archive_policy.executable_mode
+        } else {
+            spec.archive_policy.file_mode
+        };
         if lm.mode != exp_mode {
             return Err(format!(
                 "wrong member permission mode for '{}': expected {}, got {}",
@@ -765,6 +778,33 @@ pub fn verify_platform_attestation(
             return Err(format!(
                 "wrong tar member permission mode for '{}': expected {}, got {}",
                 tm.name, exp_mode, tm.mode
+            ));
+        }
+        if lm.uid != spec.archive_policy.uid || tm.uid != spec.archive_policy.uid {
+            return Err(format!(
+                "wrong uid for '{}': expected {}, ledger={}, tar={}",
+                lm.path, spec.archive_policy.uid, lm.uid, tm.uid
+            ));
+        }
+        if lm.gid != spec.archive_policy.gid || tm.gid != spec.archive_policy.gid {
+            return Err(format!(
+                "wrong gid for '{}': expected {}, ledger={}, tar={}",
+                lm.path, spec.archive_policy.gid, lm.gid, tm.gid
+            ));
+        }
+        if lm.mtime != spec.archive_policy.mtime || tm.mtime != spec.archive_policy.mtime {
+            return Err(format!(
+                "wrong mtime for '{}': expected {}, ledger={}, tar={}",
+                lm.path, spec.archive_policy.mtime, lm.mtime, tm.mtime
+            ));
+        }
+        if lm.size != tm.size || tm.size != tm.data.len() {
+            return Err(format!(
+                "wrong size for '{}': ledger={}, tar={}, data={}",
+                lm.path,
+                lm.size,
+                tm.size,
+                tm.data.len()
             ));
         }
         let actual_member_sha = sha256_digest(&tm.data);
@@ -866,6 +906,46 @@ pub fn verify_platform_attestation(
     Ok(())
 }
 
+fn artifact_path(artifact_root: &Path, name: &str) -> Result<PathBuf, String> {
+    let path = Path::new(name);
+    let mut components = path.components();
+    if !matches!(components.next(), Some(std::path::Component::Normal(_)))
+        || components.next().is_some()
+    {
+        return Err(format!("artifact path must be one file name: '{name}'"));
+    }
+    Ok(artifact_root.join(path))
+}
+
+fn artifact_entry_from_attestation(
+    att: PlatformAttestation,
+    attestation_name: String,
+    attestation_sha256: String,
+) -> PlatformArtifactEntry {
+    let archive_path = att
+        .archive_path
+        .clone()
+        .unwrap_or_else(|| format!("luad-{}.tar.gz", att.platform));
+    PlatformArtifactEntry {
+        platform: att.platform,
+        os: att.os,
+        arch: att.arch,
+        target_triple: att.target_triple,
+        toolchain: att.toolchain,
+        build_host: att.build_host,
+        git_commit: att.git_commit,
+        spec_hash: att.spec_hash,
+        archive_path,
+        archive_sha256: att.archive_sha256,
+        binary_sha256: att.binary_sha256,
+        attestation_path: Some(attestation_name),
+        attestation_sha256: Some(attestation_sha256),
+        member_ledger: att.member_ledger,
+        prerequisite_results: att.prerequisite_results,
+        aggregate_check_success: att.aggregate_check_success,
+    }
+}
+
 /// Assemble multi-platform candidate evidence index.
 pub fn assemble_evidence_index(
     spec_path: &Path,
@@ -908,24 +988,19 @@ pub fn assemble_evidence_index(
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_else(|| format!("attestation-{}.json", att.platform));
 
-        artifacts.push(PlatformArtifactEntry {
-            platform: att.platform,
-            os: att.os,
-            arch: att.arch,
-            target_triple: att.target_triple,
-            toolchain: att.toolchain,
-            build_host: att.build_host,
-            git_commit: att.git_commit,
-            spec_hash: att.spec_hash,
-            archive_path: arc_name,
-            archive_sha256: att.archive_sha256,
-            binary_sha256: att.binary_sha256,
-            attestation_path: Some(att_name),
-            attestation_sha256: Some(sha256_digest(&att_bytes)),
-            member_ledger: att.member_ledger,
-            prerequisite_results: att.prerequisite_results,
-            aggregate_check_success: att.aggregate_check_success,
-        });
+        let archive_path = artifact_path(artifact_root, &arc_name)?;
+        verify_platform_attestation(spec_path, att_path, &archive_path).map_err(|error| {
+            format!(
+                "platform attestation '{}' failed verification: {error}",
+                att.platform
+            )
+        })?;
+
+        artifacts.push(artifact_entry_from_attestation(
+            att,
+            att_name,
+            sha256_digest(&att_bytes),
+        ));
     }
 
     artifacts.sort_by(|a, b| a.platform.cmp(&b.platform));
@@ -945,7 +1020,6 @@ pub fn assemble_evidence_index(
         .map_err(|e| format!("Serialize evidence index JSON: {e}"))?;
     fs::write(out_index, json_bytes).map_err(|e| format!("Write evidence index: {e}"))?;
 
-    let _ = artifact_root;
     Ok(())
 }
 
@@ -1041,14 +1115,30 @@ pub fn verify_evidence_index(
 
         let att_name = art
             .attestation_path
-            .clone()
-            .unwrap_or_else(|| format!("attestation-{}.json", art.platform));
-        let att_file = artifact_root.join(&att_name);
+            .as_deref()
+            .ok_or_else(|| format!("missing attestation path for {}", art.platform))?;
+        let att_file = artifact_path(artifact_root, att_name)?;
         if !att_file.exists() {
             return Err(format!("missing sidecar attestation file: {:?}", att_file));
         }
 
-        let arc_file = artifact_root.join(&art.archive_path);
+        let att_bytes = fs::read(&att_file)
+            .map_err(|e| format!("Failed to read attestation '{att_file:?}': {e}"))?;
+        let actual_attestation_sha = sha256_digest(&att_bytes);
+        let indexed_attestation_sha = art
+            .attestation_sha256
+            .as_deref()
+            .ok_or_else(|| format!("missing attestation SHA-256 for {}", art.platform))?;
+        if actual_attestation_sha != indexed_attestation_sha {
+            return Err(format!(
+                "attestation SHA-256 mismatch for {}: actual={}, index={}",
+                art.platform, actual_attestation_sha, indexed_attestation_sha
+            ));
+        }
+
+        let att: PlatformAttestation = serde_json::from_slice(&att_bytes)
+            .map_err(|e| format!("Failed to parse attestation '{att_file:?}': {e}"))?;
+        let arc_file = artifact_path(artifact_root, &art.archive_path)?;
         if !arc_file.exists() {
             return Err(format!("missing archive file: {:?}", arc_file));
         }
@@ -1061,6 +1151,22 @@ pub fn verify_evidence_index(
                 art.platform, actual_arc_sha, art.archive_sha256
             ));
         }
+
+        let expected_entry =
+            artifact_entry_from_attestation(att, att_name.to_string(), actual_attestation_sha);
+        if &expected_entry != art {
+            return Err(format!(
+                "evidence index entry does not match sidecar for {}",
+                art.platform
+            ));
+        }
+
+        verify_platform_attestation(spec_path, &att_file, &arc_file).map_err(|error| {
+            format!(
+                "platform attestation '{}' failed verification: {error}",
+                art.platform
+            )
+        })?;
     }
 
     Ok(())

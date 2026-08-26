@@ -557,6 +557,41 @@ fn test_candidate_tool_verify_platform_attestation_table_driven() {
             }),
         ),
         (
+            "wrong member uid",
+            "uid",
+            Box::new(|v| {
+                v["member_ledger"][0]["uid"] = json!(1);
+            }),
+        ),
+        (
+            "wrong member gid",
+            "gid",
+            Box::new(|v| {
+                v["member_ledger"][0]["gid"] = json!(1);
+            }),
+        ),
+        (
+            "wrong member mtime",
+            "mtime",
+            Box::new(|v| {
+                v["member_ledger"][0]["mtime"] = json!(1);
+            }),
+        ),
+        (
+            "wrong member size",
+            "size",
+            Box::new(|v| {
+                v["member_ledger"][0]["size"] = json!(1);
+            }),
+        ),
+        (
+            "missing target identity",
+            "target",
+            Box::new(|v| {
+                v.as_object_mut().unwrap().remove("target");
+            }),
+        ),
+        (
             "target profile mismatch",
             "profile",
             Box::new(|v| {
@@ -613,12 +648,46 @@ fn test_candidate_tool_assemble_and_verify_index_table_driven() {
     let artifact_root = tmp_dir.path().join("artifacts");
     fs::create_dir_all(&artifact_root).unwrap();
 
+    let license_path = root.join("LICENSE");
+    let version_path = artifact_root.join("VERSION.json");
+    fs::write(&version_path, b"{\"version\":\"0.1.0\"}\n").unwrap();
     let linux_archive = artifact_root.join("luad-linux-x86_64.tar.gz");
     let macos_archive = artifact_root.join("luad-macos-aarch64.tar.gz");
-    fs::write(&linux_archive, b"archive-linux-bytes").unwrap();
-    fs::write(&macos_archive, b"archive-macos-bytes").unwrap();
+    let linux_ledger_path = artifact_root.join("ledger-linux-x86_64.json");
+    let macos_ledger_path = artifact_root.join("ledger-macos-aarch64.json");
+    let linux_bin = artifact_root.join("luad-linux-x86_64");
+    let macos_bin = artifact_root.join("luad-macos-aarch64");
+    fs::write(&linux_bin, b"#!/bin/sh\necho linux\n").unwrap();
+    fs::write(&macos_bin, b"#!/bin/sh\necho macos\n").unwrap();
 
-    let mk_att = |plat: &str, triple: &str, bin_sha: &str, arc_name: &str, arc_bytes: &[u8]| {
+    let pack = |binary: &Path, archive: &Path, ledger: &Path| {
+        let output = run_tool(
+            &[
+                "pack",
+                "--spec",
+                spec_path.to_str().unwrap(),
+                "--binary",
+                binary.to_str().unwrap(),
+                "--license",
+                license_path.to_str().unwrap(),
+                "--version-info",
+                version_path.to_str().unwrap(),
+                "--out-archive",
+                archive.to_str().unwrap(),
+                "--out-ledger",
+                ledger.to_str().unwrap(),
+            ],
+            &[],
+        )
+        .expect("pack platform archive");
+        assert!(output.status.success(), "platform pack must succeed");
+    };
+    pack(&linux_bin, &linux_archive, &linux_ledger_path);
+    pack(&macos_bin, &macos_archive, &macos_ledger_path);
+
+    let mk_att = |plat: &str, triple: &str, binary: &Path, archive: &Path, ledger: &Path| {
+        let archive_bytes = fs::read(archive).unwrap();
+        let ledger: Value = serde_json::from_slice(&fs::read(ledger).unwrap()).unwrap();
         json!({
             "schema_version": 1, "candidate_id": "lua51-lnum32-0.1.0-rc1", "spec_hash": spec_hash,
             "git_commit": "1111111111111111111111111111111111111111", "dirty": false,
@@ -627,29 +696,37 @@ fn test_candidate_tool_assemble_and_verify_index_table_driven() {
             "arch": if plat == "linux-x86_64" { "x86_64" } else { "aarch64" },
             "target_triple": triple, "toolchain": "rustc 1.97.1",
             "build_host": if plat == "linux-x86_64" { "github-actions:ubuntu-latest" } else { "github-actions:macos-latest" },
-            "archive_path": arc_name, "archive_sha256": sha256_digest(arc_bytes),
-            "binary_sha256": bin_sha,
-            "member_ledger": [{
-                "path": "bin/luad", "mode": 493, "uid": 0, "gid": 0,
-                "mtime": 0, "size": 1, "sha256": bin_sha
-            }],
-            "prerequisite_results": [], "aggregate_check_success": true
+            "archive_path": archive.file_name().unwrap().to_str().unwrap(),
+            "archive_sha256": sha256_digest(&archive_bytes),
+            "binary_sha256": sha256_digest(&fs::read(binary).unwrap()),
+            "member_ledger": ledger["members"],
+            "target": {
+                "dialect": "lua5.1", "patch_version": "Lua 5.1.5",
+                "profile": "lua5.1-lnum32", "layout": "int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4"
+            },
+            "prerequisite_results": [
+                mock_prereq_res("gate-authority-lua51-openwrt-lnum32", "085612ef3c9d702ce6bab8a245156803896c37c924a3cb693c54cc54eb29e3a9", "1000000000000000000000000000000000000000000000000000000000000001", 5, 0, 0, &[]),
+                mock_prereq_res("gate-machine-contract", "07879b1833a07ec714ba353dd6780ebdf34f4ed6f02c3c32f5ac52e1a0413e05", "1000000000000000000000000000000000000000000000000000000000000002", 21, 0, 0, &[]),
+                mock_prereq_res("gate-public-disasm-lua51", "5cbf5a737622966254c1218ae08ff3d4536131000350694cbca9bf2e9eed70d8", "1000000000000000000000000000000000000000000000000000000000000003", 12, 0, 0, &[]),
+                mock_prereq_res("gate-retrieval-contract-lua51", "b053a74ebde9f866a16d59687f9c5e20583706b4c79e1ec989999754a9d8663a", "1000000000000000000000000000000000000000000000000000000000000004", 9, 0, 0, &[])
+            ],
+            "aggregate_check_success": true
         })
     };
 
     let linux_att = mk_att(
         "linux-x86_64",
         "x86_64-unknown-linux-gnu",
-        "1111111111111111111111111111111111111111111111111111111111111111",
-        "luad-linux-x86_64.tar.gz",
-        b"archive-linux-bytes",
+        &linux_bin,
+        &linux_archive,
+        &linux_ledger_path,
     );
     let macos_att = mk_att(
         "macos-aarch64",
         "aarch64-apple-darwin",
-        "2222222222222222222222222222222222222222222222222222222222222222",
-        "luad-macos-aarch64.tar.gz",
-        b"archive-macos-bytes",
+        &macos_bin,
+        &macos_archive,
+        &macos_ledger_path,
     );
 
     let linux_att_path = artifact_root.join("attestation-linux-x86_64.json");
@@ -664,6 +741,8 @@ fn test_candidate_tool_assemble_and_verify_index_table_driven() {
         serde_json::to_vec_pretty(&macos_att).unwrap(),
     )
     .unwrap();
+    let linux_att_bytes = fs::read(&linux_att_path).unwrap();
+    let macos_att_bytes = fs::read(&macos_att_path).unwrap();
 
     let index_path = artifact_root.join("candidate-index.json");
 
@@ -765,6 +844,31 @@ fn test_candidate_tool_assemble_and_verify_index_table_driven() {
             }),
         ),
         (
+            "tampered sidecar hash in index",
+            "attestation sha-256",
+            Box::new(|v, _| {
+                v["artifacts"][0]["attestation_sha256"] =
+                    json!("0000000000000000000000000000000000000000000000000000000000000000");
+            }),
+        ),
+        (
+            "tampered sidecar contents",
+            "attestation sha-256",
+            Box::new(|_, root| {
+                let path = root.join("attestation-linux-x86_64.json");
+                let mut bytes = fs::read(&path).unwrap();
+                bytes.extend_from_slice(b"\n");
+                fs::write(path, bytes).unwrap();
+            }),
+        ),
+        (
+            "tampered prerequisite summary in index",
+            "sidecar",
+            Box::new(|v, _| {
+                v["artifacts"][0]["prerequisite_results"][0]["passed_count"] = json!(999);
+            }),
+        ),
+        (
             "tampered archive hash in index",
             "archive",
             Box::new(|v, _| {
@@ -775,6 +879,8 @@ fn test_candidate_tool_assemble_and_verify_index_table_driven() {
     ];
 
     for (name, diag, mutate) in mutations {
+        fs::write(&linux_att_path, &linux_att_bytes).unwrap();
+        fs::write(&macos_att_path, &macos_att_bytes).unwrap();
         let mut idx = base_index.clone();
         mutate(&mut idx, &artifact_root);
         let mut_index_path = artifact_root.join("mut-index.json");
