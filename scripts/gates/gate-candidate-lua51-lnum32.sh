@@ -22,7 +22,7 @@ cargo build -p luad-oracle --bin luad-candidate
 export LUAD_CANDIDATE_TOOL="${ROOT_DIR}/target/debug/luad-candidate"
 
 # CI supplies the already extracted upload. Local runs create the same package shape.
-if [[ ! -v LUAD_CANDIDATE_BIN ]]; then
+if [[ -z "${LUAD_CANDIDATE_BIN:-}" ]]; then
   cargo build --release -p luad-cli --bin luad
   PACKAGE_DIR="$(mktemp -d)"
   printf '{"version":"0.1.0","source_commit":"%s"}\n' "$(git rev-parse HEAD)" \
