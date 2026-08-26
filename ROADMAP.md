@@ -22,22 +22,17 @@ an exact release, profile, layout, public surface, and evidence manifest.
 
 ## Delivery sequence
 
-### 1. Qualify the stable LNUM32 release
+### 1. Validate and promote the stable LNUM32 release
 
-Qualification proceeds through three independently reviewable checkpoints:
+Qualification proceeds through two independently reviewable checkpoints:
 
-1. Build a release candidate for macOS arm64 and Linux x86_64 with frozen schema majors,
-   exact source and toolchain identity, complete prerequisite closure, per-platform
-   attestations, and a generated machine-readable evidence index. Validate the archived
-   CLI with redistributable fixtures and provide separate real-firmware instructions.
-   The target remains experimental at this checkpoint.
-2. Exercise those exact candidate binaries in an uncoached investigation against a
+1. Exercise the exact candidate binaries in an uncoached investigation against a
    different firmware version or objective and in a separate outside-human trial on
    different-vendor firmware. Both trials must complete the agreed public workflows
    without a reproducible correctness defect in the claimed surface. Such defects
    become minimized public regressions before qualification continues; usability
    findings are classified separately and block only when they prevent completion.
-3. Promote only `lua5.1-lnum32` from the accepted evidence bundle and customer records,
+2. Promote only `lua5.1-lnum32` from the accepted evidence bundle and customer records,
    publish the verified artifacts, and keep the base `lua5.1` dialect experimental.
 
 Exit outcome: a human or AI agent can complete the reference firmware workflows with
@@ -53,7 +48,7 @@ remain external.
 ## Dependency order
 
 ```text
-reproducible LNUM32 release candidate
+accepted LNUM32 release candidate
   -> independent customer transfer
   -> target-specific promotion
   -> independently qualified additional targets
