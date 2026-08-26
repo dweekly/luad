@@ -345,7 +345,9 @@ fn lift_instruction_51(
             operands.push(TypedOperand::Register { index: raw.b as u8 });
             reads.push(EffectTarget::Register { index: raw.b as u8 });
             parse_rk(raw.is_c_k(), raw.c_index_k(), &mut reads, &mut operands);
-            writes.push(EffectTarget::Register { index: raw.a + 1 });
+            writes.push(EffectTarget::Register {
+                index: raw.a.saturating_add(1),
+            });
             writes.push(EffectTarget::Register { index: raw.a });
             metamethods.push("__index".to_string());
             explanation = format!(
@@ -461,14 +463,14 @@ fn lift_instruction_51(
             reads.push(EffectTarget::Register { index: raw.a });
             if raw.b > 1 {
                 reads.push(EffectTarget::RegisterRange {
-                    start: raw.a + 1,
-                    end: raw.a + raw.b as u8 - 1,
+                    start: raw.a.saturating_add(1),
+                    end: raw.a.saturating_add(raw.b as u8).saturating_sub(1),
                 });
             }
             if raw.c > 1 {
                 writes.push(EffectTarget::RegisterRange {
                     start: raw.a,
-                    end: raw.a + raw.c as u8 - 2,
+                    end: raw.a.saturating_add(raw.c as u8).saturating_sub(2),
                 });
             }
             metamethods.push("__call".to_string());
@@ -484,8 +486,8 @@ fn lift_instruction_51(
             reads.push(EffectTarget::Register { index: raw.a });
             if raw.b > 1 {
                 reads.push(EffectTarget::RegisterRange {
-                    start: raw.a + 1,
-                    end: raw.a + raw.b as u8 - 1,
+                    start: raw.a.saturating_add(1),
+                    end: raw.a.saturating_add(raw.b as u8).saturating_sub(1),
                 });
             }
             metamethods.push("__call".to_string());
@@ -501,7 +503,7 @@ fn lift_instruction_51(
             if raw.b > 1 {
                 reads.push(EffectTarget::RegisterRange {
                     start: raw.a,
-                    end: raw.a + raw.b as u8 - 2,
+                    end: raw.a.saturating_add(raw.b as u8).saturating_sub(2),
                 });
             }
             explanation = format!("Return values starting from R({})", raw.a);
@@ -518,10 +520,12 @@ fn lift_instruction_51(
             jump_target = Some(target);
             reads.push(EffectTarget::RegisterRange {
                 start: raw.a,
-                end: raw.a + 2,
+                end: raw.a.saturating_add(2),
             });
             writes.push(EffectTarget::Register { index: raw.a });
-            writes.push(EffectTarget::Register { index: raw.a + 3 });
+            writes.push(EffectTarget::Register {
+                index: raw.a.saturating_add(3),
+            });
             explanation = format!("Numeric for-loop step; if not limit, jump to PC {target}");
             citations.push("lua-5.1.5:src/lvm.c:1350".to_string());
         }
@@ -536,7 +540,7 @@ fn lift_instruction_51(
             jump_target = Some(target);
             reads.push(EffectTarget::RegisterRange {
                 start: raw.a,
-                end: raw.a + 2,
+                end: raw.a.saturating_add(2),
             });
             writes.push(EffectTarget::Register { index: raw.a });
             explanation = format!("Prepare numeric for-loop and jump to PC {target}");
@@ -550,11 +554,11 @@ fn lift_instruction_51(
             });
             reads.push(EffectTarget::RegisterRange {
                 start: raw.a,
-                end: raw.a + 2,
+                end: raw.a.saturating_add(2),
             });
             writes.push(EffectTarget::RegisterRange {
-                start: raw.a + 3,
-                end: raw.a + 2 + raw.c as u8,
+                start: raw.a.saturating_add(3),
+                end: raw.a.saturating_add(2).saturating_add(raw.c as u8),
             });
             implicit_effects.push(ImplicitEffect::ConditionalSkip {
                 skip_target_pc: pc + 2,
@@ -573,8 +577,10 @@ fn lift_instruction_51(
                 is_variable: false,
             });
             reads.push(EffectTarget::RegisterRange {
-                start: raw.a + 1,
-                end: raw.a + (if raw.b == 0 { 1 } else { raw.b as u8 }),
+                start: raw.a.saturating_add(1),
+                end: raw
+                    .a
+                    .saturating_add(if raw.b == 0 { 1 } else { raw.b as u8 }),
             });
             writes.push(EffectTarget::Register { index: raw.a });
             if raw.c == 0 && pc + 1 < proto.instructions.len() {
@@ -646,7 +652,7 @@ fn lift_instruction_51(
             if raw.b > 1 {
                 writes.push(EffectTarget::RegisterRange {
                     start: raw.a,
-                    end: raw.a + raw.b as u8 - 2,
+                    end: raw.a.saturating_add(raw.b as u8).saturating_sub(2),
                 });
             }
             explanation = format!("Load vararg into R({})", raw.a);

@@ -186,10 +186,10 @@ fn lift_instruction_54(
         }
         Opcode54::Loadnil => {
             citations.push("lua-5.4.8:src/lvm.c:1146".to_string());
-            let end_reg = raw.a + raw.b;
+            let end_reg = raw.a.saturating_add(raw.b);
             operands.push(TypedOperand::Register { index: raw.a });
             operands.push(TypedOperand::Count {
-                value: (raw.b + 1) as usize,
+                value: raw.b as usize + 1,
                 is_variable: false,
             });
             writes.push(EffectTarget::RegisterRange {
@@ -478,14 +478,16 @@ fn lift_instruction_54(
             };
             reads.push(EffectTarget::Register { index: raw.b });
             writes.push(EffectTarget::Register { index: raw.a });
-            writes.push(EffectTarget::Register { index: raw.a + 1 });
+            writes.push(EffectTarget::Register {
+                index: raw.a.saturating_add(1),
+            });
             metamethod_fallbacks.push("__index".to_string());
             explanation = format!(
                 "R({}) := R({})[{}]; R({}) := R({}) (method lookup)",
                 raw.a,
                 raw.b,
                 key_str,
-                raw.a + 1,
+                raw.a.saturating_add(1),
                 raw.b
             );
         }
@@ -739,17 +741,19 @@ fn lift_instruction_54(
             reads.push(EffectTarget::Register { index: raw.a });
             if num_args > 1 {
                 reads.push(EffectTarget::RegisterRange {
-                    start: raw.a + 1,
+                    start: raw.a.saturating_add(1),
                     end: raw.a.saturating_add(num_args).saturating_sub(1),
                 });
             } else if num_args == 0 {
-                reads.push(EffectTarget::RegisterRangeToTop { start: raw.a + 1 });
+                reads.push(EffectTarget::RegisterRangeToTop {
+                    start: raw.a.saturating_add(1),
+                });
             }
 
             if num_results > 1 {
                 writes.push(EffectTarget::RegisterRange {
                     start: raw.a,
-                    end: raw.a + num_results - 2,
+                    end: raw.a.saturating_add(num_results).saturating_sub(2),
                 });
             } else if num_results == 0 {
                 writes.push(EffectTarget::RegisterRangeToTop { start: raw.a });
@@ -802,7 +806,7 @@ fn lift_instruction_54(
             if num_ret > 1 {
                 reads.push(EffectTarget::RegisterRange {
                     start: raw.a,
-                    end: raw.a + num_ret - 2,
+                    end: raw.a.saturating_add(num_ret).saturating_sub(2),
                 });
             } else if num_ret == 0 {
                 reads.push(EffectTarget::RegisterRangeToTop { start: raw.a });
@@ -882,8 +886,8 @@ fn lift_instruction_54(
                 "Call iterator function R({}): return {} results into R({})..R({})",
                 raw.a,
                 raw.c,
-                raw.a + 3,
-                raw.a + 2 + raw.c
+                raw.a.saturating_add(3),
+                raw.a.saturating_add(2).saturating_add(raw.c)
             );
         }
         Opcode54::Tforloop => {

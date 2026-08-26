@@ -31,6 +31,11 @@ All notable changes will be documented here. The project has not yet made a prod
 - Bounded debug-table upvalue-name preallocation in the Lua 5.2, 5.3, and 5.5 parsers;
   hostile declared counts now reach ordinary bounded rejection instead of requesting the
   declared allocation.
+- Bounded register-effect arithmetic in the Lua 5.1 and Lua 5.4 semantic lifters. A chunk
+  encoding a maximal register operand made derived effect ranges such as `R(A)..R(A+3)`
+  overflow their `u8` index and panic; those derivations now saturate, so lifting a
+  hostile chunk yields bounded effect facts beside the preserved raw operands instead of
+  aborting. The chunk remains invalid and validation still reports it.
 
 ### Binary parsing
 
