@@ -22,39 +22,28 @@ an exact release, profile, layout, public surface, and evidence manifest.
 
 ## Delivery sequence
 
-### 1. Freeze retrieval and machine contracts
+### 1. Qualify the stable LNUM32 release
 
-Queries will cover callee paths and lookup labels, unresolved reasons, origin shapes,
-call relations, interpretation identity, and prototype content identity. Every
-predicate applies its complete operand or fails. Capture xrefs will remain tied to the
-physical closure site when one child prototype is instantiated more than once with
-different binders. Tested recipes will cover corpus constant search, capture traversal,
-call-site enumeration, argument-origin triage, caller navigation, and cross-version
-comparison. A dedicated constant-search verb is eligible only if it materially improves
-the tested export/query recipe without creating parallel semantics.
+Qualification proceeds through three independently reviewable checkpoints:
 
-Machine compatibility rules will define whether extensible analysis vocabularies are
-open within a schema major, and command documentation will state verdict-to-exit-code
-behavior in one table. The nonfunctional `compile` placeholder will leave the public
-surface unless its complete trusted-compiler contract is independently implemented.
-
-Exit outcome: a human or AI consumer can retrieve every release-critical fact without
-reimplementing bytecode decoding or relying on undocumented enum and process behavior.
-
-### 2. Qualify the stable LNUM32 release
-
-The release candidate will freeze the schema major, publish exact target artifacts,
-derive the `lua5.1-lnum32` support tier from the verified release evidence bundle, and
-keep the base `lua5.1` dialect experimental. It will undergo an uncoached investigation
-against a different firmware version or objective and a separate outside-human trial on
-different vendor firmware. Reproducible correctness defects become minimized public
-regressions. Release binaries and a short public-firmware quickstart will cover macOS
-arm64 and Linux x86_64.
+1. Build a release candidate for macOS arm64 and Linux x86_64 with frozen schema majors,
+   exact source and toolchain identity, complete prerequisite closure, per-platform
+   attestations, and a generated machine-readable evidence index. Validate the archived
+   CLI with redistributable fixtures and provide separate real-firmware instructions.
+   The target remains experimental at this checkpoint.
+2. Exercise those exact candidate binaries in an uncoached investigation against a
+   different firmware version or objective and in a separate outside-human trial on
+   different-vendor firmware. Both trials must complete the agreed public workflows
+   without a reproducible correctness defect in the claimed surface. Such defects
+   become minimized public regressions before qualification continues; usability
+   findings are classified separately and block only when they prevent completion.
+3. Promote only `lua5.1-lnum32` from the accepted evidence bundle and customer records,
+   publish the verified artifacts, and keep the base `lua5.1` dialect experimental.
 
 Exit outcome: a human or AI agent can complete the reference firmware workflows with
 the supported CLI and a thin external judgment layer.
 
-### 3. Qualify additional targets independently
+### 2. Qualify additional targets independently
 
 Stock Lua layouts, Lua 5.2, 5.3, 5.4, 5.5, LuaJIT, and vendor mappings advance one exact
 target at a time. Vendor qualification may consume a provenance-bound mapping recovered
@@ -64,19 +53,19 @@ remain external.
 ## Dependency order
 
 ```text
-retrieval and machine-contract freeze
-  -> stable LNUM32 release evidence
+reproducible LNUM32 release candidate
+  -> independent customer transfer
+  -> target-specific promotion
   -> independently qualified additional targets
 ```
 
 ## Customer checkpoints
 
-- Before schema freeze: review callees, origins, call relations, capture xrefs, and
-  queries as one public area, then exercise every retrieval recipe against
-  representative firmware.
-- Before release: investigate a different firmware version or objective without
-  implementation guidance and obtain one outside-human trial on different vendor
-  firmware.
+- Before promotion: investigate a different firmware version or objective without
+  implementation guidance and obtain one outside-human trial on different-vendor
+  firmware. Each record identifies the exact candidate hashes, independent user and
+  firmware context, commands attempted, outcomes, and minimized public regressions;
+  private firmware bytes remain outside the repository.
 
 Silent incorrect answers interrupt the sequence. Friction routes to the nearest factual
 matrix. A private or externally downloaded corpus supplements but never replaces
