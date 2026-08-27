@@ -313,6 +313,10 @@ pub struct ExportArgs {
     #[arg(long)]
     pub max_facts_per_file: Option<usize>,
 
+    /// Comma-separated counted fact families to emit.
+    #[arg(long)]
+    pub facts: Option<String>,
+
     /// Explicit dialect override.
     #[arg(short, long)]
     pub dialect: Option<String>,

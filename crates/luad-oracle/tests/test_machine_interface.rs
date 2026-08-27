@@ -583,6 +583,7 @@ fn test_jsonl_streaming_batch_export_deterministic_and_recursive() {
     let start: ExportStartRecord = serde_json::from_str(lines[0]).expect("export_start record");
     assert_eq!(start.record_type, "export_start");
     assert_eq!(start.total_files, 2);
+    assert_eq!(start.fact_families, None);
 
     // Last line must be export_end
     let end: ExportEndRecord =

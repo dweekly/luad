@@ -154,6 +154,8 @@ pub struct ExportStartRecord {
     pub schema_version: u32,
     pub tool_version: String,
     pub total_files: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fact_families: Option<Vec<String>>,
 }
 
 /// JSONL batch export end record.

@@ -163,6 +163,10 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Machine interface
 
+- Recursive `export` now accepts a fail-closed `--facts` list for the nine existing
+  counted fact families. Explicit selections are recorded in stream metadata, compose
+  with per-file fact bounds and terminal counts, and avoid constructing unrelated
+  independent analyses; omitted selection preserves the existing all-family stream.
 - Batch export now distinguishes succeeded, skipped, and failed inputs, qualifies every
   non-success with its path, closes terminal counts, and returns default success when a
   mixed firmware tree yields at least one complete result; `--strict` retains all-or-none

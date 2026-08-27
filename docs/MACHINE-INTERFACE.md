@@ -417,6 +417,13 @@ Batch exports firmware artifacts in streaming JSONL format.
 emitted per input file while preserving stream framing, diagnostics, and per-file
 truncation metadata.
 
+`--facts FAMILY,...` selects a non-empty subset of those nine counted families. Names
+are exact and may appear only once; an unknown, duplicate, or empty name is a usage
+error with empty stdout. Control records and diagnostics are always emitted. Omitting
+the option preserves the default all-family stream. When selection is explicit,
+`export_start.fact_families` records the canonical family order regardless of argument
+order; the field is absent from an unfiltered export.
+
 Every data record has a required `context` object. Successful facts carry
 `input_identity` and `interpretation`; parse-failure diagnostics carry identity with a
 null interpretation; read-failure diagnostics carry null identity and interpretation.
@@ -452,6 +459,10 @@ input while preserving control records (`export_start`, `file_start`,
 `instruction_count` and `export_end.total_instructions` count emitted
 `instruction` records, so they can be lower than the number of available
 instructions when a fact bound truncates the stream.
+
+When `--facts` is present, availability, emission, truncation, and instruction totals
+are relative to the selected families, and the per-file bound is applied after
+selection. Analyses for unselected independent families are not eagerly constructed.
 
 ## Capability evidence
 
