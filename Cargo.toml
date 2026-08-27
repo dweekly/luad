@@ -18,7 +18,7 @@ edition = "2021"
 rust-version = "1.97.1"
 authors = ["luad contributors"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/dew/luad"
+repository = "https://github.com/dweekly/luad"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

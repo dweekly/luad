@@ -12,6 +12,17 @@ All notable changes will be documented here. The project has not yet made a prod
   not promote a target; existing derived-analysis surfaces remain experimental unless a
   later public-contract qualification explicitly includes them.
 
+### Release packaging
+
+- Added a clean-revision, same-host packaging dry run for the exact `linux-x86_64` and
+  `macos-aarch64` release names. It produces a deterministic ustar/gzip archive, exact
+  member ledger, `SHA256SUMS`, embedded version/source/platform identity, and installation
+  transcript; independently verifies canonical bytes and source inputs; rejects archive,
+  checksum, membership, path, mode, or identity corruption; and smokes the extracted
+  binary without promoting a Lua target.
+- Shipped the Apache License 2.0 text required by the existing `MIT OR Apache-2.0`
+  workspace declaration and corrected the canonical repository URL to `dweekly/luad`.
+
 ### Deterministic scalar rendering
 
 - Added one core rendering authority for the exact Lua 5.1.5 and Lua 5.4.8 targets,
