@@ -2,6 +2,8 @@
 
 **Status:** Living product requirements
 
+**Fresh as of:** 2026-08-27
+
 **Product roadmap:** [ROADMAP.md](ROADMAP.md)
 
 **Active sprint:** [docs/NEXT-SPRINT.md](docs/NEXT-SPRINT.md)
@@ -122,14 +124,16 @@ Common deficiencies include:
 The primary product should be a self-documenting CLI rather than a GUI or TUI. The CLI is the common denominator for both human researchers and AI agents; it is composable, automatable, testable, remotely usable, and capable of producing durable artifacts. A stable JSON interface is as important as the human text interface.
 
 Development proceeds through customer-visible, public-boundary vertical slices rather
-than broad parser presence. The first release path qualifies the exact
-OpenWrt-derived Lua 5.1 LNUM32 target, stabilizes firmware-tree machine output, and adds
-only the deterministic call and value facts repeatedly required by external consumers.
+than broad parser presence. The first promotion path qualifies the exact
+OpenWrt-derived Lua 5.1 LNUM32 target and the firmware-tree machine contract. Version
+1.0 then closes the same public contract independently for the exact stock PUC Lua
+5.1.5 64-bit layout and the final PUC Lua 5.4.9 release. No target inherits support
+from a nearby version, profile, or layout.
 
-Additional dialects follow only after that release boundary. Dynamic tracing,
-assembly, SSA, decompilation, persistent research state, and security judgment remain
-separate layers over the factual substrate. The roadmap defines product-level sequence;
-the active sprint defines the sole executable checkpoint.
+Dynamic tracing, assembly, SSA, decompilation, persistent research state, and security
+judgment remain separate layers over the factual substrate. The roadmap defines the
+dependency-ordered release train; the active sprint defines the sole executable
+checkpoint.
 
 ## 2. Product definition
 
@@ -201,8 +205,12 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 
 - Qualify the exact OpenWrt-derived Lua 5.1.5 LNUM32 profile and its 32-bit serialized
   string layout through a public, reproducible compiler authority.
-- Preserve experimental parsing surfaces for other dialects without promoting them
-  through the version-1 claim.
+- Qualify stock PUC Lua 5.1.5 independently for the pinned little-endian,
+  non-integral-double, 64-bit `size_t` layout.
+- Qualify stock PUC Lua 5.4.9 independently for the standard 64-bit little-endian
+  layout emitted by the pinned official compilers.
+- Preserve parsing surfaces for all other dialects, releases, profiles, and layouts as
+  experimental without promoting them through the version-1 claim.
 - Detect and report the exact dialect, profile, layout, and selection evidence.
 - Produce faithful text and versioned JSON representations.
 - Decode all instructions and semantically type all operands.
@@ -224,7 +232,7 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 
 ### 3.2 Post-version-1 goals
 
-- Independent qualification of stock Lua 5.1 and other exact stock Lua releases.
+- Independent qualification of additional stock Lua releases and Lua 5.1 layouts.
 - LuaJIT 2.0/2.1 and significant maintained forks as separate dialect modules.
 - Configurable vendor chunk profiles and opcode mappings.
 - Richer data flow, liveness, reaching definitions, backward slicing, and SSA.
@@ -937,7 +945,8 @@ instead of reproducing their internal semantic suites.
 
 ### 13.1 First release candidate
 
-The first release candidate requires:
+The first promotable release candidate qualifies the exact LNUM32 profile without
+implying stock Lua 5.1 support. It requires:
 
 - a public, reproducible OpenWrt-derived Lua 5.1.5 LNUM32 compiler authority;
 - an exact release manifest for the advertised embedded Lua 5.1 profile and layout;
@@ -954,7 +963,8 @@ The first release candidate requires:
 
 ### 13.2 Version 1.0
 
-Version 1.0 additionally requires:
+Version 1.0 promotes the exact LNUM32, stock Lua 5.1.5 64-bit, and stock Lua 5.4.9
+targets named by the roadmap. It additionally requires:
 
 - a stable CLI exit-code contract and JSON schema major;
 - reproducible packages for every advertised platform;
@@ -964,8 +974,9 @@ Version 1.0 additionally requires:
 - no open P0 correctness or security defect;
 - an explicit compatibility policy for exact dialect releases and profiles.
 
-Version 1.0 does not require every stock Lua release. Breadth must not delay or
-dilute exact evidence for the support scope actually advertised.
+Version 1.0 does not require Lua 5.2, 5.3, 5.5, LuaJIT, Luau, another Lua 5.1 layout,
+or another vendor profile. Breadth must not delay or dilute exact evidence for the
+support scope actually advertised.
 
 ## 14. Success metrics
 
@@ -1038,10 +1049,12 @@ Adoption is secondary to correctness, but useful signals include:
 - The primary deliverable is a CLI, not a GUI or TUI.
 - Versioned JSON/JSONL is the initial stable programmatic interface.
 - Static analysis never executes an input chunk.
-- The first release candidate targets the exact OpenWrt-derived Lua 5.1.5 LNUM32
-  profile and firmware-tree workflow.
-- Lua 5.2, 5.3, 5.4, and 5.5 remain experimental until independently promoted; version
-  1.0 does not require artificial stock-version breadth.
+- The first promotable release candidate targets the exact OpenWrt-derived Lua 5.1.5
+  LNUM32 profile and firmware-tree workflow.
+- Version 1.0 additionally qualifies the exact stock PUC Lua 5.1.5 64-bit layout and
+  PUC Lua 5.4.9 target named by the roadmap.
+- Lua 5.2, 5.3, 5.5, additional Lua 5.1 layouts, and every other vendor profile remain
+  experimental until independently promoted.
 - LuaJIT and Luau require separate dialect families and an explicit post-release prioritization decision.
 - Decompilation is not part of version 1.
 - Losslessness, provenance, validation, and determinism are release requirements rather than optional polish.
@@ -1052,9 +1065,10 @@ Adoption is secondary to correctness, but useful signals include:
 - Sink, taint, safety, authentication, reachability, and exploitability classifications
   remain external policy.
 
-### 16.2 Decisions required before expanding the release scope
+### 16.2 Decisions required before expanding the post-1.0 scope
 
-1. Does the next dialect investment optimize for a stock-Lua correctness reference or prevalent reverse-engineering ecosystems?
+1. Does the next dialect investment optimize for another stock-Lua correctness
+   reference or a prevalent reverse-engineering ecosystem such as LuaJIT?
 2. Which additional target platforms need release binaries and scheduled compatibility runners?
 3. Which safety-limit values should become stable version-1 defaults?
 4. Which public schemas can freeze at version 1, and which dialect-specific records still require tagged extension points?
@@ -1105,6 +1119,8 @@ present invariants and rationale rather than earlier implementations.
 The following primary or project-owned sources informed this PRD and should remain starting points for implementation research:
 
 - [Lua version history and compatibility policy](https://www.lua.org/versions.html)
+- [Lua 5.4.9 source index](https://www.lua.org/source/5.4/)
+- [Lua 5.4.8-to-5.4.9 source diff](https://www.lua.org/work/diffs-lua-5.4.8-lua-5.4.9.html)
 - [Lua 5.5 source index](https://www.lua.org/source/5.5/)
 - [Lua 5.5 binary loader](https://www.lua.org/source/5.5/lundump.c.html)
 - [Lua 5.5 instruction formats](https://www.lua.org/source/5.5/lopcodes.h.html)

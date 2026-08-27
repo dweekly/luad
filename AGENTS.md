@@ -46,6 +46,9 @@ inference-heavy analysis unless the active sprint explicitly owns them.
 
 ## Verification
 
+Run GitHub CLI (`gh`) operations outside the sandbox. The sandbox cannot access the
+macOS keyring and may incorrectly report that the active GitHub token is invalid.
+
 The implementation agent writes the bounded production change and ordinary tests in one
 session, then stops after a reviewable candidate diff. The steward runs the narrowest
 relevant focused test, any named gate, and one aggregate check from the clean candidate.

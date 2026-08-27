@@ -4,6 +4,8 @@ Status: current product requirements for the embedded-firmware use case. This do
 does not define implementation order; the [product roadmap](../ROADMAP.md) owns
 direction and the [active sprint](NEXT-SPRINT.md) owns exact gates and sequencing.
 
+Fresh as of: 2026-08-27.
+
 ## Reference use case
 
 The primary reference corpus is TP-Link Deco X55 V1.2 firmware 1.4.6, build 20250211.
@@ -28,30 +30,36 @@ origins, provable call relations, corpus search, and content identity.
 Vendor key material, credential hashes, and extracted secrets remain outside this
 repository. Examples use placeholders or safely bounded prefixes and hashes.
 
-## Current corpus sizing facts
+## Recorded corpus sizing baseline
 
-The current release-build export over the 260-file reference tree completes 252 bytecode
-files, explicitly skips eight source files, and emits one terminal result for every
-input. The 252 chunks contain 344,120 physical instructions, 6,058 prototypes, and
-38,862 physical `CALL` or `TAILCALL` sites.
+The last retained release-build export over the 260-file reference tree completed 252
+bytecode files, explicitly skipped eight source files, and emitted one terminal result
+for every input. The 252 chunks contained 344,120 physical instructions, 6,058
+prototypes, and 38,862 physical `CALL` or `TAILCALL` sites.
 
-The present callee analysis resolves 37,590 of 38,862 calls to a symbolic label or exact
-prototype. The remaining 1,272 calls report `open-register-window`; 1,220 of those have
-a callee-register definition already handled by the analysis, concentrated in
-`GETTABLE`, `GETGLOBAL`, `SELF`, `GETUPVAL`, and `MOVE`. Open vararg forwarding is
-therefore a callee-completeness defect rather than evidence that the target is dynamic.
+That pre-correction run resolved 37,590 of 38,862 calls to a symbolic label or exact
+prototype. The remaining 1,272 calls reported `open-register-window`; 1,220 had a
+callee-register definition already handled by the analysis, concentrated in
+`GETTABLE`, `GETGLOBAL`, `SELF`, `GETUPVAL`, and `MOVE`. This baseline established that
+open vararg forwarding was a callee-completeness defect rather than evidence that the
+target was dynamic.
 
-The present call graph contains 3,662 provable relations. Origin analysis reports 2,940
-`control-flow-conflict` values, including 89 sink arguments, and 2,394
-`unsupported-value` values. Constant-key table repacking is the dominant bounded shape
-inside the latter category. These are coverage measurements, not permission to infer
-taint, sink danger, or path feasibility.
+The same run contained 3,662 provable call relations. Origin analysis reported 2,940
+`control-flow-conflict` values, including 89 investigation-selected sink arguments, and
+2,394 `unsupported-value` values. Constant-key table repacking was the dominant bounded
+shape inside the latter category. These are historical coverage measurements, not
+permission to infer taint, sink danger, or path feasibility.
 
-A materialized all-facts JSONL stream is approximately 776 MB; instruction and xref
-records account for about 76% of it. Consumers commonly need only callee, origin,
-relation, and prototype facts. No current independently repeatable per-stage timing and
-peak-memory benchmark is recorded; PERF-008 requires that evidence before a performance
-claim can be promoted.
+Current `main` contains a focused open-window correction, but no retained full-corpus
+replay has replaced this baseline. The LNUM32 qualification milestone must pre-register
+its expected replay behavior, run the same input inventory, and publish the new counts
+without rewriting this older measurement as though it came from the new candidate.
+
+The baseline all-facts JSONL stream was approximately 776 MB; instruction and xref
+records accounted for about 76% of it. Consumers commonly need only callee, origin,
+relation, and prototype facts. No independently repeatable per-stage timing and
+peak-memory benchmark is currently retained; PERF-008 requires that evidence before a
+performance claim can be promoted.
 
 ## Research outcome
 
