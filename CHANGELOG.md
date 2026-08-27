@@ -64,11 +64,23 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Deterministic scalar rendering
 
-- Added one core rendering authority for the exact Lua 5.1.5 and Lua 5.4.8 targets,
-  covering canonical 64-bit integers, byte-exact escaping with a 64-input-byte preview
-  bound, round-tripping finite floats, signed zero, infinities, and payload-independent
-  NaN spelling. Typed resolved-constant previews and human disassembly now consume the
-  same rendering policy while raw scalar bytes remain available in machine facts.
+- Added one core rendering authority covering canonical 64-bit integers, byte-exact
+  escaping with a 64-input-byte preview bound, round-tripping finite floats, signed
+  zero, infinities, and payload-independent NaN spelling. Typed resolved-constant
+  previews, human disassembly, and the `origins` listing all consume the same policy
+  while raw scalar bytes remain available in machine facts.
+- Applied the authority on every dialect rather than only the exact Lua 5.1.5 and
+  Lua 5.4.8 targets. Rendering takes only the preserved value, so a constant now reads
+  the same whichever dialect produced it; previously an identical byte string printed
+  in full on Lua 5.2, 5.3, and 5.5 but bounded on the exact targets, and an identical
+  NaN printed as `NaN` on the former and `nan` on the latter.
+- Made a bounded string preview state its full input length, as
+  `"<64 bytes>..." (N bytes)`, so an elision is never confused with a constant whose
+  own last three bytes are `...`.
+- Extended `disasm --raw` to print untruncated string constants in the text listing.
+  Text output was otherwise lossy above the preview bound with no non-JSON recourse.
+- Replaced the `origins` text renderer's private literal formatter, which printed
+  floats as `float(<raw_hex>)` and strings unbounded, with the shared authority.
 
 ### Safety enforcement
 
