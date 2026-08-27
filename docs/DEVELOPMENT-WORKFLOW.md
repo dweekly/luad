@@ -198,10 +198,10 @@ presence or counts.
    diagnosed need.
 7. **Integrate.** Commit, push one pull request, obtain green CI, merge, push, and verify
    remote `main`.
-8. **Advance separately.** Before more implementation begins, replace the active
-   contract in a dedicated planning change and update indexed documentation whose
-   freshness trigger fired. Do not bundle the next public claim into the completed
-   implementation pull request.
+8. **Close, then advance separately.** Replace the accepted contract with the neutral
+   no-work checkpoint in the implementation pull request and update indexed
+   documentation whose freshness trigger fired. Select the next public claim later in
+   a dedicated planning change.
 
 An external review occurs between steps 5 and 6 only when a risk trigger in section 3
 applies. Its findings become one bounded correction list; review does not restart after
@@ -352,13 +352,14 @@ is a diagnostic for process imbalance, not a target.
 
 ## 12. Preservation, documentation, and escalation
 
-After acceptance, push and merge the reviewed work, push `main`, and run
-`scripts/verify-main-pushed.sh`. The completed implementation pull request retains its
-own claim. Before another implementation batch begins, replace `docs/NEXT-SPRINT.md`
-with one forward-looking contract in a dedicated planning change. Until that contract
-is merged, the sprint checkpoint authorizes no additional product work. Temporary work
-is not accepted evidence until its required artifacts are retained by CI, a pull
-request, or release storage.
+After local acceptance, replace `docs/NEXT-SPRINT.md` with its neutral no-work
+checkpoint in the same implementation pull request; do not put the next claim there.
+Then push and merge the reviewed work, push `main`, and run
+`scripts/verify-main-pushed.sh`. Before another implementation batch begins, replace
+the checkpoint with one forward-looking contract in a dedicated planning change. Until
+that contract is merged, the checkpoint authorizes no additional product work.
+Temporary work is not accepted evidence until its required artifacts are retained by
+CI, a pull request, or release storage.
 
 The root README indexes every maintained Markdown document with its purpose, freshness
 date, and revalidation or deletion trigger. Plans and roadmaps remain forward-looking.
