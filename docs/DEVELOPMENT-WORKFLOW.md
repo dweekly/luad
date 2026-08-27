@@ -13,13 +13,15 @@ Development uses two forward-looking plans:
 
 1. [`ROADMAP.md`](../ROADMAP.md) states product outcomes, dependencies, ordering, and
    release boundaries. It does not prescribe implementation details or model roles.
-2. [`NEXT-SPRINT.md`](NEXT-SPRINT.md) states the one active delivery contract. It names
-   the customer outcome, public boundary, non-goals, evidence, allowed paths, and stop
-   condition.
+2. [`NEXT-SPRINT.md`](NEXT-SPRINT.md) holds either the one active delivery contract or
+   an explicit checkpoint that authorizes no implementation while the next contract is
+   selected. An active contract names the customer outcome, public boundary, non-goals,
+   evidence, allowed paths, and stop condition.
 
-There is one active sprint contract. Acceptance replaces it with the next contract;
-completed work belongs in code, tests, release evidence, `CHANGELOG.md`, pull requests,
-and commits.
+There is at most one active sprint contract. Acceptance removes the completed claim;
+the next contract is selected separately before more implementation begins. Completed
+work belongs in code, tests, release evidence, `CHANGELOG.md`, pull requests, and
+commits.
 
 A sprint covers one useful workflow or one exhaustive semantic family. All variants
 governed by the same authority and algorithm belong in one table-driven batch. Fields,
@@ -127,8 +129,8 @@ reproducible correctness failure becomes a minimized public regression.
 
 ## 4. Sprint contract
 
-`docs/NEXT-SPRINT.md` stays short enough to review as one decision. A product-lane
-contract contains:
+`docs/NEXT-SPRINT.md` stays short enough to review as one decision. When a product lane
+is active, its contract contains:
 
 1. **Outcome** — the concrete researcher question or workflow enabled.
 2. **Public claim** — observable behavior, including command or library boundary.
@@ -196,8 +198,10 @@ presence or counts.
    diagnosed need.
 7. **Integrate.** Commit, push one pull request, obtain green CI, merge, push, and verify
    remote `main`.
-8. **Advance.** Replace the active contract and update indexed documentation whose
-   freshness trigger fired.
+8. **Advance separately.** Before more implementation begins, replace the active
+   contract in a dedicated planning change and update indexed documentation whose
+   freshness trigger fired. Do not bundle the next public claim into the completed
+   implementation pull request.
 
 An external review occurs between steps 5 and 6 only when a risk trigger in section 3
 applies. Its findings become one bounded correction list; review does not restart after
@@ -221,6 +225,12 @@ Qualification adds only the separation required by the release claim:
 
 Release closure proves identity, completeness, and authorized promotion. It references
 accepted prerequisites rather than reimplementing their comparators.
+
+Routine pull-request CI runs the Linux and macOS contributor checks plus the bounded
+hostile-input fuzz smoke suite. Candidate packaging, platform attestations, canonical
+qualification gates, and the evidence index run only when the steward explicitly
+dispatches the `Candidate Qualification` workflow for a qualification or release
+decision. A product pull request does not produce a release candidate implicitly.
 
 ## 8. Customer cadence
 
@@ -342,12 +352,13 @@ is a diagnostic for process imbalance, not a target.
 
 ## 12. Preservation, documentation, and escalation
 
-After local acceptance, replace `docs/NEXT-SPRINT.md` with the next forward-looking
-batch on the same candidate branch before opening its final pull request. The pull
-request and changelog retain the completed claim; `main` never needs a separate cleanup
-change for a stale sprint. Then push and merge the reviewed work, push `main`, and run
-`scripts/verify-main-pushed.sh`. Temporary work is not accepted evidence until its
-required artifacts are retained by CI, a pull request, or release storage.
+After acceptance, push and merge the reviewed work, push `main`, and run
+`scripts/verify-main-pushed.sh`. The completed implementation pull request retains its
+own claim. Before another implementation batch begins, replace `docs/NEXT-SPRINT.md`
+with one forward-looking contract in a dedicated planning change. Until that contract
+is merged, the sprint checkpoint authorizes no additional product work. Temporary work
+is not accepted evidence until its required artifacts are retained by CI, a pull
+request, or release storage.
 
 The root README indexes every maintained Markdown document with its purpose, freshness
 date, and revalidation or deletion trigger. Plans and roadmaps remain forward-looking.
