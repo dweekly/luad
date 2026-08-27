@@ -58,6 +58,11 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Development process
 
+- Replaced the broad release outline with one dependency-ordered path to 1.0 covering
+  exact target scope, stable machine contracts, hostile-input evidence, LNUM32 and stock
+  Lua qualification, packaging, customer transfer, publication, and rollback. Aligned
+  the PRD, release policy, security status, candidate guide, README status, and complete
+  documentation index without promoting any current capability.
 - Replaced per-increment model committees with customer-outcome product batches: one
   implementation session writes production code and ordinary tests, the steward owns
   algorithmic review and integration, Opus review is risk-triggered, and separated

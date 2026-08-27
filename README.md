@@ -4,42 +4,21 @@
 
 ## Project status
 
-`luad` is a pre-release research tool. It is not currently suitable as the sole basis for security conclusions or production reverse-engineering decisions.
+`luad` is a pre-release research tool. It is not currently suitable as the sole basis
+for security conclusions or production reverse-engineering decisions. No dialect or
+profile is promoted to the supported tier.
 
-Lua 5.4.8 public disassembly has normalized typed agreement with the official
-listing and an independent decoder. Embedded Lua 5.1 profile selection,
-disassembly, operand-role validation, bounded register spans, closure captures,
-prototype identity, public diagnostics, queries, and machine output close under the
-Area 1 validator-and-diagnostic gate. The exact OpenWrt-derived Lua 5.1.5 LNUM32 public
-read surface is qualified against reproducible macOS and Linux compiler authorities;
-the target remains experimental until a release evidence bundle promotes it.
-Streaming facts carry their own artifact and interpretation identity for stateless
-firmware-tree ingestion.
-Lua 5.1 calls expose bounded symbolic global/module labels, direct closure identities,
-typed constant-key `GETTABLE`/`SELF` labels, stable instruction evidence, and explicit
-unresolved reasons through `callees` and recursive export. Fixed call arguments expose
-bounded, owner-qualified value-expression
-origins through `origins`, including eager `CONCAT`, Lua `MOD`, and explicit cutoff
-reasons without sink or taint policy. `callgraph` links calls to exact child prototypes
-when direct closure flow or one literal global store establishes a unique relation;
-unresolved relations remain explicit. Batch export treats readable non-bytecode inputs
-as explicit skips, reports every input path, and returns default success when a mixed
-firmware tree produces at least one complete file result.
-Lua 5.1 prototype records also carry a versioned subtree-content identity for ordinary
-cross-firmware joins without conflating the digest with source or runtime identity.
-Lua 5.1 physical words are classified once from executable context: closure bindings
-and `SETLIST C == 0` list-batch data remain physically auditable but cannot become CFG
-nodes or invented calls. Callee and origin analysis share a bounded whole-tree capture
-mutation summary, so a sibling or descendant write prevents stale closure resolution.
-Recursive export emits the `luad-prototype-v2` identity scheme, which commits these
-physical roles; the v1 encoder remains available as a compatibility definition.
+The repository has public-boundary evidence for exact Lua 5.4.8 disassembly and a broad
+experimental Lua 5.1 surface. The OpenWrt-derived Lua 5.1.5 LNUM32 public read contract
+and compiler authority are qualified as prerequisites, but the retained RC1 candidate
+is non-promoting and predates later correctness and machine-interface changes. Lua 5.2,
+5.3, 5.5, stock Lua 5.1 layouts, and every other target remain experimental.
 
-Lua 5.1 callee analysis preserves a proved callee below an open argument or result
-window while keeping that open cardinality explicit in value-origin facts.
-
-All stock-Lua dialects remain **experimental** unless an exact release artifact
-for the current revision and profile says otherwise. Internal library gates do not
-substitute for public CLI and schema evidence.
+The [path to 1.0](ROADMAP.md) keeps those explorations while ordering the remaining
+work: freeze the public contract, make packaging and evidence retention routine, close
+hostile-input evidence, qualify LNUM32, qualify exact stock PUC Lua 5.4.9 and Lua 5.1.5
+targets independently, prove public workflow transfer, and publish one verifiable
+candidate. Future target names in that plan are obligations, not present support claims.
 
 The architectural boundary is deliberate: `luad` owns deterministic VM facts that
 competent analysts should agree on, while callers own investigation-specific judgments
@@ -57,20 +36,21 @@ delete the document in the same change and update this index.
 | Document | Purpose | Fresh as of | Revalidate or delete when |
 |---|---|---:|---|
 | [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-08-27 | Public scope, support status, setup, primary commands, or the documentation set changes. |
-| [`AGENTS.md`](AGENTS.md) | Binding repository instructions, product-batch boundaries, and safety constraints for coding agents. | 2026-08-26 | Development workflow, proof policy, current priority, or repository invariants change. |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-26 | Crates, ownership boundaries, core representations, or evidence layers change. |
+| [`AGENTS.md`](AGENTS.md) | Binding repository instructions, product-batch boundaries, and safety constraints for coding agents. | 2026-08-27 | Development workflow, proof policy, current priority, or repository invariants change. |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-27 | Crates, ownership boundaries, core representations, or evidence layers change. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of unreleased and released user-visible changes. | 2026-08-27 | Every user-visible change or release; never use it as a forward plan. |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor setup, test taxonomy, fixture provenance, and definition of done. | 2026-08-26 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
-| [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-08-25 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
-| [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-26 | Support policy, reporting channel, trust boundary, or threat model changes. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor setup, test taxonomy, fixture provenance, and definition of done. | 2026-08-27 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
+| [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-08-27 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
+| [`ROADMAP.md`](ROADMAP.md) | Detailed dependency-ordered path to a narrow, exact, robust, documented, and obtainable 1.0 release. | 2026-08-27 | Product targets, milestone order, release acceptance, package platforms, compatibility boundary, or exclusions change. |
+| [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-27 | Support policy, reporting channel, trust boundary, or threat model changes. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, separate product and qualification CI lanes, proportional evidence, process budgets, and agent orchestration. | 2026-08-27 | Planning artifacts, CI lanes, customer cadence, agent roles, evidence policy, process budgets, provider interfaces, or sprint-advance mechanics change. |
-| [`ROADMAP.md`](ROADMAP.md) | Stack-ranked path to an exact, deterministic, robust, and obtainable Lua disassembler, with hard research tracks sized explicitly. | 2026-08-25 | Product targets, stage order, mountain sizing, version-1 acceptance, or exclusions change. |
 | [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Sprint checkpoint that authorizes no product implementation until one forward-looking contract is selected. | 2026-08-27 | A product batch is selected; replace the checkpoint with its exact claim, evidence boundary, non-goals, and stop condition. |
-| [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-25 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
+| [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-27 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-27 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
-| [`docs/RELEASING.md`](docs/RELEASING.md) | Exact-target authority prerequisites, independent customer validation, evidence bundle, versioning, and publication policy. | 2026-08-25 | Release gates, target authority, customer-validation boundary, artifact channels, version policy, signing, or publication procedure changes. |
-| [`docs/LUA51-LNUM32-CANDIDATE.md`](docs/LUA51-LNUM32-CANDIDATE.md) | Operational procedure for dispatching, obtaining, verifying, and using the reproducible Lua 5.1 LNUM32 release candidate on unpacked firmware. | 2026-08-26 | Revalidate or delete when the LNUM32 candidate is promoted to stable release, candidate specification/schema changes, qualification workflow changes, or real-firmware workflows change. |
+| [`docs/RELEASING.md`](docs/RELEASING.md) | Release stop, exact-target order, qualification checklist, evidence bundle, packaging, compatibility, publication, and rollback policy. | 2026-08-27 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |
+| [`docs/LUA51-LNUM32-CANDIDATE.md`](docs/LUA51-LNUM32-CANDIDATE.md) | Archived verification and firmware-handoff guide for the immutable, non-promoting Lua 5.1 LNUM32 RC1 artifact. | 2026-08-27 | RC1 evidence is retired, its retained artifacts become unverifiable, or a new LNUM32 candidate guide replaces it. |
 | [`docs/examples/RECIPES.md`](docs/examples/RECIPES.md) | Practical command-line and composition recipes for consuming machine JSON and JSONL output. | 2026-08-27 | Machine interface envelopes, export records, or CLI subcommands change. |
+| [`docs/reviews/2026-08-25-roadmap-review.md`](docs/reviews/2026-08-25-roadmap-review.md) | Archived point-in-time roadmap and release-readiness critique retained as planning provenance, not current status. | 2026-08-27 | Delete only when its planning provenance is intentionally retired; never revalidate it as current release evidence. |
 
 ## Intended scope
 

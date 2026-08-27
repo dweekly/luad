@@ -1,12 +1,18 @@
 # Sprint checkpoint: no active product batch
 
-Lane: planning. Roadmap position: select the next unresolved version-1 outcome.
+Lane: planning. Roadmap position: select the next unresolved milestone from the
+dependency-ordered version-1 release train.
 
 ## Current decision
 
 No product implementation is authorized by this checkpoint. Before implementation
 begins, the steward must replace this file with one forward-looking contract selected
 from `ROADMAP.md`.
+
+The roadmap's milestone order is a dependency plan, not a standing batch authorization.
+Choose only the smallest unmet outcome whose prerequisites are accepted; do not combine
+publication, schema, robustness, target-promotion, or customer-transfer work merely
+because they share the 1.0 destination.
 
 The contract must name:
 
