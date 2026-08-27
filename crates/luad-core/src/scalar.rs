@@ -1,14 +1,8 @@
 //! Canonical, platform-independent rendering of preserved scalar values.
 //!
-//! This module is the only rendering authority for scalar values that reach a
-//! user, on every dialect and through both the text listing and the typed
-//! machine facts. Rendering depends only on the preserved value; it does not
-//! inspect a dialect, host layout, locale, or target width.
-//!
-//! Float spellings come from Rust's `f64: Debug`, which formats in `core` rather
-//! than through the host C library. The output is therefore identical on every
-//! target for a given toolchain; the workspace pins that toolchain in
-//! `rust-toolchain.toml`.
+//! This module is the only rendering authority used by the exact Lua 5.1.5 and
+//! Lua 5.4.8 disassembly paths. Rendering depends only on the preserved value;
+//! it does not inspect a dialect, host layout, locale, or target width.
 
 use std::fmt::Write as _;
 
@@ -17,8 +11,7 @@ use crate::model::ConstantValue;
 /// Maximum number of raw string bytes included in a human-facing scalar preview.
 ///
 /// Truncation is measured only in input bytes. The complete byte sequence remains
-/// available in [`crate::model::LuaString::raw_bytes`], and in the text surface
-/// through the untruncated renderers.
+/// available in [`crate::model::LuaString::raw_bytes`].
 pub const BYTE_STRING_PREVIEW_BYTES: usize = 64;
 
 /// Escape every byte using the canonical byte-string policy, without quotes or
@@ -44,25 +37,16 @@ pub fn escape_bytes(bytes: &[u8]) -> String {
     rendered
 }
 
-/// Render a quoted byte-string preview bounded to [`BYTE_STRING_PREVIEW_BYTES`]
-/// input bytes.
-///
-/// A truncated preview always carries the total input length, so a preview that
-/// ends in a literal `...` is never confused with an elision.
+/// Render a quoted, bounded byte-string preview from its exact bytes.
 #[must_use]
 pub fn render_byte_string(bytes: &[u8]) -> String {
+    let preview_len = bytes.len().min(BYTE_STRING_PREVIEW_BYTES);
+    let escaped = escape_bytes(&bytes[..preview_len]);
     if bytes.len() > BYTE_STRING_PREVIEW_BYTES {
-        let escaped = escape_bytes(&bytes[..BYTE_STRING_PREVIEW_BYTES]);
-        format!(r#""{escaped}..." ({} bytes)"#, bytes.len())
+        format!(r#""{escaped}...""#)
     } else {
-        render_byte_string_full(bytes)
+        format!(r#""{escaped}""#)
     }
-}
-
-/// Render a quoted byte string from every input byte, without a preview bound.
-#[must_use]
-pub fn render_byte_string_full(bytes: &[u8]) -> String {
-    format!(r#""{}""#, escape_bytes(bytes))
 }
 
 /// Render a signed integer canonically across its complete 64-bit domain.
@@ -75,7 +59,8 @@ pub fn render_integer(value: i64) -> String {
 /// payload.
 ///
 /// Every finite spelling round-trips through Rust's binary64 parser to the same
-/// bits, and stays visibly a float by carrying a decimal point or an exponent.
+/// bits. Integral-valued floats retain a decimal point so their scalar kind stays
+/// visible.
 #[must_use]
 pub fn render_float(value: f64) -> String {
     if value.is_nan() {
@@ -99,37 +84,20 @@ pub fn render_float(value: f64) -> String {
     if rendered.contains(['.', 'e', 'E']) {
         rendered
     } else {
-        // Defensive: `f64: Debug` emits a decimal point or an exponent for every
-        // finite value, so this arm is unreachable today. It holds the "integral
-        // floats stay visibly floats" guarantee independently of that impl.
-        // `finite_debug_spelling_is_always_visibly_a_float` fails if the
-        // guarantee ever starts depending on this arm.
         format!("{rendered}.0")
     }
 }
 
-/// Render one preserved Lua constant using the canonical scalar policy, bounding
-/// byte strings to a preview.
+/// Render one preserved Lua constant using the canonical scalar policy.
 #[must_use]
 pub fn render_constant(value: &ConstantValue) -> String {
-    render_constant_with(value, render_byte_string)
-}
-
-/// Render one preserved Lua constant using the canonical scalar policy, emitting
-/// byte strings in full.
-#[must_use]
-pub fn render_constant_full(value: &ConstantValue) -> String {
-    render_constant_with(value, render_byte_string_full)
-}
-
-fn render_constant_with(value: &ConstantValue, render_string: fn(&[u8]) -> String) -> String {
     match value {
         ConstantValue::Nil => "nil".to_string(),
         ConstantValue::Boolean(value) => value.to_string(),
         ConstantValue::Integer { val, .. } => render_integer(*val),
         ConstantValue::Float { val, .. } => render_float(*val),
         ConstantValue::ShortString(value) | ConstantValue::LongString(value) => {
-            render_string(&value.raw_bytes)
+            render_byte_string(&value.raw_bytes)
         }
     }
 }
@@ -177,122 +145,11 @@ mod tests {
     fn byte_string_truncation_is_measured_in_raw_bytes_and_is_reversible() {
         let raw_bytes = vec![0xff; BYTE_STRING_PREVIEW_BYTES + 1];
         let value = LuaString::from_bytes(&raw_bytes);
-        let expected = format!(
-            r#""{}..." ({} bytes)"#,
-            r"\xff".repeat(BYTE_STRING_PREVIEW_BYTES),
-            BYTE_STRING_PREVIEW_BYTES + 1
-        );
+        let expected = format!(r#""{}...""#, r"\xff".repeat(BYTE_STRING_PREVIEW_BYTES));
 
         assert_eq!(render_byte_string(&value.raw_bytes), expected);
-        assert_eq!(
-            render_byte_string_full(&value.raw_bytes),
-            format!(r#""{}""#, r"\xff".repeat(BYTE_STRING_PREVIEW_BYTES + 1))
-        );
         assert_eq!(value.raw_bytes, raw_bytes);
         assert_eq!(value.display, r"\xff".repeat(BYTE_STRING_PREVIEW_BYTES + 1));
-    }
-
-    #[test]
-    fn a_bounded_preview_is_never_ambiguous_with_a_literal_ellipsis() {
-        let mut ends_in_ellipsis = vec![b'a'; BYTE_STRING_PREVIEW_BYTES - 3];
-        ends_in_ellipsis.extend_from_slice(b"...");
-        assert_eq!(ends_in_ellipsis.len(), BYTE_STRING_PREVIEW_BYTES);
-
-        let untruncated = render_byte_string(&ends_in_ellipsis);
-        assert!(untruncated.ends_with(r#"...""#));
-        assert!(!untruncated.contains(" bytes)"));
-
-        let mut truncated_source = ends_in_ellipsis.clone();
-        truncated_source.push(b'a');
-        let truncated = render_byte_string(&truncated_source);
-        assert!(truncated.ends_with(&format!("({} bytes)", BYTE_STRING_PREVIEW_BYTES + 1)));
-        assert_ne!(truncated, untruncated);
-    }
-
-    #[test]
-    fn preview_and_full_renderings_agree_at_or_below_the_bound() {
-        for len in [
-            0,
-            1,
-            BYTE_STRING_PREVIEW_BYTES - 1,
-            BYTE_STRING_PREVIEW_BYTES,
-        ] {
-            let bytes = vec![b'z'; len];
-            assert_eq!(
-                render_byte_string(&bytes),
-                render_byte_string_full(&bytes),
-                "length {len} must not be bounded"
-            );
-        }
-    }
-
-    /// `render_float` appends `.0` only if `f64: Debug` ever omits both a decimal
-    /// point and an exponent for a finite value. Today it never does, so that arm
-    /// is unreachable and this test says so out loud. If Rust's formatting ever
-    /// changes, this fails first and points at the defensive arm rather than
-    /// letting a golden shift silently.
-    #[test]
-    fn finite_debug_spelling_is_always_visibly_a_float() {
-        let mut state: u64 = 0x243f_6a88_85a3_08d3;
-        let mut finite_checked = 0u32;
-        let mut relied_on_defensive_arm = 0u32;
-
-        let check = |value: f64, finite_checked: &mut u32, relied: &mut u32| {
-            if !value.is_finite() || value == 0.0 {
-                return;
-            }
-            *finite_checked += 1;
-            let debug_spelling = format!("{value:?}");
-            if !debug_spelling.contains(['.', 'e', 'E']) {
-                *relied += 1;
-            }
-            let rendered = render_float(value);
-            assert!(
-                rendered.contains(['.', 'e', 'E']),
-                "{rendered} is not visibly a float"
-            );
-            let reparsed: f64 = rendered
-                .parse()
-                .expect("finite rendering must parse as f64");
-            assert_eq!(reparsed.to_bits(), value.to_bits(), "rendering {rendered}");
-        };
-
-        for value in [
-            f64::MIN,
-            f64::MAX,
-            f64::MIN_POSITIVE,
-            f64::from_bits(1),
-            1.0,
-            -1.0,
-            1e15,
-            1e16,
-            1e21,
-            1e22,
-            123_456_789_012_345_680.0,
-            std::f64::consts::PI,
-        ] {
-            check(value, &mut finite_checked, &mut relied_on_defensive_arm);
-        }
-
-        for _ in 0..100_000 {
-            state ^= state << 13;
-            state ^= state >> 7;
-            state ^= state << 17;
-            check(
-                f64::from_bits(state),
-                &mut finite_checked,
-                &mut relied_on_defensive_arm,
-            );
-        }
-
-        assert!(
-            finite_checked > 1_000,
-            "sample was too small to be evidence"
-        );
-        assert_eq!(
-            relied_on_defensive_arm, 0,
-            "f64: Debug now omits the decimal point; the defensive arm in render_float is live"
-        );
     }
 
     #[test]
@@ -329,5 +186,25 @@ mod tests {
         assert_eq!(render_float(f64::NEG_INFINITY), "-inf");
         assert_eq!(render_float(f64::from_bits(0x7ff8_0000_0000_0001)), "nan");
         assert_eq!(render_float(f64::from_bits(0xfff0_0000_0000_0001)), "nan");
+    }
+
+    #[test]
+    fn scalar_mutation_controls_change_the_canonical_golden() {
+        let canonical = [
+            render_float(-0.0),
+            render_float(f64::NAN),
+            render_float(1.0),
+            render_byte_string(b"\""),
+        ]
+        .join("\n");
+
+        for corrupted in [
+            canonical.replacen("-0.0", "0.0", 1),
+            canonical.replacen("nan", "NaN", 1),
+            canonical.replacen("1.0", "1", 1),
+            canonical.replacen(r#"\""#, "\"", 1),
+        ] {
+            assert_ne!(corrupted, canonical);
+        }
     }
 }

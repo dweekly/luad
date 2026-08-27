@@ -2,10 +2,8 @@
 
 use colored::Colorize;
 use luad_core::diagnostic::{Diagnostic, Severity, Verdict};
-use luad_core::model::{Chunk, Prototype};
-use luad_core::scalar::{
-    render_byte_string, render_constant, render_constant_full, render_float, render_integer,
-};
+use luad_core::model::{Chunk, ConstantValue, Prototype};
+use luad_core::scalar::render_constant;
 
 /// Render human-readable inspection summary or detailed chunk overview.
 pub fn render_inspect(chunk: &Chunk, summary: bool) {
@@ -162,13 +160,18 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
     if !proto.constants.is_empty() {
         println!("; Constants:");
         for c in &proto.constants {
-            // `--raw` widens this listing to the untruncated constant. Operand
-            // previews inside the instruction stream stay bounded so a long
-            // constant cannot push the disassembly off screen.
-            let val_str = if raw {
-                render_constant_full(&c.value)
-            } else {
+            let val_str = if dialect.starts_with("lua5.1") || dialect.starts_with("lua5.4") {
                 render_constant(&c.value)
+            } else {
+                match &c.value {
+                    ConstantValue::Nil => "nil".to_string(),
+                    ConstantValue::Boolean(b) => b.to_string(),
+                    ConstantValue::Integer { val, .. } => val.to_string(),
+                    ConstantValue::Float { val, .. } => format!("{val:?}"),
+                    ConstantValue::ShortString(s) | ConstantValue::LongString(s) => {
+                        format!("\"{}\"", s.display)
+                    }
+                }
             };
             println!(";   k[{}] = {}", c.index, val_str);
         }
@@ -458,9 +461,6 @@ pub fn render_capabilities(manifest: &luad_core::CapabilityManifest, evidence: b
 }
 
 /// Render one line per call with an explicit resolution or unresolved reason.
-///
-/// The caller restricts symbolic callee analysis to Lua 5.1 profiles, so this
-/// renderer never sees another dialect's constants.
 pub fn render_callees(analysis: &luad_analysis::ChunkCalleeAnalysis) {
     for prototype in &analysis.prototypes {
         for fact in &prototype.calls {
@@ -581,13 +581,6 @@ pub fn render_origins(analysis: &luad_analysis::ChunkOriginAnalysis) {
     }
 }
 
-/// Decode a preserved little-endian binary64 constant back to its value.
-fn float_from_raw_hex(raw_hex: &str) -> Option<f64> {
-    let bytes = hex::decode(raw_hex).ok()?;
-    let bytes: [u8; 8] = bytes.try_into().ok()?;
-    Some(f64::from_bits(u64::from_le_bytes(bytes)))
-}
-
 fn format_origin_expression(expression: &luad_analysis::OriginExpression) -> String {
     use luad_analysis::{OriginExpressionKind, OriginLiteral};
 
@@ -595,16 +588,9 @@ fn format_origin_expression(expression: &luad_analysis::OriginExpression) -> Str
         match value {
             OriginLiteral::Nil => "nil".to_string(),
             OriginLiteral::Boolean { value } => value.to_string(),
-            OriginLiteral::Integer { value, .. } => render_integer(*value),
-            // `OriginLiteral::Float` stores only the preserved bytes because the
-            // enum derives `Eq`. Decode them back to binary64 so the scalar
-            // authority owns this spelling too; a byte width other than eight is
-            // not a float this renderer can speak for, so it shows the bytes.
-            OriginLiteral::Float { raw_hex, .. } => match float_from_raw_hex(raw_hex) {
-                Some(value) => render_float(value),
-                None => format!("float({raw_hex})"),
-            },
-            OriginLiteral::String { value } => render_byte_string(&value.raw_bytes),
+            OriginLiteral::Integer { value, .. } => value.to_string(),
+            OriginLiteral::Float { raw_hex, .. } => format!("float({raw_hex})"),
+            OriginLiteral::String { value } => format!("\"{}\"", value.display),
         }
     }
 

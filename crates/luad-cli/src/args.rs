@@ -115,7 +115,7 @@ pub struct DisasmArgs {
     #[arg(short, long)]
     pub dialect: Option<String>,
 
-    /// Include raw instruction words in hex and untruncated string constants.
+    /// Include raw instruction words in hex.
     #[arg(long)]
     pub raw: bool,
 
