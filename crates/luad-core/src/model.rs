@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::diagnostic::{Diagnostic, Verdict};
 use crate::id::{ProtoPath, StableId};
 use crate::provenance::SourceLocation;
+use crate::scalar;
 
 /// A lossless Lua string retaining exact byte contents along with escaped display representation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -24,28 +25,12 @@ impl LuaString {
     #[must_use]
     pub fn from_bytes(bytes: &[u8]) -> Self {
         let is_utf8 = std::str::from_utf8(bytes).is_ok();
-        let display = Self::escape_bytes(bytes);
+        let display = scalar::escape_bytes(bytes);
         Self {
             raw_bytes: bytes.to_vec(),
             display,
             is_utf8,
         }
-    }
-
-    fn escape_bytes(bytes: &[u8]) -> String {
-        let mut out = String::new();
-        for &b in bytes {
-            match b {
-                b'\\' => out.push_str(r"\\"),
-                b'"' => out.push_str(r#"\""#),
-                b'\n' => out.push_str(r"\n"),
-                b'\r' => out.push_str(r"\r"),
-                b'\t' => out.push_str(r"\t"),
-                0x20..=0x7E => out.push(b as char),
-                _ => out.push_str(&format!(r"\x{:02x}", b)),
-            }
-        }
-        out
     }
 
     /// Return the string representation.

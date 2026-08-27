@@ -3,6 +3,7 @@
 use colored::Colorize;
 use luad_core::diagnostic::{Diagnostic, Severity, Verdict};
 use luad_core::model::{Chunk, ConstantValue, Prototype};
+use luad_core::scalar::render_constant;
 
 /// Render human-readable inspection summary or detailed chunk overview.
 pub fn render_inspect(chunk: &Chunk, summary: bool) {
@@ -159,13 +160,17 @@ pub fn render_disasm(dialect: &str, proto: &Prototype, raw: bool, debug_info: bo
     if !proto.constants.is_empty() {
         println!("; Constants:");
         for c in &proto.constants {
-            let val_str = match &c.value {
-                ConstantValue::Nil => "nil".to_string(),
-                ConstantValue::Boolean(b) => b.to_string(),
-                ConstantValue::Integer { val, .. } => val.to_string(),
-                ConstantValue::Float { val, .. } => format!("{val:?}"),
-                ConstantValue::ShortString(s) | ConstantValue::LongString(s) => {
-                    format!("\"{}\"", s.display)
+            let val_str = if dialect.starts_with("lua5.1") || dialect.starts_with("lua5.4") {
+                render_constant(&c.value)
+            } else {
+                match &c.value {
+                    ConstantValue::Nil => "nil".to_string(),
+                    ConstantValue::Boolean(b) => b.to_string(),
+                    ConstantValue::Integer { val, .. } => val.to_string(),
+                    ConstantValue::Float { val, .. } => format!("{val:?}"),
+                    ConstantValue::ShortString(s) | ConstantValue::LongString(s) => {
+                        format!("\"{}\"", s.display)
+                    }
                 }
             };
             println!(";   k[{}] = {}", c.index, val_str);
@@ -469,16 +474,7 @@ pub fn render_callees(analysis: &luad_analysis::ChunkCalleeAnalysis) {
                         luad_analysis::CalleeLookupKind::Gettable => "gettable",
                         luad_analysis::CalleeLookupKind::SelfOp => "self",
                     };
-                    let key_str = match key {
-                        luad_core::model::ConstantValue::ShortString(s)
-                        | luad_core::model::ConstantValue::LongString(s) => {
-                            format!("\"{}\"", s.display)
-                        }
-                        luad_core::model::ConstantValue::Nil => "nil".to_string(),
-                        luad_core::model::ConstantValue::Boolean(b) => b.to_string(),
-                        luad_core::model::ConstantValue::Integer { val, .. } => val.to_string(),
-                        luad_core::model::ConstantValue::Float { val, .. } => format!("{val:?}"),
-                    };
+                    let key_str = render_constant(key);
                     format!(
                         "lookup:{kind_str}:{key_str} [{}]",
                         evidence

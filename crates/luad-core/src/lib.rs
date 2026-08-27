@@ -14,6 +14,7 @@ pub mod limits;
 pub mod model;
 pub mod provenance;
 pub mod reader;
+pub mod scalar;
 
 pub use capabilities::{
     get_canonical_capabilities, CapabilityManifest, DiagnosticCatalogCapability, DialectCapability,
@@ -46,3 +47,7 @@ pub use model::{
 };
 pub use provenance::{Confidence, ProvenanceRecord, SourceLocation};
 pub use reader::SafeReader;
+pub use scalar::{
+    escape_bytes, render_byte_string, render_constant, render_float, render_integer,
+    BYTE_STRING_PREVIEW_BYTES,
+};
