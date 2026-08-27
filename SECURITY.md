@@ -12,9 +12,11 @@ the evidence boundaries in the [product roadmap](ROADMAP.md), [active sprint](do
 
 The planned 1.0 matrix contains three separate claims: the exact OpenWrt-derived Lua
 5.1.5 LNUM32 profile, one exact stock PUC Lua 5.1.5 64-bit layout, and the exact stock
-PUC Lua 5.4.9 target. This future matrix does not designate any current code or
-candidate as security-supported. After release, this section must be replaced with the
-actual supported tool versions and their security-fix window.
+PUC Lua 5.4.9 target. The canonical profile and layout identities live in the
+[frozen version-1 boundary](docs/RELEASING.md#frozen-version-1-boundary). This future
+matrix does not designate any current code or candidate as security-supported. After
+release, this section must be replaced with the actual supported tool versions and
+their security-fix window.
 
 ## Reporting a vulnerability
 

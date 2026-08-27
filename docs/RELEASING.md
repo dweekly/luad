@@ -20,16 +20,42 @@ begins only under a qualification contract in [the active sprint](NEXT-SPRINT.md
 Passing an ordinary test, prerequisite gate, candidate packaging workflow, private
 corpus run, or model review cannot remove this stop.
 
+## Frozen version-1 boundary
+
+The version-1 bytecode claim contains exactly three independent target identities:
+
+| Lua release | Canonical profile | Serialized layout |
+|---|---|---|
+| OpenWrt-derived Lua 5.1.5 LNUM32 | `lua5.1-lnum32` | `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4` |
+| Stock PUC Lua 5.1.5 | `lua5.1` | `int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0` |
+| Stock PUC Lua 5.4.9 | `lua5.4` | format 0; 4-byte instructions; 8-byte `lua_Integer`; 8-byte `lua_Number`; pinned official compiler's standard little-endian representation |
+
+The package platforms are exactly `linux-x86_64` and `macos-aarch64`. Enveloped command
+JSON and the other major-1 JSON schema families freeze at major 1 for the 1.x line;
+capabilities JSON and streaming JSONL/export freeze at major 2. CLI exit codes 0 through
+6 freeze with the meanings in
+[the machine-interface contract](MACHINE-INTERFACE.md#exit-codes). Command and fact
+families acquire a 1.x compatibility promise only when the public automation-contract
+milestone qualifies them. Existing symbolic-callee, value-origin, call-relation, and
+related derived facts remain experimental until then.
+
+The workspace remains dual `MIT OR Apache-2.0`; this permits use under terms compatible
+with the [MIT-licensed Lua project](https://www.lua.org/license.html). The release owner
+is the repository owner, `dweekly`. Accepted qualification results, sanitized customer
+records, candidate packages, and final evidence are retained in the matching candidate
+or final GitHub release in `dweekly/luad`. Expiring Actions artifacts and local temporary
+directories may transport evidence but are not its durable authority.
+
+This boundary is a future compatibility promise, not current support evidence. The
+supported target set remains empty until exact target manifests are accepted.
+
 ## Release scope and order
 
-Version 1.0 is limited to three independently promoted targets:
+Qualification proceeds in this order:
 
-1. OpenWrt-derived Lua 5.1.5 LNUM32 with
-   `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4`;
-2. stock PUC Lua 5.4.9 with the standard 64-bit little-endian layout emitted by the
-   pinned official compilers; and
-3. stock PUC Lua 5.1.5 with the pinned little-endian, non-integral-double, 64-bit
-   `size_t` layout.
+1. OpenWrt-derived Lua 5.1.5 `lua5.1-lnum32`;
+2. stock PUC Lua 5.4.9 `lua5.4`; and
+3. stock PUC Lua 5.1.5 `lua5.1`.
 
 The order exercises the vendor-profile workflow first, repeats promotion on the final
 Lua 5.4 release, and then closes stock Lua 5.1 without conflating it with LNUM32. A
@@ -77,7 +103,7 @@ Before promoting any exact target:
 7. Verify `luad capabilities --format json --evidence` against actual accepted results
    and keep README support status identical to the manifest.
 8. Build and smoke-test the installable candidate on every advertised package platform.
-9. Retain the complete results outside temporary storage.
+9. Retain the complete results in the matching GitHub release in `dweekly/luad`.
 
 Before publishing 1.0, additionally:
 
@@ -108,8 +134,8 @@ An additional out-of-profile refusal test proves that a different stock/vendor l
 fails with an actionable diagnostic and the documented exit code. It does not consume
 the outside-human checkpoint.
 
-Commit a sanitized customer-trial record in the durable location named by the sprint.
-Do not commit private firmware, sensitive findings, model transcripts, or
+Retain a sanitized customer-trial record in the matching candidate GitHub release in
+`dweekly/luad`. Do not commit private firmware, sensitive findings, model transcripts, or
 investigation-specific security judgments. Every reproducible correctness defect
 becomes a minimized redistributable regression and passes its named gate before the
 candidate is eligible again.
@@ -164,10 +190,8 @@ the project has not selected a durable signing identity; do not create an epheme
 solely to check a box. If a stable signing identity is selected later, amend this policy
 under its own release-infrastructure contract.
 
-The workspace remains dual `MIT OR Apache-2.0`. This permits use under terms compatible
-with the [MIT-licensed Lua project](https://www.lua.org/license.html) without a
-relicensing project. Release archives, Cargo metadata, repository license files, and
-SBOM declarations must agree.
+Release archives, Cargo metadata, repository license files, and SBOM declarations must
+agree with the dual-license decision in the frozen boundary.
 
 ## Versioning and compatibility
 
@@ -176,10 +200,12 @@ The tool uses semantic versioning independently of the Lua versions it reads. `l
 release/profile/layout identity.
 
 Before 1.0, an incompatible machine-output change requires a schema-major increment and
-changelog entry. At 1.0, the release notes must define:
+changelog entry. The frozen 1.x boundary already fixes enveloped command JSON and the
+other major-1 JSON families at major 1, capabilities JSON and streaming JSONL/export at
+major 2, and process exit meanings at codes 0 through 6. The release notes must
+additionally define:
 
-- stable CLI exit-code meanings;
-- stable schema majors and command names;
+- stable command names;
 - additive-field and open-vocabulary handling;
 - closed tagged-union and enum handling;
 - target/profile/layout naming and support duration; and

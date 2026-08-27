@@ -24,14 +24,16 @@ evidence link.
 
 ### Version 1 support boundary
 
-Version 1.0 will promote only these independently qualified targets:
+Version 1.0 will promote only the independently qualified targets in the canonical
+[release boundary](docs/RELEASING.md#frozen-version-1-boundary):
 
-1. the OpenWrt-derived Lua 5.1.5 LNUM32 profile with
+1. OpenWrt-derived Lua 5.1.5 profile `lua5.1-lnum32` with
    `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4`;
-2. stock PUC Lua 5.1.5 with the little-endian, non-integral-double, 64-bit `size_t`
-   layout emitted by the pinned 64-bit authority; and
-3. stock PUC Lua 5.4.9 with the standard 64-bit little-endian layout emitted by the
-   pinned official compilers.
+2. stock PUC Lua 5.1.5 profile `lua5.1` with
+   `int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0`; and
+3. stock PUC Lua 5.4.9 profile `lua5.4`, format 0, with 4-byte instructions, 8-byte
+   `lua_Integer`, 8-byte `lua_Number`, and the pinned official compiler's standard
+   little-endian representation.
 
 [Lua 5.4.9](https://www.lua.org/versions.html) replaces 5.4.8 as the forward-looking
 1.0 target because it is the final Lua 5.4 bug-fix release. Accepted 5.4.8 evidence may
@@ -85,7 +87,7 @@ written scope and authority decision demonstrates that it should share this prod
 The dependency order is:
 
 ```text
-release boundary and publication contract
+publication and artifact-retention implementation
   -> stable public CLI and schema boundary
   -> robustness and distribution infrastructure
   -> LNUM32 exact-target qualification
@@ -98,30 +100,6 @@ release boundary and publication contract
 Accepted prerequisite gates are referenced by identity. A downstream milestone does
 not duplicate their semantic suites unless it owns a new interaction capable of
 falsifying the release claim.
-
-### Milestone 0 — freeze the release boundary
-
-Outcome: every subsequent batch works toward one stable support and distribution claim.
-
-Required decisions:
-
-- confirm the three exact targets and two package platforms above;
-- record each target's canonical profile and serialized layout identity;
-- declare JSON/JSONL schema majors and CLI exit codes that will freeze at 1.0;
-- keep derived analysis outside the stable claim unless its target-specific evidence is
-  strong enough to qualify with the same candidate;
-- keep the current dual MIT/Apache-2.0 license and make its compatibility with the
-  [MIT-licensed Lua project](https://www.lua.org/license.html) visible rather than
-  opening an unnecessary relicensing project; and
-- name the release owner and the durable location for qualification and customer-trial
-  artifacts.
-
-Evidence boundary: a documentation-only planning change makes `ROADMAP.md`, `PRD.md`,
-`docs/RELEASING.md`, `SECURITY.md`, and the README support table state the same future
-claim while leaving every current capability experimental.
-
-Stop condition: no release implementation begins while any maintained document implies
-a different 1.0 target or compatibility promise.
 
 ### Milestone 1 — make publication boring
 

@@ -203,12 +203,14 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 
 ### 3.1 Version 1 goals
 
-- Qualify the exact OpenWrt-derived Lua 5.1.5 LNUM32 profile and its 32-bit serialized
-  string layout through a public, reproducible compiler authority.
-- Qualify stock PUC Lua 5.1.5 independently for the pinned little-endian,
-  non-integral-double, 64-bit `size_t` layout.
-- Qualify stock PUC Lua 5.4.9 independently for the standard 64-bit little-endian
-  layout emitted by the pinned official compilers.
+- Qualify OpenWrt-derived Lua 5.1.5 profile `lua5.1-lnum32` with
+  `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4` through a public,
+  reproducible compiler authority.
+- Qualify stock PUC Lua 5.1.5 profile `lua5.1` independently with
+  `int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0`.
+- Qualify stock PUC Lua 5.4.9 profile `lua5.4` independently at format 0, with 4-byte
+  instructions, 8-byte `lua_Integer`, 8-byte `lua_Number`, and the pinned official
+  compiler's standard little-endian representation.
 - Preserve parsing surfaces for all other dialects, releases, profiles, and layouts as
   experimental without promoting them through the version-1 claim.
 - Detect and report the exact dialect, profile, layout, and selection evidence.
@@ -219,11 +221,10 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 - Construct basic blocks and control-flow graphs.
 - Provide instruction-level use/definition effects and common cross-references.
 - Produce self-identifying, deterministic JSONL over firmware-scale mixed file sets.
-- Resolve evidence-backed symbolic callee paths with explicit unresolved reasons.
-- Expose bounded, cycle-safe value-expression origins for call arguments and selected
-  registers without assigning taint or safety labels.
-- Expose only statically provable call relations and versioned prototype content
-  identities for cross-firmware joins.
+- Freeze only the command and fact families admitted by the public automation-contract
+  milestone. Existing symbolic-callee, bounded value-origin, provable-call-relation,
+  and prototype-identity surfaces remain available as experimental research unless
+  that milestone qualifies an exact stable subset.
 - Explain instructions in context.
 - Compare two chunks structurally and semantically.
 - Support stripped chunks without treating absent debug data as an error.
@@ -953,8 +954,8 @@ implying stock Lua 5.1 support. It requires:
 - reviewed CFG/precondition and lossless-model checkpoints;
 - deterministic, self-identifying public text and machine output over firmware-scale
   mixed inputs;
-- evidence-backed symbolic callees, bounded value origins, provable call relations, and
-  prototype content identities with explicit unresolved states;
+- existing derived-analysis surfaces may assist the customer trial, but remain
+  experimental and cannot satisfy or expand the target-promotion claim;
 - capability status derived from one verified release manifest;
 - no required skipped probe;
 - bounded malformed-input behavior and maintained fuzz coverage;
@@ -964,9 +965,12 @@ implying stock Lua 5.1 support. It requires:
 ### 13.2 Version 1.0
 
 Version 1.0 promotes the exact LNUM32, stock Lua 5.1.5 64-bit, and stock Lua 5.4.9
-targets named by the roadmap. It additionally requires:
+targets in the canonical [release boundary](docs/RELEASING.md#frozen-version-1-boundary).
+It additionally requires:
 
-- a stable CLI exit-code contract and JSON schema major;
+- enveloped command JSON and the other major-1 JSON families at schema major 1,
+  capabilities JSON and streaming JSONL/export at schema major 2, and stable CLI exit
+  codes 0 through 6 with the meanings in the machine-interface contract;
 - reproducible packages for every advertised platform;
 - a published evidence bundle and software bill of materials;
 - a completed security review and extended fuzz campaign;
@@ -1060,8 +1064,9 @@ Adoption is secondary to correctness, but useful signals include:
 - Losslessness, provenance, validation, and determinism are release requirements rather than optional polish.
 - Persistent researcher state, interpretations, hypotheses, and agent planning remain outside `luad`.
 - Symbolic callee paths, bounded value-expression origins, provable partial call
-  relations, cross-file identities, and prototype content identities are in scope as
-  derived facts.
+  relations, cross-file identities, and prototype content identities are implemented
+  experimental research. They are not a stable version-1 promise unless the public
+  automation-contract milestone qualifies an exact surface.
 - Sink, taint, safety, authentication, reachability, and exploitability classifications
   remain external policy.
 

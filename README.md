@@ -14,11 +14,12 @@ and compiler authority are qualified as prerequisites, but the retained RC1 cand
 is non-promoting and predates later correctness and machine-interface changes. Lua 5.2,
 5.3, 5.5, stock Lua 5.1 layouts, and every other target remain experimental.
 
-The [path to 1.0](ROADMAP.md) keeps those explorations while ordering the remaining
-work: freeze the public contract, make packaging and evidence retention routine, close
-hostile-input evidence, qualify LNUM32, qualify exact stock PUC Lua 5.4.9 and Lua 5.1.5
-targets independently, prove public workflow transfer, and publish one verifiable
-candidate. Future target names in that plan are obligations, not present support claims.
+The [release procedure](docs/RELEASING.md#frozen-version-1-boundary) records the exact
+future 1.0 targets, layouts, package platforms, machine-contract majors, owner, and
+evidence location. The [path to 1.0](ROADMAP.md) keeps the existing explorations while
+ordering the remaining packaging, public-contract, hostile-input, exact-target,
+workflow-transfer, and publication work. Future target names are obligations, not
+present support claims.
 
 The architectural boundary is deliberate: `luad` owns deterministic VM facts that
 competent analysts should agree on, while callers own investigation-specific judgments
@@ -44,7 +45,7 @@ delete the document in the same change and update this index.
 | [`ROADMAP.md`](ROADMAP.md) | Detailed dependency-ordered path to a narrow, exact, robust, documented, and obtainable 1.0 release. | 2026-08-27 | Product targets, milestone order, release acceptance, package platforms, compatibility boundary, or exclusions change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-27 | Support policy, reporting channel, trust boundary, or threat model changes. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, separate product and qualification CI lanes, proportional evidence, process budgets, and agent orchestration. | 2026-08-27 | Planning artifacts, CI lanes, customer cadence, agent roles, evidence policy, process budgets, provider interfaces, or sprint-advance mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Active Milestone 0 contract freezing the future version-1 targets, compatibility boundary, ownership, and artifact retention without changing product behavior. | 2026-08-27 | The contract is accepted or its claim, scope, evidence, non-goals, or stop condition changes. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Sprint checkpoint that authorizes no product implementation until one forward-looking contract is selected. | 2026-08-27 | A product batch is selected; replace the checkpoint with its exact claim, evidence boundary, non-goals, and stop condition. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-27 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-27 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
 | [`docs/RELEASING.md`](docs/RELEASING.md) | Release stop, exact-target order, qualification checklist, evidence bundle, packaging, compatibility, publication, and rollback policy. | 2026-08-27 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |

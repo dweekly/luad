@@ -11,6 +11,14 @@ diagnostics. Lua 5.1 stock and LNUM32 parsing, disassembly, constants, and closu
 captures have public-boundary experimental evidence; no Lua dialect is promoted to
 the supported tier.
 
+The future [version-1 release boundary](RELEASING.md#frozen-version-1-boundary) keeps
+enveloped command JSON and the other major-1 JSON families at schema major 1,
+capabilities JSON and streaming JSONL/export at major 2, and the exit-code meanings
+below for the 1.x line. This freezes numeric compatibility slots, not every command or
+fact currently occupying them. Existing symbolic-callee,
+value-origin, call-relation, and related derived-analysis records remain experimental
+until the public automation-contract milestone qualifies an exact stable surface.
+
 See the [product roadmap](../ROADMAP.md), [active sprint](NEXT-SPRINT.md), and
 [embedded-firmware requirements](EMBEDDED-FIRMWARE-REQUIREMENTS.md).
 
@@ -51,10 +59,14 @@ Available schema names are:
 - `manifest`
 - `export`
 
-Each schema family advances independently. Complete JSON documents remain at major 1;
-capabilities and streaming JSONL use major 2. Omitting `--schema-version` selects the
-current major for the requested schema. An explicit unsupported major fails with a
-usage error.
+Each schema family advances independently. Enveloped command JSON and the other
+major-1 JSON families remain at major 1; capabilities JSON and streaming JSONL/export
+use major 2. Omitting `--schema-version` selects the current major for the requested
+schema. An explicit unsupported major fails with a usage error.
+
+Those numeric majors are reserved for the future 1.x contract. Before 1.0, a command or
+fact family remains experimental unless its own qualification closes; sharing a major
+does not promote its semantics.
 
 Within a schema major, object structure and tagged-union discriminants are closed:
 consumers must reject an unknown required structure or variant rather than guessing its
@@ -85,6 +97,9 @@ Output ordering is intended to be deterministic for identical input bytes, optio
 | 4 | Unsupported or ambiguous format |
 | 5 | Configured resource limit reached |
 | 6 | Internal error |
+
+These numeric meanings are the future 1.x exit-code contract. Command-specific outcome
+rules must remain consistent with them before a command enters the stable surface.
 
 Do not infer validity from the presence of output alone; inspect both the exit code and structured verdict/diagnostics.
 
@@ -470,6 +485,10 @@ The capability document is useful for discovering implemented surface. Callers m
 interpret every dialect/profile and command surface as `experimental` unless a
 target-specific release manifest for the exact tool revision and interpretation
 says otherwise.
+
+Presence in a schema or capability feature list is not a version-1 compatibility
+promise. In particular, current derived-analysis records remain experimental unless a
+later public automation-contract result names and qualifies them.
 
 `diagnostic_catalog` identifies the `diagnostics` command, its schema name, and output
 formats so callers can discover the diagnostic authority without parsing help text.
