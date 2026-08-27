@@ -39,3 +39,7 @@ path = "src/bin/run_gate.rs"
 [[bin]]
 name = "luad-candidate"
 path = "src/bin/luad_candidate.rs"
+
+[[bin]]
+name = "luad-release"
+path = "src/bin/luad_release.rs"

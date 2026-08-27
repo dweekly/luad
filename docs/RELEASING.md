@@ -180,6 +180,32 @@ Each archive contains the `luad` executable, README, license files, and a machin
 version/source identity. The packaging gate fixes member order, timestamps, modes, and
 the metadata allowed to vary by platform.
 
+The accepted local packaging boundary is `scripts/package-release.sh`. From a clean
+revision on a matching host, it derives the workspace version and Git revision, builds
+`luad`, and writes one `luad-<version>-<platform>.tar.gz`, a JSON member ledger,
+`SHA256SUMS`, and a JSON installation transcript into a new or empty directory. The
+archive has exactly these lexicographically ordered members beneath its single
+`luad-<version>-<platform>/` prefix:
+
+```text
+LICENSE
+LICENSE-APACHE
+README.md
+VERSION.json
+luad
+```
+
+Regular files use mode `0644`; `luad` uses `0755`; uid, gid, and mtime are zero. The
+verifier checks canonical deterministic ustar/gzip bytes, checksum, ledger, safe paths,
+exact source inputs, and version/revision/platform/target identity before extracting and
+running `luad --version` plus machine-readable capabilities. The smoke refuses any
+supported dialect in this non-promoting package.
+
+This local command proves archive construction for identical inputs on the current
+host. It does not yet prove cross-host reproducible Rust compilation, build both release
+platforms in CI, publish or retain artifacts, generate an SBOM, run dependency audits,
+or exercise withdrawal. Those remain release blockers.
+
 `cargo install` is a secondary channel only after package names, publication order,
 metadata, dependency versions, and install behavior pass a dry run and are documented.
 Homebrew, LuaRocks wrappers, additional operating systems, and installer scripts are not

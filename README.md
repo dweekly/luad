@@ -45,7 +45,7 @@ delete the document in the same change and update this index.
 | [`ROADMAP.md`](ROADMAP.md) | Detailed dependency-ordered path to a narrow, exact, robust, documented, and obtainable 1.0 release. | 2026-08-27 | Product targets, milestone order, release acceptance, package platforms, compatibility boundary, or exclusions change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-27 | Support policy, reporting channel, trust boundary, or threat model changes. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, separate product and qualification CI lanes, proportional evidence, process budgets, and agent orchestration. | 2026-08-27 | Planning artifacts, CI lanes, customer cadence, agent roles, evidence policy, process budgets, provider interfaces, or sprint-advance mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Active product contract for a deterministic, independently verified, non-promoting release archive and local install smoke. | 2026-08-27 | The archive contract is accepted or rescoped; return to the neutral checkpoint or replace its outcome, evidence, paths, non-goals, and stop condition. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Sprint checkpoint that authorizes no product implementation until one forward-looking contract is selected. | 2026-08-27 | A product batch is selected; replace the checkpoint with its exact claim, evidence boundary, non-goals, and stop condition. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-27 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-27 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
 | [`docs/RELEASING.md`](docs/RELEASING.md) | Release stop, exact-target order, qualification checklist, evidence bundle, packaging, compatibility, publication, and rollback policy. | 2026-08-27 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |
@@ -115,6 +115,27 @@ bash scripts/install_ci_compilers.sh
 
 The aggregate check is necessary repository evidence, not instruction-level proof. See [CONTRIBUTING.md](CONTRIBUTING.md) for the test taxonomy and required gates.
 
+## Local release archive dry run
+
+From a clean checkout on Linux x86-64 or macOS arm64, the maintained packaging command
+builds the host binary, creates the deterministic archive and sidecars, independently
+verifies them, extracts into a fresh temporary directory, and runs the packaged version
+and capabilities smokes:
+
+```console
+./scripts/package-release.sh /tmp/luad-release
+```
+
+The output directory must be new or empty. It receives
+`luad-<version>-<platform>.tar.gz`, its JSON member ledger, `SHA256SUMS`, and a JSON
+installation transcript. The archive contains only a top-level
+`luad-<version>-<platform>/` directory with `luad`, `README.md`, `LICENSE`,
+`LICENSE-APACHE`, and `VERSION.json`.
+
+This is a local, non-promoting packaging check. It does not publish an artifact, qualify
+a host or Lua target, generate an SBOM, or establish cross-host reproducible compilation.
+The remaining release work is tracked in the [roadmap](ROADMAP.md).
+
 ## First use
 
 The repository includes precompiled fixtures, so no Lua compiler is needed for a basic smoke test:
@@ -174,4 +195,5 @@ Machine consumers should read [docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE
 
 ## License
 
-Licensed under either the MIT License or the Apache License, Version 2.0, at your option.
+Licensed under either the [MIT License](LICENSE) or the
+[Apache License, Version 2.0](LICENSE-APACHE), at your option.
