@@ -56,10 +56,10 @@ delete the document in the same change and update this index.
 
 | Document | Purpose | Fresh as of | Revalidate or delete when |
 |---|---|---:|---|
-| [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-08-26 | Public scope, support status, setup, primary commands, or the documentation set changes. |
+| [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-08-27 | Public scope, support status, setup, primary commands, or the documentation set changes. |
 | [`AGENTS.md`](AGENTS.md) | Binding repository instructions, product-batch boundaries, and safety constraints for coding agents. | 2026-08-26 | Development workflow, proof policy, current priority, or repository invariants change. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-26 | Crates, ownership boundaries, core representations, or evidence layers change. |
-| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of unreleased and released user-visible changes. | 2026-08-26 | Every user-visible change or release; never use it as a forward plan. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of unreleased and released user-visible changes. | 2026-08-27 | Every user-visible change or release; never use it as a forward plan. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor setup, test taxonomy, fixture provenance, and definition of done. | 2026-08-26 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
 | [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-08-25 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-26 | Support policy, reporting channel, trust boundary, or threat model changes. |
@@ -67,10 +67,10 @@ delete the document in the same change and update this index.
 | [`ROADMAP.md`](ROADMAP.md) | Stack-ranked path to an exact, deterministic, robust, and obtainable Lua disassembler, with hard research tracks sized explicitly. | 2026-08-25 | Product targets, stage order, mountain sizing, version-1 acceptance, or exclusions change. |
 | [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Active product contract for selecting existing counted fact families in bounded recursive export. | 2026-08-27 | The export-selection batch is accepted, respecified, or replaced; remove completed obligations rather than retaining implementation history. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-25 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
-| [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-25 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
+| [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-27 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
 | [`docs/RELEASING.md`](docs/RELEASING.md) | Exact-target authority prerequisites, independent customer validation, evidence bundle, versioning, and publication policy. | 2026-08-25 | Release gates, target authority, customer-validation boundary, artifact channels, version policy, signing, or publication procedure changes. |
 | [`docs/LUA51-LNUM32-CANDIDATE.md`](docs/LUA51-LNUM32-CANDIDATE.md) | Operational procedure for dispatching, obtaining, verifying, and using the reproducible Lua 5.1 LNUM32 release candidate on unpacked firmware. | 2026-08-26 | Revalidate or delete when the LNUM32 candidate is promoted to stable release, candidate specification/schema changes, qualification workflow changes, or real-firmware workflows change. |
-| [`docs/examples/RECIPES.md`](docs/examples/RECIPES.md) | Practical command-line and composition recipes for consuming machine JSON and JSONL output. | 2026-08-25 | Machine interface envelopes, export records, or CLI subcommands change. |
+| [`docs/examples/RECIPES.md`](docs/examples/RECIPES.md) | Practical command-line and composition recipes for consuming machine JSON and JSONL output. | 2026-08-27 | Machine interface envelopes, export records, or CLI subcommands change. |
 
 ## Intended scope
 

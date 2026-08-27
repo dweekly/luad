@@ -28,7 +28,7 @@ Output:
 Extract all string constants across a batch of precompiled files, capturing parent file and prototype structural path:
 
 ```bash
-luad export firmware/*.luac --format jsonl | jq -r '
+luad export firmware/*.luac --format jsonl --facts constant | jq -r '
   select(.record_type == "constant" and
          (.data.value.value.display? != null)) |
   "[\(.context.input_identity.path)]" +
@@ -40,7 +40,8 @@ For large or mixed corpora, cap counted facts independently for each input while
 retaining every file's completion or failure record:
 
 ```bash
-luad export firmware/*.lua --format jsonl --max-facts-per-file 10000 | jq -c '
+luad export firmware/*.lua --format jsonl --facts prototype,instruction,constant \
+  --max-facts-per-file 10000 | jq -c '
   select(.record_type == "file_end") |
   {path, status, is_truncated, emitted_fact_count, available_fact_count}'
 ```
@@ -73,7 +74,7 @@ luad query firmware/main.luac --where "mnemonic == 'GETGLOBAL' or mnemonic == 'C
 Or from a batch JSONL export:
 
 ```bash
-luad export firmware/*.luac --format jsonl | jq -c '
+luad export firmware/*.luac --format jsonl --facts instruction | jq -c '
   select(.record_type == "instruction" and (.data.mnemonic | startswith("GETGLOBAL") or startswith("CALL"))) |
   {id: .data.id, mnemonic: .data.mnemonic, comment: .data.comment}'
 ```
@@ -93,7 +94,7 @@ luad callees firmware/main.lua --format json | jq -c '
 Survey a firmware tree from the recursive export while retaining file identity:
 
 ```bash
-luad export firmware/*.lua --format jsonl | jq -c '
+luad export firmware/*.lua --format jsonl --facts callee | jq -c '
   select(.record_type == "callee") |
   {file: .context.input_identity.path,
    profile: .context.interpretation.profile,
@@ -190,7 +191,7 @@ global store. It does not claim the global cannot be replaced by code outside th
 Trace the capture of local variables and parent upvalues into nested closure upvalues across prototype boundaries:
 
 ```bash
-luad export closures.luac --format jsonl | jq -c '
+luad export closures.luac --format jsonl --facts xref | jq -c '
   select(.record_type == "xref" and .data.relation == "binds") |
   {source: .data.source, target: .data.target, relation: .data.relation}'
 ```

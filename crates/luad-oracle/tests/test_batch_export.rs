@@ -27,6 +27,156 @@ fn get_luad_bin() -> String {
     path.to_str().unwrap().to_string()
 }
 
+const COUNTED_EXPORT_FACTS: [&str; 9] = [
+    "prototype",
+    "prototype_identity",
+    "instruction",
+    "constant",
+    "upvalue",
+    "xref",
+    "callee",
+    "origin",
+    "call_relation",
+];
+
+fn run_selected_export(luad: &str, file: &std::path::Path, facts: &str) -> std::process::Output {
+    Command::new(luad)
+        .args([
+            "export",
+            file.to_str().expect("fixture path"),
+            "--format",
+            "jsonl",
+            "--facts",
+            facts,
+        ])
+        .output()
+        .expect("run selected export")
+}
+
+fn parse_jsonl(output: &[u8]) -> Vec<serde_json::Value> {
+    String::from_utf8(output.to_vec())
+        .expect("export stdout is UTF-8")
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("export line is JSON"))
+        .collect()
+}
+
+#[test]
+fn test_batch_export_fact_family_selection_matrix() {
+    let root = luad_oracle::find_workspace_root();
+    let lua51 = root.join("tests/fixtures/precompiled/lua51/closures.luac");
+    let luad = get_luad_bin();
+
+    for family in COUNTED_EXPORT_FACTS {
+        let output = run_selected_export(&luad, &lua51, family);
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "{family}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let records = parse_jsonl(&output.stdout);
+        assert_eq!(records[0]["fact_families"], serde_json::json!([family]));
+
+        let facts: Vec<_> = records
+            .iter()
+            .filter(|record| {
+                record["record_type"]
+                    .as_str()
+                    .is_some_and(|kind| COUNTED_EXPORT_FACTS.contains(&kind))
+            })
+            .collect();
+        assert!(!facts.is_empty(), "fixture must exercise {family}");
+        assert!(
+            facts.iter().all(|record| record["record_type"] == family),
+            "{family}: selected stream emitted another counted family"
+        );
+        assert!(facts.iter().all(|record| record.get("context").is_some()));
+
+        let file_end = records
+            .iter()
+            .find(|record| record["record_type"] == "file_end")
+            .expect("file_end");
+        assert_eq!(file_end["emitted_fact_count"], facts.len());
+        assert_eq!(file_end["available_fact_count"], facts.len());
+        assert_eq!(file_end["is_truncated"], false);
+        let instruction_count = facts
+            .iter()
+            .filter(|record| record["record_type"] == "instruction")
+            .count();
+        assert_eq!(file_end["instruction_count"], instruction_count);
+        assert_eq!(
+            records.last().expect("export_end")["total_instructions"],
+            instruction_count
+        );
+    }
+
+    let lua54 = root.join("tests/fixtures/precompiled/lua54/closures.luac");
+    let mixed = run_selected_export(&luad, &lua54, "instruction,prototype");
+    assert_eq!(mixed.status.code(), Some(0));
+    let mixed_records = parse_jsonl(&mixed.stdout);
+    assert_eq!(
+        mixed_records[0]["fact_families"],
+        serde_json::json!(["prototype", "instruction"]),
+        "selection metadata uses canonical family order"
+    );
+    assert!(mixed_records
+        .iter()
+        .any(|record| record["record_type"] == "prototype"));
+    assert!(mixed_records
+        .iter()
+        .any(|record| record["record_type"] == "instruction"));
+    assert!(mixed_records.iter().all(|record| {
+        record["record_type"].as_str().is_none_or(|kind| {
+            !COUNTED_EXPORT_FACTS.contains(&kind) || matches!(kind, "prototype" | "instruction")
+        })
+    }));
+
+    let default = Command::new(&luad)
+        .args(["export", lua51.to_str().unwrap(), "--format", "jsonl"])
+        .output()
+        .expect("default export");
+    let explicit_all = run_selected_export(&luad, &lua51, &COUNTED_EXPORT_FACTS.join(","));
+    assert_eq!(default.status.code(), Some(0));
+    assert_eq!(explicit_all.status.code(), Some(0));
+    let default_records = parse_jsonl(&default.stdout);
+    let mut explicit_records = parse_jsonl(&explicit_all.stdout);
+    assert!(default_records[0].get("fact_families").is_none());
+    explicit_records[0]
+        .as_object_mut()
+        .expect("export_start object")
+        .remove("fact_families");
+    assert_eq!(default_records, explicit_records);
+}
+
+#[test]
+fn test_batch_export_invalid_fact_family_selection_fails_closed() {
+    let root = luad_oracle::find_workspace_root();
+    let fixture = root.join("tests/fixtures/precompiled/lua51/closures.luac");
+    let luad = get_luad_bin();
+    for (selection, marker) in [
+        ("", "non-empty"),
+        ("unknown", "unknown export fact family 'unknown'"),
+        (
+            "prototype,prototype",
+            "duplicate export fact family 'prototype'",
+        ),
+        ("prototype,", "unknown export fact family ''"),
+    ] {
+        let first = run_selected_export(&luad, &fixture, selection);
+        let second = run_selected_export(&luad, &fixture, selection);
+        assert_eq!(first.status.code(), Some(2), "selection {selection:?}");
+        assert!(first.stdout.is_empty(), "selection {selection:?}");
+        assert!(
+            String::from_utf8_lossy(&first.stderr).contains(marker),
+            "selection {selection:?}: {}",
+            String::from_utf8_lossy(&first.stderr)
+        );
+        assert_eq!(first.stdout, second.stdout, "selection {selection:?}");
+        assert_eq!(first.stderr, second.stderr, "selection {selection:?}");
+    }
+}
+
 #[test]
 fn test_batch_export_deterministic_hash_on_mixed_fixtures() {
     let luad = get_luad_bin();

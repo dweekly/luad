@@ -11,6 +11,15 @@
         "total_files"
       ],
       "properties": {
+        "fact_families": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
         "record_type": {
           "type": "string",
           "enum": [

@@ -228,6 +228,17 @@ fn run_export(files: &[String], bound: Option<&str>) -> std::process::Output {
         .unwrap_or_else(|error| panic!("Failed to execute `luad {}`: {error}", argv.join(" ")))
 }
 
+fn run_selected_export(files: &[String], bound: Option<usize>) -> std::process::Output {
+    let bound_text = bound.map(|value| value.to_string());
+    let mut argv = export_argv(files, bound_text.as_deref());
+    argv.push("--facts".to_string());
+    argv.push("instruction".to_string());
+    Command::new(luad_bin())
+        .args(&argv)
+        .output()
+        .unwrap_or_else(|error| panic!("Failed to execute `luad {}`: {error}", argv.join(" ")))
+}
+
 /// Run a bounded export that the contract requires to succeed at the option level, and
 /// return its stdout. A usage error here means the public option is absent or rejected.
 fn bounded_stdout(files: &[String], bound: usize, expected_exit: i32) -> Vec<u8> {
@@ -798,6 +809,61 @@ fn full_matrix_batch(generated: &GeneratedInputs) -> Vec<String> {
 // ---------------------------------------------------------------------------
 // Positive acceptance assertions
 // ---------------------------------------------------------------------------
+
+#[test]
+fn test_selected_family_bounds_and_terminal_counts_compose() {
+    let files = vec![pinned_fixture(&FIXTURE_CLOSURES_LUA51)];
+    let unbounded = run_selected_export(&files, None);
+    assert_eq!(unbounded.status.code(), Some(0));
+    let baseline = parse_stream(&unbounded.stdout).expect("selected unbounded stream");
+    assert_eq!(
+        baseline.start["fact_families"],
+        serde_json::json!(["instruction"])
+    );
+    assert_eq!(baseline.files.len(), 1);
+    let available = baseline.files[0].facts.len();
+    assert!(
+        available > 1,
+        "fixture must have multiple instruction facts"
+    );
+    assert!(baseline.files[0]
+        .facts
+        .iter()
+        .all(|fact| fact["record_type"] == "instruction"));
+
+    for bound in [0, 1, available] {
+        let output = run_selected_export(&files, Some(bound));
+        assert_eq!(output.status.code(), Some(0), "bound {bound}");
+        let stream = parse_stream(&output.stdout).expect("selected bounded stream");
+        let block = &stream.files[0];
+        let emitted = available.min(bound);
+        assert_eq!(block.facts.len(), emitted, "bound {bound}");
+        assert!(
+            block
+                .facts
+                .iter()
+                .all(|fact| fact["record_type"] == "instruction"),
+            "bound {bound}"
+        );
+        assert_eq!(
+            expect_u64(&block.end, "emitted_fact_count"),
+            Ok(emitted as u64)
+        );
+        assert_eq!(
+            expect_u64(&block.end, "available_fact_count"),
+            Ok(available as u64)
+        );
+        assert_eq!(
+            expect_u64(&block.end, "instruction_count"),
+            Ok(emitted as u64)
+        );
+        assert_eq!(
+            expect_bool(&block.end, "is_truncated"),
+            Ok(emitted < available)
+        );
+        assert_eq!(stream.end["total_instructions"], emitted);
+    }
+}
 
 #[test]
 fn test_bounds_matrix_matches_independent_prefix_and_counts_for_pinned_fixtures() {

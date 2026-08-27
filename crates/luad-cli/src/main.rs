@@ -1520,6 +1520,117 @@ fn handle_diff(args: DiffArgs) {
     ExitCode::Success.exit();
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum ExportFactFamily {
+    Prototype,
+    PrototypeIdentity,
+    Instruction,
+    Constant,
+    Upvalue,
+    Xref,
+    Callee,
+    Origin,
+    CallRelation,
+}
+
+const EXPORT_FACT_FAMILIES: [ExportFactFamily; 9] = [
+    ExportFactFamily::Prototype,
+    ExportFactFamily::PrototypeIdentity,
+    ExportFactFamily::Instruction,
+    ExportFactFamily::Constant,
+    ExportFactFamily::Upvalue,
+    ExportFactFamily::Xref,
+    ExportFactFamily::Callee,
+    ExportFactFamily::Origin,
+    ExportFactFamily::CallRelation,
+];
+
+impl ExportFactFamily {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Prototype => "prototype",
+            Self::PrototypeIdentity => "prototype_identity",
+            Self::Instruction => "instruction",
+            Self::Constant => "constant",
+            Self::Upvalue => "upvalue",
+            Self::Xref => "xref",
+            Self::Callee => "callee",
+            Self::Origin => "origin",
+            Self::CallRelation => "call_relation",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        EXPORT_FACT_FAMILIES
+            .iter()
+            .copied()
+            .find(|family| family.as_str() == value)
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ExportFactSelection {
+    families: std::collections::BTreeSet<ExportFactFamily>,
+    explicit: bool,
+}
+
+impl ExportFactSelection {
+    fn parse(value: Option<&str>) -> Result<Self, String> {
+        let Some(value) = value else {
+            return Ok(Self {
+                families: EXPORT_FACT_FAMILIES.into_iter().collect(),
+                explicit: false,
+            });
+        };
+
+        if value.is_empty() {
+            return Err("--facts requires a non-empty comma-separated family list".to_string());
+        }
+
+        let mut families = std::collections::BTreeSet::new();
+        for name in value.split(',') {
+            let Some(family) = ExportFactFamily::parse(name) else {
+                return Err(format!("unknown export fact family '{name}'"));
+            };
+            if !families.insert(family) {
+                return Err(format!("duplicate export fact family '{name}'"));
+            }
+        }
+
+        Ok(Self {
+            families,
+            explicit: true,
+        })
+    }
+
+    fn includes(&self, family: ExportFactFamily) -> bool {
+        self.families.contains(&family)
+    }
+
+    fn includes_proto_tree_family(&self) -> bool {
+        [
+            ExportFactFamily::Prototype,
+            ExportFactFamily::PrototypeIdentity,
+            ExportFactFamily::Instruction,
+            ExportFactFamily::Constant,
+            ExportFactFamily::Upvalue,
+        ]
+        .into_iter()
+        .any(|family| self.includes(family))
+    }
+
+    fn explicit_names(&self) -> Option<Vec<String>> {
+        self.explicit.then(|| {
+            EXPORT_FACT_FAMILIES
+                .iter()
+                .copied()
+                .filter(|family| self.includes(*family))
+                .map(|family| family.as_str().to_string())
+                .collect()
+        })
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 struct ExportProtoMeta {
     id: StableId,
@@ -1543,6 +1654,8 @@ enum ExportRecord {
         schema_version: u32,
         tool_version: String,
         total_files: usize,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fact_families: Option<Vec<String>>,
     },
     FileStart {
         path: String,
@@ -1664,71 +1777,98 @@ impl FactEmitter {
     }
 }
 
-fn count_available_facts_proto_tree(proto: &Prototype, disasm: &DisassembledPrototype) -> usize {
-    let mut count = 1 + disasm.instructions.len() + proto.constants.len() + proto.upvalues.len();
-    for (child, child_disasm) in proto.protos.iter().zip(disasm.child_protos.iter()) {
-        count += count_available_facts_proto_tree(child, child_disasm);
+fn count_available_facts_proto_tree(proto: &Prototype, selection: &ExportFactSelection) -> usize {
+    let mut count = 0;
+    if selection.includes(ExportFactFamily::Prototype) {
+        count += 1;
+    }
+    if selection.includes(ExportFactFamily::Instruction) {
+        count += proto.instructions.len();
+    }
+    if selection.includes(ExportFactFamily::Constant) {
+        count += proto.constants.len();
+    }
+    if selection.includes(ExportFactFamily::Upvalue) {
+        count += proto.upvalues.len();
+    }
+    for child in &proto.protos {
+        count += count_available_facts_proto_tree(child, selection);
     }
     count
 }
 
 fn emit_export_proto_tree(
     proto: &Prototype,
-    disasm: &DisassembledPrototype,
+    disasm: Option<&DisassembledPrototype>,
     identities: &std::collections::BTreeMap<StableId, luad_analysis::PrototypeIdentityFact>,
+    selection: &ExportFactSelection,
     emitter: &mut FactEmitter,
 ) {
     if !emitter.should_emit() {
         return;
     }
 
-    let proto_meta = ExportProtoMeta {
-        id: proto.id.clone(),
-        path: proto.path.clone(),
-        source_name: proto.source_name.as_ref().map(|s| s.display.clone()),
-        line_defined: proto.line_defined,
-        last_line_defined: proto.last_line_defined,
-        numparams: proto.numparams as usize,
-        is_vararg: proto.is_vararg != 0,
-        maxstacksize: proto.maxstacksize as usize,
-        instructions_count: proto.instructions.len(),
-        constants_count: proto.constants.len(),
-        upvalues_count: proto.upvalues.len(),
-        protos_count: proto.protos.len(),
-    };
-    if !emitter.emit_fact("prototype", &proto_meta) {
-        return;
-    }
-
-    if let Some(identity) = identities.get(&proto.id) {
-        if !emitter.emit_fact("prototype_identity", identity) {
+    if selection.includes(ExportFactFamily::Prototype) {
+        let proto_meta = ExportProtoMeta {
+            id: proto.id.clone(),
+            path: proto.path.clone(),
+            source_name: proto.source_name.as_ref().map(|s| s.display.clone()),
+            line_defined: proto.line_defined,
+            last_line_defined: proto.last_line_defined,
+            numparams: proto.numparams as usize,
+            is_vararg: proto.is_vararg != 0,
+            maxstacksize: proto.maxstacksize as usize,
+            instructions_count: proto.instructions.len(),
+            constants_count: proto.constants.len(),
+            upvalues_count: proto.upvalues.len(),
+            protos_count: proto.protos.len(),
+        };
+        if !emitter.emit_fact("prototype", &proto_meta) {
             return;
         }
     }
 
-    for inst in &disasm.instructions {
-        if !emitter.emit_instruction(inst) {
-            return;
+    if selection.includes(ExportFactFamily::PrototypeIdentity) {
+        if let Some(identity) = identities.get(&proto.id) {
+            if !emitter.emit_fact("prototype_identity", identity) {
+                return;
+            }
         }
     }
 
-    for c in &proto.constants {
-        if !emitter.emit_fact("constant", c) {
-            return;
+    if selection.includes(ExportFactFamily::Instruction) {
+        for inst in &disasm
+            .expect("selected instruction facts require disassembly")
+            .instructions
+        {
+            if !emitter.emit_instruction(inst) {
+                return;
+            }
         }
     }
 
-    for u in &proto.upvalues {
-        if !emitter.emit_fact("upvalue", u) {
-            return;
+    if selection.includes(ExportFactFamily::Constant) {
+        for c in &proto.constants {
+            if !emitter.emit_fact("constant", c) {
+                return;
+            }
         }
     }
 
-    for (child, child_disasm) in proto.protos.iter().zip(disasm.child_protos.iter()) {
+    if selection.includes(ExportFactFamily::Upvalue) {
+        for u in &proto.upvalues {
+            if !emitter.emit_fact("upvalue", u) {
+                return;
+            }
+        }
+    }
+
+    for (index, child) in proto.protos.iter().enumerate() {
         if !emitter.should_emit() {
             return;
         }
-        emit_export_proto_tree(child, child_disasm, identities, emitter);
+        let child_disasm = disasm.map(|parent| &parent.child_protos[index]);
+        emit_export_proto_tree(child, child_disasm, identities, selection, emitter);
     }
 }
 
@@ -1740,6 +1880,14 @@ fn handle_export(args: ExportArgs) {
         );
         ExitCode::UsageError.exit();
     }
+
+    let fact_selection = match ExportFactSelection::parse(args.facts.as_deref()) {
+        Ok(selection) => selection,
+        Err(error) => {
+            eprintln!("{}: {error}", "error".red());
+            ExitCode::UsageError.exit();
+        }
+    };
 
     let mut file_paths = args.files;
 
@@ -1790,6 +1938,7 @@ fn handle_export(args: ExportArgs) {
             schema_version: JSONL_SCHEMA_VERSION,
             tool_version: env!("CARGO_PKG_VERSION").to_string(),
             total_files: file_paths.len(),
+            fact_families: fact_selection.explicit_names(),
         })
         .unwrap_or_default()
     );
@@ -1935,8 +2084,13 @@ fn handle_export(args: ExportArgs) {
             .unwrap_or_default()
         );
 
-        let disasm = get_disasm_proto(&chunk.dialect, &chunk.main_proto);
-        let prototype_identity_analysis = if chunk.dialect.starts_with("lua5.1") {
+        let disasm = fact_selection
+            .includes(ExportFactFamily::Instruction)
+            .then(|| get_disasm_proto(&chunk.dialect, &chunk.main_proto));
+        let prototype_identity_analysis = if fact_selection
+            .includes(ExportFactFamily::PrototypeIdentity)
+            && chunk.dialect.starts_with("lua5.1")
+        {
             match luad_analysis::analyze_chunk_prototype_identities(&chunk) {
                 Ok(analysis) => Some(analysis),
                 Err(error) => {
@@ -1990,11 +2144,12 @@ fn handle_export(args: ExportArgs) {
                     .collect::<std::collections::BTreeMap<_, _>>()
             })
             .unwrap_or_default();
-        let xref_index = XrefIndex::build(&chunk);
-        let callee_analysis = chunk
-            .dialect
-            .starts_with("lua5.1")
-            .then(|| luad_analysis::analyze_chunk_callees(&chunk));
+        let xref_index = fact_selection
+            .includes(ExportFactFamily::Xref)
+            .then(|| XrefIndex::build(&chunk));
+        let callee_analysis = (fact_selection.includes(ExportFactFamily::Callee)
+            && chunk.dialect.starts_with("lua5.1"))
+        .then(|| luad_analysis::analyze_chunk_callees(&chunk));
         let available_callee_count = callee_analysis
             .as_ref()
             .map(|analysis| {
@@ -2005,10 +2160,9 @@ fn handle_export(args: ExportArgs) {
                     .sum::<usize>()
             })
             .unwrap_or(0);
-        let origin_analysis = chunk
-            .dialect
-            .starts_with("lua5.1")
-            .then(|| luad_analysis::analyze_chunk_origins(&chunk));
+        let origin_analysis = (fact_selection.includes(ExportFactFamily::Origin)
+            && chunk.dialect.starts_with("lua5.1"))
+        .then(|| luad_analysis::analyze_chunk_origins(&chunk));
         let available_origin_count = origin_analysis
             .as_ref()
             .map(|analysis| {
@@ -2019,10 +2173,9 @@ fn handle_export(args: ExportArgs) {
                     .sum::<usize>()
             })
             .unwrap_or(0);
-        let call_relation_analysis = chunk
-            .dialect
-            .starts_with("lua5.1")
-            .then(|| luad_analysis::analyze_chunk_call_relations(&chunk));
+        let call_relation_analysis = (fact_selection.includes(ExportFactFamily::CallRelation)
+            && chunk.dialect.starts_with("lua5.1"))
+        .then(|| luad_analysis::analyze_chunk_call_relations(&chunk));
         let available_call_relation_count = call_relation_analysis
             .as_ref()
             .map(|analysis| {
@@ -2033,25 +2186,34 @@ fn handle_export(args: ExportArgs) {
                     .sum::<usize>()
             })
             .unwrap_or(0);
-        let available_fact_count = count_available_facts_proto_tree(&chunk.main_proto, &disasm)
-            + xref_index.entries.len()
-            + available_callee_count
-            + available_origin_count
-            + available_call_relation_count
-            + prototype_identities.len();
+        let available_fact_count =
+            count_available_facts_proto_tree(&chunk.main_proto, &fact_selection)
+                + xref_index
+                    .as_ref()
+                    .map(|index| index.entries.len())
+                    .unwrap_or(0)
+                + available_callee_count
+                + available_origin_count
+                + available_call_relation_count
+                + prototype_identities.len();
 
         let context = JsonlRecordContext::successful(identity.clone(), interp);
         let mut emitter = FactEmitter::new(context.clone(), args.max_facts_per_file);
-        emit_export_proto_tree(
-            &chunk.main_proto,
-            &disasm,
-            &prototype_identities,
-            &mut emitter,
-        );
+        if fact_selection.includes_proto_tree_family() {
+            emit_export_proto_tree(
+                &chunk.main_proto,
+                disasm.as_ref(),
+                &prototype_identities,
+                &fact_selection,
+                &mut emitter,
+            );
+        }
 
-        for entry in &xref_index.entries {
-            if !emitter.emit_fact("xref", entry) {
-                break;
+        if let Some(index) = &xref_index {
+            for entry in &index.entries {
+                if !emitter.emit_fact("xref", entry) {
+                    break;
+                }
             }
         }
 
@@ -2196,5 +2358,33 @@ mod tests {
         assert!(emitter.emit_fact("constant", &"const_data"));
         assert!(emitter.emit_fact("upvalue", &"upvalue_data"));
         assert_eq!(emitter.emitted_count, 3);
+    }
+
+    #[test]
+    fn test_export_fact_selection_gates_each_independent_family() {
+        for selected in EXPORT_FACT_FAMILIES {
+            let selection = ExportFactSelection::parse(Some(selected.as_str())).unwrap();
+            for family in EXPORT_FACT_FAMILIES {
+                assert_eq!(
+                    selection.includes(family),
+                    family == selected,
+                    "{} selection must gate {} independently",
+                    selected.as_str(),
+                    family.as_str()
+                );
+            }
+        }
+
+        let default = ExportFactSelection::parse(None).unwrap();
+        assert!(EXPORT_FACT_FAMILIES
+            .iter()
+            .all(|family| default.includes(*family)));
+        assert_eq!(default.explicit_names(), None);
+
+        let reordered = ExportFactSelection::parse(Some("instruction,prototype")).unwrap();
+        assert_eq!(
+            reordered.explicit_names(),
+            Some(vec!["prototype".to_string(), "instruction".to_string()])
+        );
     }
 }
