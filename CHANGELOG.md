@@ -4,6 +4,14 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+### Release planning
+
+- Froze the future version-1 release boundary around three exact target layouts, two
+  package platforms, the existing machine-contract majors and exit codes, repository
+  ownership, and durable GitHub Release evidence retention. This planning decision does
+  not promote a target; existing derived-analysis surfaces remain experimental unless a
+  later public-contract qualification explicitly includes them.
+
 ### Deterministic scalar rendering
 
 - Added one core rendering authority for the exact Lua 5.1.5 and Lua 5.4.8 targets,
