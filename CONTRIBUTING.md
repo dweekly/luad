@@ -20,10 +20,11 @@ the steward explicitly authorizes an amendment.
 
 ## Development setup
 
-The contributor toolchain is pinned in `rust-toolchain.toml`. Workspace and fuzz package
-manifests intentionally omit `rust-version` because an MSRV has not yet been established
-independently. Do not turn the contributor pin into package metadata without a dedicated
-MSRV contract and executable evidence.
+The stable workspace MSRV is Rust 1.85. The contributor and release-builder toolchain is
+separately pinned to Rust 1.97.1 in `rust-toolchain.toml`; the fuzz workspace uses
+`nightly-2026-08-25` and does not declare a stable `rust-version`. Changes that raise
+the MSRV must update package metadata, CI evidence, release documentation, and the
+changelog together.
 
 ```console
 cargo build --workspace

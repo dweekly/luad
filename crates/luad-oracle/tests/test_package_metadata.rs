@@ -10,6 +10,7 @@ use serde_json::Value;
 
 const REPOSITORY: &str = "https://github.com/dweekly/luad";
 const LICENSE_EXPRESSION: &str = "MIT OR Apache-2.0";
+const MSRV: &str = "1.85";
 const MIT_SHA256: &str = "f9ad3423044ff24a94051b055745fbe7059b1ecdb83ea2a00b36d32e95bd54fa";
 const APACHE_SHA256: &str = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4";
 
@@ -116,10 +117,8 @@ fn validate_metadata(metadata: &Value) -> Result<(), String> {
         {
             return Err(format!("package '{name}' is publishable"));
         }
-        if !matches!(package.get("rust_version"), Some(Value::Null)) {
-            return Err(format!(
-                "package '{name}' declares an unproved minimum Rust version"
-            ));
+        if package["rust_version"].as_str() != Some(MSRV) {
+            return Err(format!("package '{name}' does not declare MSRV {MSRV}"));
         }
 
         let binaries: Vec<&str> = package["targets"]
@@ -192,7 +191,9 @@ fn test_package_metadata_mutations_are_rejected() {
         "readme",
         "license",
         "publish",
-        "rust-version",
+        "rust-version-missing",
+        "rust-version-lower",
+        "rust-version-contributor-pin",
         "binary",
     ];
     for case in cases {
@@ -205,7 +206,11 @@ fn test_package_metadata_mutations_are_rejected() {
             "readme" => package["readme"] = Value::Null,
             "license" => package["license"] = Value::Null,
             "publish" => package["publish"] = Value::Null,
-            "rust-version" => package["rust_version"] = Value::String("1.97.1".to_string()),
+            "rust-version-missing" => package["rust_version"] = Value::Null,
+            "rust-version-lower" => package["rust_version"] = Value::String("1.84".to_string()),
+            "rust-version-contributor-pin" => {
+                package["rust_version"] = Value::String("1.97.1".to_string())
+            }
             "binary" => {
                 let target = package["targets"]
                     .as_array_mut()

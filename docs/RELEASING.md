@@ -214,9 +214,12 @@ publication evidence. A post-1.0 registry channel requires its own package-name,
 publication-order, dependency-version, and install contract. Homebrew, LuaRocks wrappers,
 additional operating systems, and installer scripts are not 1.0 requirements.
 
-Package manifests omit `rust-version` until the separate MSRV milestone establishes and
-tests a real minimum. `rust-toolchain.toml` pins contributors and release builders; it is
-not an MSRV declaration.
+The stable workspace MSRV is Rust 1.85. Every stable workspace package declares that
+minimum, and routine CI builds the locked workspace and source-installed CLI with Rust
+1.85.0 on Linux x86-64 and macOS arm64. `rust-toolchain.toml` separately pins Rust
+1.97.1 for contributors and release builders; the fuzz workspace retains its pinned
+nightly and has no stable `rust-version` claim. Passing the MSRV job does not qualify
+release-platform archives or reproducible compilation.
 
 The release publishes SHA-256 checksums. Detached signing is optional for 1.0 because
 the project has not selected a durable signing identity; do not create an ephemeral key

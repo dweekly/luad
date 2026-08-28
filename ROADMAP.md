@@ -114,8 +114,6 @@ Required work:
   license files, and version/source identity;
 - publish `SHA256SUMS`, a machine-readable evidence index, and one generated SPDX or
   CycloneDX SBOM;
-- establish the minimum supported Rust version separately from the contributor
-  toolchain pin;
 - run one dependency-license and vulnerability audit in release CI;
 - document tag, release-note, checksum, failed-release, and rollback behavior; and
 - retain release evidence beyond ordinary CI artifact expiry.
