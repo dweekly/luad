@@ -21,6 +21,61 @@ jobs:
         arguments: --locked
         command: check advisories licenses
 
+  release-sbom:
+    name: Release SBOM
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: 1.97.1
+
+    - name: Install Pinned cargo-cyclonedx
+      shell: bash
+      run: |
+        archive="${RUNNER_TEMP}/cargo-cyclonedx-x86_64-unknown-linux-gnu.tar.xz"
+        tool_root="${RUNNER_TEMP}/cargo-cyclonedx"
+        curl --fail --location --silent --show-error \
+          --output "${archive}" \
+          https://github.com/CycloneDX/cyclonedx-rust-cargo/releases/download/cargo-cyclonedx-0.5.9/cargo-cyclonedx-x86_64-unknown-linux-gnu.tar.xz
+        echo "fb8dbee9f182173e062a64a387b21a0badc6fab8b2abf9294973f012972bf6d8  ${archive}" \
+          | sha256sum --check --strict
+        mkdir -p "${tool_root}"
+        tar -xJf "${archive}" --strip-components=1 -C "${tool_root}"
+        test "$("${tool_root}/cargo-cyclonedx" cyclonedx --version)" \
+          = "cargo-cyclonedx-cyclonedx 0.5.9"
+        echo "CARGO_CYCLONEDX=${tool_root}/cargo-cyclonedx" >> "${GITHUB_ENV}"
+
+    - name: Generate and Compare Clean-Checkout SBOMs
+      shell: bash
+      run: |
+        source_one="${RUNNER_TEMP}/luad-sbom-source-one"
+        source_two="${RUNNER_TEMP}/luad-sbom-source-two"
+        output_one="${RUNNER_TEMP}/luad-sbom-one"
+        output_two="${RUNNER_TEMP}/luad-sbom-two"
+        export CARGO_TARGET_DIR="${RUNNER_TEMP}/luad-sbom-target"
+
+        git clone --quiet --no-hardlinks "${GITHUB_WORKSPACE}" "${source_one}"
+        git clone --quiet --no-hardlinks "${GITHUB_WORKSPACE}" "${source_two}"
+        "${source_one}/scripts/generate-release-sbom.sh" "${output_one}"
+        "${source_two}/scripts/generate-release-sbom.sh" "${output_two}"
+
+        version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+        sbom="luad-${version}.cdx.json"
+        cmp "${output_one}/${sbom}" "${output_two}/${sbom}"
+        mkdir -p artifacts/release-sbom
+        cp "${output_one}/${sbom}" artifacts/release-sbom/
+
+    - name: Upload Diagnostic SBOM
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-sbom
+        path: artifacts/release-sbom/
+        if-no-files-found: error
+        retention-days: 7
+
   msrv:
     name: MSRV (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

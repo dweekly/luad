@@ -157,7 +157,7 @@ The 1.0 evidence bundle includes:
 - fuzz corpus revision and extended-campaign summary;
 - security-review disposition and performance tripwires;
 - package archive hashes and member ledgers;
-- generated SPDX or CycloneDX SBOM;
+- canonical `luad-<version>.cdx.json` CycloneDX 1.5 SBOM;
 - exact known limitations; and
 - sanitized customer-transfer result identities.
 
@@ -173,7 +173,7 @@ luad-1.0.0-linux-x86_64.tar.gz
 luad-1.0.0-macos-aarch64.tar.gz
 SHA256SUMS
 evidence-index.json
-luad-1.0.0.spdx.json (or an equivalent CycloneDX document)
+luad-1.0.0.cdx.json
 ```
 
 Each archive contains the `luad` executable, README, license files, and a machine-readable
@@ -203,8 +203,25 @@ supported dialect in this non-promoting package.
 
 This local command proves archive construction for identical inputs on the current
 host. It does not yet prove cross-host reproducible Rust compilation, build both release
-platforms in CI, publish or retain artifacts, generate an SBOM, or exercise withdrawal.
-Those remain release blockers.
+platforms in CI, publish or retain artifacts, include the separately generated SBOM, or
+exercise withdrawal. Those remain release blockers.
+
+The accepted SBOM boundary is `scripts/generate-release-sbom.sh`. From a clean revision,
+with the exact cargo-cyclonedx 0.5.9 executable, it writes one
+`luad-<version>.cdx.json` document into a new or empty directory. The document is
+CycloneDX 1.5 JSON with a fixed epoch timestamp, no random serial number or host paths,
+and namespaced source-revision and `Cargo.lock` SHA-256 properties. It describes the
+`luad` executable's default-feature normal and build dependency graph across all Cargo
+target conditions; build-only components have excluded scope and dev-only dependencies
+are absent.
+
+The verifier compares the exact component set, scopes, dependency edges, declared
+licenses, registry package URLs, and registry checksums with independent locked Cargo
+metadata. The required `Release SBOM` job verifies the official Linux generator asset
+SHA-256 and requires byte-identical documents from two clean checkout paths. Its
+seven-day Actions upload is diagnostic transport, not durable release evidence. The
+source inventory does not prove which conditional components were linked into either
+platform binary, replace the dependency audit, publish an asset, or promote a target.
 
 Crates.io is not a version-1.0 distribution channel. Every workspace package is marked
 `publish = false`, and neither `cargo install luad` nor another registry package name is

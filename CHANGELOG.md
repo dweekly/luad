@@ -35,6 +35,12 @@ All notable changes will be documented here. The project has not yet made a prod
   using a pinned `cargo-deny` action, an explicit SPDX allowlist, current RustSec
   advisories, no advisory ignores or license exceptions, and fail-closed yanked and
   unmaintained-direct-dependency policy.
+- Added a clean-revision release SBOM command and required hosted check using the pinned
+  official cargo-cyclonedx 0.5.9 asset. It writes one deterministic, path-independent
+  CycloneDX 1.5 source dependency inventory, binds it to the source revision and lockfile
+  digest, independently verifies the locked normal/build graph, and rejects component,
+  edge, identity, checksum, scope, timestamp, serial, or host-path corruption without
+  claiming platform-specific binary composition.
 
 ### Deterministic scalar rendering
 

@@ -5,6 +5,7 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use luad_oracle::release_package::package_clean_workspace;
+use luad_oracle::release_sbom::generate_release_sbom;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -33,6 +34,21 @@ enum Commands {
         #[arg(long = "output-dir")]
         output_dir: PathBuf,
     },
+
+    /// Generate and independently verify the deterministic release SBOM.
+    Sbom {
+        /// Clean luad repository revision to describe.
+        #[arg(long)]
+        repository: PathBuf,
+
+        /// Exact cargo-cyclonedx 0.5.9 executable.
+        #[arg(long = "cargo-cyclonedx")]
+        cargo_cyclonedx: PathBuf,
+
+        /// New or empty output directory for the one SBOM document.
+        #[arg(long = "output-dir")]
+        output_dir: PathBuf,
+    },
 }
 
 fn run() -> Result<(), String> {
@@ -46,6 +62,16 @@ fn run() -> Result<(), String> {
             let result = package_clean_workspace(&repository, &platform, &output_dir)?;
             let json = serde_json::to_string_pretty(&result)
                 .map_err(|error| format!("serialize package result: {error}"))?;
+            println!("{json}");
+        }
+        Commands::Sbom {
+            repository,
+            cargo_cyclonedx,
+            output_dir,
+        } => {
+            let result = generate_release_sbom(&repository, &cargo_cyclonedx, &output_dir)?;
+            let json = serde_json::to_string_pretty(&result)
+                .map_err(|error| format!("serialize SBOM result: {error}"))?;
             println!("{json}");
         }
     }

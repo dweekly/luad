@@ -112,8 +112,7 @@ Required work:
   `linux-x86_64` and `macos-aarch64` archives;
 - name archives `luad-<version>-<platform>.tar.gz` and include `luad`, `README.md`,
   license files, and version/source identity;
-- publish `SHA256SUMS`, a machine-readable evidence index, and one generated SPDX or
-  CycloneDX SBOM;
+- publish `SHA256SUMS` and a machine-readable evidence index;
 - document tag, release-note, checksum, failed-release, and rollback behavior; and
 - retain release evidence beyond ordinary CI artifact expiry.
 
@@ -121,9 +120,10 @@ Detached signing is not a 1.0 blocker unless a stable signing identity and owner
 selected before the release contract freezes. If it is omitted, the release procedure
 must say so plainly and rely on repository provenance plus published checksums.
 
-Evidence boundary: a non-promoting packaging dry run from a clean revision proves the
-archive ledger, reproducibility policy, installation transcript, SBOM generation, and
-checksum verification. It cannot change capability status.
+Evidence boundary: a non-promoting packaging dry run from a clean revision references
+the accepted dependency-audit and SBOM results and proves the archive ledger,
+reproducibility policy, installation transcript, and checksum verification. It cannot
+change capability status.
 
 Stop condition: no target promotion artifact is produced by the packaging dry run.
 
