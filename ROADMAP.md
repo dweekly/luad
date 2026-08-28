@@ -111,7 +111,8 @@ Required work:
 - use a GitHub release as the primary 1.0 channel and attach the accepted
   `luad-<version>-linux-x86_64.tar.gz` and
   `luad-<version>-macos-aarch64.tar.gz` archives plus source;
-- publish `SHA256SUMS` and a machine-readable evidence index;
+- publish the accepted `SHA256SUMS`, machine-readable evidence index, and SBOM without
+  rebuilding them from another revision;
 - document tag, release-note, checksum, failed-release, and rollback behavior; and
 - retain release evidence beyond ordinary CI artifact expiry.
 
@@ -119,12 +120,11 @@ Detached signing is not a 1.0 blocker unless a stable signing identity and owner
 selected before the release contract freezes. If it is omitted, the release procedure
 must say so plainly and rely on repository provenance plus published checksums.
 
-Evidence boundary: a non-promoting release-bundle dry run from a clean revision
-references the accepted dependency-audit, SBOM, local archive, and hosted repeated-build
-results and proves evidence-index and checksum composition without changing capability
-status.
+Evidence boundary: publication consumes the accepted non-promoting `Release Bundle`
+result and proves upload, fresh download, checksum verification, durable evidence
+retention, and failed-release handling without rebuilding or changing capability status.
 
-Stop condition: no target promotion artifact is produced by the packaging dry run.
+Stop condition: no target promotion artifact is produced by publication infrastructure.
 
 ### Milestone 2 — freeze the public automation contract
 

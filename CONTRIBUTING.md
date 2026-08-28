@@ -70,6 +70,23 @@ transport, not publication or durable evidence. Do not suppress a replica mismat
 describe equality within those runner classes as reproducibility across arbitrary
 hosts, toolchains, or targets.
 
+Release-bundle composition uses the accepted archive and SBOM outputs without copying
+their internal semantic gates:
+
+```console
+scripts/assemble-release-bundle.sh \
+  /tmp/release-archives \
+  /tmp/release-sbom/luad-<version>.cdx.json \
+  /tmp/release-prerequisites.json \
+  /tmp/release-bundle
+cargo test -p luad-oracle --test test_release_bundle
+```
+
+The `Release Bundle` check creates the prerequisite document from actual same-revision
+job results, assembles twice, compares and verifies the exact five-file output, and runs
+a corruption probe. Local prerequisite JSON is composition input, not evidence that a
+hosted check passed. The seven-day result remains diagnostic and non-promoting.
+
 The bounded hostile-input campaign uses an independently pinned nightly and
 `cargo-fuzz` release:
 

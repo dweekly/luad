@@ -11,6 +11,7 @@ pub mod gate_runner;
 pub mod independent_lua51_oracle;
 pub mod independent_lua54_oracle;
 pub mod listing_parser;
+pub mod release_bundle;
 pub mod release_package;
 pub mod release_sbom;
 
@@ -37,6 +38,11 @@ pub use listing_parser::{
     assert_chunk_matches_luac, compare_chunk_with_luac, decode_instruction_mnemonic,
     decode_instruction_operands, parse_luac_dump, LuacConstDump, LuacDump, LuacInstDump,
     LuacLocVarDump, LuacProtoDump, LuacUpvalDump, OracleMismatch, OracleParseError,
+};
+pub use release_bundle::{
+    assemble_release_bundle, verify_release_bundle, BundleArchive, BundleMember,
+    BundleMemberLedger, BundlePlatform, BundleSbom, EvidenceConclusion, PrerequisiteDocument,
+    PrerequisiteResult, ReleaseBundleResult, ReleaseEvidenceIndex,
 };
 pub use release_package::{
     clean_source_revision, extract_verified_release, pack_release, package_clean_workspace,

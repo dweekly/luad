@@ -257,6 +257,125 @@ jobs:
         if-no-files-found: error
         retention-days: 7
 
+  release-bundle:
+    name: Release Bundle
+    needs:
+      - dependency-audit
+      - release-sbom
+      - release-archives
+      - test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: 1.97.1
+
+    - name: Download Release Archives
+      uses: actions/download-artifact@v4
+      with:
+        name: release-archives
+        path: ${{ runner.temp }}/release-archives
+
+    - name: Download Release SBOM
+      uses: actions/download-artifact@v4
+      with:
+        name: release-sbom
+        path: ${{ runner.temp }}/release-sbom
+
+    - name: Assemble, Compare, and Verify Release Bundle
+      shell: bash
+      env:
+        DEPENDENCY_AUDIT_RESULT: ${{ needs.dependency-audit.result }}
+        HOSTED_ARCHIVES_RESULT: ${{ needs.release-archives.result }}
+        LOCAL_ARCHIVE_RESULT: ${{ needs.test.result }}
+        RELEASE_SBOM_RESULT: ${{ needs.release-sbom.result }}
+      run: |
+        version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+        run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+        prerequisites="${RUNNER_TEMP}/release-prerequisites.json"
+        first="${RUNNER_TEMP}/release-bundle-one"
+        second="${RUNNER_TEMP}/release-bundle-two"
+        archive_dir="${RUNNER_TEMP}/release-archives"
+        sbom="${RUNNER_TEMP}/release-sbom/luad-${version}.cdx.json"
+
+        python3 - "${GITHUB_SHA}" "${run_url}" "${DEPENDENCY_AUDIT_RESULT}" "${HOSTED_ARCHIVES_RESULT}" "${LOCAL_ARCHIVE_RESULT}" "${RELEASE_SBOM_RESULT}" "${prerequisites}" <<'PY'
+        import json
+        import pathlib
+        import sys
+
+        revision, run_url = sys.argv[1:3]
+        results = [
+            {
+                "evidence_id": "dependency-audit",
+                "check_name": "Dependency Audit",
+                "source_revision": revision,
+                "conclusion": sys.argv[3],
+                "result_url": run_url,
+            },
+            {
+                "evidence_id": "hosted-release-archives",
+                "check_name": "Release Archives",
+                "source_revision": revision,
+                "conclusion": sys.argv[4],
+                "result_url": run_url,
+            },
+            {
+                "evidence_id": "local-release-archive",
+                "check_name": "Test (ubuntu-latest)",
+                "source_revision": revision,
+                "conclusion": sys.argv[5],
+                "result_url": run_url,
+            },
+            {
+                "evidence_id": "release-sbom",
+                "check_name": "Release SBOM",
+                "source_revision": revision,
+                "conclusion": sys.argv[6],
+                "result_url": run_url,
+            },
+        ]
+        document = {"schema_version": 1, "results": results}
+        pathlib.Path(sys.argv[7]).write_text(
+            json.dumps(document, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        PY
+
+        ./scripts/assemble-release-bundle.sh "${archive_dir}" "${sbom}" "${prerequisites}" "${first}"
+        ./scripts/assemble-release-bundle.sh "${archive_dir}" "${sbom}" "${prerequisites}" "${second}"
+
+        expected="$(printf '%s\n' SHA256SUMS evidence-index.json "luad-${version}-linux-x86_64.tar.gz" "luad-${version}-macos-aarch64.tar.gz" "luad-${version}.cdx.json" | LC_ALL=C sort)"
+        for bundle in "${first}" "${second}"; do
+          actual="$(find "${bundle}" -mindepth 1 -maxdepth 1 -type f -exec basename {} \; | LC_ALL=C sort)"
+          test "${actual}" = "${expected}"
+          cargo run --quiet -p luad-oracle --bin luad-release -- verify-bundle --repository "${GITHUB_WORKSPACE}" --bundle-dir "${bundle}"
+        done
+        for name in ${expected}; do
+          cmp "${first}/${name}" "${second}/${name}"
+        done
+
+        probe="${RUNNER_TEMP}/release-bundle-corruption-probe"
+        cp -R "${first}" "${probe}"
+        printf '\000' | dd of="${probe}/luad-${version}-linux-x86_64.tar.gz" bs=1 seek=0 count=1 conv=notrunc status=none
+        if cargo run --quiet -p luad-oracle --bin luad-release -- verify-bundle --repository "${GITHUB_WORKSPACE}" --bundle-dir "${probe}"; then
+          echo "corrupted release bundle unexpectedly passed verification" >&2
+          exit 1
+        fi
+
+        mkdir -p artifacts/release-bundle
+        cp "${first}/"* artifacts/release-bundle/
+
+    - name: Upload Diagnostic Release Bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-bundle
+        path: artifacts/release-bundle/
+        if-no-files-found: error
+        retention-days: 7
+
   msrv:
     name: MSRV (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
