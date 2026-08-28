@@ -22,6 +22,12 @@ All notable changes will be documented here. The project has not yet made a prod
   binary without promoting a Lua target.
 - Shipped the Apache License 2.0 text required by the existing `MIT OR Apache-2.0`
   workspace declaration and corrected the canonical repository URL to `dweekly/luad`.
+- Added role-specific descriptions, repository, homepage, root README, license, and
+  explicit `publish = false` metadata to every workspace package. Removed the contributor
+  toolchain value from `rust-version` package metadata because no independent MSRV has
+  been established, while retaining the toolchain pin itself.
+- Documented and tested a locked local install from a checked-out `luad-cli` source path.
+  Crates.io and `cargo install luad` are explicitly not 1.0 distribution channels.
 
 ### Deterministic scalar rendering
 

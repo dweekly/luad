@@ -206,10 +206,17 @@ host. It does not yet prove cross-host reproducible Rust compilation, build both
 platforms in CI, publish or retain artifacts, generate an SBOM, run dependency audits,
 or exercise withdrawal. Those remain release blockers.
 
-`cargo install` is a secondary channel only after package names, publication order,
-metadata, dependency versions, and install behavior pass a dry run and are documented.
-Homebrew, LuaRocks wrappers, additional operating systems, and installer scripts are not
-1.0 requirements.
+Crates.io is not a version-1.0 distribution channel. Every workspace package is marked
+`publish = false`, and neither `cargo install luad` nor another registry package name is
+advertised. A checked-out source tree may use
+`cargo install --path crates/luad-cli --locked`; that is a source-build convenience, not
+publication evidence. A post-1.0 registry channel requires its own package-name,
+publication-order, dependency-version, and install contract. Homebrew, LuaRocks wrappers,
+additional operating systems, and installer scripts are not 1.0 requirements.
+
+Package manifests omit `rust-version` until the separate MSRV milestone establishes and
+tests a real minimum. `rust-toolchain.toml` pins contributors and release builders; it is
+not an MSRV declaration.
 
 The release publishes SHA-256 checksums. Detached signing is optional for 1.0 because
 the project has not selected a durable signing identity; do not create an ephemeral key
