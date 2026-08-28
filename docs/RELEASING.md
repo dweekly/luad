@@ -2,7 +2,7 @@
 
 Status: release policy and operational checklist.
 
-Fresh as of: 2026-08-27.
+Fresh as of: 2026-08-28.
 
 Revalidate or delete when: the release target matrix, qualification lifecycle, package
 platforms, artifact channel, compatibility policy, signing/checksum policy, release
@@ -11,9 +11,10 @@ ownership, or rollback procedure changes.
 ## Current release stop
 
 Do not make a production release. No exact target is currently promoted, the active
-sprint is a no-work checkpoint, the 1.0 publication workflow is not implemented, and
-the required customer, extended-fuzz, security-review, packaging, and final
-qualification evidence has not closed over one clean revision.
+sprint is a no-work checkpoint, and the required public-contract, customer,
+extended-fuzz, security-review, target-qualification, and final-candidate evidence has
+not closed over one clean revision. The publication rehearsal below proves mechanics;
+it does not authorize a `v*` tag or production release.
 
 The dependency-ordered path is [the product roadmap](../ROADMAP.md). Exact release work
 begins only under a qualification contract in [the active sprint](NEXT-SPRINT.md).
@@ -212,8 +213,7 @@ that both byte comparison and checksum verification fail closed.
 The resulting `release-archives` Actions upload expires after seven days. It is
 diagnostic transport, not a GitHub Release, durable evidence, target promotion, or a
 claim of reproducibility across different runner-image revisions, operating systems,
-Rust versions, target triples, or arbitrary build environments. Publication, durable
-retention, and withdrawal remain release blockers.
+Rust versions, target triples, or arbitrary build environments.
 
 The accepted SBOM boundary is `scripts/generate-release-sbom.sh`. From a clean revision,
 with the exact cargo-cyclonedx 0.5.9 executable, it writes one
@@ -257,8 +257,50 @@ workflow dependencies, assembles twice, requires byte equality for all five file
 verifies both results, and proves a changed archive byte fails verification. Its
 seven-day upload is diagnostic transport. The assembler does not query GitHub, so a
 locally authored prerequisite document or copied index does not authenticate a hosted
-result. GitHub Release publication, source attachment, durable evidence retention, and
-withdrawal remain separate blockers.
+result.
+
+### Non-production publication rehearsal
+
+The manually dispatched `Release Publication` workflow consumes one already successful
+`main` `CI` run at the same full source revision. It reuses that run's exact
+`release-bundle` bytes; it never rebuilds an archive, SBOM, checksum file, or evidence
+index. A maintainer dispatches it from `main` with:
+
+```console
+gh workflow run release-publication.yml --ref main \
+  -f revision=<full-main-revision> \
+  -f ci_run_id=<successful-main-ci-run-id>
+```
+
+The script authenticates the repository, clean checkout, remote `main`, CI run, all 13
+required jobs, and the one unexpired bundle artifact before making a release change. It
+then exercises a corrupted draft cleanup probe and a valid published withdrawal probe.
+Both probe releases and tags must be absent at completion.
+
+The retained result is a prerelease named and tagged
+`publication-rehearsal-<version>-<12-revision-hex>`. It is explicitly not a product
+release, does not become the latest release, names no supported target, and is not
+signed. Its five custom assets are the two platform archives, `SHA256SUMS`,
+`evidence-index.json`, and the CycloneDX SBOM; GitHub's ordinary tag archives provide
+source. The workflow freshly downloads and byte-compares every custom asset, reruns the
+bundle verifier, checks both source archive forms, and verifies the tag target and short
+release notes. The retained prerelease is durable mechanics evidence beyond Actions
+artifact expiry, not target qualification or a 1.0 candidate.
+
+Re-running the exact identity only reverifies it; no asset is overwritten and no tag is
+moved. From a clean canonical `main` checkout with authenticated `gh`, withdraw that
+exact rehearsal with the command recorded in its notes:
+
+```console
+scripts/release-publication.sh withdraw \
+  publication-rehearsal-<version>-<12-revision-hex> \
+  <full-main-revision>
+```
+
+Withdrawal deletes the release and tag and requires the release lookup, tag lookup, and
+both tag source-archive endpoints to return absent. Failure to prove cleanup is a hard
+failure requiring maintainer attention. Never reuse the deleted tag name or use this
+command for a `v*` tag.
 
 Crates.io is not a version-1.0 distribution channel. Every workspace package is marked
 `publish = false`, and neither `cargo install luad` nor another registry package name is

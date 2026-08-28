@@ -14,6 +14,11 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Release packaging
 
+- Added a manually dispatched, non-production GitHub Release rehearsal that consumes
+  one accepted `main` release bundle without rebuilding it, publishes the exact five
+  files as an unsigned non-latest prerelease, verifies fresh asset and source-archive
+  downloads, retains the result beyond Actions expiry, and proves corrupted-draft
+  cleanup plus valid-release withdrawal with an offline stateful fake-GitHub regression.
 - Added a bounded non-promoting release-bundle assembler and verifier. It composes the
   accepted Linux and macOS archives, canonical CycloneDX SBOM, and same-revision hosted
   result references into the conventional five-file release set, with a canonical
