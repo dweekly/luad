@@ -33,6 +33,16 @@ bash scripts/check.sh
 
 `scripts/check.sh` runs the aggregate repository checks. It is necessary before handoff, but it is not proof that oracle-backed claims are correct; each work package must also pass its canonical gate.
 
+Dependency changes must also pass the pinned `cargo-deny` policy:
+
+```console
+cargo install cargo-deny --version 0.20.2 --locked
+cargo deny --locked check advisories licenses
+```
+
+Do not add an advisory ignore, license exception, clarification, or graph exclusion as
+a routine way to restore CI. A rejected dependency requires its own bounded disposition.
+
 The bounded hostile-input campaign uses an independently pinned nightly and
 `cargo-fuzz` release:
 

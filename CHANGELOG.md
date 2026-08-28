@@ -31,6 +31,10 @@ All notable changes will be documented here. The project has not yet made a prod
 - Established Rust 1.85 as the stable workspace MSRV with locked Linux and macOS build
   and source-install CI, while retaining Rust 1.97.1 for contributors and release
   builders and the separately pinned nightly for fuzzing.
+- Added a required locked dependency audit for both release targets and dev dependencies,
+  using a pinned `cargo-deny` action, an explicit SPDX allowlist, current RustSec
+  advisories, no advisory ignores or license exceptions, and fail-closed yanked and
+  unmaintained-direct-dependency policy.
 
 ### Deterministic scalar rendering
 

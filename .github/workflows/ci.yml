@@ -10,6 +10,17 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  dependency-audit:
+    name: Dependency Audit
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Check Licenses and Advisories
+      uses: EmbarkStudios/cargo-deny-action@v2.1.1
+      with:
+        arguments: --locked
+        command: check advisories licenses
+
   msrv:
     name: MSRV (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
