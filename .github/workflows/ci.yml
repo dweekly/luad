@@ -76,6 +76,187 @@ jobs:
         if-no-files-found: error
         retention-days: 7
 
+  release-archive-build:
+    name: Release Archive Build (${{ matrix.platform }}, replica ${{ matrix.replica }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-latest
+            target_triple: x86_64-unknown-linux-gnu
+            replica: one
+          - platform: linux-x86_64
+            runner: ubuntu-latest
+            target_triple: x86_64-unknown-linux-gnu
+            replica: two
+          - platform: macos-aarch64
+            runner: macos-latest
+            target_triple: aarch64-apple-darwin
+            replica: one
+          - platform: macos-aarch64
+            runner: macos-latest
+            target_triple: aarch64-apple-darwin
+            replica: two
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: 1.97.1
+
+    - name: Confirm Release Host
+      shell: bash
+      run: |
+        host="$(rustc -vV | sed -n 's/^host: //p')"
+        test "${host}" = "${{ matrix.target_triple }}"
+
+    - name: Build, Verify, Install, and Smoke Archive
+      shell: bash
+      run: |
+        source_dir="${RUNNER_TEMP}/luad-release-source-${{ matrix.replica }}"
+        output_dir="${RUNNER_TEMP}/luad-release-output"
+        result="${RUNNER_TEMP}/luad-release-result.json"
+
+        git clone --quiet --no-hardlinks "${GITHUB_WORKSPACE}" "${source_dir}"
+        "${source_dir}/scripts/package-release.sh" "${output_dir}" >"${result}"
+
+        version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+        stem="luad-${version}-${{ matrix.platform }}"
+        expected="$(printf '%s\n' \
+          SHA256SUMS \
+          "${stem}.installation.json" \
+          "${stem}.ledger.json" \
+          "${stem}.tar.gz" | LC_ALL=C sort)"
+        actual="$(find "${output_dir}" -mindepth 1 -maxdepth 1 -type f \
+          -exec basename {} \; | LC_ALL=C sort)"
+        test "${actual}" = "${expected}"
+
+        artifact_dir="artifacts/release-archive"
+        mkdir -p "${artifact_dir}"
+        cp "${output_dir}/SHA256SUMS" "${artifact_dir}/"
+        cp "${output_dir}/${stem}.installation.json" "${artifact_dir}/"
+        cp "${output_dir}/${stem}.ledger.json" "${artifact_dir}/"
+        cp "${output_dir}/${stem}.tar.gz" "${artifact_dir}/"
+
+    - name: Upload Release Archive Replica
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-archive-${{ matrix.platform }}-${{ matrix.replica }}
+        path: artifacts/release-archive/
+        if-no-files-found: error
+        retention-days: 7
+
+  release-archives:
+    name: Release Archives
+    needs: release-archive-build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download Linux Replica One
+      uses: actions/download-artifact@v4
+      with:
+        name: release-archive-linux-x86_64-one
+        path: replicas/linux-x86_64-one
+
+    - name: Download Linux Replica Two
+      uses: actions/download-artifact@v4
+      with:
+        name: release-archive-linux-x86_64-two
+        path: replicas/linux-x86_64-two
+
+    - name: Download macOS Replica One
+      uses: actions/download-artifact@v4
+      with:
+        name: release-archive-macos-aarch64-one
+        path: replicas/macos-aarch64-one
+
+    - name: Download macOS Replica Two
+      uses: actions/download-artifact@v4
+      with:
+        name: release-archive-macos-aarch64-two
+        path: replicas/macos-aarch64-two
+
+    - name: Compare Replicas and Assemble Checksums
+      shell: bash
+      run: |
+        version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+        accepted="artifacts/release-archives"
+        mkdir -p "${accepted}"
+
+        for platform in linux-x86_64 macos-aarch64; do
+          first="replicas/${platform}-one"
+          second="replicas/${platform}-two"
+          stem="luad-${version}-${platform}"
+          expected="$(printf '%s\n' \
+            SHA256SUMS \
+            "${stem}.installation.json" \
+            "${stem}.ledger.json" \
+            "${stem}.tar.gz" | LC_ALL=C sort)"
+          for replica in "${first}" "${second}"; do
+            actual="$(find "${replica}" -mindepth 1 -maxdepth 1 -type f \
+              -exec basename {} \; | LC_ALL=C sort)"
+            test "${actual}" = "${expected}"
+            (cd "${replica}" && sha256sum --check --strict SHA256SUMS)
+          done
+
+          cmp "${first}/SHA256SUMS" "${second}/SHA256SUMS"
+          cmp "${first}/${stem}.installation.json" \
+            "${second}/${stem}.installation.json"
+          cmp "${first}/${stem}.ledger.json" "${second}/${stem}.ledger.json"
+          cmp "${first}/${stem}.tar.gz" "${second}/${stem}.tar.gz"
+
+          cp "${first}/${stem}.installation.json" "${accepted}/"
+          cp "${first}/${stem}.ledger.json" "${accepted}/"
+          cp "${first}/${stem}.tar.gz" "${accepted}/"
+        done
+
+        (
+          cd "${accepted}"
+          sha256sum "luad-${version}-linux-x86_64.tar.gz" \
+            "luad-${version}-macos-aarch64.tar.gz" | LC_ALL=C sort >SHA256SUMS
+          sha256sum --check --strict SHA256SUMS
+        )
+
+        probe="${RUNNER_TEMP}/release-archive-corruption-probe"
+        cp -R "${accepted}" "${probe}"
+        printf '\000' | dd \
+          of="${probe}/luad-${version}-linux-x86_64.tar.gz" \
+          bs=1 seek=0 count=1 conv=notrunc status=none
+        if cmp "${accepted}/luad-${version}-linux-x86_64.tar.gz" \
+          "${probe}/luad-${version}-linux-x86_64.tar.gz"; then
+          echo "corrupted archive unexpectedly passed byte comparison" >&2
+          exit 1
+        fi
+        if (cd "${probe}" && sha256sum --check --strict SHA256SUMS); then
+          echo "corrupted archive unexpectedly passed checksum verification" >&2
+          exit 1
+        fi
+
+        expected="$(printf '%s\n' \
+          SHA256SUMS \
+          "luad-${version}-linux-x86_64.installation.json" \
+          "luad-${version}-linux-x86_64.ledger.json" \
+          "luad-${version}-linux-x86_64.tar.gz" \
+          "luad-${version}-macos-aarch64.installation.json" \
+          "luad-${version}-macos-aarch64.ledger.json" \
+          "luad-${version}-macos-aarch64.tar.gz" | LC_ALL=C sort)"
+        actual="$(find "${accepted}" -mindepth 1 -maxdepth 1 -type f \
+          -exec basename {} \; | LC_ALL=C sort)"
+        test "${actual}" = "${expected}"
+
+    - name: Upload Diagnostic Release Archives
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-archives
+        path: artifacts/release-archives/
+        if-no-files-found: error
+        retention-days: 7
+
   msrv:
     name: MSRV (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

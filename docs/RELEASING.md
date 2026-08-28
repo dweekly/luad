@@ -202,9 +202,18 @@ running `luad --version` plus machine-readable capabilities. The smoke refuses a
 supported dialect in this non-promoting package.
 
 This local command proves archive construction for identical inputs on the current
-host. It does not yet prove cross-host reproducible Rust compilation, build both release
-platforms in CI, publish or retain artifacts, include the separately generated SBOM, or
-exercise withdrawal. Those remain release blockers.
+host. The required `Release Archives` job repeats it in two independent Rust 1.97.1
+jobs for each of `linux-x86_64` and `macos-aarch64`, confirms the exact Rust host triple,
+and requires byte equality for each platform's archive, ledger, one-entry checksum, and
+installation transcript. A Linux aggregation job verifies one accepted archive per
+platform, emits a canonical two-entry `SHA256SUMS`, and proves with a corrupted copy
+that both byte comparison and checksum verification fail closed.
+
+The resulting `release-archives` Actions upload expires after seven days. It is
+diagnostic transport, not a GitHub Release, durable evidence, target promotion, or a
+claim of reproducibility across different runner-image revisions, operating systems,
+Rust versions, target triples, or arbitrary build environments. Publication, durable
+retention, evidence-index and SBOM composition, and withdrawal remain release blockers.
 
 The accepted SBOM boundary is `scripts/generate-release-sbom.sh`. From a clean revision,
 with the exact cargo-cyclonedx 0.5.9 executable, it writes one

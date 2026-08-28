@@ -56,6 +56,20 @@ canonical CycloneDX 1.5 source inventory and independently compares it with lock
 metadata. Do not describe it as proof of either platform binary's linked contents or as
 a replacement for the dependency audit.
 
+Release archive changes must preserve the accepted host-native packaging boundary:
+
+```console
+./scripts/package-release.sh /tmp/luad-release
+cargo test -p luad-oracle --test test_release_package
+```
+
+The required `Release Archives` check repeats that command in two independent Rust
+1.97.1 jobs for each of `linux-x86_64` and `macos-aarch64`, then requires exact archive
+and sidecar bytes plus verified combined checksums. Its seven-day upload is diagnostic
+transport, not publication or durable evidence. Do not suppress a replica mismatch or
+describe equality within those runner classes as reproducibility across arbitrary
+hosts, toolchains, or targets.
+
 The bounded hostile-input campaign uses an independently pinned nightly and
 `cargo-fuzz` release:
 
