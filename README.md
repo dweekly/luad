@@ -45,7 +45,7 @@ delete the document in the same change and update this index.
 | [`ROADMAP.md`](ROADMAP.md) | Detailed dependency-ordered path to a narrow, exact, robust, documented, and obtainable 1.0 release. | 2026-08-27 | Product targets, milestone order, release acceptance, package platforms, compatibility boundary, or exclusions change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-27 | Support policy, reporting channel, trust boundary, or threat model changes. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, separate product and qualification CI lanes, proportional evidence, process budgets, and agent orchestration. | 2026-08-27 | Planning artifacts, CI lanes, customer cadence, agent roles, evidence policy, process budgets, provider interfaces, or sprint-advance mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Active release-infrastructure contract for one deterministic, independently verified CycloneDX dependency inventory for the clean `luad` source revision. | 2026-08-27 | Replace with the neutral checkpoint when the SBOM command, locked-graph verifier, hosted evidence, corruption controls, and documentation close, or revise before implementation if its boundary changes. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Sprint checkpoint that authorizes no product implementation until one forward-looking contract is selected. | 2026-08-27 | A product batch is selected; replace the checkpoint with its exact claim, evidence boundary, non-goals, and stop condition. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-27 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-27 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
 | [`docs/RELEASING.md`](docs/RELEASING.md) | Release stop, exact-target order, qualification checklist, evidence bundle, packaging, compatibility, publication, and rollback policy. | 2026-08-27 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |
@@ -157,8 +157,30 @@ installation transcript. The archive contains only a top-level
 `LICENSE-APACHE`, and `VERSION.json`.
 
 This is a local, non-promoting packaging check. It does not publish an artifact, qualify
-a host or Lua target, generate an SBOM, or establish cross-host reproducible compilation.
-The remaining release work is tracked in the [roadmap](ROADMAP.md).
+a host or Lua target, include the separately generated SBOM, or establish cross-host
+reproducible compilation. The remaining release work is tracked in the
+[roadmap](ROADMAP.md).
+
+## Release SBOM dry run
+
+With the exact `cargo-cyclonedx` 0.5.9 executable installed, a clean checkout can write
+and independently verify the release dependency inventory:
+
+```console
+CARGO_CYCLONEDX="$(command -v cargo-cyclonedx)" \
+  ./scripts/generate-release-sbom.sh /tmp/luad-sbom
+```
+
+The new or empty output directory receives exactly `luad-<version>.cdx.json`: canonical,
+path-independent CycloneDX 1.5 JSON bound to the clean source revision and `Cargo.lock`
+digest. The verifier compares components, scopes, licenses, registry checksums, and
+dependency edges with locked Cargo metadata. CI pins the official Linux generator asset
+and compares output from two clean checkout paths.
+
+This is a conservative source inventory for the `luad` executable's normal and build
+dependency graph across all Cargo target conditions. It is not a platform-specific
+binary-composition attestation, vulnerability result, published release asset, or target
+promotion record.
 
 ## First use
 

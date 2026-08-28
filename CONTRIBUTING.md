@@ -43,6 +43,19 @@ cargo deny --locked check advisories licenses
 Do not add an advisory ignore, license exception, clarification, or graph exclusion as
 a routine way to restore CI. A rejected dependency requires its own bounded disposition.
 
+Release dependency inventories use the exact `cargo-cyclonedx` 0.5.9 generator:
+
+```console
+CARGO_CYCLONEDX="$(command -v cargo-cyclonedx)" \
+  scripts/generate-release-sbom.sh /tmp/luad-sbom
+cargo test -p luad-oracle --test test_release_sbom
+```
+
+The command requires a clean revision and a new or empty output directory. It emits one
+canonical CycloneDX 1.5 source inventory and independently compares it with locked Cargo
+metadata. Do not describe it as proof of either platform binary's linked contents or as
+a replacement for the dependency audit.
+
 The bounded hostile-input campaign uses an independently pinned nightly and
 `cargo-fuzz` release:
 

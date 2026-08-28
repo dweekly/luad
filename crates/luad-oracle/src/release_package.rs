@@ -676,7 +676,7 @@ pub fn clean_source_revision(repository: &Path) -> Result<String, String> {
     Ok(revision)
 }
 
-fn cargo_metadata(repository: &Path) -> Result<serde_json::Value, String> {
+pub(crate) fn cargo_metadata(repository: &Path) -> Result<serde_json::Value, String> {
     let output = Command::new("cargo")
         .args(["metadata", "--no-deps", "--format-version", "1"])
         .current_dir(repository)
@@ -691,7 +691,7 @@ fn cargo_metadata(repository: &Path) -> Result<serde_json::Value, String> {
     serde_json::from_slice(&output.stdout).map_err(|error| format!("parse cargo metadata: {error}"))
 }
 
-fn workspace_version(metadata: &serde_json::Value) -> Result<String, String> {
+pub(crate) fn workspace_version(metadata: &serde_json::Value) -> Result<String, String> {
     let packages = metadata
         .get("packages")
         .and_then(|value| value.as_array())

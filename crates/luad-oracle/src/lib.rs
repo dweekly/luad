@@ -12,6 +12,7 @@ pub mod independent_lua51_oracle;
 pub mod independent_lua54_oracle;
 pub mod listing_parser;
 pub mod release_package;
+pub mod release_sbom;
 
 pub use candidate::{
     decompress_gzip, parse_tar, resolve_test_binary, verify_platform_attestation,
@@ -41,6 +42,9 @@ pub use release_package::{
     clean_source_revision, extract_verified_release, pack_release, package_clean_workspace,
     smoke_release_binary, verify_release, InstallationTranscript, PackageCommandResult,
     ReleaseArtifactPaths, ReleaseIdentity, ReleaseInputs, VerifiedRelease,
+};
+pub use release_sbom::{
+    generate_release_sbom, verify_release_sbom, ReleaseSbomResult, VerifiedReleaseSbom,
 };
 
 use luad_core::limits::{ParseMode, ResourceLimits};
