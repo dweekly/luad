@@ -14,6 +14,13 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Release packaging
 
+- Added a bounded non-promoting release-bundle assembler and verifier. It composes the
+  accepted Linux and macOS archives, canonical CycloneDX SBOM, and same-revision hosted
+  result references into the conventional five-file release set, with a canonical
+  four-entry `SHA256SUMS` and an evidence index that retains archive ledgers and install
+  smokes while requiring an empty promoted-target set. Hosted CI assembles twice,
+  byte-compares every file, verifies composition, and rejects corruption; its seven-day
+  upload is not publication or durable authority.
 - Added required hosted release-archive evidence for `linux-x86_64` and
   `macos-aarch64`: two independent Rust 1.97.1 build jobs per platform must produce
   byte-identical archives, ledgers, checksums, and installation transcripts before a

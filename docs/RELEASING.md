@@ -213,7 +213,7 @@ The resulting `release-archives` Actions upload expires after seven days. It is
 diagnostic transport, not a GitHub Release, durable evidence, target promotion, or a
 claim of reproducibility across different runner-image revisions, operating systems,
 Rust versions, target triples, or arbitrary build environments. Publication, durable
-retention, evidence-index and SBOM composition, and withdrawal remain release blockers.
+retention, and withdrawal remain release blockers.
 
 The accepted SBOM boundary is `scripts/generate-release-sbom.sh`. From a clean revision,
 with the exact cargo-cyclonedx 0.5.9 executable, it writes one
@@ -231,6 +231,34 @@ SHA-256 and requires byte-identical documents from two clean checkout paths. Its
 seven-day Actions upload is diagnostic transport, not durable release evidence. The
 source inventory does not prove which conditional components were linked into either
 platform binary, replace the dependency audit, publish an asset, or promote a target.
+
+The accepted release-bundle boundary is `scripts/assemble-release-bundle.sh`. It consumes
+the exact seven-file hosted archive result, the canonical SBOM, and a bounded document
+referencing the successful dependency-audit, Linux archive-oracle, SBOM, and hosted
+archive results from the same clean revision. It writes exactly:
+
+```text
+SHA256SUMS
+evidence-index.json
+luad-<version>-linux-x86_64.tar.gz
+luad-<version>-macos-aarch64.tar.gz
+luad-<version>.cdx.json
+```
+
+The four-entry checksum file covers every other bundle file. The canonical evidence
+index binds the clean revision and version, exact platforms and target triples, archive
+hashes, member ledgers, installation transcripts, SBOM identity, and four prerequisite
+references. It has an empty promoted-target set and no target-release-manifest field.
+The composition verifier checks only these cross-artifact identities and bytes; it
+references rather than duplicates the accepted archive and SBOM semantic gates.
+
+The required `Release Bundle` job obtains prerequisite conclusions from its actual
+workflow dependencies, assembles twice, requires byte equality for all five files,
+verifies both results, and proves a changed archive byte fails verification. Its
+seven-day upload is diagnostic transport. The assembler does not query GitHub, so a
+locally authored prerequisite document or copied index does not authenticate a hosted
+result. GitHub Release publication, source attachment, durable evidence retention, and
+withdrawal remain separate blockers.
 
 Crates.io is not a version-1.0 distribution channel. Every workspace package is marked
 `publish = false`, and neither `cargo install luad` nor another registry package name is

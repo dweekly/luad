@@ -189,6 +189,31 @@ dependency graph across all Cargo target conditions. It is not a platform-specif
 binary-composition attestation, vulnerability result, published release asset, or target
 promotion record.
 
+## Release bundle dry run
+
+The required `Release Bundle` CI check combines the accepted two-platform archive
+artifact and SBOM with references to the successful dependency-audit, Linux archive
+oracle, SBOM, and hosted archive checks from the same clean revision. The maintained
+entry point is:
+
+```console
+./scripts/assemble-release-bundle.sh \
+  /tmp/release-archives \
+  /tmp/release-sbom/luad-<version>.cdx.json \
+  /tmp/release-prerequisites.json \
+  /tmp/release-bundle
+```
+
+The output is exactly the two archives, the SBOM, `evidence-index.json`, and a
+`SHA256SUMS` covering those four payload files. The index preserves each archive's
+member ledger and installation transcript, binds every input and prerequisite reference
+to one revision, and requires an empty promoted-target set. CI assembles twice, compares
+all five files byte for byte, verifies them, and exercises a corruption control.
+
+The hosted workflow creates the prerequisite-reference document from actual job
+results. A locally authored document or seven-day `release-bundle` upload is not proof
+of those results, publication, durable retention, or target promotion.
+
 ## First use
 
 The repository includes precompiled fixtures, so no Lua compiler is needed for a basic smoke test:
