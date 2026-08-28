@@ -114,8 +114,6 @@ Required work:
   license files, and version/source identity;
 - publish `SHA256SUMS`, a machine-readable evidence index, and one generated SPDX or
   CycloneDX SBOM;
-- correct package metadata, define whether `cargo install luad` is a supported
-  secondary channel, and run its publish/install dry run if it is advertised;
 - establish the minimum supported Rust version separately from the contributor
   toolchain pin;
 - run one dependency-license and vulnerability audit in release CI;

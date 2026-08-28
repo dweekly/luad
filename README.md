@@ -45,7 +45,7 @@ delete the document in the same change and update this index.
 | [`ROADMAP.md`](ROADMAP.md) | Detailed dependency-ordered path to a narrow, exact, robust, documented, and obtainable 1.0 release. | 2026-08-27 | Product targets, milestone order, release acceptance, package platforms, compatibility boundary, or exclusions change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-27 | Support policy, reporting channel, trust boundary, or threat model changes. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, separate product and qualification CI lanes, proportional evidence, process budgets, and agent orchestration. | 2026-08-27 | Planning artifacts, CI lanes, customer cadence, agent roles, evidence policy, process budgets, provider interfaces, or sprint-advance mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Active product contract for honest package metadata, a source-only Cargo install, and an explicit no-crates.io 1.0 decision. | 2026-08-27 | The package-identity contract is accepted or rescoped; return to the neutral checkpoint or replace its outcome, evidence, paths, non-goals, and stop condition. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Sprint checkpoint that authorizes no product implementation until one forward-looking contract is selected. | 2026-08-27 | A product batch is selected; replace the checkpoint with its exact claim, evidence boundary, non-goals, and stop condition. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-27 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-27 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
 | [`docs/RELEASING.md`](docs/RELEASING.md) | Release stop, exact-target order, qualification checklist, evidence bundle, packaging, compatibility, publication, and rollback policy. | 2026-08-27 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |
@@ -85,13 +85,26 @@ The embedded Lua 5.1 release scope is driven by a 252-file TP-Link corpus: heade
 
 ## Build
 
-The repository currently pins its contributor toolchain in `rust-toolchain.toml`. The long-term MSRV has not yet been established independently of that development-toolchain pin. All production crates inherit the workspace's `unsafe_code = "forbid"` policy.
+The repository pins its contributor toolchain in `rust-toolchain.toml`. Package manifests
+intentionally omit `rust-version`: the long-term MSRV has not yet been established
+independently of that contributor pin. All production crates inherit the workspace's
+`unsafe_code = "forbid"` policy.
 
 ```console
 git clone https://github.com/dweekly/luad.git
 cd luad
 cargo build --workspace
 ```
+
+A checked-out source tree can install the `luad` binary into Cargo's normal install root:
+
+```console
+cargo install --path crates/luad-cli --locked
+```
+
+This is a source install, not a crates.io channel. All workspace packages are marked
+`publish = false`; `cargo install luad` is not supported or advertised for 1.0. The
+primary planned 1.0 channel remains the verified GitHub release archives.
 
 For the complete contributor check:
 

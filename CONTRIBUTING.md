@@ -20,7 +20,10 @@ the steward explicitly authorizes an amendment.
 
 ## Development setup
 
-The contributor toolchain is pinned in `rust-toolchain.toml`.
+The contributor toolchain is pinned in `rust-toolchain.toml`. Workspace and fuzz package
+manifests intentionally omit `rust-version` because an MSRV has not yet been established
+independently. Do not turn the contributor pin into package metadata without a dedicated
+MSRV contract and executable evidence.
 
 ```console
 cargo build --workspace
