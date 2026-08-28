@@ -108,10 +108,9 @@ inventing procedure on release day.
 
 Required work:
 
-- use a GitHub release as the primary 1.0 channel, with source plus reproducible
-  `linux-x86_64` and `macos-aarch64` archives;
-- name archives `luad-<version>-<platform>.tar.gz` and include `luad`, `README.md`,
-  license files, and version/source identity;
+- use a GitHub release as the primary 1.0 channel and attach the accepted
+  `luad-<version>-linux-x86_64.tar.gz` and
+  `luad-<version>-macos-aarch64.tar.gz` archives plus source;
 - publish `SHA256SUMS` and a machine-readable evidence index;
 - document tag, release-note, checksum, failed-release, and rollback behavior; and
 - retain release evidence beyond ordinary CI artifact expiry.
@@ -120,10 +119,10 @@ Detached signing is not a 1.0 blocker unless a stable signing identity and owner
 selected before the release contract freezes. If it is omitted, the release procedure
 must say so plainly and rely on repository provenance plus published checksums.
 
-Evidence boundary: a non-promoting packaging dry run from a clean revision references
-the accepted dependency-audit and SBOM results and proves the archive ledger,
-reproducibility policy, installation transcript, and checksum verification. It cannot
-change capability status.
+Evidence boundary: a non-promoting release-bundle dry run from a clean revision
+references the accepted dependency-audit, SBOM, local archive, and hosted repeated-build
+results and proves evidence-index and checksum composition without changing capability
+status.
 
 Stop condition: no target promotion artifact is produced by the packaging dry run.
 

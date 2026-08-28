@@ -14,6 +14,12 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Release packaging
 
+- Added required hosted release-archive evidence for `linux-x86_64` and
+  `macos-aarch64`: two independent Rust 1.97.1 build jobs per platform must produce
+  byte-identical archives, ledgers, checksums, and installation transcripts before a
+  verified two-platform checksum bundle is retained for seven days as diagnostic
+  transport. The workflow includes archive-byte and checksum corruption controls and
+  does not publish or promote an artifact.
 - Added a clean-revision, same-host packaging dry run for the exact `linux-x86_64` and
   `macos-aarch64` release names. It produces a deterministic ustar/gzip archive, exact
   member ledger, `SHA256SUMS`, embedded version/source/platform identity, and installation
