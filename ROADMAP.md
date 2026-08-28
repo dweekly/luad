@@ -149,6 +149,9 @@ Required work:
   rendering through maintained fuzz targets;
 - retain bounded fuzz smoke in routine CI and run one representative time-bounded
   campaign to prove that the extended-campaign procedure and artifact retention work;
+- before accepting untrusted public-fork pull requests, move persistent self-hosted
+  runners behind an ephemeral isolation boundary or restore GitHub-hosted contributor
+  jobs; trusted private-repository runners are not the public contribution boundary;
 - turn every crash, timeout, excessive allocation, or inconsistent verdict into a
   minimized redistributable regression;
 - define the final focused security-review packet for hostile input, archive

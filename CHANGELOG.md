@@ -14,6 +14,10 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Release packaging
 
+- Routed routine Linux x86-64 and macOS arm64 CI plus the publication rehearsal through
+  explicit repo-scoped self-hosted runner labels, with runtime OS and architecture
+  checks and the existing exact Rust host-triple checks. The 13-job release evidence
+  contract and public support status are unchanged.
 - Added a manually dispatched, non-production GitHub Release rehearsal that consumes
   one accepted `main` release bundle without rebuilding it, publishes the exact five
   files as an unsigned non-latest prerelease, verifies fresh asset and source-archive

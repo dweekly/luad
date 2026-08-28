@@ -12,9 +12,14 @@ env:
 jobs:
   dependency-audit:
     name: Dependency Audit
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, luad-linux]
     steps:
     - uses: actions/checkout@v4
+    - name: Confirm Linux Runner
+      shell: bash
+      run: |
+        test "${RUNNER_OS}" = "Linux"
+        test "${RUNNER_ARCH}" = "X64"
     - name: Check Licenses and Advisories
       uses: EmbarkStudios/cargo-deny-action@v2.1.1
       with:
@@ -23,9 +28,15 @@ jobs:
 
   release-sbom:
     name: Release SBOM
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, luad-linux]
     steps:
     - uses: actions/checkout@v4
+
+    - name: Confirm Linux Runner
+      shell: bash
+      run: |
+        test "${RUNNER_OS}" = "Linux"
+        test "${RUNNER_ARCH}" = "X64"
 
     - name: Set up Rust
       uses: dtolnay/rust-toolchain@stable
@@ -78,25 +89,33 @@ jobs:
 
   release-archive-build:
     name: Release Archive Build (${{ matrix.platform }}, replica ${{ matrix.replica }})
-    runs-on: ${{ matrix.runner }}
+    runs-on: [self-hosted, "${{ matrix.runner_os }}", "${{ matrix.runner_arch }}", "${{ matrix.runner_label }}"]
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: linux-x86_64
-            runner: ubuntu-latest
+            runner_os: Linux
+            runner_arch: X64
+            runner_label: luad-linux
             target_triple: x86_64-unknown-linux-gnu
             replica: one
           - platform: linux-x86_64
-            runner: ubuntu-latest
+            runner_os: Linux
+            runner_arch: X64
+            runner_label: luad-linux
             target_triple: x86_64-unknown-linux-gnu
             replica: two
           - platform: macos-aarch64
-            runner: macos-latest
+            runner_os: macOS
+            runner_arch: ARM64
+            runner_label: luad-macos
             target_triple: aarch64-apple-darwin
             replica: one
           - platform: macos-aarch64
-            runner: macos-latest
+            runner_os: macOS
+            runner_arch: ARM64
+            runner_label: luad-macos
             target_triple: aarch64-apple-darwin
             replica: two
 
@@ -111,6 +130,8 @@ jobs:
     - name: Confirm Release Host
       shell: bash
       run: |
+        test "${RUNNER_OS}" = "${{ matrix.runner_os }}"
+        test "${RUNNER_ARCH}" = "${{ matrix.runner_arch }}"
         host="$(rustc -vV | sed -n 's/^host: //p')"
         test "${host}" = "${{ matrix.target_triple }}"
 
@@ -153,9 +174,15 @@ jobs:
   release-archives:
     name: Release Archives
     needs: release-archive-build
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, luad-linux]
     steps:
     - uses: actions/checkout@v4
+
+    - name: Confirm Linux Runner
+      shell: bash
+      run: |
+        test "${RUNNER_OS}" = "Linux"
+        test "${RUNNER_ARCH}" = "X64"
 
     - name: Download Linux Replica One
       uses: actions/download-artifact@v4
@@ -264,9 +291,15 @@ jobs:
       - release-sbom
       - release-archives
       - test
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, luad-linux]
     steps:
     - uses: actions/checkout@v4
+
+    - name: Confirm Linux Runner
+      shell: bash
+      run: |
+        test "${RUNNER_OS}" = "Linux"
+        test "${RUNNER_ARCH}" = "X64"
 
     - name: Set up Rust
       uses: dtolnay/rust-toolchain@stable
@@ -378,14 +411,28 @@ jobs:
 
   msrv:
     name: MSRV (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    runs-on: [self-hosted, "${{ matrix.runner_os }}", "${{ matrix.runner_arch }}", "${{ matrix.runner_label }}"]
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            runner_os: Linux
+            runner_arch: X64
+            runner_label: luad-linux
+          - os: macos-latest
+            runner_os: macOS
+            runner_arch: ARM64
+            runner_label: luad-macos
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Confirm Runner
+      shell: bash
+      run: |
+        test "${RUNNER_OS}" = "${{ matrix.runner_os }}"
+        test "${RUNNER_ARCH}" = "${{ matrix.runner_arch }}"
 
     - name: Set up MSRV
       uses: dtolnay/rust-toolchain@stable
@@ -444,13 +491,27 @@ jobs:
 
   test:
     name: Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    runs-on: [self-hosted, "${{ matrix.runner_os }}", "${{ matrix.runner_arch }}", "${{ matrix.runner_label }}"]
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            runner_os: Linux
+            runner_arch: X64
+            runner_label: luad-linux
+          - os: macos-latest
+            runner_os: macOS
+            runner_arch: ARM64
+            runner_label: luad-macos
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Confirm Runner
+      shell: bash
+      run: |
+        test "${RUNNER_OS}" = "${{ matrix.runner_os }}"
+        test "${RUNNER_ARCH}" = "${{ matrix.runner_arch }}"
 
     - name: Set up Rust
       uses: dtolnay/rust-toolchain@stable
@@ -470,9 +531,15 @@ jobs:
 
   fuzz-smoke:
     name: Hostile Input Fuzz Smoke (Linux)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, luad-linux]
     steps:
     - uses: actions/checkout@v4
+
+    - name: Confirm Linux Runner
+      shell: bash
+      run: |
+        test "${RUNNER_OS}" = "Linux"
+        test "${RUNNER_ARCH}" = "X64"
 
     - name: Set up Rust Nightly
       uses: dtolnay/rust-toolchain@nightly

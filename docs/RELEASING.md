@@ -210,10 +210,13 @@ installation transcript. A Linux aggregation job verifies one accepted archive p
 platform, emits a canonical two-entry `SHA256SUMS`, and proves with a corrupted copy
 that both byte comparison and checksum verification fail closed.
 
-The resulting `release-archives` Actions upload expires after seven days. It is
-diagnostic transport, not a GitHub Release, durable evidence, target promotion, or a
-claim of reproducibility across different runner-image revisions, operating systems,
-Rust versions, target triples, or arbitrary build environments.
+The resulting `release-archives` Actions upload expires after seven days. The workflow
+routes Linux x86-64 work through the `luad-linux` self-hosted label and macOS arm64 work
+through `luad-macos`; every matrix job verifies the declared OS and architecture, and
+archive jobs also verify the exact Rust host triple. The upload is diagnostic transport,
+not a GitHub Release, durable evidence, target promotion, or a claim of reproducibility
+across different runner installations, operating systems, Rust versions, target triples,
+or arbitrary build environments.
 
 The accepted SBOM boundary is `scripts/generate-release-sbom.sh`. From a clean revision,
 with the exact cargo-cyclonedx 0.5.9 executable, it writes one
