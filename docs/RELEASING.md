@@ -203,8 +203,8 @@ supported dialect in this non-promoting package.
 
 This local command proves archive construction for identical inputs on the current
 host. It does not yet prove cross-host reproducible Rust compilation, build both release
-platforms in CI, publish or retain artifacts, generate an SBOM, run dependency audits,
-or exercise withdrawal. Those remain release blockers.
+platforms in CI, publish or retain artifacts, generate an SBOM, or exercise withdrawal.
+Those remain release blockers.
 
 Crates.io is not a version-1.0 distribution channel. Every workspace package is marked
 `publish = false`, and neither `cargo install luad` nor another registry package name is
@@ -220,6 +220,14 @@ minimum, and routine CI builds the locked workspace and source-installed CLI wit
 1.97.1 for contributors and release builders; the fuzz workspace retains its pinned
 nightly and has no stable `rust-version` claim. Passing the MSRV job does not qualify
 release-platform archives or reproducible compilation.
+
+The required `Dependency Audit` job runs `cargo-deny` 0.20.2 against the locked
+Linux x86-64 and macOS arm64 graph, including dev dependencies. The policy admits only
+the SPDX expressions enumerated in `deny.toml`, has no license exceptions or advisory
+ignores, denies yanked packages, and fails for an unmaintained direct workspace
+dependency. The final candidate must retain a passing audit result. This automated
+metadata and RustSec check is not a legal opinion, manual source-license review, SBOM,
+binary-composition proof, or complete supply-chain review.
 
 The release publishes SHA-256 checksums. Detached signing is optional for 1.0 because
 the project has not selected a durable signing identity; do not create an ephemeral key
