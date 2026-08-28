@@ -28,6 +28,9 @@ All notable changes will be documented here. The project has not yet made a prod
   been established, while retaining the toolchain pin itself.
 - Documented and tested a locked local install from a checked-out `luad-cli` source path.
   Crates.io and `cargo install luad` are explicitly not 1.0 distribution channels.
+- Established Rust 1.85 as the stable workspace MSRV with locked Linux and macOS build
+  and source-install CI, while retaining Rust 1.97.1 for contributors and release
+  builders and the separately pinned nightly for fuzzing.
 
 ### Deterministic scalar rendering
 

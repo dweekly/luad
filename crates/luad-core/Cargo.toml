@@ -3,6 +3,7 @@ name = "luad-core"
 description = "Memory-safe Lua bytecode models, parsing primitives, and diagnostics for luad"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true

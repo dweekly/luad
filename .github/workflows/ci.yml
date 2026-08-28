@@ -10,6 +10,72 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  msrv:
+    name: MSRV (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up MSRV
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: 1.85.0
+
+    - name: Build Locked Workspace
+      run: cargo build --workspace --locked
+
+    - name: Install and Smoke Locked CLI
+      shell: bash
+      run: |
+        install_root="${RUNNER_TEMP}/luad-msrv-install"
+        cargo install --path crates/luad-cli --locked --root "${install_root}"
+
+        version_stderr="${RUNNER_TEMP}/luad-msrv-version.stderr"
+        version_stdout="$("${install_root}/bin/luad" --version 2>"${version_stderr}")"
+        expected_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+        test ! -s "${version_stderr}"
+        test "${version_stdout}" = "luad ${expected_version}"
+
+        capabilities="${RUNNER_TEMP}/luad-msrv-capabilities.json"
+        capabilities_stderr="${RUNNER_TEMP}/luad-msrv-capabilities.stderr"
+        "${install_root}/bin/luad" capabilities --format json \
+          >"${capabilities}" 2>"${capabilities_stderr}"
+        test ! -s "${capabilities_stderr}"
+        python3 - "${expected_version}" "${capabilities}" <<'PY'
+        import json
+        import pathlib
+        import sys
+
+        expected_version = sys.argv[1]
+        document = json.loads(pathlib.Path(sys.argv[2]).read_text())
+        assert document["tool_name"] == "luad"
+        assert document["tool_version"] == expected_version
+        assert document["supported_dialects"] == []
+        PY
+
+    - name: Reject Rust Below MSRV
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        rustup toolchain install 1.84.1 --profile minimal
+        lower_log="${RUNNER_TEMP}/luad-below-msrv.log"
+        if rustup run 1.84.1 cargo build --workspace --locked >"${lower_log}" 2>&1; then
+          cat "${lower_log}"
+          echo "Rust 1.84.1 unexpectedly built the workspace" >&2
+          exit 1
+        fi
+        cat "${lower_log}"
+        if grep -Eq 'requires rustc 1\.85([^.0-9]|$)' "${lower_log}"; then
+          exit 0
+        fi
+        grep -Fq 'feature `edition2024` is required' "${lower_log}"
+        grep -Eq 'Cargo.*1\.84\.1' "${lower_log}"
+
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
