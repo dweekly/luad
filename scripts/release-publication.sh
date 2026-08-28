@@ -348,8 +348,8 @@ verify_tag_target() {
 verify_source_archive_root() {
   local archive="$1"
   local kind="$2"
-  local revision="$3"
-  local expected="dweekly-luad-${revision}/"
+  local tag="$3"
+  local expected="luad-${tag}/"
   local members="${TEMP_ROOT}/source-members-${kind}.txt"
 
   [[ -s "${archive}" ]] || die "${kind} source archive is empty"
@@ -381,8 +381,8 @@ download_and_verify_source() {
     --output "${directory}/source.tar.gz"
   gh release download "${tag}" --repo "${REPOSITORY}" --archive zip \
     --output "${directory}/source.zip"
-  verify_source_archive_root "${directory}/source.tar.gz" tar "${revision}"
-  verify_source_archive_root "${directory}/source.zip" zip "${revision}"
+  verify_source_archive_root "${directory}/source.tar.gz" tar "${tag}"
+  verify_source_archive_root "${directory}/source.zip" zip "${tag}"
 }
 
 release_assets() {

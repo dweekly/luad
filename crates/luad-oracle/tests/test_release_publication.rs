@@ -250,7 +250,10 @@ if args[0] == "release" and len(args) >= 3 and args[1] == "download":
         kind = option("--archive")
         output = pathlib.Path(option("--output"))
         output.parent.mkdir(parents=True, exist_ok=True)
-        archive_root = f"dweekly-luad-{revision}"
+        if mode == "revision_source_root":
+            archive_root = f"dweekly-luad-{revision}"
+        else:
+            archive_root = f"luad-{tag}"
         payload = root / "source-readme"
         payload.write_text("source\n", encoding="utf-8")
         if kind == "tar.gz":
@@ -766,6 +769,7 @@ fn test_release_publication_rejects_remote_corruption_and_cleanup_failures() {
         "changed_download",
         "latest_changed",
         "tag_moved",
+        "revision_source_root",
         "delete_noop",
         "missing_release_asset",
         "extra_release_asset",
