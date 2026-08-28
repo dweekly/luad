@@ -19,6 +19,8 @@ All notable changes will be documented here. The project has not yet made a prod
   files as an unsigned non-latest prerelease, verifies fresh asset and source-archive
   downloads, retains the result beyond Actions expiry, and proves corrupted-draft
   cleanup plus valid-release withdrawal with an offline stateful fake-GitHub regression.
+  Hosted follow-up hardened cleanup for drafts without Git refs and pinned the normalized
+  tagged-release roots emitted by GitHub CLI for both source archive formats.
 - Added a bounded non-promoting release-bundle assembler and verifier. It composes the
   accepted Linux and macOS archives, canonical CycloneDX SBOM, and same-revision hosted
   result references into the conventional five-file release set, with a canonical
