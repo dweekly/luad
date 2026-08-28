@@ -87,6 +87,22 @@ job results, assembles twice, compares and verifies the exact five-file output, 
 a corruption probe. Local prerequisite JSON is composition input, not evidence that a
 hosted check passed. The seven-day result remains diagnostic and non-promoting.
 
+Release publication mechanics have an offline regression and a manually dispatched
+hosted rehearsal:
+
+```console
+cargo test -p luad-oracle --test test_release_publication
+gh workflow run release-publication.yml --ref main \
+  -f revision=<full-main-revision> \
+  -f ci_run_id=<successful-main-ci-run-id>
+```
+
+The hosted command is maintainer-only and runs after the named `main` CI result is
+accepted. It retains one clearly labeled non-production prerelease, verifies fresh
+downloads and GitHub source archives, and deletes its corruption and withdrawal probes.
+It must not create or change a `v*` tag, latest-release pointer, target manifest,
+capability status, or signing claim.
+
 The bounded hostile-input campaign uses an independently pinned nightly and
 `cargo-fuzz` release:
 

@@ -2,7 +2,7 @@
 
 Status: authoritative product direction.
 
-Fresh as of: 2026-08-27.
+Fresh as of: 2026-08-28.
 
 Product requirements live in [PRD.md](PRD.md). Exact implementation and acceptance
 details live only in [the active sprint](docs/NEXT-SPRINT.md). This roadmap orders
@@ -87,8 +87,7 @@ written scope and authority decision demonstrates that it should share this prod
 The dependency order is:
 
 ```text
-publication and artifact-retention implementation
-  -> stable public CLI and schema boundary
+stable public CLI and schema boundary
   -> robustness and distribution infrastructure
   -> LNUM32 exact-target qualification
   -> PUC Lua 5.4.9 exact-target qualification
@@ -100,31 +99,6 @@ publication and artifact-retention implementation
 Accepted prerequisite gates are referenced by identity. A downstream milestone does
 not duplicate their semantic suites unless it owns a new interaction capable of
 falsifying the release claim.
-
-### Milestone 1 — make publication boring
-
-Outcome: a release can be assembled, installed, verified, and withdrawn without
-inventing procedure on release day.
-
-Required work:
-
-- use a GitHub release as the primary 1.0 channel and attach the accepted
-  `luad-<version>-linux-x86_64.tar.gz` and
-  `luad-<version>-macos-aarch64.tar.gz` archives plus source;
-- publish the accepted `SHA256SUMS`, machine-readable evidence index, and SBOM without
-  rebuilding them from another revision;
-- document tag, release-note, checksum, failed-release, and rollback behavior; and
-- retain release evidence beyond ordinary CI artifact expiry.
-
-Detached signing is not a 1.0 blocker unless a stable signing identity and owner are
-selected before the release contract freezes. If it is omitted, the release procedure
-must say so plainly and rely on repository provenance plus published checksums.
-
-Evidence boundary: publication consumes the accepted non-promoting `Release Bundle`
-result and proves upload, fresh download, checksum verification, durable evidence
-retention, and failed-release handling without rebuilding or changing capability status.
-
-Stop condition: no target promotion artifact is produced by publication infrastructure.
 
 ### Milestone 2 — freeze the public automation contract
 

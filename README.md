@@ -17,9 +17,9 @@ is non-promoting and predates later correctness and machine-interface changes. L
 The [release procedure](docs/RELEASING.md#frozen-version-1-boundary) records the exact
 future 1.0 targets, layouts, package platforms, machine-contract majors, owner, and
 evidence location. The [path to 1.0](ROADMAP.md) keeps the existing explorations while
-ordering the remaining packaging, public-contract, hostile-input, exact-target,
-workflow-transfer, and publication work. Future target names are obligations, not
-present support claims.
+ordering the remaining public-contract, hostile-input, exact-target, workflow-transfer,
+and final-candidate work. Future target names are obligations, not present support
+claims.
 
 The architectural boundary is deliberate: `luad` owns deterministic VM facts that
 competent analysts should agree on, while callers own investigation-specific judgments
@@ -36,19 +36,19 @@ delete the document in the same change and update this index.
 
 | Document | Purpose | Fresh as of | Revalidate or delete when |
 |---|---|---:|---|
-| [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-08-27 | Public scope, support status, setup, primary commands, or the documentation set changes. |
+| [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-08-28 | Public scope, support status, setup, primary commands, or the documentation set changes. |
 | [`AGENTS.md`](AGENTS.md) | Binding repository instructions, product-batch boundaries, and safety constraints for coding agents. | 2026-08-27 | Development workflow, proof policy, current priority, or repository invariants change. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-27 | Crates, ownership boundaries, core representations, or evidence layers change. |
-| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of unreleased and released user-visible changes. | 2026-08-27 | Every user-visible change or release; never use it as a forward plan. |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor setup, test taxonomy, fixture provenance, and definition of done. | 2026-08-27 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of unreleased and released user-visible changes. | 2026-08-28 | Every user-visible change or release; never use it as a forward plan. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor setup, test taxonomy, fixture provenance, and definition of done. | 2026-08-28 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
 | [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-08-27 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
-| [`ROADMAP.md`](ROADMAP.md) | Detailed dependency-ordered path to a narrow, exact, robust, documented, and obtainable 1.0 release. | 2026-08-27 | Product targets, milestone order, release acceptance, package platforms, compatibility boundary, or exclusions change. |
+| [`ROADMAP.md`](ROADMAP.md) | Detailed dependency-ordered path to a narrow, exact, robust, documented, and obtainable 1.0 release. | 2026-08-28 | Product targets, milestone order, release acceptance, package platforms, compatibility boundary, or exclusions change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-27 | Support policy, reporting channel, trust boundary, or threat model changes. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, separate product and qualification CI lanes, proportional evidence, process budgets, and agent orchestration. | 2026-08-27 | Planning artifacts, CI lanes, customer cadence, agent roles, evidence policy, process budgets, provider interfaces, or sprint-advance mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Active release-infrastructure contract for a non-production GitHub Release publication, retention, failure-cleanup, and withdrawal rehearsal. | 2026-08-27 | Replace with the neutral checkpoint when the retained rehearsal, fresh verification, failure and withdrawal probes, landed evidence, and documentation close, or revise before implementation if that boundary changes. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Neutral checkpoint authorizing no product implementation while the next roadmap outcome is selected. | 2026-08-28 | Replace only through a dedicated planning change that selects one unmet outcome and defines its evidence and stop boundary. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-27 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-27 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
-| [`docs/RELEASING.md`](docs/RELEASING.md) | Release stop, exact-target order, qualification checklist, evidence bundle, packaging, compatibility, publication, and rollback policy. | 2026-08-27 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |
+| [`docs/RELEASING.md`](docs/RELEASING.md) | Release stop, exact-target order, qualification checklist, evidence bundle, packaging, compatibility, publication, and rollback policy. | 2026-08-28 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |
 | [`docs/LUA51-LNUM32-CANDIDATE.md`](docs/LUA51-LNUM32-CANDIDATE.md) | Archived verification and firmware-handoff guide for the immutable, non-promoting Lua 5.1 LNUM32 RC1 artifact. | 2026-08-27 | RC1 evidence is retired, its retained artifacts become unverifiable, or a new LNUM32 candidate guide replaces it. |
 | [`docs/examples/RECIPES.md`](docs/examples/RECIPES.md) | Practical command-line and composition recipes for consuming machine JSON and JSONL output. | 2026-08-27 | Machine interface envelopes, export records, or CLI subcommands change. |
 | [`docs/reviews/2026-08-25-roadmap-review.md`](docs/reviews/2026-08-25-roadmap-review.md) | Archived point-in-time roadmap and release-readiness critique retained as planning provenance, not current status. | 2026-08-27 | Delete only when its planning provenance is intentionally retired; never revalidate it as current release evidence. |
@@ -212,7 +212,24 @@ all five files byte for byte, verifies them, and exercises a corruption control.
 
 The hosted workflow creates the prerequisite-reference document from actual job
 results. A locally authored document or seven-day `release-bundle` upload is not proof
-of those results, publication, durable retention, or target promotion.
+of those results or target promotion.
+
+## Non-production publication rehearsal
+
+Maintainers can dispatch `Release Publication` from `main` with one full source
+revision and its successful `CI` run ID. The workflow reuses that run's exact bundle,
+exercises failed-publication cleanup and valid-release withdrawal, then retains one
+plainly labeled prerelease:
+
+```text
+publication-rehearsal-<version>-<12-revision-hex>
+```
+
+The retained release contains the same five custom files plus GitHub's normal source
+archives. Fresh downloads, checksums, bundle identity, tag target, release metadata, and
+both source archive forms are verified. It is not latest, not signed, names no supported
+target, and is not a product release or 1.0 candidate. The exact dispatch and withdrawal
+commands are in the [release procedure](docs/RELEASING.md#non-production-publication-rehearsal).
 
 ## First use
 
