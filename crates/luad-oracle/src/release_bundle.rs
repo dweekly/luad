@@ -144,6 +144,12 @@ struct SbomIdentity {
     component_count: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum ChecksumOrder {
+    Filename,
+    WholeLine,
+}
+
 fn validate_revision(revision: &str) -> Result<(), String> {
     if !matches!(revision.len(), 40 | 64)
         || !revision
@@ -328,6 +334,7 @@ fn validate_prerequisites(
 fn parse_checksums(
     bytes: &[u8],
     expected_names: &[String],
+    order: ChecksumOrder,
 ) -> Result<BTreeMap<String, String>, String> {
     let text = std::str::from_utf8(bytes).map_err(|error| format!("SHA256SUMS UTF-8: {error}"))?;
     let mut actual = BTreeMap::new();
@@ -353,11 +360,23 @@ fn parse_checksums(
             "SHA256SUMS filenames differ: expected {expected:?}, got {names:?}"
         ));
     }
-    let canonical = checksum_bytes(&actual);
+    let canonical = match order {
+        ChecksumOrder::Filename => checksum_bytes(&actual),
+        ChecksumOrder::WholeLine => checksum_line_bytes(&actual),
+    };
     if bytes != canonical {
         return Err("SHA256SUMS is not in canonical deterministic form".to_string());
     }
     Ok(actual)
+}
+
+fn checksum_line_bytes(entries: &BTreeMap<String, String>) -> Vec<u8> {
+    let mut lines: Vec<_> = entries
+        .iter()
+        .map(|(name, digest)| format!("{digest}  {name}\n"))
+        .collect();
+    lines.sort();
+    lines.concat().into_bytes()
 }
 
 fn checksum_bytes(entries: &BTreeMap<String, String>) -> Vec<u8> {
@@ -611,7 +630,11 @@ pub fn assemble_release_bundle(
         MAX_SIDECAR_BYTES,
         "release archive SHA256SUMS",
     )?;
-    let archive_checksums = parse_checksums(&archive_checksum_bytes, &archive_names)?;
+    let archive_checksums = parse_checksums(
+        &archive_checksum_bytes,
+        &archive_names,
+        ChecksumOrder::WholeLine,
+    )?;
 
     let mut platforms = Vec::new();
     let mut archive_bytes = BTreeMap::new();
@@ -750,7 +773,7 @@ pub fn verify_release_bundle(
         MAX_SIDECAR_BYTES,
         "release bundle SHA256SUMS",
     )?;
-    let checksums = parse_checksums(&checksum_file, &payload_names)?;
+    let checksums = parse_checksums(&checksum_file, &payload_names, ChecksumOrder::Filename)?;
     for name in &payload_names {
         let limit = if name.ends_with(".tar.gz") {
             MAX_ARCHIVE_BYTES

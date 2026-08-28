@@ -177,11 +177,7 @@ fn create_archive_inputs(root: &Path, revision: &str) {
             "x86_64-unknown-linux-gnu",
             b"linux archive bytes\n".as_slice(),
         ),
-        (
-            "macos-aarch64",
-            "aarch64-apple-darwin",
-            b"macos archive bytes\n".as_slice(),
-        ),
+        ("macos-aarch64", "aarch64-apple-darwin", b"b\n".as_slice()),
     ];
     let mut checksums = BTreeMap::new();
     for (platform, triple, bytes) in platforms {
@@ -198,11 +194,12 @@ fn create_archive_inputs(root: &Path, revision: &str) {
             &installation(revision, platform, triple),
         );
     }
-    let text: String = checksums
+    let mut lines: Vec<_> = checksums
         .iter()
         .map(|(name, digest)| format!("{digest}  {name}\n"))
         .collect();
-    fs::write(root.join("SHA256SUMS"), text).expect("write archive checksums");
+    lines.sort();
+    fs::write(root.join("SHA256SUMS"), lines.concat()).expect("write archive checksums");
 }
 
 fn create_sbom(path: &Path, revision: &str) {
@@ -294,6 +291,15 @@ fn tool_path() -> PathBuf {
 #[test]
 fn test_release_bundle_public_command_is_deterministic_and_non_promoting() {
     let fixture = Fixture::new();
+    assert!(
+        fs::read_to_string(fixture.archives.join("SHA256SUMS"))
+            .unwrap()
+            .lines()
+            .next()
+            .unwrap()
+            .ends_with("luad-0.1.0-macos-aarch64.tar.gz"),
+        "fixture must distinguish accepted whole-line order from filename order"
+    );
     let first = fixture._temp.path().join("bundle-one");
     let second = fixture._temp.path().join("bundle-two");
 
