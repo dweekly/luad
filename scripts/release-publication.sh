@@ -50,7 +50,7 @@ api_json() {
 }
 
 is_http_404() {
-  grep -Fq '(HTTP 404)' "$1"
+  grep -Eq '\(HTTP 404\)|gh: HTTP 404([[:space:]]|$)' "$1"
 }
 
 api_presence() {
@@ -110,13 +110,27 @@ prove_identity_absent() {
   expect_api_absent "repos/${REPOSITORY}/zipball/${tag}" "zip source archive for ${tag}"
 }
 
+delete_tag_if_present() {
+  local tag="$1"
+  if tag_exists "${tag}"; then
+    gh api --method DELETE \
+      "repos/${REPOSITORY}/git/refs/tags/${tag}" >/dev/null
+  fi
+}
+
+delete_release_and_tag() {
+  local tag="$1"
+  gh release delete "${tag}" --repo "${REPOSITORY}" --yes
+  delete_tag_if_present "${tag}"
+}
+
 cleanup_active_probe() {
   local status=$?
   trap - EXIT
   if (( status != 0 )) && [[ -n "${ACTIVE_PROBE_TAG}" ]]; then
     set +e
     gh release delete "${ACTIVE_PROBE_TAG}" --repo "${REPOSITORY}" \
-      --cleanup-tag --yes >/dev/null 2>&1
+      --yes >/dev/null 2>&1
     gh api --method DELETE \
       "repos/${REPOSITORY}/git/refs/tags/${ACTIVE_PROBE_TAG}" \
       >/dev/null 2>&1
@@ -450,7 +464,7 @@ verify_published_release() {
 
 delete_and_prove_probe_absent() {
   local tag="$1"
-  gh release delete "${tag}" --repo "${REPOSITORY}" --cleanup-tag --yes
+  delete_release_and_tag "${tag}"
   prove_identity_absent "${tag}"
   ACTIVE_PROBE_TAG=""
 }
@@ -606,7 +620,7 @@ withdraw() {
     '.tag_name == $tag and .target_commitish == $revision and
      .draft == false and .prerelease == true' "${metadata}" >/dev/null || \
     die "withdrawal target is not the exact retained rehearsal"
-  gh release delete "${tag}" --repo "${REPOSITORY}" --cleanup-tag --yes
+  delete_release_and_tag "${tag}"
   prove_identity_absent "${tag}"
 }
 

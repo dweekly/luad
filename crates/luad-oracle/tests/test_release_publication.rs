@@ -47,6 +47,15 @@ def not_found():
     print("gh: Not Found (HTTP 404)", file=sys.stderr)
     sys.exit(1)
 
+def archive_not_found():
+    print("404: Not Found", end="", file=sys.stderr)
+    print("gh: HTTP 404", file=sys.stderr)
+    sys.exit(1)
+
+def reference_does_not_exist():
+    print("gh: Reference does not exist (HTTP 422)", file=sys.stderr)
+    sys.exit(1)
+
 def option(name, default=None):
     if name not in args:
         return default
@@ -122,7 +131,7 @@ if args[0] == "api":
         if endpoint.startswith(prefix):
             tag = endpoint[len(prefix):]
             if tag not in state["tags"]:
-                not_found()
+                reference_does_not_exist()
             del state["tags"][tag]
             save()
             sys.exit(0)
@@ -184,7 +193,7 @@ if args[0] == "api":
         if endpoint.startswith(prefix):
             tag = endpoint[len(prefix):]
             if tag not in state["tags"]:
-                not_found()
+                archive_not_found()
             print("archive")
             sys.exit(0)
     print(f"unsupported api endpoint: {endpoint}", file=sys.stderr)
@@ -210,7 +219,8 @@ if args[0] == "release" and len(args) >= 3 and args[1] == "create":
     title = option("--title")
     notes = pathlib.Path(option("--notes-file")).read_text(encoding="utf-8")
     target = option("--target")
-    state["tags"][tag] = target
+    if "--draft" not in args:
+        state["tags"][tag] = target
     state["releases"][tag] = {
         "tag_name": tag,
         "name": title,
@@ -273,7 +283,11 @@ if args[0] == "release" and len(args) >= 3 and args[1] == "delete":
         not_found()
     if mode != "delete_noop":
         del state["releases"][tag]
-        state["tags"].pop(tag, None)
+        if "--cleanup-tag" in args:
+            if tag not in state["tags"]:
+                save()
+                reference_does_not_exist()
+            del state["tags"][tag]
         save()
     sys.exit(0)
 
@@ -588,15 +602,19 @@ fn audit_success_log(log: &[Vec<String>], revision: &str) -> Result<(), String> 
             "release",
             "delete",
             "publication-failure-probe-0.1.0",
-            "--cleanup-tag",
             "--yes",
         ],
         vec![
             "release",
             "delete",
             "publication-withdrawal-probe-0.1.0",
-            "--cleanup-tag",
             "--yes",
+        ],
+        vec![
+            "api",
+            "--method",
+            "DELETE",
+            "git/refs/tags/publication-withdrawal-probe-0.1.0",
         ],
         vec!["release", "download", "--archive", "tar.gz"],
         vec!["release", "download", "--archive", "zip"],
@@ -604,6 +622,9 @@ fn audit_success_log(log: &[Vec<String>], revision: &str) -> Result<(), String> 
         if !command_has(log, &words) {
             return Err(format!("missing command evidence: {words:?}"));
         }
+    }
+    if command_has(log, &["release", "delete", "--cleanup-tag"]) {
+        return Err("release deletion must tolerate a draft without a tag".to_owned());
     }
     Ok(())
 }
@@ -830,5 +851,21 @@ fn test_release_publication_fake_command_audit_has_negative_controls() {
     assert!(
         audit_success_log(&without_one_cleanup, &fixture.revision).is_err(),
         "removing either probe cleanup must be detected"
+    );
+
+    let mut with_draft_cleanup_tag = log.clone();
+    let failure_delete = with_draft_cleanup_tag
+        .iter_mut()
+        .find(|command| {
+            command_has(
+                &[(**command).clone()],
+                &["release", "delete", "publication-failure-probe-0.1.0"],
+            )
+        })
+        .expect("failure probe deletion command");
+    failure_delete.push("--cleanup-tag".to_owned());
+    assert!(
+        audit_success_log(&with_draft_cleanup_tag, &fixture.revision).is_err(),
+        "reintroducing tag cleanup for a tagless draft must be detected"
     );
 }
