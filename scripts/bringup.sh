@@ -171,33 +171,39 @@ check_channel() {
     return
   fi
 
+  label="cargo (rust-toolchain.toml)"
+  expected="${pinned_channel} through the rustup shim"
+  shim_hint="put the rustup shim first: export PATH=\"${cargo_bin_dir}:\$PATH\""
+
   cargo_path="$(command -v cargo 2>/dev/null || true)"
-  # Run from the repository root so rust-toolchain.toml applies.
+  # Run from the repository root so rust-toolchain.toml applies. This is also the call
+  # that reconciles the components that file declares, which is why the component rows
+  # are probed before this one.
   cargo_version="$(cargo --version 2>/dev/null | awk '{print $2}' || true)"
 
-  shim_note=""
-  if [ -n "${cargo_path}" ] && [ "${cargo_path}" != "${cargo_bin_dir}/cargo" ]; then
-    # Only the rustup shim honors rust-toolchain.toml. A package-manager cargo earlier
-    # in PATH is a fixed compiler that ignores the pin.
-    shim_note=" from ${cargo_path} (not the rustup shim at ${cargo_bin_dir}/cargo)"
+  # The rustup shim is the cargo that accepts `+<toolchain>` selection; a
+  # package-manager cargo answers "no such command" and exits non-zero. That capability
+  # is the property that matters, not a path convention: only the shim follows
+  # rust-toolchain.toml when the pin moves, and --install issues
+  # `cargo +<toolchain> install`, which any other cargo rejects. A matching version from
+  # a non-shim cargo is a coincidence that breaks on the next pin bump, so it is WRONG.
+  if ! cargo "+${pinned_channel}" --version >/dev/null 2>&1; then
+    st_channel="WRONG"
+    add_row "${label}" "${expected}" \
+      "${cargo_version:-unknown} from ${cargo_path:-PATH}, which rejects +${pinned_channel}" \
+      "WRONG" "${shim_hint}"
+    return
   fi
 
   if [ "${cargo_version}" = "${pinned_channel}" ]; then
     st_channel="OK"
-    add_row "cargo (rust-toolchain.toml)" "${pinned_channel}" \
-      "${cargo_version}${shim_note}" "OK"
+    add_row "${label}" "${expected}" "${cargo_version}" "OK"
     return
   fi
 
   st_channel="WRONG"
-  if [ -n "${shim_note}" ]; then
-    add_row "cargo (rust-toolchain.toml)" "${pinned_channel}" \
-      "${cargo_version:-unknown}${shim_note}" "WRONG" \
-      "put the rustup shim first: export PATH=\"${cargo_bin_dir}:\$PATH\""
-  else
-    add_row "cargo (rust-toolchain.toml)" "${pinned_channel}" "${cargo_version:-absent}" "WRONG" \
-      "rustup toolchain install ${pinned_channel} --profile minimal --component clippy --component rustfmt"
-  fi
+  add_row "${label}" "${expected}" "${cargo_version:-absent}" "WRONG" \
+    "rustup toolchain install ${pinned_channel} --profile minimal --component clippy --component rustfmt"
 }
 
 # scripts/check.sh runs `cargo fmt --all -- --check` and `cargo clippy` under the
@@ -637,13 +643,15 @@ EOF
     exit 1
   fi
 
-  cargo_path="$(command -v cargo 2>/dev/null || true)"
-  if [ "${st_channel}" != "OK" ] && [ -n "${cargo_path}" ] &&
-    [ "${cargo_path}" != "${cargo_bin_dir}/cargo" ]; then
+  # Same criterion as check_channel: without the shim, `cargo +<toolchain> install`
+  # below cannot run at all, so stop rather than install under the wrong compiler.
+  if ! cargo "+${pinned_channel}" --version >/dev/null 2>&1; then
+    cargo_path="$(command -v cargo 2>/dev/null || true)"
     cat >&2 <<EOF
-bringup: '${cargo_path}' shadows the rustup shim at '${cargo_bin_dir}/cargo'.
-That cargo ignores rust-toolchain.toml, so installing under it would pin the wrong
-compiler. Fix the search order first, then rerun 'bash scripts/bringup.sh --install':
+bringup: '${cargo_path:-cargo}' is not the rustup shim at '${cargo_bin_dir}/cargo'.
+It rejects the '+${pinned_channel}' selection this script installs with and ignores
+rust-toolchain.toml. Fix the search order first, then rerun
+'bash scripts/bringup.sh --install':
 
   export PATH="${cargo_bin_dir}:\$PATH"
 EOF

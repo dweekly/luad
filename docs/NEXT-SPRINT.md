@@ -26,7 +26,8 @@ Allowed paths:
 - `scripts/bringup.sh`, `scripts/pins.env`, `scripts/install_ci_compilers.sh`,
   `scripts/generate_fixtures_manifest.py`
 - `crates/luad-oracle/src/lib.rs`, `crates/luad-oracle/src/candidate.rs`
-- `crates/luad-oracle/tests/test_bringup_pins.rs`, `test_analysis.rs`,
+- `crates/luad-oracle/tests/test_bringup_pins.rs`,
+  `crates/luad-oracle/tests/test_compiler_search_pin.rs`, `test_analysis.rs`,
   `test_public_disasm_lua54.rs`, `test_batch_export_bounds.rs`,
   `test_area1_validator_diagnostics.rs`
 - `.github/workflows/ci.yml` — the `Test` jobs' step list only
@@ -44,7 +45,9 @@ are owned by concurrent work and stay untouched.
 1. `bash scripts/bringup.sh --doctor` exits 0 on a machine after
    `bash scripts/bringup.sh --install`, and exits non-zero with a named fix command when
    a pinned tool is absent or at the wrong version.
-2. `cargo test -p luad-oracle --test test_bringup_pins` — the pin file,
+2. `cargo test -p luad-oracle --test test_bringup_pins --test test_compiler_search_pin`
+   — every `find_luac5x` passes over a same-series, different-patch compiler planted at
+   the front of the real search order, and the pin file,
    `rust-toolchain.toml`, `Cargo.toml`, `scripts/fuzz_smoke.sh`,
    `scripts/install_ci_compilers.sh`, `.github/workflows/ci.yml`, the `luad-oracle`
    compiler-search constant, and `docs/BRINGUP.md` all name the same versions and

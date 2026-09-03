@@ -25,7 +25,7 @@ restated in a second place, so a pin cannot drift from what CI installs.
 
 `scripts/bringup.sh` reads all five files rather than carrying its own copies.
 `crates/luad-oracle/tests/test_bringup_pins.rs` asserts that they agree with
-`.github/workflows/ci.yml`, with the compiler-search constant in `luad-oracle`, and with
+`.github/workflows/ci.yml`, with the compiler-search constants in `luad-oracle`, and with
 this document — including a check that every three-part version number written here is
 one of the pins above.
 
@@ -54,7 +54,11 @@ export PATH="$HOME/.cargo/bin:$PATH"
 ```
 
 Add that line to your shell profile. `scripts/bringup.sh --doctor` reports this case
-explicitly, naming the binary that is shadowing the shim.
+explicitly, naming the binary that is shadowing the shim. It tests for the shim by
+capability rather than by location: only the shim accepts `cargo +<toolchain>`, which is
+both how it follows the pin and the form `--install` uses. A package-manager cargo that
+happens to sit at the pinned version today is still reported `WRONG`, because it will not
+follow the pin when it moves.
 
 If rustup is not installed yet:
 
@@ -142,8 +146,9 @@ where a version is not the right question it exercises the thing instead, runnin
 non-zero if any row is not `OK`.
 
 Compilers are resolved in the order the oracle uses, and a candidate is accepted only if
-its banner names the pinned release, so a wrong-version binary in an earlier directory
-does not hide a correct one later in the order.
+its banner names the whole pinned release, patch included, so neither a wrong-version
+binary in an earlier directory nor a different patch of the same series can stand in for
+the pinned one.
 
 `--scope ci-test` narrows the report to the toolchain, its components, and the five
 official compilers,

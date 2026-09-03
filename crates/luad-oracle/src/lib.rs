@@ -147,6 +147,29 @@ pub fn get_fixture_bytes(
     }
 }
 
+/// The exact official Lua releases the differential oracle is pinned to, ascending.
+///
+/// `scripts/install_ci_compilers.sh` owns these values: it builds each release against a
+/// recorded SHA-256 and refuses a binary whose banner names a different one. Its
+/// `build_lua` arguments are the definition; `scripts/bringup.sh` reads them directly,
+/// and `crates/luad-oracle/tests/test_bringup_pins.rs` fails if this array disagrees.
+///
+/// Every search below matches a whole release. A series prefix such as `5.4` accepts any
+/// 5.4.x a host happens to carry, and a differential result is evidence only about the
+/// release that produced it.
+pub const LUA_RELEASES: [&str; 5] = ["5.1.5", "5.2.4", "5.3.6", "5.4.8", "5.5.1"];
+
+/// Pinned Lua 5.1 release.
+pub const LUA51_RELEASE: &str = LUA_RELEASES[0];
+/// Pinned Lua 5.2 release.
+pub const LUA52_RELEASE: &str = LUA_RELEASES[1];
+/// Pinned Lua 5.3 release.
+pub const LUA53_RELEASE: &str = LUA_RELEASES[2];
+/// Pinned Lua 5.4 release.
+pub const LUA54_RELEASE: &str = LUA_RELEASES[3];
+/// Pinned Lua 5.5 release.
+pub const LUA55_RELEASE: &str = LUA_RELEASES[4];
+
 /// Directory beneath the user's home where `scripts/install_ci_compilers.sh` installs the
 /// official Lua compilers, and the first location every compiler search consults after an
 /// explicit `LUAD_ORACLE_BIN_DIR` override.
@@ -360,7 +383,7 @@ pub fn find_luac54() -> Option<PathBuf> {
             "luac5.4",
             "luac-5.4",
         ],
-        "5.4",
+        LUA54_RELEASE,
     )
 }
 
@@ -411,7 +434,7 @@ pub fn find_luac55() -> Option<PathBuf> {
             "luac5.5",
             "luac-5.5",
         ],
-        "5.5",
+        LUA55_RELEASE,
     )
 }
 
@@ -470,7 +493,7 @@ pub fn find_luac53() -> Option<PathBuf> {
             "luac5.3",
             "luac-5.3",
         ],
-        "5.3",
+        LUA53_RELEASE,
     )
 }
 
@@ -516,7 +539,7 @@ pub fn find_luac52() -> Option<PathBuf> {
             "luac5.2",
             "luac-5.2",
         ],
-        "5.2",
+        LUA52_RELEASE,
     )
 }
 
@@ -564,7 +587,7 @@ pub fn find_luac51() -> Option<PathBuf> {
             "luac5.1",
             "luac-5.1",
         ],
-        "5.1",
+        LUA51_RELEASE,
     )
 }
 

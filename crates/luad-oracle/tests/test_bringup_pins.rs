@@ -11,10 +11,38 @@
 //! 6. The CI `Test` jobs run the bring-up doctor.
 //! 7. Every three-component version number in `docs/BRINGUP.md` is a declared pin.
 //! 8. `docs/RELEASING.md` states the pinned `cargo-deny` version.
+//! 9. The Rust compiler search is pinned to the same releases the installer builds.
+//! 10. A same-minor, different-patch compiler earlier in the search order is skipped.
 
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+/// Official Lua releases in `scripts/install_ci_compilers.sh`, in declaration order.
+fn installer_lua_releases(installer: &str) -> Vec<String> {
+    installer
+        .lines()
+        .filter_map(|line| line.trim_start().strip_prefix("build_lua \""))
+        .map(|rest| {
+            rest.split('"')
+                .next()
+                .expect("closing quote after the release")
+                .to_string()
+        })
+        .collect()
+}
+
+/// Write an executable stub whose `-v` banner is `banner`.
+fn plant_luac_stub(dir: &Path, bin_name: &str, banner: &str) -> PathBuf {
+    let path = dir.join(bin_name);
+    fs::write(&path, format!("#!/bin/sh\necho \"{banner}\"\n")).expect("write stub");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod stub");
+    }
+    path
+}
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -207,20 +235,12 @@ fn test_bringup_document_states_only_declared_pins() {
     declared.insert(pin(&pins, "LUAD_CARGO_CYCLONEDX_VERSION"));
 
     // The official Lua releases are owned by the installer's build_lua arguments.
-    let installer = read("scripts/install_ci_compilers.sh");
-    let mut lua_releases = 0;
-    for line in installer.lines() {
-        let line = line.trim_start();
-        if let Some(rest) = line.strip_prefix("build_lua \"") {
-            let version = rest.split('"').next().expect("closing quote");
-            declared.insert(version.to_string());
-            lua_releases += 1;
-        }
-    }
+    let releases = installer_lua_releases(&read("scripts/install_ci_compilers.sh"));
     assert!(
-        lua_releases > 0,
+        !releases.is_empty(),
         "scripts/install_ci_compilers.sh must declare official Lua releases"
     );
+    declared.extend(releases);
 
     let bringup = read("docs/BRINGUP.md");
     let undeclared: Vec<String> = three_component_versions(&bringup)
@@ -251,4 +271,75 @@ fn test_version_scanner_rejects_an_undeclared_number() {
     assert!(found.contains("1.97.1"));
     assert!(found.contains("9.9.9"));
     assert!(!found.contains("1.85"));
+}
+
+#[test]
+fn test_oracle_search_is_pinned_to_the_installed_releases() {
+    let releases = installer_lua_releases(&read("scripts/install_ci_compilers.sh"));
+    assert_eq!(
+        luad_oracle::LUA_RELEASES.to_vec(),
+        releases,
+        "luad_oracle::LUA_RELEASES and the installer's build_lua arguments must name \
+         the same releases in the same order"
+    );
+
+    // A series prefix would accept any patch release a host happens to carry.
+    for release in luad_oracle::LUA_RELEASES {
+        assert_eq!(
+            release.split('.').count(),
+            3,
+            "pinned release {release} must name a full major.minor.patch version"
+        );
+    }
+}
+
+#[test]
+fn test_search_skips_a_same_minor_different_patch_compiler() {
+    // Negative control for the rule every find_luac5x depends on: the first candidate
+    // reports the pinned series with the wrong patch and must be passed over for the
+    // exact release later in the order. Both candidates are stubs under a name no host
+    // carries, so the result depends on the acceptance rule alone rather than on which
+    // compilers this machine has installed.
+    let temp = tempfile::tempdir().expect("create tempdir");
+    let wrong_dir = temp.path().join("wrong");
+    let right_dir = temp.path().join("right");
+    fs::create_dir_all(&wrong_dir).expect("create wrong dir");
+    fs::create_dir_all(&right_dir).expect("create right dir");
+
+    for release in luad_oracle::LUA_RELEASES {
+        let (series, patch) = release
+            .rsplit_once('.')
+            .expect("release has a patch component");
+        let patch: u32 = patch.parse().expect("numeric patch");
+        // Any patch in the same series other than the pinned one.
+        let decoy = format!("{series}.{}", patch + 1);
+        let bin_name = format!("luac{series}-pin-control");
+
+        let wrong = plant_luac_stub(
+            &wrong_dir,
+            &bin_name,
+            &format!("Lua {decoy}  Copyright (C) 1994-2026 Lua.org, PUC-Rio"),
+        );
+        let right = plant_luac_stub(
+            &right_dir,
+            &bin_name,
+            &format!("Lua {release}  Copyright (C) 1994-2026 Lua.org, PUC-Rio"),
+        );
+
+        let wrong_str = wrong.to_str().expect("utf-8 path");
+        let right_str = right.to_str().expect("utf-8 path");
+        assert_eq!(
+            luad_oracle::find_compiler_binary(&bin_name, &[wrong_str, right_str], release)
+                .as_deref(),
+            Some(right.as_path()),
+            "search for Lua {release} must skip the {decoy} stub at {wrong_str}"
+        );
+
+        // The decoy alone is not an acceptable answer.
+        assert_eq!(
+            luad_oracle::find_compiler_binary(&bin_name, &[wrong_str], release),
+            None,
+            "search for Lua {release} must reject a lone {decoy} compiler"
+        );
+    }
 }
