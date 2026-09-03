@@ -81,6 +81,8 @@ All notable changes will be documented here. The project has not yet made a prod
   Text output was otherwise lossy above the preview bound with no non-JSON recourse.
 - Replaced the `origins` text renderer's private literal formatter, which printed
   floats as `float(<raw_hex>)` and strings unbounded, with the shared authority.
+  Both declared Lua 5.1 number widths decode: a four-byte binary32 is widened
+  exactly as the parser widens it, so it renders as the same value.
 
 ### Safety enforcement
 

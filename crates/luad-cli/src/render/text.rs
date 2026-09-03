@@ -581,11 +581,25 @@ pub fn render_origins(analysis: &luad_analysis::ChunkOriginAnalysis) {
     }
 }
 
-/// Decode a preserved little-endian binary64 constant back to its value.
+/// Decode a preserved little-endian `lua_Number` constant back to its value.
+///
+/// A Lua 5.1 header declares `sizeof(lua_Number)` as 4 or 8. The parser widens a
+/// four-byte binary32 to binary64 exactly (`f64::from(f32)`), and this helper
+/// repeats that widening so both widths reach the scalar authority as the same
+/// `f64` the typed constant carries.
 fn float_from_raw_hex(raw_hex: &str) -> Option<f64> {
     let bytes = hex::decode(raw_hex).ok()?;
-    let bytes: [u8; 8] = bytes.try_into().ok()?;
-    Some(f64::from_bits(u64::from_le_bytes(bytes)))
+    match bytes.len() {
+        4 => {
+            let bytes: [u8; 4] = bytes.try_into().ok()?;
+            Some(f64::from(f32::from_bits(u32::from_le_bytes(bytes))))
+        }
+        8 => {
+            let bytes: [u8; 8] = bytes.try_into().ok()?;
+            Some(f64::from_bits(u64::from_le_bytes(bytes)))
+        }
+        _ => None,
+    }
 }
 
 fn format_origin_expression(expression: &luad_analysis::OriginExpression) -> String {
@@ -598,8 +612,9 @@ fn format_origin_expression(expression: &luad_analysis::OriginExpression) -> Str
             OriginLiteral::Integer { value, .. } => render_integer(*value),
             // `OriginLiteral::Float` stores only the preserved bytes because the
             // enum derives `Eq`. Decode them back to binary64 so the scalar
-            // authority owns this spelling too; a byte width other than eight is
-            // not a float this renderer can speak for, so it shows the bytes.
+            // authority owns this spelling too; a byte width other than the
+            // declared four or eight is not a float this renderer can speak
+            // for, so it shows the bytes.
             OriginLiteral::Float { raw_hex, .. } => match float_from_raw_hex(raw_hex) {
                 Some(value) => render_float(value),
                 None => format!("float({raw_hex})"),

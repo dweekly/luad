@@ -171,8 +171,15 @@ fn exact_targets_match_the_same_byte_for_byte_scalar_golden() {
 /// can otherwise pass against a binary that predates the change under test. The
 /// aggregate `cargo test --workspace` in `scripts/check.sh` always rebuilds, so
 /// this only fires on a partial local run.
+///
+/// A packaged candidate selected through `LUAD_CANDIDATE_BIN` is a fixed artifact
+/// whose members carry a zero modification time by construction, so it is never a
+/// stale local build; the candidate gate binds it to its source revision instead.
 fn resolve_current_luad() -> std::path::PathBuf {
     let luad = luad_oracle::resolve_test_binary().expect("resolve luad test binary");
+    if std::env::var_os("LUAD_CANDIDATE_BIN").is_some() {
+        return luad;
+    }
     let built_at = fs::metadata(&luad)
         .and_then(|meta| meta.modified())
         .expect("luad binary modification time");
@@ -561,5 +568,107 @@ fn every_dialect_renders_its_constant_listing_through_the_scalar_authority() {
         bounded_seen,
         ALL_DIALECTS.len(),
         "every dialect must have exercised the preview bound"
+    );
+}
+
+/// Encode one Lua 5.1 instruction in the stock layout from `lopcodes.h` (Lua
+/// 5.1.5): opcode in bits 0-5, A in bits 6-13, C in bits 14-22, B in bits 23-31.
+fn lua51_abc(op: u32, a: u32, b: u32, c: u32) -> u32 {
+    op | (a << 6) | (c << 14) | (b << 23)
+}
+
+/// Encode one Lua 5.1 `iABx` instruction: opcode in bits 0-5, A in bits 6-13,
+/// Bx in bits 14-31 (`lopcodes.h`, Lua 5.1.5).
+fn lua51_abx(op: u32, a: u32, bx: u32) -> u32 {
+    op | (a << 6) | (bx << 14)
+}
+
+/// A stock little-endian Lua 5.1 chunk whose header declares
+/// `sizeof(lua_Number) == 4`, holding the single call `f(1.5)` so that the call's
+/// only argument originates from a four-byte float constant.
+fn four_byte_number_lua51_chunk() -> Vec<u8> {
+    // Opcode numbers from `lopcodes.h`, Lua 5.1.5.
+    const OP_LOADK: u32 = 1;
+    const OP_GETGLOBAL: u32 = 5;
+    const OP_CALL: u32 = 28;
+    const OP_RETURN: u32 = 30;
+    // Constant tags from `lua.h`, Lua 5.1.5.
+    const LUA_TNUMBER: u8 = 3;
+    const LUA_TSTRING: u8 = 4;
+    // `VARARG_ISVARARG` from `lobject.h`, Lua 5.1.5: every main chunk is vararg.
+    const VARARG_ISVARARG: u8 = 2;
+
+    let mut out = Vec::new();
+    out.extend_from_slice(b"\x1bLua");
+    // version 5.1, format 0, little-endian, int 4, size_t 8, Instruction 4,
+    // lua_Number 4, non-integral numbers.
+    out.extend_from_slice(&[0x51, 0, 1, 4, 8, 4, 4, 0]);
+    out.extend_from_slice(&0u64.to_le_bytes()); // empty source name
+    out.extend_from_slice(&0u32.to_le_bytes()); // linedefined
+    out.extend_from_slice(&0u32.to_le_bytes()); // lastlinedefined
+    out.extend_from_slice(&[0, 0, VARARG_ISVARARG, 2]); // nups, numparams, is_vararg, maxstacksize
+    let code = [
+        lua51_abx(OP_GETGLOBAL, 0, 0),
+        lua51_abx(OP_LOADK, 1, 1),
+        lua51_abc(OP_CALL, 0, 2, 1),
+        lua51_abc(OP_RETURN, 0, 1, 0),
+    ];
+    out.extend_from_slice(&(code.len() as u32).to_le_bytes());
+    for word in code {
+        out.extend_from_slice(&word.to_le_bytes());
+    }
+    out.extend_from_slice(&2u32.to_le_bytes());
+    out.push(LUA_TSTRING);
+    out.extend_from_slice(&2u64.to_le_bytes());
+    out.extend_from_slice(b"f\0");
+    out.push(LUA_TNUMBER);
+    out.extend_from_slice(&1.5f32.to_bits().to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes()); // prototypes
+    out.extend_from_slice(&0u32.to_le_bytes()); // lineinfo
+    out.extend_from_slice(&0u32.to_le_bytes()); // locvars
+    out.extend_from_slice(&0u32.to_le_bytes()); // upvalue names
+    out
+}
+
+#[test]
+fn origins_text_renders_four_byte_lua51_floats_through_the_authority() {
+    let luad = resolve_current_luad();
+    let dir = tempfile::tempdir().expect("temporary directory");
+    let chunk = dir.path().join("four_byte_number.luac");
+    fs::write(&chunk, four_byte_number_lua51_chunk()).expect("write synthesized chunk");
+    let path = chunk.to_str().expect("utf8 path");
+
+    let typed = Command::new(&luad)
+        .args(["disasm", path, "--format", "json"])
+        .output()
+        .expect("run typed disassembly");
+    assert!(
+        typed.status.success(),
+        "the four-byte-number chunk must decode: {}",
+        String::from_utf8_lossy(&typed.stderr)
+    );
+    let typed = String::from_utf8(typed.stdout).expect("utf8 json");
+    assert!(
+        typed.contains("\"0000c03f\""),
+        "typed disassembly must preserve the four raw bytes of 1.5f32:\n{typed}"
+    );
+
+    let text = Command::new(&luad)
+        .args(["origins", path, "--format", "text"])
+        .output()
+        .expect("run origins text");
+    assert!(
+        text.status.success(),
+        "origins must accept the four-byte-number chunk: {}",
+        String::from_utf8_lossy(&text.stderr)
+    );
+    let text = String::from_utf8(text.stdout).expect("utf8 text");
+    assert!(
+        text.contains("<- 1.5"),
+        "a four-byte float argument must render through the scalar authority:\n{text}"
+    );
+    assert!(
+        !text.contains("float("),
+        "the raw-bytes fallback must not appear for a declared number width:\n{text}"
     );
 }
