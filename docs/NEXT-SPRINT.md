@@ -25,7 +25,7 @@ Allowed paths:
 - `docs/BRINGUP.md`, `docs/NEXT-SPRINT.md`
 - `scripts/bringup.sh`, `scripts/pins.env`, `scripts/install_ci_compilers.sh`,
   `scripts/generate_fixtures_manifest.py`
-- `crates/luad-oracle/src/lib.rs`
+- `crates/luad-oracle/src/lib.rs`, `crates/luad-oracle/src/candidate.rs`
 - `crates/luad-oracle/tests/test_bringup_pins.rs`, `test_analysis.rs`,
   `test_public_disasm_lua54.rs`, `test_batch_export_bounds.rs`,
   `test_area1_validator_diagnostics.rs`
@@ -49,8 +49,9 @@ are owned by concurrent work and stay untouched.
    `scripts/install_ci_compilers.sh`, `.github/workflows/ci.yml`, the `luad-oracle`
    compiler-search constant, and `docs/BRINGUP.md` all name the same versions and
    directories.
-3. `cargo test -p luad-oracle --test test_analysis --test test_batch_export_bounds --test test_public_disasm_lua54 --test test_area1_validator_diagnostics`
-   passes with a relocated `CARGO_TARGET_DIR`.
+3. `CARGO_TARGET_DIR=$(mktemp -d) cargo test -p luad-oracle --test test_analysis --test test_batch_export_bounds --test test_public_disasm_lua54 --test test_area1_validator_diagnostics`
+   passes from an empty target directory, building the public CLI on demand rather than
+   assuming it is already there.
 4. The CI `Test` jobs run `bash scripts/bringup.sh --doctor --scope ci-test` immediately
    after installing the official compilers.
 5. `bash scripts/check.sh` exits 0.

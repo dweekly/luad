@@ -124,6 +124,9 @@ st_rustup=""
 st_channel=""
 st_msrv=""
 st_nightly=""
+st_components=""
+st_llvm_tools=""
+st_timeout=""
 st_cargo_fuzz=""
 st_cargo_deny=""
 st_cyclonedx=""
@@ -134,28 +137,22 @@ st_lnum32=""
 # Probes.
 # --------------------------------------------------------------------------------
 
-# Resolves a luac binary the way crates/luad-oracle/src/lib.rs find_compiler_binary
-# does: explicit override first, then the persistent directory, then the legacy one,
-# then PATH.
-resolve_luac() {
-  bin_name="$1"
-  if [ -n "${LUAD_ORACLE_BIN_DIR:-}" ] && [ -x "${LUAD_ORACLE_BIN_DIR}/${bin_name}" ]; then
-    printf '%s\n' "${LUAD_ORACLE_BIN_DIR}/${bin_name}"
-    return 0
+# Directories crates/luad-oracle/src/lib.rs find_compiler_binary consults, in order:
+# an explicit override, the persistent directory, then the legacy one. The caller adds
+# the PATH entry that holds the bare binary name, which is the oracle's last resort.
+luac_search_dirs() {
+  if [ -n "${LUAD_ORACLE_BIN_DIR:-}" ]; then
+    printf '%s\n' "${LUAD_ORACLE_BIN_DIR}"
   fi
-  if [ -x "${compiler_dir}/${bin_name}" ]; then
-    printf '%s\n' "${compiler_dir}/${bin_name}"
-    return 0
-  fi
-  if [ -x "${LUAD_LEGACY_COMPILER_DIR}/${bin_name}" ]; then
-    printf '%s\n' "${LUAD_LEGACY_COMPILER_DIR}/${bin_name}"
-    return 0
-  fi
-  command -v "${bin_name}" 2>/dev/null || return 1
+  printf '%s\n' "${compiler_dir}"
+  printf '%s\n' "${LUAD_LEGACY_COMPILER_DIR}"
 }
 
 check_rustup() {
-  found="$(rustup --version 2>/dev/null | head -n 1 || true)"
+  # From a neutral directory: `rustup --version` inside the repository resolves the
+  # toolchain rust-toolchain.toml names and installs its declared components, which
+  # would repair the very state check_pinned_components exists to report.
+  found="$(cd / && rustup --version 2>/dev/null | head -n 1 || true)"
   if [ -z "${found}" ]; then
     st_rustup="MISSING"
     add_row "rustup" "installed" "absent" "MISSING" \
@@ -200,6 +197,110 @@ check_channel() {
   else
     add_row "cargo (rust-toolchain.toml)" "${pinned_channel}" "${cargo_version:-absent}" "WRONG" \
       "rustup toolchain install ${pinned_channel} --profile minimal --component clippy --component rustfmt"
+  fi
+}
+
+# scripts/check.sh runs `cargo fmt --all -- --check` and `cargo clippy` under the
+# toolchain rust-toolchain.toml selects, so both components must be present for that
+# toolchain. A `--profile minimal` install satisfies the cargo version check without
+# them, which is why this is a separate row.
+# `cargo doc`, also in check.sh, needs no extra component: rustdoc ships inside rustc.
+#
+# Two properties hold this honest. `rustup component list` and `rustup run` both read
+# the stored toolchain and install nothing, so the probe cannot repair what it measures.
+# And it runs before check_channel, whose bare `cargo` call does reconcile the
+# `components` list in rust-toolchain.toml and downloads what is missing.
+#
+# That reconciliation means a networked machine repairs this itself on the next cargo
+# command. The row still matters where the download cannot happen: an offline or
+# network-restricted host fails at check.sh's first step instead, with no warning.
+check_pinned_components() {
+  st_components="OK"
+  if [ "${st_rustup}" != "OK" ]; then
+    st_components="MISSING"
+    add_row "rustfmt (${pinned_channel})" "available" "no rustup" "MISSING" "install rustup first"
+    add_row "clippy (${pinned_channel})" "available" "no rustup" "MISSING" "install rustup first"
+    return
+  fi
+
+  hint="rustup component add rustfmt clippy --toolchain ${pinned_channel}"
+  installed="$(rustup component list --toolchain "${pinned_channel}" --installed 2>/dev/null || true)"
+  for component in rustfmt clippy; do
+    case "${component}" in
+      rustfmt) subcommand="fmt" ;;
+      *) subcommand="clippy" ;;
+    esac
+    label="${component} (${pinned_channel})"
+
+    # rustup names an installed component after the host target, so match the prefix.
+    if ! printf '%s\n' "${installed}" | grep -q "^${component}"; then
+      st_components="MISSING"
+      add_row "${label}" "available for ${pinned_channel}" "not installed for ${pinned_channel}" \
+        "MISSING" "${hint}"
+      continue
+    fi
+
+    found="$(rustup run "${pinned_channel}" cargo "${subcommand}" --version 2>/dev/null | head -n 1 || true)"
+    if [ -z "${found}" ]; then
+      st_components="WRONG"
+      add_row "${label}" "available for ${pinned_channel}" "listed but does not run" "WRONG" "${hint}"
+    else
+      add_row "${label}" "available for ${pinned_channel}" "${found}" "OK"
+    fi
+  done
+}
+
+# .github/workflows/ci.yml installs the fuzz nightly with llvm-tools-preview. rustup
+# names the installed component after the host target, so the check is on the prefix.
+check_nightly_llvm_tools() {
+  label="llvm-tools (${pinned_nightly})"
+  hint="rustup component add llvm-tools-preview --toolchain ${pinned_nightly}"
+  if [ "${st_nightly}" != "OK" ]; then
+    st_llvm_tools="MISSING"
+    add_row "${label}" "installed" "no ${pinned_nightly}" "MISSING" "install ${pinned_nightly} first"
+    return
+  fi
+  found="$(rustup component list --toolchain "${pinned_nightly}" --installed 2>/dev/null | grep -m1 '^llvm-tools' || true)"
+  if [ -z "${found}" ]; then
+    st_llvm_tools="MISSING"
+    add_row "${label}" "installed" "absent" "MISSING" "${hint}"
+  else
+    st_llvm_tools="OK"
+    add_row "${label}" "installed" "${found}" "OK"
+  fi
+}
+
+# scripts/fuzz_smoke.sh resolves `timeout`, then `gtimeout`, and invokes it with
+# --signal and --kill-after, which are GNU coreutils options. Presence alone would
+# accept a non-GNU timeout that the campaign cannot use, so the probe runs the flags.
+check_gnu_timeout() {
+  label="GNU timeout (fuzz smoke)"
+  expected="accepts --signal and --kill-after"
+  case "$(uname -s)" in
+    Darwin) hint="brew install coreutils" ;;
+    *) hint="install the coreutils package with your distribution's package manager" ;;
+  esac
+
+  timeout_command=""
+  if command -v timeout >/dev/null 2>&1; then
+    timeout_command="timeout"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    timeout_command="gtimeout"
+  fi
+
+  if [ -z "${timeout_command}" ]; then
+    st_timeout="MISSING"
+    add_row "${label}" "${expected}" "neither timeout nor gtimeout on PATH" "MISSING" "${hint}"
+    return
+  fi
+
+  timeout_path="$(command -v "${timeout_command}")"
+  if "${timeout_command}" --signal=TERM --kill-after=10s 1s true >/dev/null 2>&1; then
+    st_timeout="OK"
+    add_row "${label}" "${expected}" "${timeout_path}" "OK"
+  else
+    st_timeout="WRONG"
+    add_row "${label}" "${expected}" "${timeout_path} rejected the flags" "WRONG" "${hint}"
   fi
 }
 
@@ -346,24 +447,46 @@ check_compilers() {
     series="${version%.*}"
     bin_name="luac${series}"
     expected="Lua ${version}"
-    path="$(resolve_luac "${bin_name}" || true)"
-    if [ -z "${path}" ]; then
+    matched=""
+    matched_banner=""
+    rejected_path=""
+    rejected_banner=""
+
+    # Like the oracle, a candidate is accepted only if its banner names the pinned
+    # release; a wrong-version binary in an earlier directory does not mask a correct
+    # one later in the order. The first rejected candidate is kept for the report.
+    while IFS= read -r dir; do
+      [ -n "${dir}" ] || continue
+      candidate="${dir}/${bin_name}"
+      [ -x "${candidate}" ] || continue
+      banner="$("${candidate}" -v 2>&1 | head -n 1 || true)"
+      case "${banner}" in
+        *"${expected}"*)
+          matched="${candidate}"
+          matched_banner="${banner}"
+          break
+          ;;
+      esac
+      if [ -z "${rejected_path}" ]; then
+        rejected_path="${candidate}"
+        rejected_banner="${banner}"
+      fi
+    done <<EOT
+$(luac_search_dirs)
+$(command -v "${bin_name}" 2>/dev/null | sed 's|/[^/]*$||')
+EOT
+
+    if [ -n "${matched}" ]; then
+      add_row "${bin_name}" "${expected}" "${matched_banner%%  *} (${matched})" "OK"
+    elif [ -n "${rejected_path}" ]; then
+      st_compilers="WRONG"
+      add_row "${bin_name}" "${expected}" "${rejected_banner:-unreadable} (${rejected_path})" "WRONG" \
+        "bash scripts/install_ci_compilers.sh replaces a wrong-version binary in ${compiler_dir}; delete ${rejected_path} if it is elsewhere"
+    else
       st_compilers="MISSING"
       add_row "${bin_name}" "${expected}" "absent" "MISSING" \
         "bash scripts/install_ci_compilers.sh"
-      continue
     fi
-    banner="$("${path}" -v 2>&1 | head -n 1 || true)"
-    case "${banner}" in
-      *"${expected}"*)
-        add_row "${bin_name}" "${expected}" "${banner%%  *} (${path})" "OK"
-        ;;
-      *)
-        st_compilers="WRONG"
-        add_row "${bin_name}" "${expected}" "${banner:-unreadable} (${path})" "WRONG" \
-          "remove ${path} and rerun: bash scripts/install_ci_compilers.sh"
-        ;;
-    esac
   done
 }
 
@@ -407,12 +530,17 @@ run_checks() {
   hint_text=()
 
   check_rustup
+  # Before check_channel: its bare `cargo` call reconciles rust-toolchain.toml's
+  # declared components. Both scopes, because the CI Test jobs run scripts/check.sh.
+  check_pinned_components
   check_channel
 
   if [ "${scope}" = "developer" ]; then
     check_msrv
     check_nightly
+    check_nightly_llvm_tools
     check_cargo_fuzz
+    check_gnu_timeout
     check_cargo_deny
     check_cyclonedx
   fi
@@ -528,6 +656,11 @@ EOF
       --component clippy --component rustfmt
   fi
 
+  if [ "${st_components}" != "OK" ]; then
+    echo "==> rustup component add rustfmt clippy --toolchain ${pinned_channel}"
+    rustup component add rustfmt clippy --toolchain "${pinned_channel}"
+  fi
+
   if [ "${st_msrv}" != "OK" ]; then
     echo "==> rustup toolchain install ${msrv_toolchain} (MSRV)"
     rustup toolchain install "${msrv_toolchain}" --profile minimal
@@ -537,6 +670,27 @@ EOF
     echo "==> rustup toolchain install ${pinned_nightly} (fuzz)"
     rustup toolchain install "${pinned_nightly}" --profile minimal \
       --component llvm-tools-preview
+  fi
+
+  if [ "${st_llvm_tools}" != "OK" ]; then
+    echo "==> rustup component add llvm-tools-preview --toolchain ${pinned_nightly}"
+    rustup component add llvm-tools-preview --toolchain "${pinned_nightly}"
+  fi
+
+  if [ "${st_timeout}" != "OK" ]; then
+    # GNU timeout is a system package. Homebrew installs it without elevation; every
+    # other package manager needs root, which this script never takes.
+    if [ "$(uname -s)" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
+      echo "==> brew install coreutils (GNU timeout for the fuzz smoke runner)"
+      brew install coreutils
+    else
+      echo "==> skipping GNU timeout: it needs a system package manager"
+      echo "    run this yourself, then rerun 'bash scripts/bringup.sh --install':"
+      case "$(uname -s)" in
+        Darwin) echo "      brew install coreutils" ;;
+        *) echo "      sudo <your package manager> install coreutils" ;;
+      esac
+    fi
   fi
 
   if [ "${st_cargo_fuzz}" != "OK" ]; then

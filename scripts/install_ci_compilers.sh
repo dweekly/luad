@@ -29,9 +29,20 @@ build_lua() {
     local expected_sha="$4"
     local bin_name="$5"
 
+    # An existing file is only a valid installation if it reports the pinned version.
+    # Skipping on presence alone lets a truncated, stale, or wrong-version binary
+    # survive every reinstall while the differential gates keep failing.
     if [ -f "${DEST_DIR}/${bin_name}" ]; then
-        echo "[INFO] ${bin_name} already installed, skipping."
-        return 0
+        local installed_banner
+        installed_banner=$("${DEST_DIR}/${bin_name}" -v 2>&1 | head -n 1 || true)
+        case "${installed_banner}" in
+            *"Lua ${version}"*)
+                echo "[INFO] ${bin_name} already installed (${installed_banner}), skipping."
+                return 0
+                ;;
+        esac
+        echo "[REPLACE] ${DEST_DIR}/${bin_name} reported '${installed_banner}', expected Lua ${version}; rebuilding."
+        rm -f "${DEST_DIR}/${bin_name}"
     fi
 
     echo "[DOWNLOAD] Fetching Lua ${version} from ${url}..."

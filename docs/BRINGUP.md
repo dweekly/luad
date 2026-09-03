@@ -35,6 +35,10 @@ Supported hosts are macOS on Apple silicon (arm64) and Linux on x86-64. You need
 toolchain and `make` (Xcode command line tools, or `build-essential`), plus `curl`,
 `tar`, `patch`, `cmp`, and `od`, which every supported host already provides.
 
+You also need GNU `timeout`, which the fuzz smoke runner invokes with `--signal` and
+`--kill-after`. Linux has it in `coreutils`; macOS does not ship it, so install
+Homebrew's `coreutils`, which provides `gtimeout`.
+
 ### Install Rust through rustup, and put its shim first
 
 The repository pins its compiler in `rust-toolchain.toml`. That pin is honored by the
@@ -72,13 +76,20 @@ missing or at the wrong version, then re-runs the report. It never uses `sudo` a
 installs Python packages; anything that would need root is printed for you to run
 yourself. It performs the following.
 
-- The pinned contributor toolchain from `rust-toolchain.toml`, with `clippy` and
-  `rustfmt`.
+- The pinned contributor toolchain from `rust-toolchain.toml`, with its `clippy` and
+  `rustfmt` components. `scripts/check.sh` runs both, and a toolchain installed with
+  `--profile minimal` has neither. `rust-toolchain.toml` also declares them, so a
+  networked machine repairs this by itself on the next `cargo` command in the
+  repository; the doctor reports the stored state, which is what an offline or
+  network-restricted host actually has.
 - The MSRV toolchain from `Cargo.toml`. CI builds the locked workspace and the
   source-installed CLI with it on both platforms.
 - The fuzz nightly from `scripts/fuzz_smoke.sh`, with `llvm-tools-preview`, and
   `cargo-fuzz` at the version that runner requires. The runner refuses to start on any
   other toolchain or `cargo-fuzz` version, so these two move together.
+- GNU `timeout`, on macOS through `brew install coreutils` when Homebrew is present.
+  Every other package manager needs root, which this script never takes; there it
+  prints the command for you to run.
 - `cargo-deny` at the pinned version, for the dependency-policy check.
 - `cargo-cyclonedx` at the pinned version, for the release SBOM. CI downloads the pinned
   Linux release asset and checks its SHA-256; a developer machine installs the same
@@ -125,10 +136,17 @@ bash scripts/bringup.sh --doctor
 
 The report is a table of tool, expected version, found version, and `OK`, `MISSING`, or
 `WRONG`, followed by one exact fix command per failing row. It compares versions rather
-than presence, so an installed-but-wrong tool is reported as `WRONG` rather than passing.
-It exits non-zero if any row is not `OK`.
+than presence, so an installed-but-wrong tool is reported as `WRONG` rather than passing;
+where a version is not the right question it exercises the thing instead, running GNU
+`timeout` with the flags the fuzz runner uses and reading each `luac` banner. It exits
+non-zero if any row is not `OK`.
 
-`--scope ci-test` narrows the report to the toolchain and the five official compilers,
+Compilers are resolved in the order the oracle uses, and a candidate is accepted only if
+its banner names the pinned release, so a wrong-version binary in an earlier directory
+does not hide a correct one later in the order.
+
+`--scope ci-test` narrows the report to the toolchain, its components, and the five
+official compilers,
 which is what a CI `Test` job provides; the CI workflow runs the doctor in that scope
 immediately after installing the compilers, so the doctor and CI cannot disagree about
 them.

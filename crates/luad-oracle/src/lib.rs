@@ -3,6 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
 use tempfile::NamedTempFile;
 
 pub mod candidate;
@@ -202,20 +203,78 @@ pub fn cargo_target_dir() -> PathBuf {
     root.join("target")
 }
 
-/// Absolute path of the public `luad` binary for integration tests.
+/// Serializes the on-demand `luad` build so parallel test threads issue at most one.
+static LUAD_BUILD_LOCK: Mutex<()> = Mutex::new(());
+
+/// Absolute path of the public `luad` binary for integration tests, built if absent.
 ///
 /// `env!("CARGO_BIN_EXE_luad")` is not available here: Cargo defines `CARGO_BIN_EXE_<name>`
 /// only for binaries declared by the package under test, and `luad` belongs to `luad-cli`.
-/// `scripts/check.sh` exports the variable at runtime; the fallback resolves the binary
-/// inside whatever target directory Cargo is using.
-#[must_use]
-pub fn luad_binary_path() -> PathBuf {
+/// `scripts/check.sh` exports the variable at runtime. Otherwise the binary is resolved
+/// inside whatever target directory Cargo is using, and built there when it is not
+/// present: `cargo test -p luad-oracle` builds only `luad-oracle`, so a fresh target
+/// directory never contains `luad` until something asks for it.
+///
+/// Absence is never reported as success; a failed build returns the command's output.
+pub fn try_luad_binary_path() -> Result<PathBuf, String> {
     if let Some(value) = std::env::var_os("CARGO_BIN_EXE_luad") {
         if !value.is_empty() {
-            return PathBuf::from(value);
+            let path = PathBuf::from(value);
+            if path.exists() {
+                return Ok(path);
+            }
         }
     }
-    cargo_target_dir().join("debug").join("luad")
+
+    let target_dir = cargo_target_dir();
+    let path = target_dir.join("debug").join("luad");
+    if path.exists() {
+        return Ok(path);
+    }
+
+    let guard = LUAD_BUILD_LOCK.lock();
+    // A poisoned lock means another thread panicked mid-build; the build itself is
+    // idempotent, so recover the guard and rebuild rather than propagating the panic.
+    let _guard = match guard {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if path.exists() {
+        return Ok(path);
+    }
+
+    // Cargo exports CARGO for processes it launches; falling back to the name on PATH
+    // keeps this working when a test binary is run directly.
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let root = find_workspace_root();
+    let output = Command::new(cargo)
+        .args(["build", "-p", "luad-cli", "--bin", "luad", "--target-dir"])
+        .arg(&target_dir)
+        .current_dir(&root)
+        .output()
+        .map_err(|error| format!("failed to spawn cargo build -p luad-cli: {error}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "cargo build -p luad-cli --bin luad --target-dir {} failed with status {:?}\nstderr:\n{}",
+            target_dir.display(),
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    if !path.exists() {
+        return Err(format!(
+            "cargo build reported success but {} does not exist",
+            path.display()
+        ));
+    }
+    Ok(path)
+}
+
+/// Absolute path of the public `luad` binary, panicking when it cannot be produced.
+#[must_use]
+pub fn luad_binary_path() -> PathBuf {
+    try_luad_binary_path().unwrap_or_else(|error| panic!("{error}"))
 }
 
 /// Accept `path` only when its `-v` banner names `expected_version`.

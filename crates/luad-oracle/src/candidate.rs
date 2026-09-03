@@ -12,8 +12,6 @@ use std::process::Command;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::find_workspace_root;
-
 /// Compute canonical hex SHA-256 digest of bytes.
 #[must_use]
 pub fn sha256_digest(bytes: &[u8]) -> String {
@@ -256,28 +254,9 @@ pub fn resolve_test_binary() -> Result<PathBuf, BinaryResolutionError> {
         return Ok(path);
     }
 
-    if let Ok(p) = std::env::var("CARGO_BIN_EXE_luad") {
-        let path = PathBuf::from(p);
-        if path.exists() {
-            return Ok(path);
-        }
-    }
-
-    let root = find_workspace_root();
-    let path = root.join("target/debug/luad");
-    if !path.exists() {
-        let output = Command::new("cargo")
-            .args(["build", "-p", "luad-cli", "--bin", "luad"])
-            .current_dir(&root)
-            .output()
-            .map_err(|e| BinaryResolutionError::WorkspaceFallbackFailed(e.to_string()))?;
-        if !output.status.success() {
-            return Err(BinaryResolutionError::WorkspaceFallbackFailed(
-                String::from_utf8_lossy(&output.stderr).to_string(),
-            ));
-        }
-    }
-    Ok(path)
+    // One resolver owns the workspace fallback so the target directory, the on-demand
+    // build, and the exported-variable precedence cannot diverge between call sites.
+    crate::try_luad_binary_path().map_err(BinaryResolutionError::WorkspaceFallbackFailed)
 }
 
 /// Create a 512-byte POSIX ustar tar header.
