@@ -325,8 +325,8 @@ Required work:
   without embedding sink, taint, or exploitability policy in `luad`;
 - make installation, verification, quick-start, command, schema, diagnostic, evidence,
   security, and known-limitation documentation discoverable from the README index;
-- commit the internal investigation record using a stable template while excluding
-  private firmware and investigation-specific security judgments; and
+- reference the accepted Milestone 4 investigation record rather than producing a new
+  one; and
 - have a fresh session with no repository context install the packaged candidate on a
   clean machine from `docs/BRINGUP.md` and the README alone and complete the seven
   documented workflows, committing its summary as the transfer record.

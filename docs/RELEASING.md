@@ -112,7 +112,8 @@ Before publishing 1.0, additionally:
    corpus identity, resource envelope, and result.
 2. Complete the focused hostile-input and release-supply-chain security review.
 3. Record the representative runtime and peak-memory tripwires required by the roadmap.
-4. Complete the internal transfer checkpoint and the out-of-profile refusal test below.
+4. Complete the internal transfer checkpoint and the out-of-profile refusal test below,
+   and retain the fresh-session transfer record required by the roadmap's Milestone 7.
 5. Confirm no P0 correctness or security defect remains open.
 6. Assemble and verify the two platform archives, evidence index, SBOM, and checksums.
 7. Update `CHANGELOG.md`, version metadata, schemas, README, security policy, candidate
