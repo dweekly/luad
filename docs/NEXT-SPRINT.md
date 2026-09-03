@@ -1,16 +1,19 @@
 # Sprint checkpoint: no active product batch
 
-Lane: planning. Roadmap position: select the next unresolved milestone from the
-dependency-ordered version-1 release train.
+Lane: planning. Roadmap position: the next stage is the first unmet entry of the
+[release execution sequence](../ROADMAP.md#release-execution-sequence).
 
 ## Current decision
 
 No product implementation is authorized by this checkpoint. Before implementation
-begins, the steward must replace this file with one forward-looking contract selected
-from `ROADMAP.md`.
+begins, this file is replaced with that stage's contract, following the lifecycle in
+[the development workflow](DEVELOPMENT-WORKFLOW.md#12-preservation-documentation-and-escalation):
+a target-qualification stage merges its contract in a dedicated planning change first;
+every other stage places its contract here in the first commit of its own pull request
+and restores this checkpoint in its last.
 
-The roadmap's milestone order is a dependency plan, not a standing batch authorization.
-Choose only the smallest unmet outcome whose prerequisites are accepted; do not combine
+The execution sequence is a dependency order, not a standing batch authorization. Take
+only the first unmet stage whose prerequisites are accepted; do not combine
 public-contract, robustness, target-promotion, or customer-transfer work merely because
 they share the 1.0 destination.
 
@@ -28,5 +31,5 @@ outcome.
 
 ## Stop condition
 
-Stop before changing product code. Product work resumes only after a dedicated planning
-change replaces this checkpoint with an active contract.
+Stop before changing product code. Every implementation commit follows one that placed
+its claim in this file; a checkpoint never coexists with a contract.
