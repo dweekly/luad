@@ -92,10 +92,12 @@ The unlicensed real-world chunks under `test-compiled/` (game and client binarie
 ### Explicit remapping facilities in other tools
 
 - [unluac (Jeong-Min-Cho fork)](https://github.com/Jeong-Min-Cho/unluac) documents
-  `--opmap <file>` for VMs with shuffled opcodes and `--typemap` for
-  [xLua](https://github.com/Tencent/xLua), Tencent's Lua 5.3 for Unity, which keeps
-  the opcode table but swaps the integer and float constant type tags. Both are the
-  kind of dialect knob `luad` must express as an explicit, provenance-bound profile.
+  `--opmap <file>` for VMs with shuffled opcodes and `--typemap` for modified
+  [xLua](https://github.com/Tencent/xLua) builds found in shipped Unity games, which
+  keep the opcode table but swap the integer and float constant type tags. Tencent's
+  checked-in xLua sources use the stock tags, so the swap comes from a game-side
+  modification with no public compiler. Both flags are the kind of dialect knob `luad`
+  must express as an explicit, provenance-bound profile.
 - [Unshuffling TP-Link's Lua opcodes](https://jhalon.github.io/side-channel/tplink-opcode-shuffle/)
   documents an Archer AX1800 V5.6 build whose `lopcodes.h` enum, `BinOpr`, and `UnOpr`
   were reordered, recovered by diffing the vendor GPL drop against stock 5.1. The same
@@ -246,7 +248,7 @@ moonscript, argparse.
 | **NodeMCU** ([nodemcu-firmware](https://github.com/nodemcu/nodemcu-firmware), MIT) | Lua 5.1 with optional `LUA_NUMBER_INTEGRAL`; Lua 5.3 branch with `LUA_32BITS`; `app/lua/ldump.c` has `luaU_dump_crosscompile` with a `DumpTargetInfo{little_endian, sizeof_int, sizeof_strsize_t, sizeof_lua_Number, lua_Number_integral, is_arm_fpa}` | Verified from source; not built here | Build `luac.cross` | **A retargetable dumper under MIT.** It emits the stock integral-number layout that this repository's pinned compilers cannot, plus byte-swapped and ARM-FPA mixed-endian doubles. LFS images (`luac.cross -f`/`-a`) are a multi-prototype flash container, not a chunk. |
 | **Playdate** (Panic) | Lua 5.4.3 with `LUA_32BITS`, three appended opcodes (`OP_LOADFALSE`, `OP_LFALSESKIP`, `OP_LOADTRUE`), non-standard version byte in SDKs before 1.8.0, per [playdate-reverse-engineering](https://github.com/cranksters/playdate-reverse-engineering/blob/main/formats/luac.md) | Unverified here (documented by a third party) | Free Playdate SDK `pdc`; `.pdz` container documented in the same repository | 32-bit Lua 5.4 with a non-standard opcode table and version byte |
 | **TP-Link Archer AX1800 V5.6** | Lua 5.1 + OpenWrt patches + reordered opcode enum, `BinOpr`, `UnOpr` ([write-up](https://jhalon.github.io/side-channel/tplink-opcode-shuffle/)) | Unverified here (documented by a third party) | Vendor GPL drop at `static.tp-link.com/upload/gpl-code/2025/202510/20251021/GPL_AX1800v5.tar.gz` | A differently shuffled sibling of the private corpus, obtainable under GPL |
-| **xLua** ([Tencent/xLua](https://github.com/Tencent/xLua), MIT) | Lua 5.3 with integer and float constant tags swapped | Unverified here (documented by unluac's `--typemap`) | Build and compile samples | Correct opcodes with wrong constant tags: plausible but wrong output if unhandled |
+| **Modified xLua builds in shipped Unity games** | Lua 5.3 with integer and float constant tags swapped (unluac's `--typemap` example maps tag 3 to integer and tag 19 to float) | Unverified here; documented by [unluac's README](https://github.com/Jeong-Min-Cho/unluac/blob/main/README.md) against game-extracted chunks | **No public compiler identified.** Tencent's checked-in [xLua](https://github.com/Tencent/xLua) Lua 5.3.5 sources define the stock tags (`LUA_TNUMFLT` 3, `LUA_TNUMINT` 19) and dump them unchanged, so building upstream xLua does not reproduce the swap | Correct opcodes with wrong constant tags: plausible but wrong output if unhandled. Enters only if a reproducible authority is found |
 
 ### 4c. Containers around otherwise stock chunks
 
@@ -344,22 +346,45 @@ offset 0 with a message that names a downstream symptom. The stock 5.3.6 chunk f
 same source reads cleanly with `Layout: int=4,sizet=8,inst=4,num=8,endian=1` and
 `Verdict: ValidForParser`. Bounded behaviour held: no panic, no hang.
 
+Width-byte probes on the repository's own stock fixtures (one header byte changed to
+`04`, body left as compiled, so a desynchronised parse means the byte was honoured and
+a clean parse reporting `8` means it was ignored):
+
+| Dialect and byte | Result |
+|---|---|
+| 5.4 `lua_Number` (offset 14) | Rejected: `Parsing failed at offset 14: Unsupported lua_Number size: expected 8, found 4`. The header names the field and the width. |
+| 5.5 `lua_Number` (offset 31) | Accepted at the header, test value consumed at the declared width, body fails with `Invalid constant tag 12` at offset 0 or an EOF at a body offset. No diagnostic names the width. |
+| 5.3 `lua_Integer` (offset 15) or `lua_Number` (offset 16) | Accepted at the header, body fails with `Instruction count 4210944 exceeds safety limit` at offset 0. |
+| 5.3 `size_t` (offset 13) | **Ignored**: reported `sizet=8`, `ValidForParser`, zero diagnostics. |
+| 5.2 `lua_Number` (offset 10) | **Ignored**: reported `num=8`, `ValidForParser`, zero diagnostics on a chunk with float constants. |
+| 5.2 `size_t` (offset 8) | Honoured: body desynchronises and fails with an EOF at a body offset. |
+
+Header parsing code for reference: `crates/luad-dialect-lua54/src/header.rs` rejects
+any `lua_Number` width other than 8; `crates/luad-dialect-lua53/src/header.rs` accepts
+4 or 8 for `size_t`, `lua_Integer`, and `lua_Number`; `crates/luad-dialect-lua55/src/header.rs`
+and `crates/luad-dialect-lua52/src/header.rs` read the width bytes without validating
+them.
+
 ## 6. Gaps this survey exposes in `luad`
 
 Stated as present constraints on the tool, each traceable to a source above.
 
-- A Lua 5.3 or 5.4 header declaring a 4-byte `lua_Number` is not rejected and not
-  honoured; parsing proceeds under 8-byte assumptions. `LUAC_NUM` must be checked as
-  an f32 (`0x43b94000`) when the declared width is 4, and float constants decoded at the
-  declared width, or the header must be refused with a diagnostic that names the width.
-- A parse failure caused by a layout mismatch is reported at offset 0 with the first
-  downstream symptom. The diagnostic should name the header field that the body
+- Lua 5.4 is the model: a header declaring a 4-byte `lua_Number` is refused with a
+  diagnostic that names the field and the width. Lua 5.2 ignores the declared
+  `lua_Number` width and Lua 5.3 ignores the declared `size_t` width, each reporting
+  the stock width and a valid verdict with no diagnostic. Lua 5.3 and 5.5 accept 4-byte
+  `lua_Integer` and `lua_Number` widths at the header and then fail inside the body.
+  Every dialect must either honour a declared width end to end (`LUAC_NUM` checked as
+  an f32, `0x43b94000`, and float constants decoded at 4 bytes) or refuse it the way
+  5.4 does.
+- A body parse failure caused by a layout mismatch is reported at offset 0 with the
+  first downstream symptom. The diagnostic should name the header field that the body
   contradicts.
 - A header whose declared `size_t` width disagrees with the width of a long-string
   length field is a detectable, reportable inconsistency (EdgeTX host builds). No
   diagnostic exists for it.
 - Opcode-table permutation (TP-Link AX1800, Playdate, PopCap) and constant-type-tag
-  remapping (xLua) have no profile representation. Both must be explicit,
+  remapping (modified xLua builds) have no profile representation. Both must be explicit,
   provenance-bound profiles; auto-guessing from a canary is a separate tool, never a
   default.
 - No fact identifies the likely origin ecosystem of a chunk from its layout tuple,
@@ -375,8 +400,10 @@ Stated as present constraints on the tool, each traceable to a source above.
 - The stock integral-number layout, which the active sprint evidences with hand-built
   chunks because the pinned compilers cannot emit it, has an MIT-licensed compiler
   authority available in NodeMCU's `luac.cross`.
-- The redistributable corpus is five toy programs and one validator per dialect. The
-  official per-release test suites remove that limit at no license cost.
+- The redistributable corpus is five shared toy programs per stock dialect (debug and
+  stripped) plus one Lua 5.1 validator-scale case; Lua 5.2 through 5.5 have no
+  validator-scale coverage. The official per-release test suites remove that limit at
+  no license cost.
 
 ## 7. Recommendations, stack-ranked
 
@@ -391,15 +418,17 @@ marked as a candidate for an earlier planning change.
    layout** and for byte-swapped 5.1 chunks. Candidate for a pre-1.0 planning change
    because it replaces hand-built evidence in an active sprint with an independent
    compiler.
-3. **Reject or honour a 4-byte `lua_Number` in 5.3 and 5.4 headers**, and anchor
-   layout-mismatch diagnostics to the contradicted header field. This is a silent
+3. **Bring Lua 5.2, 5.3, and 5.5 header-width handling up to the 5.4 model**: honour
+   a declared width end to end or refuse it by name, and anchor layout-mismatch
+   diagnostics to the contradicted header field. This is a silent
    incorrect answer of the kind the ROADMAP's sequencing rules put ahead of feature
    work.
 4. **Qualify EdgeTX 5.3 32-bit as the first vendor profile after LNUM32**, with
    `edgetx-luac` as authority and sdcard scripts (GPLv2, recorded per case) plus this
    repository's MIT sources as inputs; add a header-versus-body width diagnostic.
 5. **Express opcode maps and constant-type-tag maps as explicit profiles**, with the
-   TP-Link AX1800 GPL drop and xLua as the first two authorities.
+   TP-Link AX1800 GPL drop as the first authority; a type-tag authority is still to be
+   identified.
 6. **Publish a hostile-chunk seed corpus** and offer it upstream to lunapark-corpus.
 7. **Add a chunk mutator** that emits labeled variants with a ground-truth manifest,
    backed by ChunkSpy-style rewriting.

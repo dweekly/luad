@@ -382,10 +382,11 @@ order, with their authorities recorded in
 
 ### Profile facilities
 
-- A header that declares a 4-byte `lua_Number` in Lua 5.3 or 5.4 is either honoured at
-  the declared width or refused with a diagnostic naming the width; parsing under
-  assumed widths and reporting the first downstream symptom at offset 0 is a silent
-  incorrect answer under the sequencing rules.
+- Every dialect handles a declared header width the way Lua 5.4 already does: honour
+  it end to end or refuse it with a diagnostic naming the field and width. Ignoring a
+  declared width while reporting the stock one, or parsing under assumed widths and
+  reporting the first downstream symptom at offset 0, is a silent incorrect answer
+  under the sequencing rules.
 - Opcode-table maps and constant-type-tag maps are explicit, provenance-bound
   profiles. Deriving a map from a canary chunk is a separate tool, never a default.
 - A header-versus-body width inconsistency (a declared `size_t` width contradicted by
