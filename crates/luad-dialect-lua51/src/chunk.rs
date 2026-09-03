@@ -217,8 +217,29 @@ fn load_proto_51(
                 let b = reader.read_u8()?;
                 ConstantValue::Boolean(b != 0)
             }
+            // LUA_TNUMBER carries one `lua_Number` of the declared width. The stock
+            // header's integral flag (byte 11, `lundump.c`: `(lua_Number)0.5 == 0`)
+            // says whether that type is an integer or a floating-point type, so the
+            // same four or eight bytes decode as a two's-complement integer under
+            // flag 1 and as IEEE-754 under flag 0. The LNUM32 profile keeps tag 3
+            // floating-point and carries its integers in tag 9 below; its byte 11 is
+            // `sizeof(lua_Integer)`, which `ChunkLayout::validate` pins to 4.
             3 => {
-                if layout.lua_number_size == 4 {
+                if layout.integral_flag == 1 {
+                    if layout.lua_number_size == 4 {
+                        let i_val = reader.read_i32_le()?;
+                        ConstantValue::Integer {
+                            val: i64::from(i_val),
+                            raw_hex: hex::encode(i_val.to_le_bytes()),
+                        }
+                    } else {
+                        let i_val = reader.read_i64_le()?;
+                        ConstantValue::Integer {
+                            val: i_val,
+                            raw_hex: hex::encode(i_val.to_le_bytes()),
+                        }
+                    }
+                } else if layout.lua_number_size == 4 {
                     let raw_bits = reader.read_u32_le()?;
                     let f32_val = f32::from_bits(raw_bits);
                     let f_val = f64::from(f32_val);
