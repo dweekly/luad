@@ -15,16 +15,33 @@ FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
 PRECOMPILED_DIR = FIXTURES_DIR / "precompiled"
 MANIFEST_PATH = PRECOMPILED_DIR / "MANIFEST.json"
 
+PINS_PATH = Path(__file__).resolve().parent / "pins.env"
+
+
+def load_pins() -> dict:
+    """Read scripts/pins.env, the single source for the compiler directory pins."""
+    pins = {}
+    for raw in PINS_PATH.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        pins[key.strip()] = os.path.expandvars(value.strip().strip('"'))
+    return pins
+
+
+PINS = load_pins()
+
 # Search order for the official compilers, matching find_compiler_binary in
 # crates/luad-oracle/src/lib.rs: an explicit override, then the persistent directory
-# under the user's home, then the legacy /tmp directory. /tmp is last because macOS
-# clears it on reboot.
+# under the user's home, then the legacy directory. /tmp is last because macOS clears
+# it on reboot.
 COMPILER_DIRS = [
     d
     for d in (
         os.environ.get("LUAD_COMPILER_DIR"),
-        str(Path.home() / ".cache" / "luad" / "lua-tools" / "bin"),
-        "/tmp/lua-tools/bin",
+        PINS["LUAD_COMPILER_DIR_DEFAULT"],
+        PINS["LUAD_LEGACY_COMPILER_DIR"],
     )
     if d
 ]
