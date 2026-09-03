@@ -137,6 +137,11 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Binary parsing
 
+- Lua 5.1 chunks whose header declares an integral `lua_Number` (integral flag 1) now
+  decode every LUA_TNUMBER constant as a two's-complement integer of the declared 4- or
+  8-byte width. Every consumer of the typed constant, including `disasm` text and JSON
+  and `origins`, reports the integer; the same bytes under integral flag 0 remain
+  IEEE-754 floats, and the LNUM32 profile's tag-9 integers are unaffected.
 - Enforced `ResourceLimits::max_string_bytes` across Lua 5.1, 5.2, 5.3, 5.4, and 5.5
   chunk loaders before string payloads are read or retained, with stable diagnostics
   `L51-STR-001`, `L52-STR-001`, `L53-STR-001`, and `L55-STR-002`.
