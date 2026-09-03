@@ -85,6 +85,18 @@ This table describes code present in the repository, not verified support status
 
 The embedded Lua 5.1 release scope is driven by a 252-file TP-Link corpus: header-declared 32-bit `size_t`, an explicit LNUM profile, correct closure-binding records, precise offsets, and inline resolved constants. Private-corpus results supplement—but never replace—redistributable fixtures and public-boundary proof. See the [embedded-firmware requirements](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md).
 
+## How `luad` compares on non-stock chunks
+
+[docs/PRIOR-ART-AND-CORPORA.md](docs/PRIOR-ART-AND-CORPORA.md) keeps a matrix of every
+runnable Lua bytecode tool against chunks that stock desktop Lua never produces,
+starting with EdgeTX radio firmware (32-bit Lua 5.3, 4-byte floats, a header slot that
+does not describe the body). The honest summary as of 2026-09-02: tools built on the
+stock loader (official `luac`, luadec, rizin, ChunkSpy) refuse those chunks by name; the
+two unluac lineages read them correctly; `luad` accepts the header and then fails inside
+the body with a diagnostic anchored at the wrong offset. Closing that row is tracked in
+the [roadmap](ROADMAP.md) under vendor-profile candidates. The matrix is the acceptance
+picture for that work, and this section is updated when a row changes.
+
 ## Build
 
 The stable workspace MSRV is Rust 1.85. The repository separately pins a newer Rust

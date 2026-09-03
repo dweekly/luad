@@ -6,6 +6,10 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Documentation
 
+- Added a tool-comparison matrix to `docs/PRIOR-ART-AND-CORPORA.md`: official `luac`,
+  luadec, rizin, ChunkSpy, luac-parser, unluac, unluac-rs, and `luad` on the same
+  EdgeTX chunks and on a width-probed stock chunk, with a README summary section and a
+  roadmap line for hosting a public hostile-chunk corpus.
 - Added `docs/PRIOR-ART-AND-CORPORA.md`, a survey of external tools, datasets, and
   bytecode-emitting ecosystems against the product scope, with candidate fixture sources
   and their license constraints. Its EdgeTX spike shows that a 32-bit Lua 5.3 chunk with

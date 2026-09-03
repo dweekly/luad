@@ -364,6 +364,50 @@ any `lua_Number` width other than 8; `crates/luad-dialect-lua53/src/header.rs` a
 and `crates/luad-dialect-lua52/src/header.rs` read the width bytes without validating
 them.
 
+### Other tools on the same chunks
+
+The same four EdgeTX outputs were given to every runnable tool from section 2, on the
+same host and day. `hello` is the debug-bearing chunk, `stripped` its `-s` twin,
+`widget` is the 24 KB `CellsValues/main.lua` compile (real code, with a `0.1` float
+constant), and `longstring` is the host-built chunk whose 8-byte long-string length
+contradicts its 4-byte header slot. The last column is the repository's stock Lua 5.2
+`numerics` fixture with its `lua_Number` header byte set to 4 while the body stays
+8-wide, to show how each tool treats a declared width it cannot satisfy.
+
+| Tool and version | `hello` | `stripped` | `widget` | `longstring` (inconsistent) | 5.2 header says `num=4`, body is 8 |
+|---|---|---|---|---|---|
+| Official `luac` 5.3.6 (`-l`) | Refuses: `size_t size mismatch in precompiled chunk` | Same | Same | Same | Not run |
+| `edgetx-luac` (Lua 5.3.6, EdgeTX `676721f`) | Lists correctly (authority) | Same | Same | Same | Not applicable |
+| viruscamp luadec 2.2 (`895d923`, Lua 5.3 build) | Refuses with the stock loader's `size_t size mismatch` | Same | Same | Same | Not run |
+| rizin 0.9.1 | Refuses: `Integer format does not match with the expected integer`, `Invalid or truncated luac header`, then disassembles the bytes as ARM with `arch N/A` | Same | Same | Same | Not run |
+| ChunkSpy 0.9.9 (5.3, under Lua 5.3.6) | Refuses by name: `mismatch in Integer size (needs 8 but read 4)`. With `--auto`: `bad constant type 2 at 175` | `--auto`: `could not load integer` | `--auto`: `bad integer` | `--auto`: no result within 2 minutes, killed | Not run |
+| metaworm luac-parser 0.5.3 (Rust crate, nightly) | Fails inside the body: constant tag error at offset 174 | Expected EOF at offset 154 | Ran out of input at offset 24068 | Expected EOF at offset 488 | Fails at offset 101 |
+| unluac 1.2.3.569 (Java) | **Correct decompile** | **Correct** | **Correct**; float printed `0.1` | Exception: `unmapped type code 65` | Exception: `unmapped type code 224` |
+| unluac-rs 1.4.3 (`dd11a73`) | **Correct decompile** | **Correct** | Decompiles with recovery errors (`residual table-set-list`); float printed `0.10000000149011612` | `invalid constant tag 65 at offset 398` | `invalid constant tag 224 at offset 100` |
+| `luad` 0.1.0 (`881397b`) | `Parsing failed at offset 0: Upvalue count 131072 exceeds safety limit` | `Unexpected EOF ... at offset 157` | `Parsing failed at offset 0: Invalid constant tag 61` | `Parsing failed at offset 0: Invalid constant tag 65` | Reports `num=8`, `ValidForParser`, zero diagnostics |
+
+What the matrix says:
+
+- Only the two unluac lineages honour the declared 4-byte widths end to end. Every
+  tool that links or reimplements the stock loader refuses by name at the header,
+  which is honest but useless for firmware work. `luad`, luac-parser, and ChunkSpy
+  `--auto` sit in the worst position: they accept the header and fail on a downstream
+  symptom.
+- On the inconsistent chunk, unluac-rs gives the best diagnostic of any tool (the
+  real offset and the real tag); unluac throws; ChunkSpy does not terminate; `luad`
+  reports the right tag at the wrong offset. Bounded behaviour is not a given in this
+  space.
+- The two correct decompilers disagree on how to print a 4-byte float. unluac renders
+  the f32 `0.1` as `0.1`; unluac-rs widens it to f64 first and prints
+  `0.10000000149011612`, which is plausible and wrong. A declared 4-byte number must be
+  rendered at 4-byte precision.
+- On the width-probe column, every other tool either refuses or desynchronises;
+  `luad` alone reports the chunk valid.
+
+Reproduction: the inputs, outputs, `SHA256SUMS`, and each tool's build log are session
+artifacts under the spike directory; every tool was built from the named revision or
+installed from the named package on 2026-09-02.
+
 ## 6. Gaps this survey exposes in `luad`
 
 Stated as present constraints on the tool, each traceable to a source above.
@@ -378,7 +422,10 @@ Stated as present constraints on the tool, each traceable to a source above.
   5.4 does.
 - A body parse failure caused by a layout mismatch is reported at offset 0 with the
   first downstream symptom. The diagnostic should name the header field that the body
-  contradicts.
+  contradicts and the offset at which the contradiction was observed, as unluac-rs
+  already does.
+- A 4-byte float constant must be rendered at 4-byte precision (`0.1`, not the widened
+  `0.10000000149011612`) on every human and machine surface.
 - A header whose declared `size_t` width disagrees with the width of a long-string
   length field is a detectable, reportable inconsistency (EdgeTX host builds). No
   diagnostic exists for it.
@@ -424,7 +471,9 @@ marked as a candidate for an earlier planning change.
    work.
 4. **Qualify EdgeTX 5.3 32-bit as the first vendor profile after LNUM32**, with
    `edgetx-luac` as authority and sdcard scripts (GPLv2, recorded per case) plus this
-   repository's MIT sources as inputs; add a header-versus-body width diagnostic.
+   repository's MIT sources as inputs; add a header-versus-body width diagnostic. The
+   matrix in section 5 is the acceptance picture: `luad`'s row must become the only
+   one that reads every column correctly and names the inconsistency in the fourth.
 5. **Express opcode maps and constant-type-tag maps as explicit profiles**, with the
    TP-Link AX1800 GPL drop as the first authority; a type-tag authority is still to be
    identified.

@@ -375,8 +375,10 @@ order, with their authorities recorded in
 - `fuzz_lua51_analysis` and `fuzz_lua54_analysis` receive seed corpora from the
   generated regression corpus.
 - A hostile-chunk seed set (width, byte-order, and profile variants; truncations;
-  oversized counts; recursion bombs; jump-past-end) is a publishable artifact with an
-  upstream path to `ligurio/lunapark-corpus`, which OSS-Fuzz clones.
+  oversized counts; recursion bombs; jump-past-end) is a publishable artifact: no
+  public malformed-chunk corpus exists. It would live in its own public repository
+  with a provenance manifest per chunk, seeded from this repository's fuzz findings,
+  with an upstream path to `ligurio/lunapark-corpus`, which OSS-Fuzz clones.
 - A chunk mutator that emits labeled layout and opcode variants with a ground-truth
   manifest gives regression tests whose expected facts are known by construction.
 
