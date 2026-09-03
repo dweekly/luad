@@ -674,8 +674,21 @@ EOF
     exit 1
   fi
 
-  # Same criterion as check_channel: without the shim, `cargo +<toolchain> install`
-  # below cannot run at all, so stop rather than install under the wrong compiler.
+  # `cargo +<toolchain>` fails for two unrelated reasons, and only one of them is the
+  # operator's problem. Install the pinned toolchain first if rustup does not have it:
+  # the shim also refuses the selection when the toolchain is absent and rustup's
+  # auto-install is off (`RUSTUP_AUTO_INSTALL=0`, or `rustup set auto-install disable`),
+  # which is precisely what this script exists to repair.
+  installed_pinned_toolchain=false
+  if ! rustup toolchain list 2>/dev/null | grep -q "^${pinned_channel}-"; then
+    echo "==> rustup toolchain install ${pinned_channel}"
+    rustup toolchain install "${pinned_channel}" --profile minimal \
+      --component clippy --component rustfmt
+    installed_pinned_toolchain=true
+  fi
+
+  # With the toolchain present, a refusal can only mean this cargo is not the shim, so
+  # `cargo +<toolchain> install` below could not run and the search order needs fixing.
   if ! cargo "+${pinned_channel}" --version >/dev/null 2>&1; then
     cargo_path="$(command -v cargo 2>/dev/null || true)"
     cat >&2 <<EOF
@@ -689,7 +702,7 @@ EOF
     exit 1
   fi
 
-  if needs_install "${st_channel}"; then
+  if [ "${installed_pinned_toolchain}" != true ] && needs_install "${st_channel}"; then
     echo "==> rustup toolchain install ${pinned_channel}"
     rustup toolchain install "${pinned_channel}" --profile minimal \
       --component clippy --component rustfmt

@@ -25,7 +25,8 @@ Allowed paths:
 - `docs/BRINGUP.md`, `docs/NEXT-SPRINT.md`
 - `scripts/bringup.sh`, `scripts/pins.env`, `scripts/install_ci_compilers.sh`,
   `scripts/generate_fixtures_manifest.py`
-- `crates/luad-oracle/src/lib.rs`, `crates/luad-oracle/src/candidate.rs`
+- `crates/luad-oracle/src/lib.rs`, `crates/luad-oracle/src/candidate.rs`,
+  `crates/luad-oracle/src/gate_runner.rs`
 - `crates/luad-oracle/tests/test_bringup_pins.rs`,
   `crates/luad-oracle/tests/test_compiler_search_pin.rs`, `test_analysis.rs`,
   `test_public_disasm_lua54.rs`, `test_batch_export_bounds.rs`,

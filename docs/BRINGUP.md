@@ -245,18 +245,30 @@ gh api repos/dweekly/luad/actions/runners --jq '.runners[] | {name, status, labe
 
 ### Done
 
-Push a branch, then confirm that a CI run on that host finished with every required job
-successful:
+Push a branch, wait for its CI run to finish, then run this from a checkout of the same
+repository, substituting the branch name. It exits 0 only when the CI run at that
+branch's head reports exactly the required set of successful jobs:
 
 ```console
-gh run list --branch <branch> --limit 1
-gh run view <run-id> --json jobs --jq '.jobs[] | {name, conclusion}'
+branch=<branch>
+head="$(git rev-parse "${branch}")"
+run_id="$(gh run list --workflow ci.yml --branch "${branch}" --limit 20 --json databaseId,headSha,status --jq "[.[] | select(.headSha == \"${head}\" and .status == \"completed\")] | first | .databaseId")"
+test -n "${run_id}" && test "${run_id}" != "null"
+sed -n "/'Dependency Audit'/,/jobs_expected/p" scripts/release-publication.sh | sed -n "s/^ *'\(.*\)'.*$/\1/p" | LC_ALL=C sort >required-jobs.txt
+gh run view "${run_id}" --json jobs --jq '.jobs[] | select(.status == "completed" and .conclusion == "success") | .name' | LC_ALL=C sort >successful-jobs.txt
+diff required-jobs.txt successful-jobs.txt
 ```
 
-The runner is ready when every job in that listing reports `"conclusion": "success"`. A
-skipped or missing job is not a pass. To confirm the work actually landed on your host
-rather than a GitHub-hosted one, read the job's own log header, or check that the runner
-has recent activity in Settings → Actions → Runners.
+The required job names are not restated here: the `diff` reads them out of the list in
+[`scripts/release-publication.sh`](../scripts/release-publication.sh), which is the same
+list the publication workflow enforces before it will publish anything. A missing job, a
+skipped job, an extra job, or any non-success conclusion shows up as a `diff` line and a
+non-zero exit. The extraction is anchored on the first name in that list, so if the list
+moves or is renamed it yields nothing and the `diff` fails rather than passing quietly.
+
+That command proves the run passed; it does not prove it ran on your machine. For that,
+check that your runner shows recent activity under
+Settings → Actions → Runners, or read a job's log header.
 
 ## 3. Release builder
 
@@ -278,18 +290,38 @@ either; run what those documents specify.
 3. **Bundle** — `scripts/assemble-release-bundle.sh` composes the accepted archives, the
    SBOM, and same-revision prerequisite results into the five-file release set.
 
-Then run the hosted rehearsal. It is maintainer-only, consumes one already successful
-`main` CI run at the same full revision, and never rebuilds an artifact. Dispatch it and
-withdraw its result exactly as
+Then dispatch the hosted rehearsal exactly as
 [docs/RELEASING.md](RELEASING.md#non-production-publication-rehearsal) documents; that
-section holds the authoritative dispatch and withdrawal commands, the required-job
-preconditions, and the rule that a withdrawal must prove cleanup.
+section holds the authoritative dispatch command and the required-job preconditions. It
+is maintainer-only, consumes one already successful `main` CI run at the same full
+revision, and never rebuilds an artifact.
+
+The workflow creates and deletes two probe releases of its own along the way, one for
+corrupted-draft cleanup and one for withdrawal, and both must be gone when it finishes.
+Those probes are internal to the run. What it leaves behind on purpose is one retained
+prerelease, and that is the artifact the next section checks for. Withdrawing the
+retained prerelease is a separate, optional step taken after it has been verified, using
+the `scripts/release-publication.sh withdraw` command recorded in its release notes.
 
 ### Done
 
-A retained prerelease named and tagged `publication-rehearsal-<version>-<12-revision-hex>`
-exists, and its five custom assets, source archives, tag target, and release metadata
-verify under the checks that
-[docs/RELEASING.md](RELEASING.md#non-production-publication-rehearsal) requires. That
-prerelease is durable mechanics evidence; it is not a product release, not latest, not
-signed, and names no supported target.
+The rehearsal leaves one retained prerelease named and tagged
+`publication-rehearsal-<version>-<12-revision-hex>`. Run this from a checkout at that
+revision; it exits 0 only when that prerelease exists, is marked a prerelease, and
+carries exactly the five custom assets:
+
+```console
+revision=<full-main-revision>
+version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+tag="publication-rehearsal-${version}-$(git rev-parse --short=12 "${revision}")"
+gh release view "${tag}" --json isPrerelease,assets --jq ".isPrerelease == true and ([.assets[].name] | sort) == ([\"SHA256SUMS\", \"evidence-index.json\", \"luad-${version}-linux-x86_64.tar.gz\", \"luad-${version}-macos-aarch64.tar.gz\", \"luad-${version}.cdx.json\"] | sort)" | grep -qx true
+```
+
+The asset names come from the release set in
+[docs/RELEASING.md](RELEASING.md#packaging-and-publication-policy). This checks that the
+retained result exists and is complete; the workflow run itself is what verified fresh
+downloads, checksums, bundle identity, tag target, and both source archive forms, under
+the rules in
+[docs/RELEASING.md](RELEASING.md#non-production-publication-rehearsal). That prerelease
+is durable mechanics evidence; it is not a product release, not latest, not signed, and
+names no supported target.

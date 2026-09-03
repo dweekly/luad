@@ -325,6 +325,24 @@ pub fn banner_names_release(banner: &str, release: &str) -> bool {
     false
 }
 
+/// Whether the leading `<name> <version>` token of `banner` is exactly `expected`.
+///
+/// Stricter than [`banner_names_release`]: the version must be the banner's own first
+/// token, so a required `Lua 5.1.5` is not satisfied by `Lua 5.4.8 built against 5.1.5`,
+/// and `Lua 5.4.80` never satisfies `Lua 5.4.8`. Gate specifications name a compiler
+/// this way, and a gate must not accept a compiler it did not ask for.
+#[must_use]
+pub fn banner_reports_exact_version(banner: &str, expected: &str) -> bool {
+    let first_line = banner.lines().next().unwrap_or("").trim();
+    let words: Vec<&str> = first_line.split_whitespace().collect();
+    let leading_token = if words.len() >= 2 {
+        format!("{} {}", words[0], words[1])
+    } else {
+        first_line.to_string()
+    };
+    leading_token == expected || first_line == expected
+}
+
 /// Accept `path` only when its `-v` banner names `release` as a complete version token.
 fn compiler_matches_version(path: &Path, release: &str) -> bool {
     let Ok(output) = Command::new(path).arg("-v").output() else {
@@ -378,16 +396,8 @@ pub fn find_compiler_binary(
         };
 
         if let Some(p) = target_path {
-            if let Ok(output) = Command::new(&p).arg("-v").output() {
-                let v = format!(
-                    "{}{}",
-                    String::from_utf8_lossy(&output.stdout),
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                let actual = v.trim();
-                if actual.starts_with(expected_version) || actual.contains(expected_version) {
-                    return Some(p);
-                }
+            if compiler_matches_version(&p, expected_version) {
+                return Some(p);
             }
         }
     }

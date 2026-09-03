@@ -3,7 +3,10 @@
 //! A search that accepts anything less than the complete version token takes evidence
 //! from a release nobody pinned: a series prefix such as `5.4` accepts any 5.4.x, and a
 //! substring test accepts `5.4.80` for `5.4.8`. This plants each of those shapes at the
-//! front of the real search order and requires every finder to pass over it.
+//! front of the real search order and requires every finder to pass over it, through the
+//! `LUAD_ORACLE_BIN_DIR` override, through the candidate list every finder falls through
+//! to when the override and the persistent directory are both absent, and against the
+//! shared candidate matcher directly.
 //!
 //! This is the only test in its binary because it sets process environment variables to
 //! control the search. Another test running concurrently could read them mid-change.
@@ -105,27 +108,27 @@ fn test_finders_reject_every_version_that_is_not_the_pinned_release() {
             planted.push((decoy, path));
         }
 
-        // LUAD_ORACLE_BIN_DIR is the first location every search consults, so this
-        // round's decoys sit ahead of everything else.
+        // Round A. LUAD_ORACLE_BIN_DIR is the first location every search consults, so
+        // this round's decoys sit ahead of everything else, and the correct stubs are
+        // reachable through the bare-name entry of each candidate list.
         std::env::set_var("LUAD_ORACLE_BIN_DIR", &decoys);
-
-        let found = [
+        std::env::set_var("PATH", &good);
+        let overridden = [
             find_luac51(),
             find_luac52(),
             find_luac53(),
             find_luac54(),
             find_luac55(),
         ];
-
         for (index, (bin_name, release)) in CASES.iter().enumerate() {
             let (decoy, decoy_path) = &planted[index];
-            let resolved = found[index]
+            let resolved = overridden[index]
                 .as_ref()
                 .unwrap_or_else(|| panic!("{bin_name} must resolve to the planted Lua {release}"));
             assert_ne!(
                 resolved,
                 decoy_path,
-                "{bin_name} accepted the Lua {decoy} decoy at {}",
+                "{bin_name} accepted the Lua {decoy} decoy at {} through the override",
                 decoy_path.display()
             );
             let banner = banner_of(resolved);
@@ -135,6 +138,90 @@ fn test_finders_reject_every_version_that_is_not_the_pinned_release() {
                 resolved.display()
             );
         }
+
+        // Round B. No override and an empty home, so every finder falls through to its
+        // candidate list, where only the decoy is reachable. Rejecting it and resolving
+        // nothing is correct; returning it is not.
+        std::env::remove_var("LUAD_ORACLE_BIN_DIR");
+        std::env::set_var("PATH", &decoys);
+        let fell_through = [
+            find_luac51(),
+            find_luac52(),
+            find_luac53(),
+            find_luac54(),
+            find_luac55(),
+        ];
+        for (index, (bin_name, release)) in CASES.iter().enumerate() {
+            let (decoy, decoy_path) = &planted[index];
+            if let Some(resolved) = fell_through[index].as_ref() {
+                assert_ne!(
+                    resolved,
+                    decoy_path,
+                    "{bin_name} accepted the Lua {decoy} decoy at {} through its candidate list",
+                    decoy_path.display()
+                );
+                let banner = banner_of(resolved);
+                assert!(
+                    banner.contains(release),
+                    "{bin_name} resolved {} whose banner {banner:?} does not name Lua {release}",
+                    resolved.display()
+                );
+            }
+        }
+        std::env::set_var("PATH", &good);
+    }
+
+    // Round C. The candidate list alone, under a name no host carries so the override
+    // and persistent probes cannot answer, with both candidates under this test's
+    // control. Unlike round B this holds whatever compilers the machine has installed.
+    for (bin_name, release) in CASES {
+        let control_name = format!("{bin_name}-pin-control");
+        for decoy in decoy_releases(release) {
+            let decoy_dir = temp.path().join(format!("control-decoy-{decoy}"));
+            let good_dir = temp.path().join(format!("control-good-{decoy}"));
+            fs::create_dir_all(&decoy_dir).expect("create control decoy dir");
+            fs::create_dir_all(&good_dir).expect("create control good dir");
+            let decoy_path = plant_luac_stub(&decoy_dir, &control_name, &banner_for(&decoy));
+            let good_path = plant_luac_stub(&good_dir, &control_name, &banner_for(release));
+
+            let decoy_str = decoy_path.to_str().expect("utf-8 path");
+            let good_str = good_path.to_str().expect("utf-8 path");
+            assert_eq!(
+                luad_oracle::find_compiler_binary(&control_name, &[decoy_str, good_str], release)
+                    .as_deref(),
+                Some(good_path.as_path()),
+                "the candidate list accepted the Lua {decoy} decoy at {decoy_str}"
+            );
+            assert_eq!(
+                luad_oracle::find_compiler_binary(&control_name, &[decoy_str], release),
+                None,
+                "the candidate list accepted a lone Lua {decoy} compiler for Lua {release}"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_gate_compiler_comparison_requires_the_exact_leading_token() {
+    // The gate runner asks for a compiler by its whole `Lua <release>` token. That is
+    // stricter than the search predicate and must stay that way.
+    for (_, release) in CASES {
+        let expected = format!("Lua {release}");
+        assert!(luad_oracle::banner_reports_exact_version(
+            &banner_for(release),
+            &expected
+        ));
+        for decoy in decoy_releases(release) {
+            assert!(
+                !luad_oracle::banner_reports_exact_version(&banner_for(&decoy), &expected),
+                "a gate requiring {expected} must reject Lua {decoy}"
+            );
+        }
+        // The token has to lead the banner, not merely appear in it.
+        assert!(!luad_oracle::banner_reports_exact_version(
+            &format!("luac wrapper for {expected}"),
+            &expected
+        ));
     }
 }
 
