@@ -30,6 +30,13 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Release planning
 
+- Recorded the release execution sequence in the roadmap: the remaining milestones as
+  ordered, pull-request-sized stages that are deleted as they merge. Moved the
+  outside-human in-profile trial and Lua community review from the 1.0 gates to the
+  first post-1.0 obligations; 1.0 transfer evidence is the internal uncoached
+  investigation, the out-of-profile refusal proof, and a fresh-session install record,
+  and release documentation calls that usability evidence rather than independent
+  adoption evidence.
 - Froze the future version-1 release boundary around three exact target layouts, two
   package platforms, the existing machine-contract majors and exit codes, repository
   ownership, and durable GitHub Release evidence retention. This planning decision does

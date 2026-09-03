@@ -2,7 +2,7 @@
 
 Status: release policy and operational checklist.
 
-Fresh as of: 2026-08-28.
+Fresh as of: 2026-09-02.
 
 Revalidate or delete when: the release target matrix, qualification lifecycle, package
 platforms, artifact channel, compatibility policy, signing/checksum policy, release
@@ -112,7 +112,7 @@ Before publishing 1.0, additionally:
    corpus identity, resource envelope, and result.
 2. Complete the focused hostile-input and release-supply-chain security review.
 3. Record the representative runtime and peak-memory tripwires required by the roadmap.
-4. Complete the internal and outside-user transfer checkpoints below.
+4. Complete the internal transfer checkpoint and the out-of-profile refusal test below.
 5. Confirm no P0 correctness or security defect remains open.
 6. Assemble and verify the two platform archives, evidence index, SBOM, and checksums.
 7. Update `CHANGELOG.md`, version metadata, schemas, README, security policy, candidate
@@ -127,13 +127,15 @@ The LNUM32 candidate must complete both of these before its promotion can feed 1
   only the candidate, public documentation, independently authored objective, and a
   different firmware version or vendor. The record includes commands, elapsed work,
   adapters, incorrect or ambiguous answers, and remaining workarounds.
-- **Outside-human in-profile workflow:** pre-screen the authorized public firmware only
-  far enough to establish that it resolves to the exact LNUM32 profile, then give an
-  outside human the binary and public quickstart without coaching.
+- **Out-of-profile refusal test:** a different stock/vendor layout fails with an
+  actionable diagnostic and the documented exit code.
 
-An additional out-of-profile refusal test proves that a different stock/vendor layout
-fails with an actionable diagnostic and the documented exit code. It does not consume
-the outside-human checkpoint.
+The outside-human in-profile workflow (an outside person receives the released binary
+and public quick start without coaching, on public firmware pre-screened only far
+enough to resolve to the exact LNUM32 profile) is the first post-1.0 obligation in the
+[roadmap](../ROADMAP.md#outside-validation). Until it closes, release documentation
+describes 1.0 evidence as internal usability evidence and never as independent
+adoption evidence.
 
 Retain a sanitized customer-trial record in the matching candidate GitHub release in
 `dweekly/luad`. Do not commit private firmware, sensitive findings, model transcripts, or

@@ -2,7 +2,7 @@
 
 Status: authoritative product direction.
 
-Fresh as of: 2026-08-28.
+Fresh as of: 2026-09-02.
 
 Product requirements live in [PRD.md](PRD.md). Exact implementation and acceptance
 details live only in [the active sprint](docs/NEXT-SPRINT.md). This roadmap orders
@@ -100,6 +100,51 @@ Accepted prerequisite gates are referenced by identity. A downstream milestone d
 not duplicate their semantic suites unless it owns a new interaction capable of
 falsifying the release claim.
 
+## Release execution sequence
+
+The milestones below are delivered as the stages in this list, in this order. Each
+stage is one sprint contract in `docs/NEXT-SPRINT.md` and one pull request, except
+that a target-qualification stage (Milestones 4, 5, and 6) lands its contract as a
+separate planning change before any implementation, because its acceptance commands
+must be fixed before code. A stage is deleted from this list when its pull request
+merges; the list holds only unmet obligations.
+
+1. Documentation truth pass: retire the remaining stale present-tense claims (Lua 5.4.8
+   evidence described as the 1.0 target, the duplicate MSRV statements in the
+   changelog, the archived candidate guide indexed as maintained, the PRD's open
+   platform question), name the 1.0 distribution channel, owner, and MSRV in the PRD,
+   and align `docs/DEVELOPMENT-WORKFLOW.md` with the review and model roles actually in
+   use.
+2. Milestone 2a: `capabilities --format json --evidence` distinguishes implementation
+   presence, experimental evidence, and exact promoted targets, fed by recorded gate
+   results.
+3. Milestone 2b: the machine-contract qualification gate becomes a required routine CI
+   job, and every JSON/JSONL example in the documentation executes against the live
+   schemas in a test.
+4. Milestone 2c: the 1.x compatibility policy in the machine-interface reference and
+   the release-notes compatibility statement template in the release procedure.
+5. Milestone 3a: runtime and peak-memory tripwires for the five named workloads, each a
+   falsifiable assertion with its threshold defined once and documented.
+6. Milestone 3b: one representative time-bounded fuzz campaign with a retained artifact
+   and the published configuration, corpus identity, and result format for the evidence
+   bundle.
+7. Milestone 3c: the focused security-review packet, as a checklist executed at the
+   final freeze.
+8. Milestone 4: LNUM32 contract (new candidate identity, authenticated authority and
+   patch series, prerequisite gates by identity), then implementation with the candidate
+   manifest retained in a GitHub release, the out-of-profile refusal proof, the
+   investigation-record template, and the internal uncoached investigation.
+9. Milestone 5: Lua 5.4.9 contract (pinned archive and compilers, the 5.4.8-to-5.4.9
+   delta review), then the 5.4.9 release gate and its candidate dispatch.
+10. Milestone 6: stock Lua 5.1.5 contract, then the stock release gate and its
+    candidate dispatch.
+11. Milestone 7: README reduction, the three plain guides, exact-version format notes,
+    the worked JSONL consumer example, and the fresh-session transfer record.
+12. Milestone 8: a production publication mode for the release workflow (today only the
+    rehearsal path exists), then the freeze change (version, release notes,
+    compatibility statement, completed security packet, tripwire record, extended
+    campaign rerun), then tag, publish, and fresh-environment verification.
+
 ### Milestone 2 — freeze the public automation contract
 
 Outcome: a shell script, Lua developer, or AI agent can consume the same small,
@@ -190,16 +235,19 @@ Required work:
 - prove that open argument/result windows cannot erase a callee already established in
   an unaffected register;
 - run one internal uncoached investigation with an independently authored objective on
-  different firmware;
-- run one outside-human in-profile trial after pre-screening that the sample resolves to
-  the exact LNUM32 profile;
+  different firmware, by a fresh session or researcher holding only the candidate and
+  its public documentation, and commit its sanitized record with the stable template;
 - separately prove that an out-of-profile sample fails with an actionable diagnostic and
   the correct exit code; and
 - minimize every reproducible correctness finding before promotion.
 
+The outside-human in-profile trial is a post-1.0 obligation (see
+[Outside validation](#outside-validation)); it is not a 1.0 gate.
+
 Evidence boundary: the canonical LNUM32 promotion gate emits a release manifest only
-after all clean prerequisite results, platform attestations, customer records, mutation
-probes, and the aggregate check close over one revision with zero required skips.
+after all clean prerequisite results, platform attestations, the internal investigation
+record, mutation probes, and the aggregate check close over one revision with zero
+required skips.
 
 Stop condition: promote only the exact LNUM32 profile/layout. Stock Lua 5.1 and every
 other vendor layout remain experimental.
@@ -268,14 +316,19 @@ Required work:
   without embedding sink, taint, or exploitability policy in `luad`;
 - make installation, verification, quick-start, command, schema, diagnostic, evidence,
   security, and known-limitation documentation discoverable from the README index;
-- commit customer-trial records using a stable template while excluding private
-  firmware and investigation-specific security judgments; and
-- ask Lua community reviewers specifically for corrections to terminology, target
-  claims, build instructions, and surprising output before the final freeze.
+- commit the internal investigation record using a stable template while excluding
+  private firmware and investigation-specific security judgments; and
+- have a fresh session with no repository context install the packaged candidate on a
+  clean machine from `docs/BRINGUP.md` and the README alone and complete the seven
+  documented workflows, committing its summary as the transfer record.
+
+Lua community review of terminology, target claims, build instructions, and surprising
+output is a post-1.0 obligation (see [Outside validation](#outside-validation)).
 
 Evidence boundary: a fresh human or agent installs the packaged candidate and completes
 inspection, disassembly, validation, navigation, query, export, and comparison using
-only published help and documentation.
+only published help and documentation. Self-run evaluation is usability evidence, not
+independent adoption evidence, and 1.0 claims only the former.
 
 Stop condition: documentation never calls an experimental dialect supported, never
 implies affiliation with Lua.org or PUC-Rio, and never makes a security conclusion from
@@ -399,6 +452,23 @@ order, with their authorities recorded in
 A `luac.ksy` for the Kaitai Struct format gallery and a Lua 5.5 ImHex pattern, both
 derived from this repository's structural model rather than imported, are small
 contributions that make the model the public reference for the format.
+
+### Outside validation
+
+The first 1.1 obligations are the two checkpoints that need a participant outside the
+project:
+
+- an outside-human in-profile trial: pre-screen an authorized public firmware sample only
+  far enough to establish that it resolves to the exact LNUM32 profile, then hand an
+  outside human the released binary and public quick start without coaching, and record
+  commands, elapsed work, incorrect or ambiguous answers, and remaining workarounds; and
+- Lua community review of terminology, target claims, build instructions, and
+  surprising output, with each correction landing as its own bounded change.
+
+Version 1.0 rests on the internal uncoached investigation, the out-of-profile refusal
+proof, and the fresh-session transfer record. Those are usability evidence from inside
+the project; independent adoption evidence arrives with these checkpoints, and no 1.0
+document may describe the release as externally validated before they close.
 
 ### Other deferred surfaces
 
