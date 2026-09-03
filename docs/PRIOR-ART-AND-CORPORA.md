@@ -3,8 +3,8 @@
 This document records which external tools, datasets, and bytecode-emitting ecosystems
 have been evaluated against `luad`'s scope, what each one means for the project, and
 where new kinds of `.luac` files can be obtained with clean provenance. It exists so
-that nobody re-chases a dead link, re-evaluates a dismissed tool from scratch, or
-vendors a sample whose license or origin would poison the fixture tree.
+that nobody re-evaluates a dismissed tool from scratch or vendors a sample whose
+license or origin would poison the fixture tree.
 
 Read it when choosing the next fixture corpus, the next vendor profile, or the next
 prior-art row in `PRD.md` §1.3. Every row cites a URL. A row marked *unverified* records
@@ -18,7 +18,6 @@ claims were last checked against the live URLs.
 |---|---|---|---|
 | [bartholomort/lua-obfuscator-corpus](https://huggingface.co/datasets/bartholomort/lua-obfuscator-corpus) (Hugging Face; there is no GitHub repository of that name) | 26,357 obfuscated Lua/Luau **source** files across 16 obfuscator families with per-version and per-preset labels, plus 1,244 unobfuscated baselines. CC BY-SA 4.0, gated, "research purposes only". | No. Extension census of the full file manifest: 26,275 `.lua`, 82 `.luau`, zero `.luac`. | **Influence, do not vendor.** Useful as a compile-then-analyze benchmark for CFG and dominator behaviour under control-flow flattening, with a monotonic preset-difficulty axis (Weak/Medium/Strong, Minimal/Default/Maximum). The share-alike license and the unclear copyright of "decompiled Roblox scripts" keep it out of this tree. Regenerate labeled samples instead with [Prometheus](https://github.com/prometheus-lua/Prometheus) over this repository's own MIT sources. |
 | [EdgeTX/edgetx-sdcard](https://github.com/EdgeTX/edgetx-sdcard) | SD-card contents for EdgeTX radio firmware: 379 `.lua` scripts, no repository-level license (spot-checked files carry "Copyright (C) EdgeTX, License GPLv2" headers; others carry none). | No `.luac` in the repository. The **radio** compiles these scripts to `.luac` on the SD card, and upstream EdgeTX ships a host compiler for the same dialect (section 4). | **New corpus source, and a fidelity gap.** EdgeTX bytecode is a 32-bit Lua 5.3 dialect with a 4-byte `lua_Number` and a non-standard header slot. `luad` accepts the header today and then fails inside the body with a misleading diagnostic (section 5). |
-| `squalsr/luadec`, `Fkelol/obfuscapk` | Requested for evaluation on 2026-09-02. | — | **Not found.** Both return 404 on GitHub (repository and user), have no Wayback Machine snapshots, and have no Hugging Face entry under any near-miss spelling. Dropped. The prior art that surfaced while checking them (`viruscamp/luadec`, `ClaudiuGeorgiu/Obfuscapk`) is evaluated on its own merits in section 2. |
 
 ## 2. Prior art the PRD table does not cover
 
