@@ -37,6 +37,10 @@ All notable changes will be documented here. The project has not yet made a prod
   investigation, the out-of-profile refusal proof, and a fresh-session install record,
   and release documentation calls that usability evidence rather than independent
   adoption evidence.
+- Aligned the contract lifecycle with that sequence: a qualification stage still merges
+  its contract in a dedicated planning change first, while every other stage carries its
+  contract in the first commit of its own pull request and restores the checkpoint in
+  its last.
 - Froze the future version-1 release boundary around three exact target layouts, two
   package platforms, the existing machine-contract majors and exit codes, repository
   ownership, and durable GitHub Release evidence retention. This planning decision does

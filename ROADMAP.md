@@ -103,11 +103,14 @@ falsifying the release claim.
 ## Release execution sequence
 
 The milestones below are delivered as the stages in this list, in this order. Each
-stage is one sprint contract in `docs/NEXT-SPRINT.md` and one pull request, except
-that a target-qualification stage (Milestones 4, 5, and 6) lands its contract as a
-separate planning change before any implementation, because its acceptance commands
-must be fixed before code. A stage is deleted from this list when its pull request
-merges; the list holds only unmet obligations.
+stage is one sprint contract in `docs/NEXT-SPRINT.md` and one pull request, following
+the contract lifecycle in
+[the development workflow](docs/DEVELOPMENT-WORKFLOW.md#12-preservation-documentation-and-escalation):
+the stage's first commit replaces the checkpoint with its contract, and its last commit
+restores the checkpoint. A target-qualification stage (Milestones 4, 5, and 6) instead
+merges its contract as a separate planning change before any implementation, because
+its acceptance commands must be fixed before code. A stage is deleted from this list
+when its pull request merges; the list holds only unmet obligations.
 
 1. Documentation truth pass: retire the remaining stale present-tense claims (Lua 5.4.8
    evidence described as the 1.0 target, the duplicate MSRV statements in the
