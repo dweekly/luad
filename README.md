@@ -165,8 +165,9 @@ ledgers, one-entry checksums, and installation transcripts for each platform, ve
 a combined two-entry `SHA256SUMS`, and exercises archive-byte and checksum corruption
 controls. Its seven-day `release-archives` upload is diagnostic transport, not a
 published release or durable authority. The result proves repeatability only within the
-named GitHub runner classes and pinned toolchain; the remaining release work is tracked
-in the [roadmap](ROADMAP.md).
+named `luad-linux` and `luad-macos` self-hosted runner classes and pinned toolchain;
+each job also verifies its declared OS, architecture, and Rust host triple. The
+remaining release work is tracked in the [roadmap](ROADMAP.md).
 
 ## Release SBOM dry run
 
