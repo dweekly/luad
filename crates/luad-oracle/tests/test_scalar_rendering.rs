@@ -3,6 +3,7 @@
 use std::fs;
 use std::process::Command;
 
+use luad_core::scalar::BYTE_STRING_PREVIEW_BYTES;
 use luad_core::{ConstantValue, DisassembledPrototype, LuaString, ResolvedFact, SafeReader};
 
 #[derive(Clone, Copy)]
@@ -146,15 +147,70 @@ fn exact_targets_match_the_same_byte_for_byte_scalar_golden() {
     let lua51 = target_golden(ExactTarget::Lua51);
     let lua54 = target_golden(ExactTarget::Lua54);
 
-    assert_eq!(lua51.as_bytes(), expected.as_bytes());
-    assert_eq!(lua54.as_bytes(), expected.as_bytes());
-    assert_eq!(lua51.as_bytes(), lua54.as_bytes());
+    // Byte equality, but reported as text: a golden diff nobody can read is a
+    // golden nobody updates correctly.
+    assert!(
+        lua51.as_bytes() == expected.as_bytes(),
+        "Lua 5.1.5 diverged from the golden\n--- golden ---\n{expected}--- lua5.1 ---\n{lua51}"
+    );
+    assert!(
+        lua54.as_bytes() == expected.as_bytes(),
+        "Lua 5.4.8 diverged from the golden\n--- golden ---\n{expected}--- lua5.4 ---\n{lua54}"
+    );
+    // True by construction while both dialects delegate to the dialect-free
+    // `render_constant`; kept as a tripwire for a dialect that stops delegating.
+    assert!(
+        lua51.as_bytes() == lua54.as_bytes(),
+        "exact targets disagree\n--- lua5.1 ---\n{lua51}--- lua5.4 ---\n{lua54}"
+    );
+}
+
+/// Resolve the `luad` binary and refuse to run against a stale build.
+///
+/// `cargo test -p luad-oracle` does not rebuild `luad-cli`, so a CLI-driven test
+/// can otherwise pass against a binary that predates the change under test. The
+/// aggregate `cargo test --workspace` in `scripts/check.sh` always rebuilds, so
+/// this only fires on a partial local run.
+///
+/// A packaged candidate selected through `LUAD_CANDIDATE_BIN` is a fixed artifact
+/// whose members carry a zero modification time by construction, so it is never a
+/// stale local build; the candidate gate binds it to its source revision instead.
+fn resolve_current_luad() -> std::path::PathBuf {
+    let luad = luad_oracle::resolve_test_binary().expect("resolve luad test binary");
+    if std::env::var_os("LUAD_CANDIDATE_BIN").is_some() {
+        return luad;
+    }
+    let built_at = fs::metadata(&luad)
+        .and_then(|meta| meta.modified())
+        .expect("luad binary modification time");
+
+    let mut sources = Vec::new();
+    let root = luad_oracle::find_workspace_root();
+    for crate_name in ["luad-cli", "luad-core"] {
+        rust_sources(
+            &root.join("crates").join(crate_name).join("src"),
+            &mut sources,
+        );
+    }
+    for source in sources {
+        let changed_at = fs::metadata(&source)
+            .and_then(|meta| meta.modified())
+            .expect("source modification time");
+        assert!(
+            changed_at <= built_at,
+            "{} is newer than {}; rebuild with `cargo build --workspace` \
+             before running CLI-driven tests",
+            source.display(),
+            luad.display()
+        );
+    }
+    luad
 }
 
 #[test]
 fn text_and_typed_disassembly_use_the_same_preview() {
     let root = luad_oracle::find_workspace_root();
-    let luad = luad_oracle::resolve_test_binary().expect("resolve luad test binary");
+    let luad = resolve_current_luad();
     for relative in [
         "tests/fixtures/precompiled/lua51/numerics.luac",
         "tests/fixtures/precompiled/lua54/numerics.luac",
@@ -199,42 +255,191 @@ fn text_and_typed_disassembly_use_the_same_preview() {
     }
 }
 
-fn private_formatter_violation(source: &str) -> bool {
-    [
-        "fn format_float",
-        "fn render_float",
-        "fn format_string_preview",
-        "fn render_scalar",
-    ]
-    .iter()
-    .any(|forbidden| source.contains(forbidden))
-}
+/// Crates whose scalar output reaches a user and must therefore defer to
+/// `luad_core::scalar`.
+///
+/// `luad-oracle` is absent on purpose: its listing parser reproduces the *reference*
+/// `luac -l` spelling, octal escapes and all, which is a different contract from
+/// luad's own rendering.
+const RENDERING_CRATES: [&str; 8] = [
+    "luad-core",
+    "luad-cli",
+    "luad-analysis",
+    "luad-dialect-lua51",
+    "luad-dialect-lua52",
+    "luad-dialect-lua53",
+    "luad-dialect-lua54",
+    "luad-dialect-lua55",
+];
 
-#[test]
-fn dialect_crates_cannot_regain_private_scalar_formatters() {
-    let root = luad_oracle::find_workspace_root();
-    for dialect in ["luad-dialect-lua51", "luad-dialect-lua54"] {
-        let source_root = root.join("crates").join(dialect).join("src");
-        for entry in fs::read_dir(&source_root).expect("read exact dialect source directory") {
-            let path = entry.expect("read dialect source entry").path();
-            if path.extension().and_then(|extension| extension.to_str()) != Some("rs") {
+/// The one file allowed to define scalar formatters: the authority itself.
+const SCALAR_AUTHORITY: &str = "crates/luad-core/src/scalar.rs";
+
+/// Verbs that mean "turn a value into text for a human".
+const FORMATTING_VERBS: [&str; 7] = [
+    "format",
+    "render",
+    "escape",
+    "display",
+    "preview",
+    "stringify",
+    "print",
+];
+
+/// Nouns that name a scalar this crate's authority owns.
+const SCALAR_NOUNS: [&str; 12] = [
+    "float", "double", "number", "numeric", "integer", "int", "scalar", "string", "str", "bytes",
+    "byte", "constant",
+];
+
+/// Report every function in `source` whose name reads as a private scalar formatter.
+///
+/// This matches on name structure rather than a fixed blocklist, so a formatter
+/// reintroduced under a new name is still caught. It deliberately ignores
+/// extractors such as `string_operand`, which carry no formatting verb.
+fn private_formatter_violations(source: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for (offset, _) in source.match_indices("fn ") {
+        // Require a token boundary so `r#fn ` or `..fn ` inside an identifier
+        // cannot masquerade as a definition.
+        if offset > 0 {
+            let previous = source[..offset].chars().next_back().unwrap_or(' ');
+            if previous.is_alphanumeric() || previous == '_' {
                 continue;
             }
-            let source = fs::read_to_string(&path).expect("read exact dialect source");
-            assert!(
-                !private_formatter_violation(&source),
-                "{} contains a private scalar formatter",
-                path.display()
-            );
+        }
+        let rest = &source[offset + "fn ".len()..];
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        if name.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = name.split('_').collect();
+        let has_verb = parts.iter().any(|part| FORMATTING_VERBS.contains(part));
+        let has_noun = parts.iter().any(|part| SCALAR_NOUNS.contains(part));
+        if has_verb && has_noun {
+            found.push(name);
+        }
+    }
+    found
+}
+
+fn rust_sources(root: &std::path::Path, into: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = fs::read_dir(root) else {
+        return;
+    };
+    for entry in entries {
+        let path = entry.expect("read source entry").path();
+        if path.is_dir() {
+            rust_sources(&path, into);
+        } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
+            into.push(path);
         }
     }
 }
 
 #[test]
-fn private_scalar_formatter_negative_control_is_detected() {
-    assert!(private_formatter_violation(
-        "fn format_float(value: f64) -> String { value.to_string() }"
-    ));
+fn no_crate_outside_the_authority_defines_a_private_scalar_formatter() {
+    let root = luad_oracle::find_workspace_root();
+    let authority = root.join(SCALAR_AUTHORITY);
+    let mut scanned = 0usize;
+
+    for crate_name in RENDERING_CRATES {
+        let mut sources = Vec::new();
+        rust_sources(
+            &root.join("crates").join(crate_name).join("src"),
+            &mut sources,
+        );
+        assert!(
+            !sources.is_empty(),
+            "{crate_name} has no sources; the guard would pass vacuously"
+        );
+        for path in sources {
+            if path == authority {
+                continue;
+            }
+            scanned += 1;
+            let source = fs::read_to_string(&path).expect("read crate source");
+            let violations = private_formatter_violations(&source);
+            assert!(
+                violations.is_empty(),
+                "{} defines private scalar formatter(s) {violations:?}; \
+                 route them through luad_core::scalar instead",
+                path.display()
+            );
+        }
+    }
+
+    assert!(scanned > 20, "guard scanned only {scanned} files");
+}
+
+#[test]
+fn the_scalar_authority_is_where_the_formatters_actually_live() {
+    let root = luad_oracle::find_workspace_root();
+    let source = fs::read_to_string(root.join(SCALAR_AUTHORITY)).expect("read scalar authority");
+    let defined = private_formatter_violations(&source);
+    for expected in [
+        "escape_bytes",
+        "render_byte_string",
+        "render_byte_string_full",
+        "render_float",
+        "render_integer",
+        "render_constant",
+        "render_constant_full",
+    ] {
+        assert!(
+            defined.iter().any(|name| name == expected),
+            "{expected} is missing from the authority, or the guard stopped recognising it"
+        );
+    }
+}
+
+#[test]
+fn private_scalar_formatter_negative_controls_are_detected() {
+    // A formatter reintroduced under each of several plausible names, plus the
+    // exact shapes this sprint deleted.
+    for control in [
+        "fn format_float(value: f64) -> String { value.to_string() }",
+        "fn render_float(v: f64) -> String { String::new() }",
+        "fn format_string_preview(s: &str) -> String { String::new() }",
+        "fn escape_bytes(b: &[u8]) -> String { String::new() }",
+        "fn display_number(v: f64) -> String { String::new() }",
+        "fn stringify_constant(v: &u8) -> String { String::new() }",
+        "    pub(crate) fn render_scalar_bytes(b: &[u8]) -> String { String::new() }",
+    ] {
+        assert!(
+            !private_formatter_violations(control).is_empty(),
+            "guard missed {control:?}"
+        );
+    }
+
+    // Extractors and unrelated helpers must not trip the guard.
+    for allowed in [
+        "fn string_operand(i: &u8) -> Option<String> { None }",
+        "fn lua_string_operand(i: &u8) -> Option<&str> { None }",
+        "fn string_literal(v: &u8) -> Option<u8> { None }",
+        "fn render_callees(a: &u8) {}",
+        "fn format_origin_expression(e: &u8) -> String { String::new() }",
+        "fn check_string_limit(n: usize) -> bool { true }",
+    ] {
+        assert!(
+            private_formatter_violations(allowed).is_empty(),
+            "guard false-positived on {allowed:?}"
+        );
+    }
+}
+
+#[test]
+fn the_guard_recurses_into_nested_source_directories() {
+    let root = luad_oracle::find_workspace_root();
+    let mut sources = Vec::new();
+    rust_sources(&root.join("crates/luad-cli/src"), &mut sources);
+    assert!(
+        sources.iter().any(|path| path.ends_with("render/text.rs")),
+        "guard did not reach crates/luad-cli/src/render/text.rs; nested modules are unprotected"
+    );
 }
 
 #[test]
@@ -249,4 +454,221 @@ fn named_scalar_mutations_are_rejected_by_the_exact_target_golden() {
     for corrupted in corruptions {
         assert_ne!(corrupted.as_bytes(), canonical.as_bytes());
     }
+}
+
+/// Compile a Lua source string with one dialect's official compiler.
+type CompileWithDialect = fn(&str, bool) -> Result<Vec<u8>, String>;
+
+/// Every dialect luad can disassemble, with the compiler that produces it.
+const ALL_DIALECTS: [(&str, CompileWithDialect); 5] = [
+    ("lua5.1", luad_oracle::compile_source_lua51),
+    ("lua5.2", luad_oracle::compile_source_lua52),
+    ("lua5.3", luad_oracle::compile_source_lua53),
+    ("lua5.4", luad_oracle::compile_source_lua54),
+    ("lua5.5", luad_oracle::compile_source_lua55),
+];
+
+fn decode_constants(dialect: &str, bytes: &[u8]) -> Vec<luad_core::Constant> {
+    let mut reader = SafeReader::new(bytes);
+    let chunk = match dialect {
+        "lua5.1" => luad_dialect_lua51::decode_chunk_lua51(&mut reader),
+        "lua5.2" => luad_dialect_lua52::decode_chunk_lua52(&mut reader),
+        "lua5.3" => luad_dialect_lua53::decode_chunk_lua53(&mut reader),
+        "lua5.4" => luad_dialect_lua54::decode_chunk_lua54(&mut reader),
+        "lua5.5" => luad_dialect_lua55::decode_chunk_lua55(&mut reader),
+        other => panic!("unhandled dialect {other}"),
+    }
+    .unwrap_or_else(|e| panic!("{dialect}: decode freshly compiled chunk: {e:?}"));
+    chunk.main_proto.constants
+}
+
+/// The scalar authority owns the text constant listing on *every* dialect, not
+/// only on the exact targets.
+///
+/// The source below carries a string constant past the preview bound, so a
+/// dialect that stopped consuming the authority would disagree here rather than
+/// coincidentally matching on short values.
+#[test]
+fn every_dialect_renders_its_constant_listing_through_the_scalar_authority() {
+    let luad = resolve_current_luad();
+    let long_string = "A".repeat(BYTE_STRING_PREVIEW_BYTES + 20);
+    let source =
+        format!("local s = \"{long_string}\"\nlocal f = 1.5\nlocal n = 7\nreturn s, f, n\n");
+
+    let scratch = tempfile::tempdir().expect("scratch directory");
+    let mut bounded_seen = 0;
+
+    for (dialect, compile) in ALL_DIALECTS {
+        let bytes = compile(&source, false)
+            .unwrap_or_else(|e| panic!("{dialect}: compile scalar listing source: {e}"));
+        let path = scratch.path().join(format!("{dialect}.luac"));
+        fs::write(&path, &bytes).expect("write compiled chunk");
+
+        let run = |extra: &[&str]| -> String {
+            let mut args = vec!["disasm", path.to_str().unwrap(), "--format", "text"];
+            args.extend_from_slice(extra);
+            let output = Command::new(&luad)
+                .args(&args)
+                .output()
+                .unwrap_or_else(|e| panic!("{dialect}: run luad: {e}"));
+            assert!(output.status.success(), "{dialect}: disasm failed");
+            String::from_utf8(output.stdout).expect("ASCII disassembly")
+        };
+        let bounded = run(&[]);
+        let untruncated = run(&["--raw"]);
+
+        let constants = decode_constants(dialect, &bytes);
+        assert!(
+            !constants.is_empty(),
+            "{dialect}: fixture produced no constants"
+        );
+
+        for constant in &constants {
+            let expected = format!(
+                ";   k[{}] = {}",
+                constant.index,
+                luad_core::scalar::render_constant(&constant.value)
+            );
+            assert!(
+                bounded.contains(&expected),
+                "{dialect}: constant listing did not use the scalar authority.\n\
+                 expected line: {expected}\n--- output ---\n{bounded}"
+            );
+
+            let expected_full = format!(
+                ";   k[{}] = {}",
+                constant.index,
+                luad_core::scalar::render_constant_full(&constant.value)
+            );
+            assert!(
+                untruncated.contains(&expected_full),
+                "{dialect}: --raw listing did not emit the untruncated constant.\n\
+                 expected line: {expected_full}"
+            );
+
+            if let luad_core::ConstantValue::ShortString(s)
+            | luad_core::ConstantValue::LongString(s) = &constant.value
+            {
+                if s.raw_bytes.len() > BYTE_STRING_PREVIEW_BYTES {
+                    bounded_seen += 1;
+                    assert!(
+                        expected.contains(&format!("({} bytes)", s.raw_bytes.len())),
+                        "{dialect}: truncated preview must state the full byte count"
+                    );
+                    assert_ne!(
+                        expected, expected_full,
+                        "{dialect}: --raw must differ from the bounded listing here"
+                    );
+                }
+            }
+        }
+    }
+
+    assert_eq!(
+        bounded_seen,
+        ALL_DIALECTS.len(),
+        "every dialect must have exercised the preview bound"
+    );
+}
+
+/// Encode one Lua 5.1 instruction in the stock layout from `lopcodes.h` (Lua
+/// 5.1.5): opcode in bits 0-5, A in bits 6-13, C in bits 14-22, B in bits 23-31.
+fn lua51_abc(op: u32, a: u32, b: u32, c: u32) -> u32 {
+    op | (a << 6) | (c << 14) | (b << 23)
+}
+
+/// Encode one Lua 5.1 `iABx` instruction: opcode in bits 0-5, A in bits 6-13,
+/// Bx in bits 14-31 (`lopcodes.h`, Lua 5.1.5).
+fn lua51_abx(op: u32, a: u32, bx: u32) -> u32 {
+    op | (a << 6) | (bx << 14)
+}
+
+/// A stock little-endian Lua 5.1 chunk whose header declares
+/// `sizeof(lua_Number) == 4`, holding the single call `f(1.5)` so that the call's
+/// only argument originates from a four-byte float constant.
+fn four_byte_number_lua51_chunk() -> Vec<u8> {
+    // Opcode numbers from `lopcodes.h`, Lua 5.1.5.
+    const OP_LOADK: u32 = 1;
+    const OP_GETGLOBAL: u32 = 5;
+    const OP_CALL: u32 = 28;
+    const OP_RETURN: u32 = 30;
+    // Constant tags from `lua.h`, Lua 5.1.5.
+    const LUA_TNUMBER: u8 = 3;
+    const LUA_TSTRING: u8 = 4;
+    // `VARARG_ISVARARG` from `lobject.h`, Lua 5.1.5: every main chunk is vararg.
+    const VARARG_ISVARARG: u8 = 2;
+
+    let mut out = Vec::new();
+    out.extend_from_slice(b"\x1bLua");
+    // version 5.1, format 0, little-endian, int 4, size_t 8, Instruction 4,
+    // lua_Number 4, non-integral numbers.
+    out.extend_from_slice(&[0x51, 0, 1, 4, 8, 4, 4, 0]);
+    out.extend_from_slice(&0u64.to_le_bytes()); // empty source name
+    out.extend_from_slice(&0u32.to_le_bytes()); // linedefined
+    out.extend_from_slice(&0u32.to_le_bytes()); // lastlinedefined
+    out.extend_from_slice(&[0, 0, VARARG_ISVARARG, 2]); // nups, numparams, is_vararg, maxstacksize
+    let code = [
+        lua51_abx(OP_GETGLOBAL, 0, 0),
+        lua51_abx(OP_LOADK, 1, 1),
+        lua51_abc(OP_CALL, 0, 2, 1),
+        lua51_abc(OP_RETURN, 0, 1, 0),
+    ];
+    out.extend_from_slice(&(code.len() as u32).to_le_bytes());
+    for word in code {
+        out.extend_from_slice(&word.to_le_bytes());
+    }
+    out.extend_from_slice(&2u32.to_le_bytes());
+    out.push(LUA_TSTRING);
+    out.extend_from_slice(&2u64.to_le_bytes());
+    out.extend_from_slice(b"f\0");
+    out.push(LUA_TNUMBER);
+    out.extend_from_slice(&1.5f32.to_bits().to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes()); // prototypes
+    out.extend_from_slice(&0u32.to_le_bytes()); // lineinfo
+    out.extend_from_slice(&0u32.to_le_bytes()); // locvars
+    out.extend_from_slice(&0u32.to_le_bytes()); // upvalue names
+    out
+}
+
+#[test]
+fn origins_text_renders_four_byte_lua51_floats_through_the_authority() {
+    let luad = resolve_current_luad();
+    let dir = tempfile::tempdir().expect("temporary directory");
+    let chunk = dir.path().join("four_byte_number.luac");
+    fs::write(&chunk, four_byte_number_lua51_chunk()).expect("write synthesized chunk");
+    let path = chunk.to_str().expect("utf8 path");
+
+    let typed = Command::new(&luad)
+        .args(["disasm", path, "--format", "json"])
+        .output()
+        .expect("run typed disassembly");
+    assert!(
+        typed.status.success(),
+        "the four-byte-number chunk must decode: {}",
+        String::from_utf8_lossy(&typed.stderr)
+    );
+    let typed = String::from_utf8(typed.stdout).expect("utf8 json");
+    assert!(
+        typed.contains("\"0000c03f\""),
+        "typed disassembly must preserve the four raw bytes of 1.5f32:\n{typed}"
+    );
+
+    let text = Command::new(&luad)
+        .args(["origins", path, "--format", "text"])
+        .output()
+        .expect("run origins text");
+    assert!(
+        text.status.success(),
+        "origins must accept the four-byte-number chunk: {}",
+        String::from_utf8_lossy(&text.stderr)
+    );
+    let text = String::from_utf8(text.stdout).expect("utf8 text");
+    assert!(
+        text.contains("<- 1.5"),
+        "a four-byte float argument must render through the scalar authority:\n{text}"
+    );
+    assert!(
+        !text.contains("float("),
+        "the raw-bytes fallback must not appear for a declared number width:\n{text}"
+    );
 }
