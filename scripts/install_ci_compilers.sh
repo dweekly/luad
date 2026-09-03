@@ -35,12 +35,10 @@ build_lua() {
     if [ -f "${DEST_DIR}/${bin_name}" ]; then
         local installed_banner
         installed_banner=$("${DEST_DIR}/${bin_name}" -v 2>&1 | head -n 1 || true)
-        case "${installed_banner}" in
-            *"Lua ${version}"*)
-                echo "[INFO] ${bin_name} already installed (${installed_banner}), skipping."
-                return 0
-                ;;
-        esac
+        if banner_names_release "${installed_banner}" "${version}"; then
+            echo "[INFO] ${bin_name} already installed (${installed_banner}), skipping."
+            return 0
+        fi
         echo "[REPLACE] ${DEST_DIR}/${bin_name} reported '${installed_banner}', expected Lua ${version}; rebuilding."
         rm -f "${DEST_DIR}/${bin_name}"
     fi
@@ -80,13 +78,10 @@ build_lua() {
 
     local detected_version
     detected_version=$("${DEST_DIR}/${bin_name}" -v 2>&1)
-    case "${detected_version}" in
-        *"Lua ${version}"*) ;;
-        *)
-            echo "[ERROR] ${bin_name} reported unexpected version: ${detected_version}" >&2
-            return 1
-            ;;
-    esac
+    if ! banner_names_release "${detected_version}" "${version}"; then
+        echo "[ERROR] ${bin_name} reported unexpected version: ${detected_version}" >&2
+        return 1
+    fi
 
     echo "[OK] Installed ${DEST_DIR}/${bin_name}: ${detected_version}"
 }

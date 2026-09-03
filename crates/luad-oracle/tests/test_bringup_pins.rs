@@ -13,10 +13,12 @@
 //! 8. `docs/RELEASING.md` states the pinned `cargo-deny` version.
 //! 9. The Rust compiler search is pinned to the same releases the installer builds.
 //! 10. A same-minor, different-patch compiler earlier in the search order is skipped.
+//! 11. The shell and Rust compiler-banner predicates are one rule with one definition.
 
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 /// Official Lua releases in `scripts/install_ci_compilers.sh`, in declaration order.
 fn installer_lua_releases(installer: &str) -> Vec<String> {
@@ -341,5 +343,82 @@ fn test_search_skips_a_same_minor_different_patch_compiler() {
             None,
             "search for Lua {release} must reject a lone {decoy} compiler"
         );
+    }
+}
+
+/// Runs `banner_names_release` from `scripts/pins.env` and reports whether it accepted.
+fn shell_banner_names_release(banner: &str, release: &str) -> bool {
+    let pins = workspace_root().join("scripts/pins.env");
+    let output = Command::new("bash")
+        .arg("-c")
+        .arg(r#". "$1"; banner_names_release "$2" "$3""#)
+        .arg("bash")
+        .arg(&pins)
+        .arg(banner)
+        .arg(release)
+        .output()
+        .expect("run the shell banner predicate");
+    assert!(
+        output
+            .status
+            .code()
+            .is_some_and(|code| code == 0 || code == 1),
+        "the shell predicate must answer true or false, got {:?}\nstderr:\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    output.status.success()
+}
+
+#[test]
+fn test_shell_and_rust_banner_predicates_are_one_rule() {
+    // One definition: the sourcing scripts call it and never carry their own copy.
+    for script in ["scripts/bringup.sh", "scripts/install_ci_compilers.sh"] {
+        let text = read(script);
+        assert!(
+            !text.contains("banner_names_release() {"),
+            "{script} must use the definition in scripts/pins.env, not its own"
+        );
+        assert!(
+            text.contains("banner_names_release \""),
+            "{script} must test compiler banners through banner_names_release"
+        );
+    }
+
+    for release in luad_oracle::LUA_RELEASES {
+        let (series, patch) = release.rsplit_once('.').expect("patch component");
+        let patch: u32 = patch.parse().expect("numeric patch");
+        let accepted = [
+            format!("Lua {release}  Copyright (C) 1994-2026 Lua.org, PUC-Rio"),
+            format!("Lua {release}"),
+        ];
+        let rejected = [
+            format!("Lua {series}.{}  Copyright", patch + 1),
+            format!("Lua {release}0  Copyright"),
+            format!("Lua {release}.1  Copyright"),
+            format!("luac {release}"),
+            String::new(),
+        ];
+
+        for banner in &accepted {
+            assert!(
+                luad_oracle::banner_names_release(banner, release),
+                "Rust predicate rejected {banner:?} for Lua {release}"
+            );
+            assert!(
+                shell_banner_names_release(banner, release),
+                "shell predicate rejected {banner:?} for Lua {release}"
+            );
+        }
+        for banner in &rejected {
+            assert!(
+                !luad_oracle::banner_names_release(banner, release),
+                "Rust predicate accepted {banner:?} for Lua {release}"
+            );
+            assert!(
+                !shell_banner_names_release(banner, release),
+                "shell predicate accepted {banner:?} for Lua {release}"
+            );
+        }
     }
 }

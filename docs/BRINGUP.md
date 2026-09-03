@@ -8,7 +8,8 @@ definition of done. Sections 2 and 3 both assume section 1 is already complete o
 host.
 
 If you have never seen this repository, start at section 1 and stop when
-`bash scripts/check.sh` exits 0. Nothing else here is required to contribute.
+`bash scripts/bringup.sh --doctor && bash scripts/check.sh` exits 0. Nothing else here is
+required to contribute.
 
 ## Where the pins live
 
@@ -20,7 +21,7 @@ restated in a second place, so a pin cannot drift from what CI installs.
 | Contributor and release toolchain, Rust 1.97.1 | [`rust-toolchain.toml`](../rust-toolchain.toml) |
 | Minimum supported Rust, 1.85 (rustup names the patch: 1.85.0) | [`Cargo.toml`](../Cargo.toml), `rust-version` |
 | Fuzz nightly `nightly-2026-08-25` and cargo-fuzz 0.13.2 | [`scripts/fuzz_smoke.sh`](../scripts/fuzz_smoke.sh), `readonly pinned_*` |
-| cargo-deny 0.20.2, cargo-cyclonedx 0.5.9, compiler directories | [`scripts/pins.env`](../scripts/pins.env) |
+| cargo-deny 0.20.2, cargo-cyclonedx 0.5.9, compiler directories, the shared compiler-banner test | [`scripts/pins.env`](../scripts/pins.env) |
 | Official Lua releases 5.1.5, 5.2.4, 5.3.6, 5.4.8, 5.5.1 | [`scripts/install_ci_compilers.sh`](../scripts/install_ci_compilers.sh), `build_lua` arguments |
 
 `scripts/bringup.sh` reads all five files rather than carrying its own copies.
@@ -146,9 +147,11 @@ where a version is not the right question it exercises the thing instead, runnin
 non-zero if any row is not `OK`.
 
 Compilers are resolved in the order the oracle uses, and a candidate is accepted only if
-its banner names the whole pinned release, patch included, so neither a wrong-version
-binary in an earlier directory nor a different patch of the same series can stand in for
-the pinned one.
+its banner names the whole pinned release as a complete version token, so neither a
+wrong-version binary in an earlier directory, nor a different patch of the same series,
+nor a longer version that the pinned one is merely a leading part of, can stand in for
+the pinned release. `scripts/pins.env` holds that rule once for both scripts, and
+`luad_oracle::banner_names_release` is its counterpart for the Rust search.
 
 `--scope ci-test` narrows the report to the toolchain, its components, and the five
 official compilers,
@@ -159,12 +162,17 @@ them.
 ### Done
 
 ```console
-bash scripts/check.sh
+bash scripts/bringup.sh --doctor && bash scripts/check.sh
 ```
 
-Exit code 0 means the developer machine is ready. That aggregate check is necessary
-repository evidence, not instruction-level proof; see [CONTRIBUTING.md](../CONTRIBUTING.md)
-for the test taxonomy and the named gates.
+Exit code 0 means the developer machine is ready. Both halves are needed, in that order:
+`scripts/check.sh` never invokes `cargo-cyclonedx`, the fuzz nightly, or GNU `timeout`,
+so on its own it calls a machine ready that cannot produce a release SBOM or run the
+fuzz smoke campaign, and putting the doctor first keeps the long aggregate from running
+at all on a machine already known to be short a tool.
+
+That aggregate is necessary repository evidence, not instruction-level proof; see
+[CONTRIBUTING.md](../CONTRIBUTING.md) for the test taxonomy and the named gates.
 
 ## 2. Self-hosted GitHub Actions runner
 

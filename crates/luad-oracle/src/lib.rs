@@ -300,8 +300,33 @@ pub fn luad_binary_path() -> PathBuf {
     try_luad_binary_path().unwrap_or_else(|error| panic!("{error}"))
 }
 
-/// Accept `path` only when its `-v` banner names `expected_version`.
-fn compiler_matches_version(path: &Path, expected_version: &str) -> bool {
+/// Whether `banner` names `release` as a complete version token.
+///
+/// The release must follow `Lua ` and end there: the next character may not continue the
+/// version, so a search for `5.4.8` rejects `Lua 5.4.80` and `Lua 5.4.8.1`. A plain
+/// substring test accepts both, and the resulting differential evidence would describe a
+/// release nobody pinned.
+///
+/// `scripts/pins.env` carries the same rule for the shell callers.
+#[must_use]
+pub fn banner_names_release(banner: &str, release: &str) -> bool {
+    let needle = format!("Lua {release}");
+    let mut rest = banner;
+    while let Some(index) = rest.find(&needle) {
+        let after = &rest[index + needle.len()..];
+        match after.chars().next() {
+            None => return true,
+            Some(next) if !next.is_ascii_digit() && next != '.' => return true,
+            _ => {}
+        }
+        // Keep scanning: an earlier longer version does not rule out a later exact one.
+        rest = &rest[index + needle.len()..];
+    }
+    false
+}
+
+/// Accept `path` only when its `-v` banner names `release` as a complete version token.
+fn compiler_matches_version(path: &Path, release: &str) -> bool {
     let Ok(output) = Command::new(path).arg("-v").output() else {
         return false;
     };
@@ -310,8 +335,7 @@ fn compiler_matches_version(path: &Path, expected_version: &str) -> bool {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    let actual = banner.trim();
-    actual.starts_with(expected_version) || actual.contains(expected_version)
+    banner_names_release(banner.trim(), release)
 }
 
 /// Locate compiler binary checking LUAD_ORACLE_BIN_DIR first, then the persistent

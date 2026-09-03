@@ -57,7 +57,9 @@ are owned by concurrent work and stay untouched.
    assuming it is already there.
 4. The CI `Test` jobs run `bash scripts/bringup.sh --doctor --scope ci-test` immediately
    after installing the official compilers.
-5. `bash scripts/check.sh` exits 0.
+5. `bash scripts/bringup.sh --doctor && bash scripts/check.sh` exits 0. The aggregate
+   alone is not enough: it never invokes `cargo-cyclonedx`, the fuzz nightly, or GNU
+   `timeout`.
 
 ## Stop condition
 

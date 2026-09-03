@@ -94,10 +94,13 @@ require_pin "the official Lua releases from scripts/install_ci_compilers.sh" "${
 compiler_dir="${LUAD_COMPILER_DIR:-${LUAD_COMPILER_DIR_DEFAULT}}"
 cargo_bin_dir="${CARGO_HOME:-${HOME}/.cargo}/bin"
 lnum32_authority_root="${LUAD_LNUM32_GATE_ROOT}/authority"
-# scripts/build_lua51_openwrt_lnum32.sh builds a static host compiler from the patched
-# Lua 5.1.5 tree it unpacks; scripts/gates/gate-authority-lua51-openwrt-lnum32.sh reads
-# it back from exactly this path.
-lnum32_compiler="${lnum32_authority_root}/lua-5.1.5/src/luac-host"
+# scripts/build_lua51_openwrt_lnum32.sh owns which Lua release the patched authority
+# compiler is built from; it names the unpacked tree after it.
+lnum32_release="$(sed -n 's|^BUILD_SRC_DIR="${OUTPUT_ROOT}/lua-\(.*\)"$|\1|p' scripts/build_lua51_openwrt_lnum32.sh | head -n 1)"
+require_pin "the LNUM32 Lua release from scripts/build_lua51_openwrt_lnum32.sh" "${lnum32_release}"
+# scripts/gates/gate-authority-lua51-openwrt-lnum32.sh reads the built compiler back
+# from exactly this path.
+lnum32_compiler="${lnum32_authority_root}/lua-${lnum32_release}/src/luac-host"
 
 # --------------------------------------------------------------------------------
 # Row accumulation. Parallel arrays keep this bash 3.2 compatible.
@@ -119,19 +122,29 @@ add_row() {
   fi
 }
 
-# Named statuses for --install, which only acts on what the doctor rejected.
-st_rustup=""
-st_channel=""
-st_msrv=""
-st_nightly=""
-st_components=""
-st_llvm_tools=""
-st_timeout=""
-st_cargo_fuzz=""
-st_cargo_deny=""
-st_cyclonedx=""
-st_compilers=""
-st_lnum32=""
+# Named statuses for --install, which only acts on what the doctor rejected. run_checks
+# resets every one to SKIP, so a row the active scope does not check stays SKIP and
+# install passes over it instead of treating an unset status as a failure.
+st_rustup="SKIP"
+st_channel="SKIP"
+st_msrv="SKIP"
+st_nightly="SKIP"
+st_components="SKIP"
+st_llvm_tools="SKIP"
+st_timeout="SKIP"
+st_cargo_fuzz="SKIP"
+st_cargo_deny="SKIP"
+st_cyclonedx="SKIP"
+st_compilers="SKIP"
+st_lnum32="SKIP"
+
+# True only for a row this run actually checked and rejected.
+needs_install() {
+  case "$1" in
+    OK | SKIP) return 1 ;;
+    *) return 0 ;;
+  esac
+}
 
 # --------------------------------------------------------------------------------
 # Probes.
@@ -466,13 +479,11 @@ check_compilers() {
       candidate="${dir}/${bin_name}"
       [ -x "${candidate}" ] || continue
       banner="$("${candidate}" -v 2>&1 | head -n 1 || true)"
-      case "${banner}" in
-        *"${expected}"*)
-          matched="${candidate}"
-          matched_banner="${banner}"
-          break
-          ;;
-      esac
+      if banner_names_release "${banner}" "${version}"; then
+        matched="${candidate}"
+        matched_banner="${banner}"
+        break
+      fi
       if [ -z "${rejected_path}" ]; then
         rejected_path="${candidate}"
         rejected_banner="${banner}"
@@ -507,7 +518,7 @@ lnum32_prerequisites_missing() {
 
 check_lnum32() {
   # The banner the build script itself demands from the patched compiler.
-  expected="Lua 5.1.5 (double int32)"
+  expected="Lua ${lnum32_release} (double int32)"
   if [ ! -x "${lnum32_compiler}" ]; then
     st_lnum32="MISSING"
     add_row "luac-host (OpenWrt LNUM32)" "${expected}" "absent" "MISSING" \
@@ -515,17 +526,22 @@ check_lnum32() {
     return
   fi
   banner="$("${lnum32_compiler}" -v 2>&1 | head -n 1 || true)"
-  case "${banner}" in
-    *"Lua 5.1.5"*"(double int32)"*)
-      st_lnum32="OK"
-      add_row "luac-host (OpenWrt LNUM32)" "${expected}" "${banner}" "OK"
-      ;;
-    *)
-      st_lnum32="WRONG"
-      add_row "luac-host (OpenWrt LNUM32)" "${expected}" "${banner:-unreadable}" "WRONG" \
-        "rm -rf ${lnum32_authority_root} && bash scripts/build_lua51_openwrt_lnum32.sh ${lnum32_authority_root}"
-      ;;
-  esac
+  # Both halves must hold: the pinned release as a complete token, and the LNUM32
+  # numeric profile the patched tree reports.
+  lnum32_ok=false
+  if banner_names_release "${banner}" "${lnum32_release}"; then
+    case "${banner}" in
+      *"(double int32)"*) lnum32_ok=true ;;
+    esac
+  fi
+  if [ "${lnum32_ok}" = true ]; then
+    st_lnum32="OK"
+    add_row "luac-host (OpenWrt LNUM32)" "${expected}" "${banner}" "OK"
+  else
+    st_lnum32="WRONG"
+    add_row "luac-host (OpenWrt LNUM32)" "${expected}" "${banner:-unreadable}" "WRONG" \
+      "rm -rf ${lnum32_authority_root} && bash scripts/build_lua51_openwrt_lnum32.sh ${lnum32_authority_root}"
+  fi
 }
 
 run_checks() {
@@ -534,6 +550,21 @@ run_checks() {
   row_found=()
   row_status=()
   hint_text=()
+
+  # A second run must not inherit the first one's verdicts, and a row outside the
+  # active scope must stay SKIP rather than look like a failure to install_missing.
+  st_rustup="SKIP"
+  st_channel="SKIP"
+  st_msrv="SKIP"
+  st_nightly="SKIP"
+  st_components="SKIP"
+  st_llvm_tools="SKIP"
+  st_timeout="SKIP"
+  st_cargo_fuzz="SKIP"
+  st_cargo_deny="SKIP"
+  st_cyclonedx="SKIP"
+  st_compilers="SKIP"
+  st_lnum32="SKIP"
 
   check_rustup
   # Before check_channel: its bare `cargo` call reconciles rust-toolchain.toml's
@@ -658,34 +689,34 @@ EOF
     exit 1
   fi
 
-  if [ "${st_channel}" != "OK" ]; then
+  if needs_install "${st_channel}"; then
     echo "==> rustup toolchain install ${pinned_channel}"
     rustup toolchain install "${pinned_channel}" --profile minimal \
       --component clippy --component rustfmt
   fi
 
-  if [ "${st_components}" != "OK" ]; then
+  if needs_install "${st_components}"; then
     echo "==> rustup component add rustfmt clippy --toolchain ${pinned_channel}"
     rustup component add rustfmt clippy --toolchain "${pinned_channel}"
   fi
 
-  if [ "${st_msrv}" != "OK" ]; then
+  if needs_install "${st_msrv}"; then
     echo "==> rustup toolchain install ${msrv_toolchain} (MSRV)"
     rustup toolchain install "${msrv_toolchain}" --profile minimal
   fi
 
-  if [ "${st_nightly}" != "OK" ]; then
+  if needs_install "${st_nightly}"; then
     echo "==> rustup toolchain install ${pinned_nightly} (fuzz)"
     rustup toolchain install "${pinned_nightly}" --profile minimal \
       --component llvm-tools-preview
   fi
 
-  if [ "${st_llvm_tools}" != "OK" ]; then
+  if needs_install "${st_llvm_tools}"; then
     echo "==> rustup component add llvm-tools-preview --toolchain ${pinned_nightly}"
     rustup component add llvm-tools-preview --toolchain "${pinned_nightly}"
   fi
 
-  if [ "${st_timeout}" != "OK" ]; then
+  if needs_install "${st_timeout}"; then
     # GNU timeout is a system package. Homebrew installs it without elevation; every
     # other package manager needs root, which this script never takes.
     if [ "$(uname -s)" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
@@ -701,18 +732,18 @@ EOF
     fi
   fi
 
-  if [ "${st_cargo_fuzz}" != "OK" ]; then
+  if needs_install "${st_cargo_fuzz}"; then
     echo "==> cargo-fuzz ${pinned_cargo_fuzz}"
     cargo "+${pinned_nightly}" install cargo-fuzz \
       --version "${pinned_cargo_fuzz}" --locked --force
   fi
 
-  if [ "${st_cargo_deny}" != "OK" ]; then
+  if needs_install "${st_cargo_deny}"; then
     echo "==> cargo-deny ${LUAD_CARGO_DENY_VERSION}"
     cargo install cargo-deny --version "${LUAD_CARGO_DENY_VERSION}" --locked --force
   fi
 
-  if [ "${st_cyclonedx}" != "OK" ]; then
+  if needs_install "${st_cyclonedx}"; then
     # CI downloads the pinned Linux release asset for this version; a developer
     # machine builds the same version from source, which also covers macOS arm64.
     echo "==> cargo-cyclonedx ${LUAD_CARGO_CYCLONEDX_VERSION}"
@@ -720,12 +751,12 @@ EOF
       --version "${LUAD_CARGO_CYCLONEDX_VERSION}" --locked --force
   fi
 
-  if [ "${st_compilers}" != "OK" ]; then
+  if needs_install "${st_compilers}"; then
     echo "==> official Lua compilers into ${compiler_dir}"
     LUAD_COMPILER_DIR="${compiler_dir}" bash scripts/install_ci_compilers.sh
   fi
 
-  if [ "${st_lnum32}" != "OK" ]; then
+  if needs_install "${st_lnum32}"; then
     missing_tools="$(lnum32_prerequisites_missing)"
     if [ -n "${missing_tools}" ]; then
       echo "==> skipping the OpenWrt LNUM32 authority compiler"
