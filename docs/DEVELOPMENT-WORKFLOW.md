@@ -200,8 +200,9 @@ presence or counts.
    remote `main`.
 8. **Close, then advance separately.** Replace the accepted contract with the neutral
    no-work checkpoint in the implementation pull request and update indexed
-   documentation whose freshness trigger fired. Select the next public claim later in
-   a dedicated planning change.
+   documentation whose freshness trigger fired. The next public claim is the first
+   entry of the roadmap's release execution sequence; it enters `NEXT-SPRINT.md` as
+   described in section 12.
 
 An external review occurs between steps 5 and 6 only when a risk trigger in section 3
 applies. Its findings become one bounded correction list; review does not restart after
@@ -356,8 +357,14 @@ After local acceptance, replace `docs/NEXT-SPRINT.md` with its neutral no-work
 checkpoint in the same implementation pull request; do not put the next claim there.
 Then push and merge the reviewed work, push `main`, and run
 `scripts/verify-main-pushed.sh`. Before another implementation batch begins, replace
-the checkpoint with one forward-looking contract in a dedicated planning change. Until
-that contract is merged, the checkpoint authorizes no additional product work.
+the checkpoint with one forward-looking contract, the first unmet entry of the
+roadmap's release execution sequence. A target-qualification stage merges that
+contract in a dedicated planning change before any implementation, because its
+acceptance commands must be fixed before code. Every other stage carries the contract
+in the first commit of its own pull request, where review reads it before the
+implementation; until that pull request merges, the work is a candidate, not accepted
+product behavior. A checkpoint never coexists with a contract, and every implementation
+commit follows one that placed its claim in `NEXT-SPRINT.md`.
 Temporary work is not accepted evidence until its required artifacts are retained by
 CI, a pull request, or release storage.
 

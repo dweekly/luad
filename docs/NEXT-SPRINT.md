@@ -1,49 +1,35 @@
-# Sprint contract: Lua 5.1 integral-number constants
+# Sprint checkpoint: no active product batch
 
-Lane: product. Roadmap position: a silent incorrect answer interrupts planned feature
-work (`ROADMAP.md`, sequencing rules); this batch precedes Milestone 2.
+Lane: planning. Roadmap position: the next stage is the first unmet entry of the
+[release execution sequence](../ROADMAP.md#release-execution-sequence).
 
-## Outcome
+## Current decision
 
-A stock Lua 5.1 chunk whose header declares an integral `lua_Number` yields the integer
-its bytes encode, on every public surface, instead of an IEEE-754 reinterpretation of
-those bytes.
+No product implementation is authorized by this checkpoint. Before implementation
+begins, this file is replaced with that stage's contract, following the lifecycle in
+[the development workflow](DEVELOPMENT-WORKFLOW.md#12-preservation-documentation-and-escalation):
+a target-qualification stage merges its contract in a dedicated planning change first;
+every other stage places its contract here in the first commit of its own pull request
+and restores this checkpoint in its last.
 
-## Public claim
+The execution sequence is a dependency order, not a standing batch authorization. Take
+only the first unmet stage whose prerequisites are accepted; do not combine
+public-contract, robustness, target-promotion, or customer-transfer work merely because
+they share the 1.0 destination.
 
-For a Lua 5.1 header with integral flag 1, every LUA_TNUMBER (tag 3) constant is a typed
-`Integer` of the declared 4- or 8-byte width, preserved raw bytes unchanged. Under
-integral flag 0 the same bytes remain a typed `Float`. The LNUM32 profile is untouched:
-its byte 11 is `sizeof(lua_Integer)`, its tag-3 constants stay floating-point, and its
-integers continue to arrive through tag 9. Stock integral layouts remain experimental;
-this batch corrects a wrong value and promotes nothing.
+The contract must name:
 
-## Scope
+- one public outcome and its exact target boundary;
+- the production and ordinary-test paths allowed to change;
+- the narrow regression and any already-established gate that prove the claim;
+- explicit non-goals; and
+- a stop condition that prevents adjacent roadmap work from entering the batch.
 
-Allowed paths:
-
-- `crates/luad-dialect-lua51/src/chunk.rs` — the tag-3 constant arm only
-- `crates/luad-oracle/tests/test_lua51_integral_numbers.rs`
-- `CHANGELOG.md`, `docs/NEXT-SPRINT.md`, `README.md` — the documentation index row for the sprint file only
-
-## Non-goals
-
-No schema, diagnostic, capability, target, profile, or documentation-claim change. No
-change to floating-point decoding, to the LNUM32 tag-9 path, or to header validation. No
-new fixture from a compiler: the pinned official compilers cannot emit an integral
-layout, so evidence is hand-built chunks through the public CLI.
-
-## Evidence
-
-1. `cargo test -p luad-oracle --test test_lua51_integral_numbers`: for 4-byte and 8-byte
-   integral layouts, `inspect --summary` reports the declared layout, `disasm --format
-   json` carries the integer `val` with no float classification, and `origins --format
-   text` renders the integer; the same bytes under integral flag 0 decode as the
-   expected floats.
-2. `bash scripts/check.sh` with all five official compilers present, including the
-   LNUM32 authority gate and the existing Lua 5.1 layout and profile gates.
+Qualification infrastructure, new evidence layers, and target promotion require their
+own stated need and acceptance boundary. They are not implied by selecting a product
+outcome.
 
 ## Stop condition
 
-Stop when the evidence holds. Product work resumes only after a dedicated planning
-change replaces this contract with one unmet outcome selected from `ROADMAP.md`.
+Stop before changing product code. Every implementation commit follows one that placed
+its claim in this file; a checkpoint never coexists with a contract.
