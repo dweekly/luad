@@ -36,16 +36,17 @@ delete the document in the same change and update this index.
 
 | Document | Purpose | Fresh as of | Revalidate or delete when |
 |---|---|---:|---|
-| [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-08-28 | Public scope, support status, setup, primary commands, or the documentation set changes. |
+| [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-09-02 | Public scope, support status, setup, primary commands, or the documentation set changes. |
 | [`AGENTS.md`](AGENTS.md) | Binding repository instructions, product-batch boundaries, and safety constraints for coding agents. | 2026-08-27 | Development workflow, proof policy, current priority, or repository invariants change. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-27 | Crates, ownership boundaries, core representations, or evidence layers change. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of unreleased and released user-visible changes. | 2026-08-28 | Every user-visible change or release; never use it as a forward plan. |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor setup, test taxonomy, fixture provenance, and definition of done. | 2026-08-28 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor verification commands, test taxonomy, fixture provenance, and definition of done. | 2026-09-02 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
 | [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-08-27 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
 | [`ROADMAP.md`](ROADMAP.md) | Detailed dependency-ordered path to a narrow, exact, robust, documented, and obtainable 1.0 release. | 2026-08-28 | Product targets, milestone order, release acceptance, package platforms, compatibility boundary, or exclusions change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-27 | Support policy, reporting channel, trust boundary, or threat model changes. |
+| [`docs/BRINGUP.md`](docs/BRINGUP.md) | Setup for a developer machine, a self-hosted Actions runner, and a release builder, with the owning file for every tool pin. | 2026-09-02 | A tool pin, its owning file, the doctor's checks, runner labels or security boundary, or the release dry-run and rehearsal entry points change. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, separate product and qualification CI lanes, proportional evidence, process budgets, and agent orchestration. | 2026-08-27 | Planning artifacts, CI lanes, customer cadence, agent roles, evidence policy, process budgets, provider interfaces, or sprint-advance mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Neutral checkpoint authorizing no product implementation while the next roadmap outcome is selected. | 2026-08-28 | Replace only through a dedicated planning change that selects one unmet outcome and defines its evidence and stop boundary. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Active infrastructure contract for repository bring-up: outcome, allowed paths, evidence, non-goals, and stop condition. | 2026-09-02 | The bring-up evidence is accepted, or a dedicated planning change replaces it with one unmet product outcome and its evidence and stop boundary. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-27 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-27 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
 | [`docs/RELEASING.md`](docs/RELEASING.md) | Release stop, exact-target order, qualification checklist, evidence bundle, packaging, compatibility, publication, and rollback policy. | 2026-08-28 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |
@@ -85,16 +86,25 @@ The embedded Lua 5.1 release scope is driven by a 252-file TP-Link corpus: heade
 
 ## Build
 
-The stable workspace MSRV is Rust 1.85. The repository separately pins Rust 1.97.1 in
-`rust-toolchain.toml` for contributors and release builders, and the fuzz suite uses
-its own pinned nightly. All production crates inherit the workspace's
+The stable workspace MSRV is Rust 1.85. The repository separately pins a newer Rust
+release in `rust-toolchain.toml` for contributors and release builders, and the fuzz
+suite uses its own pinned nightly. All production crates inherit the workspace's
 `unsafe_code = "forbid"` policy.
+
+Machine setup is one document: [docs/BRINGUP.md](docs/BRINGUP.md). It covers the
+toolchains, the dependency-policy and SBOM tools, the fuzz nightly and `cargo-fuzz`, the
+five official Lua compilers, and the OpenWrt LNUM32 authority compiler, and it names the
+file that owns each pinned version.
 
 ```console
 git clone https://github.com/dweekly/luad.git
 cd luad
-cargo build --workspace
+bash scripts/bringup.sh --install
+bash scripts/check.sh
 ```
+
+`scripts/bringup.sh --doctor` reports every required tool with its expected and found
+version at any time, and exits non-zero if one is missing or wrong.
 
 A checked-out source tree can install the `luad` binary into Cargo's normal install root:
 
@@ -106,14 +116,8 @@ This is a source install, not a crates.io channel. All workspace packages are ma
 `publish = false`; `cargo install luad` is not supported or advertised for 1.0. The
 primary planned 1.0 channel remains the verified GitHub release archives.
 
-For the complete contributor check:
-
-```console
-bash scripts/check.sh
-```
-
-The required dependency-policy job uses `cargo-deny` 0.20.2 against the locked Linux
-and macOS graph:
+The required dependency-policy job runs the pinned `cargo-deny` release against the
+locked Linux and macOS graph:
 
 ```console
 cargo deny --locked check advisories licenses
@@ -126,15 +130,7 @@ review, SBOM, or binary-composition proof.
 To run the bounded hostile-input fuzz smoke suite:
 
 ```console
-rustup toolchain install nightly-2026-08-25
-cargo install cargo-fuzz --version 0.13.2 --locked
 scripts/fuzz_smoke.sh artifacts/fuzz-smoke
-```
-
-The full differential suite requires the exact official Lua compilers pinned by each gate:
-
-```console
-bash scripts/install_ci_compilers.sh
 ```
 
 The aggregate check is necessary repository evidence, not instruction-level proof. See [CONTRIBUTING.md](CONTRIBUTING.md) for the test taxonomy and required gates.

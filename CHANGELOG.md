@@ -4,6 +4,20 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+### Repository setup
+
+- Added `docs/BRINGUP.md` and `scripts/bringup.sh` as the single setup path for a
+  developer machine, a self-hosted Actions runner, and a release builder. The script
+  reports every required tool with its expected and found version and exits non-zero on
+  any mismatch, and installs the missing ones idempotently without root. `scripts/pins.env`
+  now owns the tool versions that no manifest already pins, and a pin-agreement test holds
+  it, the CI workflow, the compiler-search constant, and the bring-up document together.
+  The CI `Test` jobs run the same reporter so it cannot drift from CI. The official Lua
+  compilers now install into `$HOME/.cache/luad/lua-tools/bin` and are searched there
+  first, because macOS clears `/tmp` on reboot; `/tmp/lua-tools/bin` remains a fallback.
+  Integration tests resolve the public `luad` binary through one helper that honors
+  `CARGO_TARGET_DIR` instead of assuming `target/debug`.
+
 ### Release planning
 
 - Froze the future version-1 release boundary around three exact target layouts, two

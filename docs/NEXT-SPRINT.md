@@ -1,32 +1,63 @@
-# Sprint checkpoint: no active product batch
+# Sprint contract: repository bring-up
 
-Lane: planning. Roadmap position: select the next unresolved milestone from the
-dependency-ordered version-1 release train.
+Lane: infrastructure. This contract authorizes no product, schema, dialect, target, or
+capability change.
 
-## Current decision
+## Outcome
 
-No product implementation is authorized by this checkpoint. Before implementation
-begins, the steward must replace this file with one forward-looking contract selected
-from `ROADMAP.md`.
+Someone who has never seen this repository can bring a machine to a working state from
+one document, and can verify that state with one command that compares versions rather
+than presence.
 
-The roadmap's milestone order is a dependency plan, not a standing batch authorization.
-Choose only the smallest unmet outcome whose prerequisites are accepted; do not combine
-public-contract, robustness, target-promotion, or customer-transfer work merely because
-they share the 1.0 destination.
+## Public claim
 
-The contract must name:
+`docs/BRINGUP.md` covers three machine roles — developer machine, self-hosted GitHub
+Actions runner, release builder — and each section ends with one command whose success
+is the definition of done. `scripts/bringup.sh --doctor` reports every required tool as
+`OK`, `MISSING`, or `WRONG` against the pin that owns it and exits non-zero unless every
+row is `OK`; `--install` brings a machine to that state idempotently and without root.
+Every tool version has exactly one owning file, and no consumer restates it.
 
-- one public outcome and its exact target boundary;
-- the production and ordinary-test paths allowed to change;
-- the narrow regression and any already-established gate that prove the claim;
-- explicit non-goals; and
-- a stop condition that prevents adjacent roadmap work from entering the batch.
+## Scope
 
-Qualification infrastructure, new evidence layers, and target promotion require their
-own stated need and acceptance boundary. They are not implied by selecting a product
-outcome.
+Allowed paths:
+
+- `docs/BRINGUP.md`, `docs/NEXT-SPRINT.md`
+- `scripts/bringup.sh`, `scripts/pins.env`, `scripts/install_ci_compilers.sh`,
+  `scripts/generate_fixtures_manifest.py`
+- `crates/luad-oracle/src/lib.rs`
+- `crates/luad-oracle/tests/test_bringup_pins.rs`, `test_analysis.rs`,
+  `test_public_disasm_lua54.rs`, `test_batch_export_bounds.rs`,
+  `test_area1_validator_diagnostics.rs`
+- `.github/workflows/ci.yml` — the `Test` jobs' step list only
+- `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`
+
+## Non-goals
+
+No product behavior, machine contract, schema, diagnostic, dialect, target profile, or
+capability status changes. No new gate, evidence layer, or fixture. No test is weakened,
+skipped, or deleted. `runs-on` values and matrix definitions in `.github/workflows/ci.yml`
+are owned by concurrent work and stay untouched.
+
+## Evidence
+
+1. `bash scripts/bringup.sh --doctor` exits 0 on a machine after
+   `bash scripts/bringup.sh --install`, and exits non-zero with a named fix command when
+   a pinned tool is absent or at the wrong version.
+2. `cargo test -p luad-oracle --test test_bringup_pins` — the pin file,
+   `rust-toolchain.toml`, `Cargo.toml`, `scripts/fuzz_smoke.sh`,
+   `scripts/install_ci_compilers.sh`, `.github/workflows/ci.yml`, the `luad-oracle`
+   compiler-search constant, and `docs/BRINGUP.md` all name the same versions and
+   directories.
+3. `cargo test -p luad-oracle --test test_analysis --test test_batch_export_bounds --test test_public_disasm_lua54 --test test_area1_validator_diagnostics`
+   passes with a relocated `CARGO_TARGET_DIR`.
+4. The CI `Test` jobs run `bash scripts/bringup.sh --doctor --scope ci-test` immediately
+   after installing the official compilers.
+5. `bash scripts/check.sh` exits 0.
 
 ## Stop condition
 
-Stop before changing product code. Product work resumes only after a dedicated planning
-change replaces this checkpoint with an active contract.
+Stop when the evidence above holds and the documentation index, `CONTRIBUTING.md`, and
+`README.md` name `docs/BRINGUP.md` as the only setup path with no duplicated steps.
+Product work resumes only after a dedicated planning change replaces this contract with
+one unmet outcome selected from `ROADMAP.md`.
