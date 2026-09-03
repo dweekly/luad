@@ -522,6 +522,10 @@ jobs:
     - name: Install Official Lua Compilers
       run: ./scripts/install_ci_compilers.sh
 
+    # Reads the same pins as a developer machine, narrowed to what this job installs.
+    - name: Verify Bring-Up Prerequisites
+      run: bash scripts/bringup.sh --doctor --scope ci-test
+
     - name: Run Contributor Checks
       run: ./scripts/check.sh
 
