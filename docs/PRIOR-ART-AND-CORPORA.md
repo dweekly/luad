@@ -107,8 +107,8 @@ The unlicensed real-world chunks under `test-compiled/` (game and client binarie
 
 ### Bytecode-level obfuscation, deobfuscation, and the academic neighbour
 
-- Li et al., ["Reverse Engineering of Obfuscated Lua Bytecode via Interpreter Semantics Testing"](https://ieeexplore.ieee.org/document/10163061),
-  IEEE TIFS 18 (2023). IoT malware ships Lua in customized bytecode dialects; the paper
+- Luo et al., ["Reverse Engineering of Obfuscated Lua Bytecode via Interpreter Semantics Testing"](https://doi.org/10.1109/TIFS.2023.3289254),
+  IEEE TIFS 18 (2023); open-access copy at [NSF-PAR](https://par.nsf.gov/servlets/purl/10540556). IoT malware ships Lua in customized bytecode dialects; the paper
   recovers unknown opcode semantics by mutation testing against a reference
   interpreter. Tool at [hayden-droid/Dev](https://github.com/hayden-droid/Dev) (GPL-3.0),
   no samples shipped. Closest academic neighbour to an opcode-map facility.
