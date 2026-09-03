@@ -24,7 +24,7 @@ Allowed paths:
 
 - `crates/luad-dialect-lua51/src/chunk.rs` — the tag-3 constant arm only
 - `crates/luad-oracle/tests/test_lua51_integral_numbers.rs`
-- `CHANGELOG.md`, `docs/NEXT-SPRINT.md`
+- `CHANGELOG.md`, `docs/NEXT-SPRINT.md`, `README.md` — the documentation index row for the sprint file only
 
 ## Non-goals
 
