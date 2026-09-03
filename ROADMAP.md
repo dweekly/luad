@@ -110,7 +110,9 @@ the stage's first commit replaces the checkpoint with its contract, and its last
 restores the checkpoint. A target-qualification stage (Milestones 4, 5, and 6) instead
 merges its contract as a separate planning change before any implementation, because
 its acceptance commands must be fixed before code. A stage is deleted from this list
-when its pull request merges; the list holds only unmet obligations.
+when its evidence is accepted: for most stages that is the merge of its pull request,
+and for the final publication stage it is the fresh-environment verification of the
+published artifacts. The list holds only unmet obligations.
 
 1. Documentation truth pass: retire the remaining stale present-tense claims (Lua 5.4.8
    evidence described as the 1.0 target, the duplicate MSRV statements in the
@@ -143,10 +145,13 @@ when its pull request merges; the list holds only unmet obligations.
     candidate dispatch.
 11. Milestone 7: README reduction, the three plain guides, exact-version format notes,
     the worked JSONL consumer example, and the fresh-session transfer record.
-12. Milestone 8: a production publication mode for the release workflow (today only the
-    rehearsal path exists), then the freeze change (version, release notes,
+12. Milestone 8a: a production publication mode for the release workflow (today only
+    the rehearsal path exists), then the freeze change (version, release notes,
     compatibility statement, completed security packet, tripwire record, extended
-    campaign rerun), then tag, publish, and fresh-environment verification.
+    campaign rerun).
+13. Milestone 8b: with the frozen candidate on remote `main`, tag `v1.0.0`, publish,
+    download every public artifact into a fresh environment, and repeat checksum and
+    smoke verification. This stage is deleted only after that verification succeeds.
 
 ### Milestone 2 — freeze the public automation contract
 
@@ -238,8 +243,9 @@ Required work:
 - prove that open argument/result windows cannot erase a callee already established in
   an unaffected register;
 - run one internal uncoached investigation with an independently authored objective on
-  different firmware, by a fresh session or researcher holding only the candidate and
-  its public documentation, and commit its sanitized record with the stable template;
+  different firmware, performed by a different model family or a researcher holding
+  only the candidate and its public documentation, and commit its sanitized record
+  with the stable template;
 - separately prove that an out-of-profile sample fails with an actionable diagnostic and
   the correct exit code; and
 - minimize every reproducible correctness finding before promotion.
