@@ -4,6 +4,16 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+### Documentation
+
+- Added `docs/PRIOR-ART-AND-CORPORA.md`, a survey of external tools, datasets, and
+  bytecode-emitting ecosystems against the product scope, with candidate fixture sources
+  and their license constraints. Its EdgeTX spike shows that a 32-bit Lua 5.3 chunk with
+  a 4-byte `lua_Number` is accepted at the header and then fails inside the body with an
+  offset-0 diagnostic. `ROADMAP.md` gains vendor-profile candidates with named
+  authorities, corpus and authority sources, profile facilities, and ecosystem
+  contributions under post-version-1 research.
+
 ### Repository setup
 
 - Added `docs/BRINGUP.md` and `scripts/bringup.sh` as the single setup path for a

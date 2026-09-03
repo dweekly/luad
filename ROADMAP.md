@@ -347,6 +347,59 @@ additional stock layouts may reuse the stock-Lua qualification contract. Vendor
 mappings may enter only as explicit, provenance-bound profiles. LuaJIT requires the
 separate product decision described above.
 
+A vendor profile is a candidate only when a public first-party compiler or a vendor
+GPL source drop can serve as its authority. The current candidates, in customer-value
+order, with their authorities recorded in
+[docs/PRIOR-ART-AND-CORPORA.md](docs/PRIOR-ART-AND-CORPORA.md):
+
+- EdgeTX Lua 5.3 32-bit (`edgetx-luac`): 4-byte `lua_Number`, 4-byte `lua_Integer`,
+  and a header `size_t` slot that does not describe host-built bodies.
+- OpenTX and EdgeTX 2.10 Lua 5.2 (`size_t` 4, `lua_Number` 8) from the firmware source.
+- NodeMCU Lua 5.1 integral and byte-swapped layouts (`luac.cross`). This compiler is
+  also the missing independent authority for the stock integral layout and may be
+  pulled before version 1 by a planning change.
+- Playdate Lua 5.4 32-bit with appended opcodes (`pdc`).
+- TP-Link AX1800 Lua 5.1 with a reordered opcode table (vendor GPL drop).
+
+### Corpus and authority sources
+
+- The stock regression corpus is generated, not vendored: the official per-release
+  Lua test suites, pinned by their published SHA-256 and compiled by the matching
+  pinned `luac`, with provenance recorded per `CONTRIBUTING.md`. Apache-2.0 and MIT
+  real-world sources (Kong, Penlight, luvit, the Neovim runtime) supply breadth.
+- Fixtures compiled from GPL sources record that license per case, following the
+  `tests/fixtures/embedded/MANIFEST.json` convention; share-alike, proprietary, and
+  malware-derived samples never enter the tree.
+- Labeled obfuscated inputs are regenerated with Prometheus over this repository's
+  own sources rather than taken from third-party corpora.
+- `fuzz_lua51_analysis` and `fuzz_lua54_analysis` receive seed corpora from the
+  generated regression corpus.
+- A hostile-chunk seed set (width, byte-order, and profile variants; truncations;
+  oversized counts; recursion bombs; jump-past-end) is a publishable artifact with an
+  upstream path to `ligurio/lunapark-corpus`, which OSS-Fuzz clones.
+- A chunk mutator that emits labeled layout and opcode variants with a ground-truth
+  manifest gives regression tests whose expected facts are known by construction.
+
+### Profile facilities
+
+- Every dialect handles a declared header width the way Lua 5.4 already does: honour
+  it end to end or refuse it with a diagnostic naming the field and width. Ignoring a
+  declared width while reporting the stock one, or parsing under assumed widths and
+  reporting the first downstream symptom at offset 0, is a silent incorrect answer
+  under the sequencing rules.
+- Opcode-table maps and constant-type-tag maps are explicit, provenance-bound
+  profiles. Deriving a map from a canary chunk is a separate tool, never a default.
+- A header-versus-body width inconsistency (a declared `size_t` width contradicted by
+  a long-string length field) is a reportable diagnostic.
+- A layout-tuple fact names the likely origin ecosystem of a chunk without asserting
+  it as a dialect selection.
+
+### Ecosystem contributions
+
+A `luac.ksy` for the Kaitai Struct format gallery and a Lua 5.5 ImHex pattern, both
+derived from this repository's structural model rather than imported, are small
+contributions that make the model the public reference for the format.
+
 ### Other deferred surfaces
 
 Decompiler output, source reconstruction, an assembler, execution, tracing, persistent
