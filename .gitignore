@@ -7,3 +7,4 @@ fuzz/artifacts/
 !tests/fixtures/precompiled/**
 *.out
 .DS_Store
+__pycache__/

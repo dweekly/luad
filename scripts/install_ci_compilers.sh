@@ -3,7 +3,15 @@ set -euo pipefail
 
 # Build exact official Lua compiler releases with verified SHA-256 checksums used by the differential oracle.
 
-DEST_DIR="${LUAD_COMPILER_DIR:-/tmp/lua-tools/bin}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/pins.env
+. "${SCRIPT_DIR}/pins.env"
+
+# The default lives under the user's home, not /tmp, because macOS clears /tmp on
+# reboot and would silently disarm every differential gate on the next boot. The oracle
+# searches this directory first and the legacy /tmp directory second, so an existing
+# installation keeps working without a reinstall.
+DEST_DIR="${LUAD_COMPILER_DIR:-${LUAD_COMPILER_DIR_DEFAULT}}"
 mkdir -p "${DEST_DIR}"
 BUILD_DIR="$(mktemp -d)"
 
@@ -21,9 +29,18 @@ build_lua() {
     local expected_sha="$4"
     local bin_name="$5"
 
+    # An existing file is only a valid installation if it reports the pinned version.
+    # Skipping on presence alone lets a truncated, stale, or wrong-version binary
+    # survive every reinstall while the differential gates keep failing.
     if [ -f "${DEST_DIR}/${bin_name}" ]; then
-        echo "[INFO] ${bin_name} already installed, skipping."
-        return 0
+        local installed_banner
+        installed_banner=$("${DEST_DIR}/${bin_name}" -v 2>&1 | head -n 1 || true)
+        if banner_names_release "${installed_banner}" "${version}"; then
+            echo "[INFO] ${bin_name} already installed (${installed_banner}), skipping."
+            return 0
+        fi
+        echo "[REPLACE] ${DEST_DIR}/${bin_name} reported '${installed_banner}', expected Lua ${version}; rebuilding."
+        rm -f "${DEST_DIR}/${bin_name}"
     fi
 
     echo "[DOWNLOAD] Fetching Lua ${version} from ${url}..."
@@ -61,13 +78,10 @@ build_lua() {
 
     local detected_version
     detected_version=$("${DEST_DIR}/${bin_name}" -v 2>&1)
-    case "${detected_version}" in
-        *"Lua ${version}"*) ;;
-        *)
-            echo "[ERROR] ${bin_name} reported unexpected version: ${detected_version}" >&2
-            return 1
-            ;;
-    esac
+    if ! banner_names_release "${detected_version}" "${version}"; then
+        echo "[ERROR] ${bin_name} reported unexpected version: ${detected_version}" >&2
+        return 1
+    fi
 
     echo "[OK] Installed ${DEST_DIR}/${bin_name}: ${detected_version}"
 }

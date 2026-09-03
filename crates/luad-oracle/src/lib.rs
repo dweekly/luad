@@ -3,6 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
 use tempfile::NamedTempFile;
 
 pub mod candidate;
@@ -146,7 +147,217 @@ pub fn get_fixture_bytes(
     }
 }
 
-/// Locate compiler binary checking LUAD_ORACLE_BIN_DIR first, then explicit absolute paths, verifying version output.
+/// The exact official Lua releases the differential oracle is pinned to, ascending.
+///
+/// `scripts/install_ci_compilers.sh` owns these values: it builds each release against a
+/// recorded SHA-256 and refuses a binary whose banner names a different one. Its
+/// `build_lua` arguments are the definition; `scripts/bringup.sh` reads them directly,
+/// and `crates/luad-oracle/tests/test_bringup_pins.rs` fails if this array disagrees.
+///
+/// Every search below matches a whole release. A series prefix such as `5.4` accepts any
+/// 5.4.x a host happens to carry, and a differential result is evidence only about the
+/// release that produced it.
+pub const LUA_RELEASES: [&str; 5] = ["5.1.5", "5.2.4", "5.3.6", "5.4.8", "5.5.1"];
+
+/// Pinned Lua 5.1 release.
+pub const LUA51_RELEASE: &str = LUA_RELEASES[0];
+/// Pinned Lua 5.2 release.
+pub const LUA52_RELEASE: &str = LUA_RELEASES[1];
+/// Pinned Lua 5.3 release.
+pub const LUA53_RELEASE: &str = LUA_RELEASES[2];
+/// Pinned Lua 5.4 release.
+pub const LUA54_RELEASE: &str = LUA_RELEASES[3];
+/// Pinned Lua 5.5 release.
+pub const LUA55_RELEASE: &str = LUA_RELEASES[4];
+
+/// Directory beneath the user's home where `scripts/install_ci_compilers.sh` installs the
+/// official Lua compilers, and the first location every compiler search consults after an
+/// explicit `LUAD_ORACLE_BIN_DIR` override.
+///
+/// The compilers live under `$HOME` rather than `/tmp` because macOS clears `/tmp` on
+/// reboot; the `/tmp/lua-tools/bin` entries that remain in the candidate lists keep an
+/// existing installation usable without a reinstall.
+///
+/// Cross-checked against `LUAD_COMPILER_DIR_DEFAULT` in `scripts/pins.env` by
+/// `crates/luad-oracle/tests/test_bringup_pins.rs`.
+pub const PERSISTENT_COMPILER_SUBDIR: &str = ".cache/luad/lua-tools/bin";
+
+/// Absolute persistent compiler directory for the current user, when `HOME` is set.
+#[must_use]
+pub fn persistent_compiler_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(PERSISTENT_COMPILER_SUBDIR))
+}
+
+/// Directory `scripts/install_ci_compilers.sh` installs into, for operator messages.
+fn install_compiler_dir() -> String {
+    if let Some(dir) = std::env::var_os("LUAD_COMPILER_DIR") {
+        if !dir.is_empty() {
+            return PathBuf::from(dir).display().to_string();
+        }
+    }
+    persistent_compiler_dir().map_or_else(
+        || format!("$HOME/{PERSISTENT_COMPILER_SUBDIR}"),
+        |p| p.display().to_string(),
+    )
+}
+
+/// Cargo's target directory for this workspace.
+///
+/// Honors `CARGO_TARGET_DIR` and `CARGO_BUILD_TARGET_DIR`; a relative value is resolved
+/// against the workspace root, which is where Cargo is invoked for the repository's own
+/// checks. Tests that spawn a built binary must go through this rather than assuming
+/// `<workspace>/target`, or they break whenever the target directory is relocated.
+#[must_use]
+pub fn cargo_target_dir() -> PathBuf {
+    let root = find_workspace_root();
+    for key in ["CARGO_TARGET_DIR", "CARGO_BUILD_TARGET_DIR"] {
+        if let Some(value) = std::env::var_os(key) {
+            if value.is_empty() {
+                continue;
+            }
+            let path = PathBuf::from(value);
+            return if path.is_absolute() {
+                path
+            } else {
+                root.join(path)
+            };
+        }
+    }
+    root.join("target")
+}
+
+/// Serializes the on-demand `luad` build so parallel test threads issue at most one.
+static LUAD_BUILD_LOCK: Mutex<()> = Mutex::new(());
+
+/// Absolute path of the public `luad` binary for integration tests, built if absent.
+///
+/// `env!("CARGO_BIN_EXE_luad")` is not available here: Cargo defines `CARGO_BIN_EXE_<name>`
+/// only for binaries declared by the package under test, and `luad` belongs to `luad-cli`.
+/// `scripts/check.sh` exports the variable at runtime. Otherwise the binary is resolved
+/// inside whatever target directory Cargo is using, and built there when it is not
+/// present: `cargo test -p luad-oracle` builds only `luad-oracle`, so a fresh target
+/// directory never contains `luad` until something asks for it.
+///
+/// Absence is never reported as success; a failed build returns the command's output.
+pub fn try_luad_binary_path() -> Result<PathBuf, String> {
+    if let Some(value) = std::env::var_os("CARGO_BIN_EXE_luad") {
+        if !value.is_empty() {
+            let path = PathBuf::from(value);
+            if path.exists() {
+                return Ok(path);
+            }
+        }
+    }
+
+    let target_dir = cargo_target_dir();
+    let path = target_dir.join("debug").join("luad");
+    if path.exists() {
+        return Ok(path);
+    }
+
+    let guard = LUAD_BUILD_LOCK.lock();
+    // A poisoned lock means another thread panicked mid-build; the build itself is
+    // idempotent, so recover the guard and rebuild rather than propagating the panic.
+    let _guard = match guard {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if path.exists() {
+        return Ok(path);
+    }
+
+    // Cargo exports CARGO for processes it launches; falling back to the name on PATH
+    // keeps this working when a test binary is run directly.
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let root = find_workspace_root();
+    let output = Command::new(cargo)
+        .args(["build", "-p", "luad-cli", "--bin", "luad", "--target-dir"])
+        .arg(&target_dir)
+        .current_dir(&root)
+        .output()
+        .map_err(|error| format!("failed to spawn cargo build -p luad-cli: {error}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "cargo build -p luad-cli --bin luad --target-dir {} failed with status {:?}\nstderr:\n{}",
+            target_dir.display(),
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    if !path.exists() {
+        return Err(format!(
+            "cargo build reported success but {} does not exist",
+            path.display()
+        ));
+    }
+    Ok(path)
+}
+
+/// Absolute path of the public `luad` binary, panicking when it cannot be produced.
+#[must_use]
+pub fn luad_binary_path() -> PathBuf {
+    try_luad_binary_path().unwrap_or_else(|error| panic!("{error}"))
+}
+
+/// Whether `banner` names `release` as a complete version token.
+///
+/// The release must follow `Lua ` and end there: the next character may not continue the
+/// version, so a search for `5.4.8` rejects `Lua 5.4.80` and `Lua 5.4.8.1`. A plain
+/// substring test accepts both, and the resulting differential evidence would describe a
+/// release nobody pinned.
+///
+/// `scripts/pins.env` carries the same rule for the shell callers.
+#[must_use]
+pub fn banner_names_release(banner: &str, release: &str) -> bool {
+    let needle = format!("Lua {release}");
+    let mut rest = banner;
+    while let Some(index) = rest.find(&needle) {
+        let after = &rest[index + needle.len()..];
+        match after.chars().next() {
+            None => return true,
+            Some(next) if !next.is_ascii_digit() && next != '.' => return true,
+            _ => {}
+        }
+        // Keep scanning: an earlier longer version does not rule out a later exact one.
+        rest = &rest[index + needle.len()..];
+    }
+    false
+}
+
+/// Whether the leading `<name> <version>` token of `banner` is exactly `expected`.
+///
+/// Stricter than [`banner_names_release`]: the version must be the banner's own first
+/// token, so a required `Lua 5.1.5` is not satisfied by `Lua 5.4.8 built against 5.1.5`,
+/// and `Lua 5.4.80` never satisfies `Lua 5.4.8`. Gate specifications name a compiler
+/// this way, and a gate must not accept a compiler it did not ask for.
+#[must_use]
+pub fn banner_reports_exact_version(banner: &str, expected: &str) -> bool {
+    let first_line = banner.lines().next().unwrap_or("").trim();
+    let words: Vec<&str> = first_line.split_whitespace().collect();
+    let leading_token = if words.len() >= 2 {
+        format!("{} {}", words[0], words[1])
+    } else {
+        first_line.to_string()
+    };
+    leading_token == expected || first_line == expected
+}
+
+/// Accept `path` only when its `-v` banner names `release` as a complete version token.
+fn compiler_matches_version(path: &Path, release: &str) -> bool {
+    let Ok(output) = Command::new(path).arg("-v").output() else {
+        return false;
+    };
+    let banner = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    banner_names_release(banner.trim(), release)
+}
+
+/// Locate compiler binary checking LUAD_ORACLE_BIN_DIR first, then the persistent
+/// compiler directory, then explicit absolute paths, verifying version output.
 pub fn find_compiler_binary(
     bin_name: &str,
     candidates: &[&str],
@@ -154,18 +365,16 @@ pub fn find_compiler_binary(
 ) -> Option<PathBuf> {
     if let Ok(dir) = std::env::var("LUAD_ORACLE_BIN_DIR") {
         let p = Path::new(&dir).join(bin_name);
-        if p.exists() {
-            if let Ok(output) = Command::new(&p).arg("-v").output() {
-                let v = format!(
-                    "{}{}",
-                    String::from_utf8_lossy(&output.stdout),
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                let actual = v.trim();
-                if actual.starts_with(expected_version) || actual.contains(expected_version) {
-                    return Some(p);
-                }
-            }
+        if p.exists() && compiler_matches_version(&p, expected_version) {
+            return Some(p);
+        }
+    }
+
+    // Ahead of the candidate list so a persistent installation always wins over a
+    // stale copy left in /tmp by an earlier session.
+    if let Some(p) = persistent_compiler_dir().map(|dir| dir.join(bin_name)) {
+        if p.exists() && compiler_matches_version(&p, expected_version) {
+            return Some(p);
         }
     }
 
@@ -187,16 +396,8 @@ pub fn find_compiler_binary(
         };
 
         if let Some(p) = target_path {
-            if let Ok(output) = Command::new(&p).arg("-v").output() {
-                let v = format!(
-                    "{}{}",
-                    String::from_utf8_lossy(&output.stdout),
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                let actual = v.trim();
-                if actual.starts_with(expected_version) || actual.contains(expected_version) {
-                    return Some(p);
-                }
+            if compiler_matches_version(&p, expected_version) {
+                return Some(p);
             }
         }
     }
@@ -216,7 +417,7 @@ pub fn find_luac54() -> Option<PathBuf> {
             "luac5.4",
             "luac-5.4",
         ],
-        "5.4",
+        LUA54_RELEASE,
     )
 }
 
@@ -267,7 +468,7 @@ pub fn find_luac55() -> Option<PathBuf> {
             "luac5.5",
             "luac-5.5",
         ],
-        "5.5",
+        LUA55_RELEASE,
     )
 }
 
@@ -326,7 +527,7 @@ pub fn find_luac53() -> Option<PathBuf> {
             "luac5.3",
             "luac-5.3",
         ],
-        "5.3",
+        LUA53_RELEASE,
     )
 }
 
@@ -372,7 +573,7 @@ pub fn find_luac52() -> Option<PathBuf> {
             "luac5.2",
             "luac-5.2",
         ],
-        "5.2",
+        LUA52_RELEASE,
     )
 }
 
@@ -420,7 +621,7 @@ pub fn find_luac51() -> Option<PathBuf> {
             "luac5.1",
             "luac-5.1",
         ],
-        "5.1",
+        LUA51_RELEASE,
     )
 }
 
@@ -486,7 +687,8 @@ pub fn require_luac51() -> PathBuf {
     find_luac51().unwrap_or_else(|| {
         panic!(
             "Required official Lua 5.1 compiler not found.\n\
-            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into {}.",
+            install_compiler_dir()
         )
     })
 }
@@ -497,7 +699,8 @@ pub fn require_luac52() -> PathBuf {
     find_luac52().unwrap_or_else(|| {
         panic!(
             "Required official Lua 5.2 compiler not found.\n\
-            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into {}.",
+            install_compiler_dir()
         )
     })
 }
@@ -508,7 +711,8 @@ pub fn require_luac53() -> PathBuf {
     find_luac53().unwrap_or_else(|| {
         panic!(
             "Required official Lua 5.3 compiler not found.\n\
-            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into {}.",
+            install_compiler_dir()
         )
     })
 }
@@ -519,7 +723,8 @@ pub fn require_luac54() -> PathBuf {
     find_luac54().unwrap_or_else(|| {
         panic!(
             "Required official Lua 5.4 compiler not found.\n\
-            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into {}.",
+            install_compiler_dir()
         )
     })
 }
@@ -530,7 +735,8 @@ pub fn require_luac55() -> PathBuf {
     find_luac55().unwrap_or_else(|| {
         panic!(
             "Required official Lua 5.5 compiler not found.\n\
-            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into {}.",
+            install_compiler_dir()
         )
     })
 }

@@ -20,30 +20,33 @@ the steward explicitly authorizes an amendment.
 
 ## Development setup
 
-The stable workspace MSRV is Rust 1.85. The contributor and release-builder toolchain is
-separately pinned to Rust 1.97.1 in `rust-toolchain.toml`; the fuzz workspace uses
-`nightly-2026-08-25` and does not declare a stable `rust-version`. Changes that raise
-the MSRV must update package metadata, CI evidence, release documentation, and the
-changelog together.
+Install the toolchains, tools, and official compilers once, following
+[docs/BRINGUP.md](docs/BRINGUP.md). It is the single setup document and names the file
+that owns every pinned version; do not install these by hand from memory.
 
 ```console
+bash scripts/bringup.sh --install
 cargo build --workspace
 bash scripts/check.sh
 ```
+
+The stable workspace MSRV is Rust 1.85. The contributor and release-builder toolchain is
+separately pinned in `rust-toolchain.toml`; the fuzz workspace uses its own pinned
+nightly and does not declare a stable `rust-version`. Changes that raise the MSRV must
+update package metadata, CI evidence, release documentation, and the changelog together.
 
 `scripts/check.sh` runs the aggregate repository checks. It is necessary before handoff, but it is not proof that oracle-backed claims are correct; each work package must also pass its canonical gate.
 
 Dependency changes must also pass the pinned `cargo-deny` policy:
 
 ```console
-cargo install cargo-deny --version 0.20.2 --locked
 cargo deny --locked check advisories licenses
 ```
 
 Do not add an advisory ignore, license exception, clarification, or graph exclusion as
 a routine way to restore CI. A rejected dependency requires its own bounded disposition.
 
-Release dependency inventories use the exact `cargo-cyclonedx` 0.5.9 generator:
+Release dependency inventories use the exact pinned `cargo-cyclonedx` generator:
 
 ```console
 CARGO_CYCLONEDX="$(command -v cargo-cyclonedx)" \
@@ -104,11 +107,9 @@ It must not create or change a `v*` tag, latest-release pointer, target manifest
 capability status, or signing claim.
 
 The bounded hostile-input campaign uses an independently pinned nightly and
-`cargo-fuzz` release:
+`cargo-fuzz` release, both installed by bring-up:
 
 ```console
-rustup toolchain install nightly-2026-08-25
-cargo install cargo-fuzz --version 0.13.2 --locked
 scripts/fuzz_smoke.sh artifacts/fuzz-smoke
 ```
 
@@ -120,13 +121,9 @@ runner alone; CI invokes the same script rather than restating its flags.
 
 ### Official Lua compilers
 
-Parser fixtures can run from bundled bytecode, but differential proof requires exact official compilers:
-
-```console
-bash scripts/install_ci_compilers.sh
-```
-
-The compilers are installed beneath `/tmp/lua-tools/bin`. Canonical gates must verify the exact compiler version and binary/archive hashes they claim. A required compiler missing from CI must fail the gate; it must never cause a silent skip.
+Parser fixtures can run from bundled bytecode, but differential proof requires the exact
+official compilers that [docs/BRINGUP.md](docs/BRINGUP.md) installs beneath
+`$HOME/.cache/luad/lua-tools/bin`. Canonical gates must verify the exact compiler version and binary/archive hashes they claim. A required compiler missing from CI must fail the gate; it must never cause a silent skip.
 
 ## Repository map
 

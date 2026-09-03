@@ -67,7 +67,7 @@ fn load_fixture(rel_path: &str) -> (Vec<u8>, Chunk, LuacDump) {
 
 fn get_cli_json_disasm(fixture_rel_path: &str) -> DisassembledPrototype {
     let root = find_workspace_root();
-    let luad = root.join("target").join("debug").join("luad");
+    let luad = luad_oracle::luad_binary_path();
     let abs_path = root.join(fixture_rel_path);
 
     let output = Command::new(&luad)
@@ -619,8 +619,7 @@ fn test_loadkx_extraarg_companion_and_constant_resolution() {
 
 #[test]
 fn test_public_disasm_schema_major_and_hash_pinned() {
-    let root = find_workspace_root();
-    let luad = root.join("target").join("debug").join("luad");
+    let luad = luad_oracle::luad_binary_path();
 
     let output = Command::new(&luad)
         .args(["schema", "disasm"])
@@ -658,7 +657,7 @@ fn test_public_disasm_schema_major_and_hash_pinned() {
 #[test]
 fn test_cli_disasm_json_and_text_goldens() {
     let root = find_workspace_root();
-    let luad = root.join("target").join("debug").join("luad");
+    let luad = luad_oracle::luad_binary_path();
 
     // 1. Full normalized golden check for hello.luac
     let hello_path = root
@@ -714,7 +713,7 @@ fn test_cli_disasm_json_and_text_goldens() {
 #[test]
 fn test_cli_explain_never_reports_static_effects_as_fact() {
     let root = find_workspace_root();
-    let luad = root.join("target").join("debug").join("luad");
+    let luad = luad_oracle::luad_binary_path();
     let fixtures = [
         "tests/fixtures/precompiled/lua54/hello.luac",
         "tests/fixtures/precompiled/lua54/control_flow.luac",

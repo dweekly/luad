@@ -303,14 +303,9 @@ pub fn execute_gate_spec(
         comp_ver = Some(actual_ver.clone());
 
         if let Some(expected_ver) = &spec.required_compiler_version {
-            let first_line = actual_ver.lines().next().unwrap_or("").trim();
-            let words: Vec<&str> = first_line.split_whitespace().collect();
-            let actual_token = if words.len() >= 2 {
-                format!("{} {}", words[0], words[1])
-            } else {
-                first_line.to_string()
-            };
-            if actual_token != *expected_ver && first_line != expected_ver {
+            // One definition of the comparison, so a gate cannot drift into accepting a
+            // version the compiler search would reject.
+            if !crate::banner_reports_exact_version(&actual_ver, expected_ver) {
                 return Err(GateRunnerError::WrongCompilerVersion {
                     expected: expected_ver.clone(),
                     actual: actual_ver,
@@ -728,14 +723,9 @@ pub fn verify_gate_result(
 
     if let Some(exp_comp_ver) = &spec.required_compiler_version {
         let actual_ver = result.compiler_version.as_deref().unwrap_or("");
-        let first_line = actual_ver.lines().next().unwrap_or("").trim();
-        let words: Vec<&str> = first_line.split_whitespace().collect();
-        let actual_token = if words.len() >= 2 {
-            format!("{} {}", words[0], words[1])
-        } else {
-            first_line.to_string()
-        };
-        if actual_token != *exp_comp_ver && first_line != exp_comp_ver {
+        // The same comparison the gate made when it ran, from one definition, so
+        // verifying a recorded result cannot be laxer than producing it.
+        if !crate::banner_reports_exact_version(actual_ver, exp_comp_ver) {
             return Err(GateRunnerError::WrongCompilerVersion {
                 expected: exp_comp_ver.clone(),
                 actual: actual_ver.to_string(),

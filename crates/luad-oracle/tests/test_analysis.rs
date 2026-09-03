@@ -434,7 +434,7 @@ fn test_cfg_dominance_frontiers() {
 #[test]
 fn test_cli_cfg_dot_golden() {
     let root = luad_oracle::find_workspace_root();
-    let luad = root.join("target").join("debug").join("luad");
+    let luad = luad_oracle::luad_binary_path();
     let cf_path = root
         .join("tests")
         .join("fixtures")
