@@ -146,7 +146,94 @@ pub fn get_fixture_bytes(
     }
 }
 
-/// Locate compiler binary checking LUAD_ORACLE_BIN_DIR first, then explicit absolute paths, verifying version output.
+/// Directory beneath the user's home where `scripts/install_ci_compilers.sh` installs the
+/// official Lua compilers, and the first location every compiler search consults after an
+/// explicit `LUAD_ORACLE_BIN_DIR` override.
+///
+/// The compilers live under `$HOME` rather than `/tmp` because macOS clears `/tmp` on
+/// reboot; the `/tmp/lua-tools/bin` entries that remain in the candidate lists keep an
+/// existing installation usable without a reinstall.
+///
+/// Cross-checked against `LUAD_COMPILER_DIR_DEFAULT` in `scripts/pins.env` by
+/// `crates/luad-oracle/tests/test_bringup_pins.rs`.
+pub const PERSISTENT_COMPILER_SUBDIR: &str = ".cache/luad/lua-tools/bin";
+
+/// Absolute persistent compiler directory for the current user, when `HOME` is set.
+#[must_use]
+pub fn persistent_compiler_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(PERSISTENT_COMPILER_SUBDIR))
+}
+
+/// Directory `scripts/install_ci_compilers.sh` installs into, for operator messages.
+fn install_compiler_dir() -> String {
+    if let Some(dir) = std::env::var_os("LUAD_COMPILER_DIR") {
+        if !dir.is_empty() {
+            return PathBuf::from(dir).display().to_string();
+        }
+    }
+    persistent_compiler_dir().map_or_else(
+        || format!("$HOME/{PERSISTENT_COMPILER_SUBDIR}"),
+        |p| p.display().to_string(),
+    )
+}
+
+/// Cargo's target directory for this workspace.
+///
+/// Honors `CARGO_TARGET_DIR` and `CARGO_BUILD_TARGET_DIR`; a relative value is resolved
+/// against the workspace root, which is where Cargo is invoked for the repository's own
+/// checks. Tests that spawn a built binary must go through this rather than assuming
+/// `<workspace>/target`, or they break whenever the target directory is relocated.
+#[must_use]
+pub fn cargo_target_dir() -> PathBuf {
+    let root = find_workspace_root();
+    for key in ["CARGO_TARGET_DIR", "CARGO_BUILD_TARGET_DIR"] {
+        if let Some(value) = std::env::var_os(key) {
+            if value.is_empty() {
+                continue;
+            }
+            let path = PathBuf::from(value);
+            return if path.is_absolute() {
+                path
+            } else {
+                root.join(path)
+            };
+        }
+    }
+    root.join("target")
+}
+
+/// Absolute path of the public `luad` binary for integration tests.
+///
+/// `env!("CARGO_BIN_EXE_luad")` is not available here: Cargo defines `CARGO_BIN_EXE_<name>`
+/// only for binaries declared by the package under test, and `luad` belongs to `luad-cli`.
+/// `scripts/check.sh` exports the variable at runtime; the fallback resolves the binary
+/// inside whatever target directory Cargo is using.
+#[must_use]
+pub fn luad_binary_path() -> PathBuf {
+    if let Some(value) = std::env::var_os("CARGO_BIN_EXE_luad") {
+        if !value.is_empty() {
+            return PathBuf::from(value);
+        }
+    }
+    cargo_target_dir().join("debug").join("luad")
+}
+
+/// Accept `path` only when its `-v` banner names `expected_version`.
+fn compiler_matches_version(path: &Path, expected_version: &str) -> bool {
+    let Ok(output) = Command::new(path).arg("-v").output() else {
+        return false;
+    };
+    let banner = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let actual = banner.trim();
+    actual.starts_with(expected_version) || actual.contains(expected_version)
+}
+
+/// Locate compiler binary checking LUAD_ORACLE_BIN_DIR first, then the persistent
+/// compiler directory, then explicit absolute paths, verifying version output.
 pub fn find_compiler_binary(
     bin_name: &str,
     candidates: &[&str],
@@ -154,18 +241,16 @@ pub fn find_compiler_binary(
 ) -> Option<PathBuf> {
     if let Ok(dir) = std::env::var("LUAD_ORACLE_BIN_DIR") {
         let p = Path::new(&dir).join(bin_name);
-        if p.exists() {
-            if let Ok(output) = Command::new(&p).arg("-v").output() {
-                let v = format!(
-                    "{}{}",
-                    String::from_utf8_lossy(&output.stdout),
-                    String::from_utf8_lossy(&output.stderr)
-                );
-                let actual = v.trim();
-                if actual.starts_with(expected_version) || actual.contains(expected_version) {
-                    return Some(p);
-                }
-            }
+        if p.exists() && compiler_matches_version(&p, expected_version) {
+            return Some(p);
+        }
+    }
+
+    // Ahead of the candidate list so a persistent installation always wins over a
+    // stale copy left in /tmp by an earlier session.
+    if let Some(p) = persistent_compiler_dir().map(|dir| dir.join(bin_name)) {
+        if p.exists() && compiler_matches_version(&p, expected_version) {
+            return Some(p);
         }
     }
 
@@ -486,7 +571,8 @@ pub fn require_luac51() -> PathBuf {
     find_luac51().unwrap_or_else(|| {
         panic!(
             "Required official Lua 5.1 compiler not found.\n\
-            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into {}.",
+            install_compiler_dir()
         )
     })
 }
@@ -497,7 +583,8 @@ pub fn require_luac52() -> PathBuf {
     find_luac52().unwrap_or_else(|| {
         panic!(
             "Required official Lua 5.2 compiler not found.\n\
-            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into {}.",
+            install_compiler_dir()
         )
     })
 }
@@ -508,7 +595,8 @@ pub fn require_luac53() -> PathBuf {
     find_luac53().unwrap_or_else(|| {
         panic!(
             "Required official Lua 5.3 compiler not found.\n\
-            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into {}.",
+            install_compiler_dir()
         )
     })
 }
@@ -519,7 +607,8 @@ pub fn require_luac54() -> PathBuf {
     find_luac54().unwrap_or_else(|| {
         panic!(
             "Required official Lua 5.4 compiler not found.\n\
-            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into {}.",
+            install_compiler_dir()
         )
     })
 }
@@ -530,7 +619,8 @@ pub fn require_luac55() -> PathBuf {
     find_luac55().unwrap_or_else(|| {
         panic!(
             "Required official Lua 5.5 compiler not found.\n\
-            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into /tmp/lua-tools/bin."
+            Run 'bash scripts/install_ci_compilers.sh' to install all official compilers into {}.",
+            install_compiler_dir()
         )
     })
 }

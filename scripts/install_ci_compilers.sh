@@ -3,7 +3,15 @@ set -euo pipefail
 
 # Build exact official Lua compiler releases with verified SHA-256 checksums used by the differential oracle.
 
-DEST_DIR="${LUAD_COMPILER_DIR:-/tmp/lua-tools/bin}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/pins.env
+. "${SCRIPT_DIR}/pins.env"
+
+# The default lives under the user's home, not /tmp, because macOS clears /tmp on
+# reboot and would silently disarm every differential gate on the next boot. The oracle
+# searches this directory first and the legacy /tmp directory second, so an existing
+# installation keeps working without a reinstall.
+DEST_DIR="${LUAD_COMPILER_DIR:-${LUAD_COMPILER_DIR_DEFAULT}}"
 mkdir -p "${DEST_DIR}"
 BUILD_DIR="$(mktemp -d)"
 

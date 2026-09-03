@@ -7,7 +7,7 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::sync::OnceLock;
 
@@ -186,13 +186,15 @@ fn test_public_embedded_case_provenance_and_stress_shape() {
     assert_eq!(case["byte_length"].as_u64(), Some(binary.len() as u64));
 
     let rebuilt = NamedTempFile::new().expect("temporary compiler output");
-    let compiler = Path::new("/tmp/lua-tools/bin/luac5.1");
-    let compiler_sha256 = sha256(&fs::read(compiler).expect("read compiler"));
+    // Resolved through the oracle's own search order so the fixture is rebuilt with the
+    // compiler every other Lua 5.1 gate uses, wherever it was installed.
+    let compiler = luad_oracle::require_luac51();
+    let compiler_sha256 = sha256(&fs::read(&compiler).expect("read compiler"));
     assert!(
         ACCEPTED_COMPILER_SHA256S.contains(&compiler_sha256.as_str()),
         "unrecognized Lua 5.1 compiler binary SHA-256: {compiler_sha256}"
     );
-    let status = Command::new(compiler)
+    let status = Command::new(&compiler)
         .args(["-o"])
         .arg(rebuilt.path())
         .arg(EMBEDDED_SOURCE)

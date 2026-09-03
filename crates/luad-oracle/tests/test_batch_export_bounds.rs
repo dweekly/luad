@@ -116,11 +116,11 @@ fn luad_bin() -> PathBuf {
     static BINARY: OnceLock<PathBuf> = OnceLock::new();
     BINARY
         .get_or_init(|| {
-            if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
-                return PathBuf::from(path);
+            let binary = luad_oracle::luad_binary_path();
+            if binary.exists() {
+                return binary;
             }
             let root = workspace_root();
-            let binary = root.join("target").join("debug").join("luad");
 
             let build = Command::new("cargo")
                 .args(["build", "-p", "luad-cli", "--bin", "luad"])
