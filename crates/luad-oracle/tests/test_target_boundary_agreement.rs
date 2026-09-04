@@ -10,10 +10,11 @@
 //! 1. The frozen boundary table names at least two profiles and its prose count word
 //!    matches the number of table rows.
 //! 2. Every profile identity in the table appears in the roadmap's support boundary,
-//!    the release qualification order, and the product requirements' version-1 goals
-//!    and 1.0 release criterion.
-//! 3. No document offers LuaJIT or Luau as a planned dialect, deferred dialect family,
-//!    or future product track while the product boundary places them out of scope.
+//!    the release qualification order, and the product requirements' version-1 goals,
+//!    1.0 release criterion, and decision summary; the two sections that enumerate the
+//!    promoted set name it exactly, so an extra entry fails as well as a missing one.
+//! 3. The product boundary states that LuaJIT and Luau are outside the product, and the
+//!    specific wordings that previously scheduled them as future work stay retired.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -117,12 +118,12 @@ fn test_every_promoted_profile_appears_in_each_authoritative_document() {
         "expected the frozen boundary to name profiles, found {promoted:?}"
     );
 
-    let sites: [(&str, &str); 4] = [
+    // Each site is bounded to its own section so a profile named elsewhere in the
+    // document cannot satisfy the check.
+    let sites: [(&str, &str); 5] = [
         (
             "the roadmap's version-1 support boundary",
-            &roadmap[roadmap
-                .find("### Version 1 support boundary")
-                .expect("roadmap support boundary")..],
+            section(&roadmap, "### Version 1 support boundary"),
         ),
         (
             "the release qualification order",
@@ -136,31 +137,45 @@ fn test_every_promoted_profile_appears_in_each_authoritative_document() {
             "the product requirements' 1.0 release criterion",
             section(&prd, "### 13.2 Version 1.0"),
         ),
+        (
+            "the product requirements' decision summary",
+            section(&prd, "### 16.1 Decisions made by this PRD"),
+        ),
     ];
 
-    for profile in &promoted {
-        for (name, body) in &sites {
-            assert!(
-                body.contains(profile.as_str()),
-                "profile `{profile}` is promoted by the frozen boundary but absent from {name}"
-            );
-        }
+    for (name, body) in &sites {
+        let named = profile_identities(body);
+        let missing: Vec<&String> = promoted.difference(&named).collect();
+        assert!(
+            missing.is_empty(),
+            "{name} omits promoted profiles {missing:?}; it names {named:?}"
+        );
     }
 
-    // The roadmap's boundary must not promote a profile the release boundary omits.
-    let boundary_section = section(&roadmap, "### Version 1 support boundary");
-    for profile in profile_identities(boundary_section) {
+    // The roadmap's boundary and the release order are the two places that enumerate
+    // the promoted set, so each must equal it exactly: an extra entry promotes a target
+    // the frozen boundary does not.
+    for (name, body) in [
+        (
+            "the roadmap's version-1 support boundary",
+            section(&roadmap, "### Version 1 support boundary"),
+        ),
+        (
+            "the release qualification order",
+            section(&releasing, "## Release scope and order"),
+        ),
+    ] {
+        let named = profile_identities(body);
+        let extra: Vec<&String> = named.difference(&promoted).collect();
         assert!(
-            promoted.contains(&profile)
-                || profile.contains("lnum")
-                || boundary_section.contains(&format!("`{profile}` with")),
-            "the roadmap promotes `{profile}`, which the frozen release boundary omits"
+            extra.is_empty(),
+            "{name} promotes {extra:?}, which the frozen release boundary omits"
         );
     }
 }
 
 #[test]
-fn test_out_of_scope_dialects_are_not_offered_as_future_targets() {
+fn test_the_out_of_scope_boundary_is_stated_and_its_retired_wordings_stay_retired() {
     let root = luad_oracle::find_workspace_root();
     let prd = read(&root, "PRD.md");
     let roadmap = read(&root, "ROADMAP.md");
@@ -171,18 +186,20 @@ fn test_out_of_scope_dialects_are_not_offered_as_future_targets() {
         "the roadmap must state the LuaJIT and Luau product boundary"
     );
 
-    // No document may schedule them as future work.
-    let scheduled = [
+    // These exact wordings scheduled LuaJIT or Luau as future work before the boundary
+    // was set. This guards their return, not every possible way to schedule the work:
+    // a newly worded stage would pass here and is caught by review, not by this test.
+    let retired = [
         "LuaJIT 2.0/2.1 and significant maintained forks as separate dialect modules",
         "LuaJIT requires the separate product decision",
         "once those dialects are supported",
         "explicit post-release prioritization decision",
     ];
-    for phrase in scheduled {
+    for phrase in retired {
         for (name, body) in [("PRD.md", &prd), ("ROADMAP.md", &roadmap)] {
             assert!(
                 !body.contains(phrase),
-                "{name} still schedules out-of-scope dialect work: {phrase:?}"
+                "{name} restates a retired out-of-scope scheduling wording: {phrase:?}"
             );
         }
     }

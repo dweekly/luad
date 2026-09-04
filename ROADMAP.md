@@ -258,8 +258,8 @@ either decoded at the declared width or refused by name, never reported valid wi
 stock width; unmodified fixtures remain valid as the negative control. The EdgeTX
 chunks are the second control at this milestone: each one is refused with a diagnostic
 naming the declared width, never accepted at the header and failed in the body. Reading
-them correctly is the EdgeTX profile's acceptance criterion in Milestone 3, not this
-milestone's.
+them correctly is the EdgeTX profile's acceptance criterion in the exact-target
+milestone, not this milestone's.
 
 Stop condition: `validate` cannot return a valid verdict for a lying header in any
 dialect. Feature work does not resume until this holds.
@@ -389,8 +389,8 @@ debug-bearing; define the profile's treatment of a host-built chunk whose long-s
 lengths contradict the header slot (a named consistency diagnostic, never a parse);
 require the survey matrix row to be green with `luad` the only tool that also names the
 inconsistency; prove symmetric rejection between `lua5.3-edgetx32` and stock 5.3. This
-milestone converts Milestone 1's named refusal of the 4-byte Lua 5.3 layout into a
-correct read under the explicit profile.
+stage converts the layout-truth milestone's named refusal of the 4-byte Lua 5.3 layout
+into a correct read under the explicit profile.
 
 **Stock PUC Lua 5.4.9.** Pin the final archive, official compiler binaries, reference
 manual, source tables, fixtures, and exact standard layout; review the 5.4.8-to-5.4.9

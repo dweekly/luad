@@ -26,8 +26,9 @@ is non-promoting and predates later correctness and machine-interface changes. L
 The [release procedure](docs/RELEASING.md#frozen-version-1-boundary) records the exact
 future 1.0 targets, layouts, package platforms, machine-contract majors, owner, and
 evidence location. The [path to 1.0](ROADMAP.md) keeps the existing explorations while
-ordering layout truth, authority and corpus, exact targets, the minimal machine
-contract, hostile-input evidence, and the final candidate. Future target names are obligations, not present support
+ordering layout truth, authority and corpus, the minimal machine contract,
+hostile-input evidence, then the exact targets that bind their manifests to those
+frozen interfaces, and the final candidate. Future target names are obligations, not present support
 claims.
 
 The architectural boundary is deliberate: `luad` owns deterministic VM facts that
@@ -102,8 +103,8 @@ starting with EdgeTX radio firmware (32-bit Lua 5.3, 4-byte floats, a header slo
 does not describe the body). The honest summary as of 2026-09-02: tools built on the
 stock loader (official `luac`, luadec, rizin, ChunkSpy) refuse those chunks by name; the
 two unluac lineages read them correctly; `luad` accepts the header and then fails inside
-the body with a diagnostic anchored at the wrong offset. Closing that row is tracked in
-the [roadmap](ROADMAP.md) under vendor-profile candidates. The matrix is the acceptance
+the body with a diagnostic anchored at the wrong offset. Closing that row is the acceptance
+criterion for the EdgeTX exact-target stage in the [roadmap](ROADMAP.md). The matrix is the acceptance
 picture for that work, and this section is updated when a row changes.
 
 ## Build

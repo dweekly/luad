@@ -1067,11 +1067,12 @@ Adoption is secondary to correctness, but useful signals include:
 - Versioned JSON/JSONL is the initial stable programmatic interface.
 - Static analysis never executes an input chunk.
 - The first promotable release candidate targets the exact OpenWrt-derived Lua 5.1.5
-  LNUM32 profile and firmware-tree workflow.
-- Version 1.0 additionally qualifies the exact stock PUC Lua 5.1.5 64-bit layout and
-  PUC Lua 5.4.9 target named by the roadmap.
-- Lua 5.2, 5.3, 5.5, additional Lua 5.1 layouts, and every other vendor profile remain
-  experimental until independently promoted.
+  `lua5.1-lnum32` profile and firmware-tree workflow.
+- Version 1.0 additionally qualifies the EdgeTX Lua 5.3.6 `lua5.3-edgetx32` profile,
+  the final PUC Lua 5.4.9 `lua5.4` target, and the exact stock PUC Lua 5.1.5 64-bit
+  `lua5.1` layout named by the roadmap.
+- Lua 5.2, stock Lua 5.3, 5.5, additional Lua 5.1 layouts, and every other vendor
+  profile remain experimental until independently promoted.
 - LuaJIT and Luau are outside the product. They are separate bytecode systems, not dialect rows, and no roadmap stage may authorize reading them.
 - Decompilation is not part of version 1.
 - Losslessness, provenance, validation, and determinism are release requirements rather than optional polish.
