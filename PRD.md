@@ -210,6 +210,10 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 - Qualify OpenWrt-derived Lua 5.1.5 profile `lua5.1-lnum32` with
   `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4` through a public,
   reproducible compiler authority.
+- Qualify EdgeTX Lua 5.3.6 profile `lua5.3-edgetx32` through the `edgetx-luac` host
+  compiler at a pinned EdgeTX revision, with 4-byte `int`, a 4-byte `size_t` header
+  slot, 4-byte instructions, 4-byte `lua_Integer`, 4-byte `lua_Number`, and `LUAC_NUM`
+  serialized as a single-precision float.
 - Qualify stock PUC Lua 5.1.5 profile `lua5.1` independently with
   `int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0`.
 - Qualify stock PUC Lua 5.4.9 profile `lua5.4` independently at format 0, with 4-byte
@@ -237,8 +241,8 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 
 ### 3.2 Post-version-1 goals
 
-- Independent qualification of additional stock Lua releases and Lua 5.1 layouts.
-- LuaJIT 2.0/2.1 and significant maintained forks as separate dialect modules.
+- Independent qualification of additional stock Lua releases, Lua 5.1 layouts, and
+  vendor profiles with a public compiler authority.
 - Configurable vendor chunk profiles and opcode mappings.
 - Richer data flow, liveness, reaching definitions, backward slicing, and SSA.
 - A canonical editable assembly representation and assembler.

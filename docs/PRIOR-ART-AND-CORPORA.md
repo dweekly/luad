@@ -193,15 +193,15 @@ dumper (section 4).
   runtime defects, not `lundump.c` defects. No CVE specifically against the chunk loader
   was found, consistent with upstream treating bytecode as trusted input.
 
-### PRD §1.3 rows that need revision
+### Relationship to the PRD prior-art table
 
-The PRD is not edited by this document. A later change should:
-
-- replace the radare2 row with rizin and its per-version `luac` ISA tables;
-- restate unluac-rs as active and MIT-licensed;
-- add Coldzer0/LuaDecompiler as the other public 5.5 claimant;
-- add metaworm/luac-parser-rs's WASM plugin-parser design as the precedent for vendor
-  profiles, with its missing license noted.
+`PRD.md` §1.3 carries the product-level comparison and cites this document as the
+acceptance picture. This section carries the reproduced detail behind those rows: rizin
+with its per-version `luac` ISA tables, unluac and unluac-rs as the two implementations
+that honour declared widths, luac-parser-rs's WASM plugin-parser design as the vendor
+profile precedent, and LuaDecompiler as the other public Lua 5.5 claimant. When a tool's
+license, activity, or measured behavior changes here, revise the PRD row in the same
+change.
 
 ## 3. Existing bytecode datasets
 

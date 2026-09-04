@@ -56,11 +56,14 @@ supported target set remains empty until exact target manifests are accepted.
 Qualification proceeds in this order:
 
 1. OpenWrt-derived Lua 5.1.5 `lua5.1-lnum32`;
-2. stock PUC Lua 5.4.9 `lua5.4`; and
-3. stock PUC Lua 5.1.5 `lua5.1`.
+2. EdgeTX Lua 5.3.6 `lua5.3-edgetx32`;
+3. stock PUC Lua 5.4.9 `lua5.4`; and
+4. stock PUC Lua 5.1.5 `lua5.1`.
 
-The order exercises the vendor-profile workflow first, repeats promotion on the final
-Lua 5.4 release, and then closes stock Lua 5.1 without conflating it with LNUM32. A
+The order exercises the vendor-profile workflow first, repeats it on a second vendor
+profile whose declared widths differ from every stock layout, then repeats promotion on
+the final Lua 5.4 release, and closes stock Lua 5.1 without conflating it with
+LNUM32. A
 prerequisite for one target cannot promote another. The 5.4.8 evidence already present
 in the repository can support 5.4.9 only where an exact source/chunk delta gate admits
 it.
