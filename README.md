@@ -8,6 +8,15 @@
 for security conclusions or production reverse-engineering decisions. No dialect or
 profile is promoted to the supported tier.
 
+`luad` is the Lua bytecode verifier and fact source: it tells the truth about a chunk's
+layout and internal consistency across Lua releases and vendor layouts, proves each
+claim against the producing compiler's listing, and exports the facts under a machine
+contract that decompilers and reverse-engineering platforms consume. It does not
+decompile and does not compete on breadth of dialect parsing. Today it does not yet
+meet its own bar: a header that declares a width the body does not use is reported
+valid in Lua 5.2 and 5.3, and EdgeTX firmware chunks fail inside the body. Layout truth
+is the first roadmap milestone.
+
 The repository has public-boundary evidence for exact Lua 5.4.8 disassembly and a broad
 experimental Lua 5.1 surface. The OpenWrt-derived Lua 5.1.5 LNUM32 public read contract
 and compiler authority are qualified as prerequisites, but the retained RC1 candidate
@@ -17,8 +26,9 @@ is non-promoting and predates later correctness and machine-interface changes. L
 The [release procedure](docs/RELEASING.md#frozen-version-1-boundary) records the exact
 future 1.0 targets, layouts, package platforms, machine-contract majors, owner, and
 evidence location. The [path to 1.0](ROADMAP.md) keeps the existing explorations while
-ordering the remaining public-contract, hostile-input, exact-target, workflow-transfer,
-and final-candidate work. Future target names are obligations, not present support
+ordering layout truth, authority and corpus, the minimal machine contract,
+hostile-input evidence, then the exact targets that bind their manifests to those
+frozen interfaces, and the final candidate. Future target names are obligations, not present support
 claims.
 
 The architectural boundary is deliberate: `luad` owns deterministic VM facts that
@@ -36,21 +46,21 @@ delete the document in the same change and update this index.
 
 | Document | Purpose | Fresh as of | Revalidate or delete when |
 |---|---|---:|---|
-| [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-09-02 | Public scope, support status, setup, primary commands, or the documentation set changes. |
+| [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-09-03 | Public scope, support status, setup, primary commands, or the documentation set changes. |
 | [`AGENTS.md`](AGENTS.md) | Binding repository instructions, product-batch boundaries, and safety constraints for coding agents. | 2026-08-27 | Development workflow, proof policy, current priority, or repository invariants change. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-27 | Crates, ownership boundaries, core representations, or evidence layers change. |
-| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of unreleased and released user-visible changes. | 2026-09-02 | Every user-visible change or release; never use it as a forward plan. |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor verification commands, test taxonomy, fixture provenance, and definition of done. | 2026-09-02 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
-| [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-08-27 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
-| [`ROADMAP.md`](ROADMAP.md) | Dependency-ordered path to 1.0: destination, support boundary, milestone train, the release execution sequence of remaining stages, acceptance, and post-1.0 obligations. |  2026-09-02 | Product targets, milestone order, release acceptance, package platforms, compatibility boundary, or exclusions change. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of unreleased and released user-visible changes. | 2026-09-03 | Every user-visible change or release; never use it as a forward plan. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor verification commands, test taxonomy, fixture provenance, and definition of done. | 2026-09-03 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
+| [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-09-03 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
+| [`ROADMAP.md`](ROADMAP.md) | Dependency-ordered path to 1.0: the verifier-and-fact-source destination, the four-target support boundary, milestones from layout truth through the frozen candidate, acceptance, and post-1.0 research. | 2026-09-03 | Product targets, milestone order, release acceptance, package platforms, compatibility boundary, or exclusions change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-27 | Support policy, reporting channel, trust boundary, or threat model changes. |
 | [`docs/BRINGUP.md`](docs/BRINGUP.md) | Setup for a developer machine, a self-hosted Actions runner, and a release builder, with the owning file for every tool pin. | 2026-09-02 | A tool pin, its owning file, the doctor's checks, runner labels or security boundary, or the release dry-run and rehearsal entry points change. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, separate product and qualification CI lanes, proportional evidence, process budgets, and agent orchestration. | 2026-08-27 | Planning artifacts, CI lanes, customer cadence, agent roles, evidence policy, process budgets, provider interfaces, or sprint-advance mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Neutral checkpoint authorizing no product implementation while the next stage of the release execution sequence is selected. |  2026-09-02 | The first unmet stage of the roadmap sequence replaces it with its contract: a qualification stage through a dedicated planning change, any other stage in the first commit of its own pull request. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Neutral checkpoint authorizing no product implementation while the next stage of the release execution sequence is selected. | 2026-09-03 | The first unmet stage of the roadmap sequence replaces it with its contract: a qualification stage through a dedicated planning change, any other stage in the first commit of its own pull request. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-27 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/PRIOR-ART-AND-CORPORA.md`](docs/PRIOR-ART-AND-CORPORA.md) | External tools, datasets, and bytecode-emitting ecosystems evaluated against the product scope, candidate fixture sources with license and provenance constraints, and the fidelity gaps they expose. | 2026-09-02 | A listed project changes license or status, a candidate corpus or vendor profile is adopted or rejected, or the PRD prior-art table is revised. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-27 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
-| [`docs/RELEASING.md`](docs/RELEASING.md) | Release stop, exact-target order, qualification checklist, evidence bundle, packaging, compatibility, publication, and rollback policy. | 2026-09-02 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |
+| [`docs/RELEASING.md`](docs/RELEASING.md) | Release stop, exact-target order, qualification checklist, evidence bundle, packaging, compatibility, publication, and rollback policy. | 2026-09-03 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |
 | [`docs/LUA51-LNUM32-CANDIDATE.md`](docs/LUA51-LNUM32-CANDIDATE.md) | Archived verification and firmware-handoff guide for the immutable, non-promoting Lua 5.1 LNUM32 RC1 artifact. | 2026-08-27 | RC1 evidence is retired, its retained artifacts become unverifiable, or a new LNUM32 candidate guide replaces it. |
 | [`docs/examples/RECIPES.md`](docs/examples/RECIPES.md) | Practical command-line and composition recipes for consuming machine JSON and JSONL output. | 2026-08-27 | Machine interface envelopes, export records, or CLI subcommands change. |
 | [`docs/reviews/2026-08-25-roadmap-review.md`](docs/reviews/2026-08-25-roadmap-review.md) | Archived point-in-time roadmap and release-readiness critique retained as planning provenance, not current status. | 2026-08-27 | Delete only when its planning provenance is intentionally retired; never revalidate it as current release evidence. |
@@ -81,7 +91,7 @@ This table describes code present in the repository, not verified support status
 | Lua 5.3 | 47 | Yes | Experimental; proof gates incomplete |
 | Lua 5.4 | 83 | Yes | Experimental; public disassembly, validation, analysis, lossless, and machine-contract evidence exists; exact target promotion remains pending |
 | Lua 5.5 | 85 | Yes | Experimental; independent proof gates incomplete |
-| LuaJIT 2.x | — | No | Planned; not supported |
+| LuaJIT 2.x | — | No | Not supported and out of scope for the product; the capability manifest still reports the Planned tier until the machine-contract milestone retires the entry |
 
 The embedded Lua 5.1 release scope is driven by a 252-file TP-Link corpus: header-declared 32-bit `size_t`, an explicit LNUM profile, correct closure-binding records, precise offsets, and inline resolved constants. Private-corpus results supplement—but never replace—redistributable fixtures and public-boundary proof. See the [embedded-firmware requirements](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md).
 
@@ -93,8 +103,8 @@ starting with EdgeTX radio firmware (32-bit Lua 5.3, 4-byte floats, a header slo
 does not describe the body). The honest summary as of 2026-09-02: tools built on the
 stock loader (official `luac`, luadec, rizin, ChunkSpy) refuse those chunks by name; the
 two unluac lineages read them correctly; `luad` accepts the header and then fails inside
-the body with a diagnostic anchored at the wrong offset. Closing that row is tracked in
-the [roadmap](ROADMAP.md) under vendor-profile candidates. The matrix is the acceptance
+the body with a diagnostic anchored at the wrong offset. Closing that row is the acceptance
+criterion for the EdgeTX exact-target stage in the [roadmap](ROADMAP.md). The matrix is the acceptance
 picture for that work, and this section is updated when a row changes.
 
 ## Build

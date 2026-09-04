@@ -23,13 +23,14 @@ corpus run, or model review cannot remove this stop.
 
 ## Frozen version-1 boundary
 
-The version-1 bytecode claim contains exactly three independent target identities:
+The version-1 bytecode claim contains exactly four independent target identities:
 
 | Lua release | Canonical profile | Serialized layout |
 |---|---|---|
 | OpenWrt-derived Lua 5.1.5 LNUM32 | `lua5.1-lnum32` | `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4` |
-| Stock PUC Lua 5.1.5 | `lua5.1` | `int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0` |
+| EdgeTX Lua 5.3.6 (`edgetx-luac`, pinned EdgeTX revision) | `lua5.3-edgetx32` | format 0; `int=4`; `size_t` header slot 4; 4-byte instructions; 4-byte `lua_Integer`; 4-byte `lua_Number`; `LUAC_INT` 0x5678 as 4 bytes; `LUAC_NUM` 370.5 as a little-endian single-precision float |
 | Stock PUC Lua 5.4.9 | `lua5.4` | format 0; 4-byte instructions; 8-byte `lua_Integer`; 8-byte `lua_Number`; pinned official compiler's standard little-endian representation |
+| Stock PUC Lua 5.1.5 | `lua5.1` | `int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0` |
 
 The package platforms are exactly `linux-x86_64` and `macos-aarch64`. Enveloped command
 JSON and the other major-1 JSON schema families freeze at major 1 for the 1.x line;
@@ -55,11 +56,14 @@ supported target set remains empty until exact target manifests are accepted.
 Qualification proceeds in this order:
 
 1. OpenWrt-derived Lua 5.1.5 `lua5.1-lnum32`;
-2. stock PUC Lua 5.4.9 `lua5.4`; and
-3. stock PUC Lua 5.1.5 `lua5.1`.
+2. EdgeTX Lua 5.3.6 `lua5.3-edgetx32`;
+3. stock PUC Lua 5.4.9 `lua5.4`; and
+4. stock PUC Lua 5.1.5 `lua5.1`.
 
-The order exercises the vendor-profile workflow first, repeats promotion on the final
-Lua 5.4 release, and then closes stock Lua 5.1 without conflating it with LNUM32. A
+The order exercises the vendor-profile workflow first, repeats it on a second vendor
+profile whose declared widths differ from every stock layout, then repeats promotion on
+the final Lua 5.4 release, and closes stock Lua 5.1 without conflating it with
+LNUM32. A
 prerequisite for one target cannot promote another. The 5.4.8 evidence already present
 in the repository can support 5.4.9 only where an exact source/chunk delta gate admits
 it.
@@ -113,7 +117,7 @@ Before publishing 1.0, additionally:
 2. Complete the focused hostile-input and release-supply-chain security review.
 3. Record the representative runtime and peak-memory tripwires required by the roadmap.
 4. Complete the internal transfer checkpoint and the out-of-profile refusal test below,
-   and retain the fresh-session transfer record required by the roadmap's Milestone 7.
+   and retain the fresh-session transfer record required by the roadmap's Milestone 6.
 5. Confirm no P0 correctness or security defect remains open.
 6. Assemble and verify the two platform archives, evidence index, SBOM, and checksums.
 7. Update `CHANGELOG.md`, version metadata, schemas, README, security policy, candidate

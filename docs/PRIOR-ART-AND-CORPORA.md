@@ -193,15 +193,15 @@ dumper (section 4).
   runtime defects, not `lundump.c` defects. No CVE specifically against the chunk loader
   was found, consistent with upstream treating bytecode as trusted input.
 
-### PRD §1.3 rows that need revision
+### Relationship to the PRD prior-art table
 
-The PRD is not edited by this document. A later change should:
-
-- replace the radare2 row with rizin and its per-version `luac` ISA tables;
-- restate unluac-rs as active and MIT-licensed;
-- add Coldzer0/LuaDecompiler as the other public 5.5 claimant;
-- add metaworm/luac-parser-rs's WASM plugin-parser design as the precedent for vendor
-  profiles, with its missing license noted.
+`PRD.md` §1.3 carries the product-level comparison and cites this document as the
+acceptance picture. This section carries the reproduced detail behind those rows: rizin
+with its per-version `luac` ISA tables, unluac and unluac-rs as the two implementations
+that honour declared widths, luac-parser-rs's WASM plugin-parser design as the vendor
+profile precedent, and LuaDecompiler as the other public Lua 5.5 claimant. When a tool's
+license, activity, or measured behavior changes here, revise the PRD row in the same
+change.
 
 ## 3. Existing bytecode datasets
 
@@ -262,10 +262,11 @@ moonscript, argparse.
 LuaJIT `-b` output (`ESC L J` magic, `BCDUMP_VERSION`, flags `BE`, `STRIP`, `FFI`;
 [bcsave.lua](https://github.com/LuaJIT/LuaJIT/blob/v2.1/src/jit/bcsave.lua)), Cocos2d-x
 `luacompile -e -k KEY -b SIGN` XXTEA envelopes
-([reference](https://github.com/xpol/lua-cocos2d-x-xxtea)), and OpenResty belong to the
-LuaJIT product decision in `ROADMAP.md`, not to the stock matrix.
-[luajit-decompiler-v2](https://github.com/marsinator358/luajit-decompiler-v2) is the
-reference implementation to test against if that decision is taken.
+([reference](https://github.com/xpol/lua-cocos2d-x-xxtea)), and OpenResty are LuaJIT
+bytecode, which is outside the product: a separate container, instruction set, and
+runtime authority. They are listed here so a reader recognizes them and stops, not as
+candidates. [luajit-decompiler-v2](https://github.com/marsinator358/luajit-decompiler-v2)
+is the tool to use on them.
 
 ### 4e. Hostile-chunk generators
 

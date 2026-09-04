@@ -30,7 +30,7 @@ Today, answering these questions usually requires a collection of version-specif
 
 Lua's bytecode is an internal implementation format rather than a stable cross-version interchange format. Lua's own documentation states that the virtual machine is likely to change between versions and that precompiled programs from one version will not load in another. Lua 5.1 encoded host details such as endianness, word sizes, and numeric representation in its header. Later releases changed both the serialized chunk layout and instruction encoding. LuaJIT, OpenResty LuaJIT, and Luau use distinct formats and instruction sets rather than merely adding a few opcodes.
 
-The product opportunity is therefore not “another Lua decompiler.” It is a trustworthy, explainable bytecode analysis tool that establishes facts first and makes higher-level analysis auditable.
+Parsing, disassembly, and decompilation of that bytecode are commodities: rizin, unluac, and unluac-rs already read it, including embedded 32-bit layouts. Verification is not. No tool proves its output against the producing compiler with negative controls, none reports a header that contradicts its body, and no public corpus of malformed chunks or licensed bytecode exists. The product opportunity is the Lua bytecode verifier and fact source: honest refusal that names the lying field, an authority discipline behind every claim, public corpora that make the claim testable, and a machine contract that decompilers, devirtualizers, and reverse-engineering platforms consume rather than compete with.
 
 ### 1.2 Who needs it
 
@@ -72,13 +72,17 @@ The existing ecosystem contains valuable components but no complete solution.
 | [OpenResty LuaJIT](https://github.com/openresty/luajit2) bytecode listing | Adds source-line and constant-table improvements useful to OpenResty users | Specific to that runtime family; not a general cross-version format reader |
 | [ChunkSpy](https://github.com/viruscamp/luadec/blob/master/ChunkSpy/ChunkSpy51.lua) | Excellent historical binary-inspection model: offsets, raw bytes, profiles, rewriting, and source merging | Primarily Lua 5.0/5.1 and no longer covers modern formats |
 | [LuaDec](https://github.com/viruscamp/luadec) | Widely known Lua 5.1 decompiler with disassembly and recompilation comparison | Experimental for 5.2/5.3 and no support for modern Lua; decompiler-oriented architecture |
-| [unluac](https://github.com/Jeong-Min-Cho/unluac) | Established stock-Lua decompiler lineage, claiming Lua 5.0-5.4 | Source reconstruction depends heavily on debug information and has known stripped-bytecode and complex-control-flow limitations |
-| [unluac-rs](https://github.com/x3zvawq/unluac-rs) | Broad modern claim: Lua 5.1-5.5, LuaJIT 2.1, and Luau; Rust, CFG/dominator analysis, CLI, library, and Wasm | Self-described as testing-stage; breadth and decompilation quality are not yet substitutes for independently proven lossless disassembly |
-| [luac-parser-rs](https://github.com/metaworm/luac-parser-rs) | Memory-safe parser foundation for Lua 5.1-5.4, LuaJIT, and Luau | No advertised Lua 5.5 support and historically coupled to a separate decompiler workflow |
-| [cLuaDecompiler](https://github.com/Coldzer0/LuaDecompiler) | Promising version-aware disassembly, CFG/SSA, custom opcode tables, and validation workflow | Young, lightly proven, AGPL-licensed, and based on a less commonly embedded Free Pascal stack |
+| [unluac](https://sourceforge.net/projects/unluac/) (Java) and the [Jeong-Min-Cho fork](https://github.com/Jeong-Min-Cho/unluac) | Established stock-Lua decompiler lineage; honours declared header widths end to end, so it reads embedded 32-bit layouts correctly; the fork adds `--opmap` and `--typemap` for modified VMs | Decompiler-first; malformed input surfaces as a Java exception without an offset; no oracle or negative controls; source reconstruction depends on debug information |
+| [unluac-rs](https://github.com/x3zvawq/unluac-rs) | MIT, actively maintained Rust decompiler for Lua 5.1-5.5, LuaJIT, and Luau with CFG/dominator analysis, CLI, library, and Wasm; honours declared widths and names the offset and tag on malformed input | Decompiler-first; widens 4-byte floats to double before printing; no differential oracle, negative controls, or machine contract; the closest neighbour and a candidate independent second decoder |
+| [luac-parser-rs](https://github.com/metaworm/luac-parser-rs) | Memory-safe parser foundation for Lua 5.1-5.4, LuaJIT, and Luau; custom parsers compile to WASM and are hot-loaded by a hosted decompiler | No license file; no Lua 5.5; requires nightly Rust; accepts embedded headers and then fails inside the body |
+| [LuaDecompiler](https://github.com/Coldzer0/LuaDecompiler) (Free Pascal) | Disassembler and decompiler claiming Lua 5.1 through 5.5 with custom opcode tables | AGPL-licensed, lightly proven, and based on a less commonly embedded stack |
 | [LuaJIT Decompiler v2](https://github.com/marsinator358/luajit-decompiler-v2) | Strong dedicated LuaJIT source-recovery candidate with stripped-bytecode support | Windows-oriented, decompiler-first, and still lists big-endian support as unfinished |
-| [radare2 Lua support](https://github.com/radareorg/radare2-book/blob/master/src/arch/plugins.md) | General reverse-engineering navigation, graphs, scripting, and analysis concepts | Lua support is not a complete modern multi-version Lua analysis implementation |
+| [rizin](https://github.com/rizinorg/rizin) | Native `luac` architecture with per-version ISA tables for Lua 5.0 through 5.5 and LuaJIT, a loader, and rizin's CFG, xref, and graph machinery | Refuses non-stock headers by name and then falls back to disassembling the bytes as native code; no oracle discipline, no machine-readable fact contract, interactive-session oriented; the platform `luad` should feed, not fight |
 | [Luau official tooling](https://github.com/luau-lang/luau/blob/master/CLI/src/Compile.cpp) | Rich official dump for the Luau ecosystem | Luau is a separate, rapidly evolving bytecode system and cannot stand in for stock Lua |
+
+The [prior-art and corpus survey](docs/PRIOR-ART-AND-CORPORA.md) keeps a reproduced
+matrix of these tools against the same non-stock chunks; it is the public acceptance
+picture for every vendor profile.
 
 ### 1.4 Why current options are deficient
 
@@ -125,9 +129,10 @@ The primary product should be a self-documenting CLI rather than a GUI or TUI. T
 
 Development proceeds through customer-visible, public-boundary vertical slices rather
 than broad parser presence. The first promotion path qualifies the exact
-OpenWrt-derived Lua 5.1 LNUM32 target and the firmware-tree machine contract. Version
-1.0 then closes the same public contract independently for the exact stock PUC Lua
-5.1.5 64-bit layout and the final PUC Lua 5.4.9 release. No target inherits support
+OpenWrt-derived Lua 5.1 LNUM32 target and the firmware-tree machine contract, followed
+by the EdgeTX Lua 5.3.6 32-bit profile as the second vendor layout. Version 1.0 then
+closes the same public contract independently for the final PUC Lua 5.4.9 release and
+the exact stock PUC Lua 5.1.5 64-bit layout. No target inherits support
 from a nearby version, profile, or layout.
 
 Dynamic tracing, assembly, SSA, decompilation, persistent research state, and security
@@ -206,6 +211,10 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 - Qualify OpenWrt-derived Lua 5.1.5 profile `lua5.1-lnum32` with
   `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4` through a public,
   reproducible compiler authority.
+- Qualify EdgeTX Lua 5.3.6 profile `lua5.3-edgetx32` through the `edgetx-luac` host
+  compiler at a pinned EdgeTX revision, with 4-byte `int`, a 4-byte `size_t` header
+  slot, 4-byte instructions, 4-byte `lua_Integer`, 4-byte `lua_Number`, and `LUAC_NUM`
+  serialized as a single-precision float.
 - Qualify stock PUC Lua 5.1.5 profile `lua5.1` independently with
   `int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0`.
 - Qualify stock PUC Lua 5.4.9 profile `lua5.4` independently at format 0, with 4-byte
@@ -233,8 +242,8 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 
 ### 3.2 Post-version-1 goals
 
-- Independent qualification of additional stock Lua releases and Lua 5.1 layouts.
-- LuaJIT 2.0/2.1 and significant maintained forks as separate dialect modules.
+- Independent qualification of additional stock Lua releases, Lua 5.1 layouts, and
+  vendor profiles with a public compiler authority.
 - Configurable vendor chunk profiles and opcode mappings.
 - Richer data flow, liveness, reaching definitions, backward slicing, and SSA.
 - A canonical editable assembly representation and assembler.
@@ -249,7 +258,8 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 - Guaranteeing compilable decompiler output.
 - Executing analyzed chunks.
 - Defeating arbitrary virtualization, encryption, packing, or opcode randomization automatically.
-- Treating LuaJIT or Luau as ordinary stock-Lua versions.
+- Reading LuaJIT or Luau bytecode; both are separate bytecode systems outside the product.
+- Competing with decompilers or reverse-engineering platforms on breadth of dialect parsing.
 - Providing a GUI, TUI, IDE extension, or hosted web service.
 - Editing chunks in place.
 - Debugging native code generated by LuaJIT.
@@ -315,7 +325,8 @@ Requirement identifiers are stable references for design, implementation, tests,
 - **FR-INPUT-001:** Accept a regular file, standard input, or an explicit byte range within a file.
 - **FR-INPUT-002:** Compute and report input length and SHA-256 without altering input.
 - **FR-INPUT-003:** Detect intact stock-Lua signatures and version bytes.
-- **FR-INPUT-004:** Detect LuaJIT and Luau signatures once those dialects are supported.
+- **FR-INPUT-004:** Recognize LuaJIT and Luau signatures and report them as
+  out-of-scope formats with an actionable diagnostic, never as a parseable dialect.
 - **FR-INPUT-005:** Report all plausible formats with confidence and evidence when identification is ambiguous.
 - **FR-INPUT-006:** Permit an explicit dialect/version override without suppressing mismatch diagnostics.
 - **FR-INPUT-007:** Support an explicit base offset for chunks extracted from containers.
@@ -756,7 +767,7 @@ A dialect module contains:
 
 Stock releases are immutable named targets such as `lua5.4` and `lua5.5`. Patch releases that share a VM remain recorded as oracle/compiler versions even when they share one dialect implementation.
 
-LuaJIT is not implemented as `lua5.1 + extensions`; it receives its own chunk model and semantics module. Luau follows the same rule if supported later.
+Vendor profiles are never implemented as `stock + extensions`; each declares its own layout, and a chunk is read under a detected or explicitly selected profile. LuaJIT and Luau are separate bytecode systems outside the product and receive no chunk model here.
 
 ### 8.4 Vendor-profile extensibility
 
@@ -964,8 +975,10 @@ implying stock Lua 5.1 support. It requires:
 
 ### 13.2 Version 1.0
 
-Version 1.0 promotes the exact LNUM32, stock Lua 5.1.5 64-bit, and stock Lua 5.4.9
-targets in the canonical [release boundary](docs/RELEASING.md#frozen-version-1-boundary).
+Version 1.0 promotes exactly the four target identities in the canonical
+[release boundary](docs/RELEASING.md#frozen-version-1-boundary): OpenWrt-derived
+Lua 5.1.5 `lua5.1-lnum32`, EdgeTX Lua 5.3.6 `lua5.3-edgetx32`, stock PUC Lua 5.4.9
+`lua5.4`, and stock PUC Lua 5.1.5 `lua5.1`.
 It additionally requires:
 
 - enveloped command JSON and the other major-1 JSON families at schema major 1,
@@ -978,9 +991,9 @@ It additionally requires:
 - no open P0 correctness or security defect;
 - an explicit compatibility policy for exact dialect releases and profiles.
 
-Version 1.0 does not require Lua 5.2, 5.3, 5.5, LuaJIT, Luau, another Lua 5.1 layout,
-or another vendor profile. Breadth must not delay or dilute exact evidence for the
-support scope actually advertised.
+Version 1.0 does not require Lua 5.2, stock Lua 5.3, 5.5, another Lua 5.1 layout, or
+another vendor profile. LuaJIT and Luau are outside the product entirely. Breadth must
+not delay or dilute exact evidence for the support scope actually advertised.
 
 ## 14. Success metrics
 
@@ -1054,12 +1067,13 @@ Adoption is secondary to correctness, but useful signals include:
 - Versioned JSON/JSONL is the initial stable programmatic interface.
 - Static analysis never executes an input chunk.
 - The first promotable release candidate targets the exact OpenWrt-derived Lua 5.1.5
-  LNUM32 profile and firmware-tree workflow.
-- Version 1.0 additionally qualifies the exact stock PUC Lua 5.1.5 64-bit layout and
-  PUC Lua 5.4.9 target named by the roadmap.
-- Lua 5.2, 5.3, 5.5, additional Lua 5.1 layouts, and every other vendor profile remain
-  experimental until independently promoted.
-- LuaJIT and Luau require separate dialect families and an explicit post-release prioritization decision.
+  `lua5.1-lnum32` profile and firmware-tree workflow.
+- Version 1.0 additionally qualifies the EdgeTX Lua 5.3.6 `lua5.3-edgetx32` profile,
+  the final PUC Lua 5.4.9 `lua5.4` target, and the exact stock PUC Lua 5.1.5 64-bit
+  `lua5.1` layout named by the roadmap.
+- Lua 5.2, stock Lua 5.3, 5.5, additional Lua 5.1 layouts, and every other vendor
+  profile remain experimental until independently promoted.
+- LuaJIT and Luau are outside the product. They are separate bytecode systems, not dialect rows, and no roadmap stage may authorize reading them.
 - Decompilation is not part of version 1.
 - Losslessness, provenance, validation, and determinism are release requirements rather than optional polish.
 - Persistent researcher state, interpretations, hypotheses, and agent planning remain outside `luad`.
@@ -1073,7 +1087,7 @@ Adoption is secondary to correctness, but useful signals include:
 ### 16.2 Decisions required before expanding the post-1.0 scope
 
 1. Does the next dialect investment optimize for another stock-Lua correctness
-   reference or a prevalent reverse-engineering ecosystem such as LuaJIT?
+   reference or another vendor profile with a public compiler authority?
 2. Which additional target platforms need release binaries and scheduled compatibility runners?
 3. Which safety-limit values should become stable version-1 defaults?
 4. Which public schemas can freeze at version 1, and which dialect-specific records still require tagged extension points?
