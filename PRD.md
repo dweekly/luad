@@ -975,9 +975,10 @@ implying stock Lua 5.1 support. It requires:
 
 ### 13.2 Version 1.0
 
-Version 1.0 promotes the exact LNUM32, EdgeTX Lua 5.3.6 32-bit, stock Lua 5.4.9, and
-stock Lua 5.1.5 64-bit targets in the canonical
-[release boundary](docs/RELEASING.md#frozen-version-1-boundary).
+Version 1.0 promotes exactly the four target identities in the canonical
+[release boundary](docs/RELEASING.md#frozen-version-1-boundary): OpenWrt-derived
+Lua 5.1.5 `lua5.1-lnum32`, EdgeTX Lua 5.3.6 `lua5.3-edgetx32`, stock PUC Lua 5.4.9
+`lua5.4`, and stock PUC Lua 5.1.5 `lua5.1`.
 It additionally requires:
 
 - enveloped command JSON and the other major-1 JSON families at schema major 1,

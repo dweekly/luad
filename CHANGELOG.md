@@ -20,6 +20,15 @@ All notable changes will be documented here. The project has not yet made a prod
   5.3, and 5.5 header-width slice of Milestone 1; the sprint checkpoint stays neutral
   until that stage's pull request places the contract, per the contract lifecycle.
 
+### Testing
+
+- Added `test_target_boundary_agreement`, which holds the version-1 target boundary
+  together across the release procedure, roadmap, and product requirements. The frozen
+  boundary table is the authority; the test fails when another document names a
+  different profile set or count, or schedules an out-of-scope dialect as future work.
+  Verified by mutation: dropping a profile from the requirements and changing the
+  stated count each fail the test.
+
 ### Documentation
 
 - Added a tool-comparison matrix to `docs/PRIOR-ART-AND-CORPORA.md`: official `luac`,

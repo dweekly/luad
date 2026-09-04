@@ -212,6 +212,18 @@ Requirements:
 - Do not copy a decoder into its encoder and call the result independent.
 - Update capability status only after the dialect's named CI gate passes.
 
+## Cross-document facts
+
+A fact stated in more than one maintained document needs a test that holds the copies
+together, not a habit of updating them. The version-1 target boundary is held by
+`crates/luad-oracle/tests/test_target_boundary_agreement.rs`, which takes the frozen
+boundary table in `docs/RELEASING.md` as the authority and fails when the roadmap, the
+release order, or the product requirements name a different set, a different count, or
+schedule an out-of-scope dialect. Tool pins are held the same way by
+`test_bringup_pins.rs`, and the README dialect table by
+`test_capabilities_readme_status_consistency`. When you add a fact that two documents
+must agree on, add it to the matching test in the same change.
+
 ## Fixtures and provenance
 
 Bundled `.luac` files are evidence artifacts, not ordinary test data. Do not regenerate them casually.
