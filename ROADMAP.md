@@ -101,8 +101,8 @@ The roadmap does not assign equal weight to unequal work.
 |---|---:|---|---|
 | Layout truth and honest refusal | Large | First, before any feature work | Every declared width honoured end to end or refused by name in every dialect; consistency diagnostics; offset-anchored failures; declared-precision rendering |
 | Authority discipline and public corpora | Large | Version 1 | The producing compiler's listing as the oracle for stock and vendor profiles; independent second decoders; a generated, provenance-tracked stock corpus; negative controls everywhere |
-| Exact target fidelity, vendor first | Large | Version 1 | Serialized layouts, opcode semantics, and malformed-input behavior across four claimed targets, two of them vendor profiles |
-| Stable machine contract, minimal core | Medium | Version 1 | Typed facts, schemas, diagnostics, exit codes, and platform-independent scalar rendering for the smallest surface the niche needs |
+| Exact target fidelity, vendor first | Large | Version 1, after the contract freezes | Serialized layouts, opcode semantics, and malformed-input behavior across four claimed targets, two of them vendor profiles |
+| Stable machine contract, minimal core | Medium | Version 1, before any target is promoted | Typed facts, schemas, diagnostics, exit codes, and platform-independent scalar rendering for the smallest surface the niche needs |
 | Hostile-input robustness | Medium | Version 1, trimmed | Resource limits, fuzz targets with seeds, minimized regressions, and the public hostile-chunk corpus |
 | Distribution and release mechanics | Small | Already built | No further investment before 1.0; publish with what exists |
 | Structural navigation and comparison | Medium–large | Experimental in 1.0 | CFGs, xrefs, query, and diff stay available and labeled experimental until a post-1.0 contract promotes them |
@@ -115,11 +115,16 @@ The dependency order is:
 ```text
 layout truth: honour every declared width end to end or refuse by name
   -> authority generalization and the generated public stock corpus
-  -> exact targets in niche order: LNUM32, EdgeTX 5.3-32, stock 5.4.9, stock 5.1.5
   -> minimal stable machine contract
   -> hostile-input evidence and the public hostile-chunk corpus
+  -> exact targets in niche order: LNUM32, EdgeTX 5.3-32, stock 5.4.9, stock 5.1.5
   -> transfer and one frozen 1.0
 ```
+
+A target manifest binds to the exact tool revision that produced it, so the public
+contract and the boundedness tripwires freeze before any target is promoted against
+them. A later change to the stable contract requalifies every promoted target rather
+than inheriting its evidence.
 
 Accepted prerequisite gates are referenced by identity. A downstream milestone does
 not duplicate their semantic suites unless it owns a new interaction capable of
@@ -132,7 +137,7 @@ stage is one sprint contract in `docs/NEXT-SPRINT.md` and one pull request, foll
 the contract lifecycle in
 [the development workflow](docs/DEVELOPMENT-WORKFLOW.md#12-preservation-documentation-and-escalation):
 the stage's first commit replaces the checkpoint with its contract, and its last commit
-restores the checkpoint. A target-qualification stage (the four targets of Milestone 3)
+restores the checkpoint. A target-qualification stage (the four targets of Milestone 5)
 instead merges its contract as a separate planning change before any implementation,
 because its acceptance commands must be fixed before code. A stage is deleted from this
 list when its evidence is accepted: for most stages that is the merge of its pull
@@ -177,43 +182,43 @@ of the published artifacts. The list holds only unmet obligations.
 7. Milestone 2c: the internal layout re-emission generator and the NodeMCU authority,
    used to put the 32-bit and integral Lua 5.1 fixtures under recorded provenance, to
    produce cross-layout negative controls, and to seed the analysis fuzz targets.
-8. Milestone 3, LNUM32: contract (new candidate identity, authenticated authority and
-   patch series, prerequisite gates by identity), then implementation with the candidate
-   manifest retained in a GitHub release, the out-of-profile refusal proof, the
-   investigation-record template, and the internal uncoached investigation.
-9. Milestone 3, EdgeTX: contract (pinned EdgeTX revision and `edgetx-luac` build recipe,
-   the `lua5.3-edgetx32` profile and layout, the consistency-diagnostic rule for
-   host-built long strings, GPLv2 sdcard inputs recorded per case), then the
-   implementation that turns the survey matrix row green with `luad` the only tool that
-   also names the inconsistency, and symmetric rejection against stock 5.3.
-10. Milestone 3, Lua 5.4.9: contract (pinned archive and compilers, the 5.4.8-to-5.4.9
-    delta review), then the 5.4.9 release gate over the generated corpus and its
-    candidate dispatch.
-11. Milestone 3, stock Lua 5.1.5: contract, then the stock release gate and its
-    candidate dispatch.
-12. Milestone 4a: `capabilities --format json --evidence` distinguishes implementation
+8. Milestone 3a: `capabilities --format json --evidence` distinguishes implementation
     presence, experimental evidence, and exact promoted targets, fed by recorded gate
     results, and lists LuaJIT and Luau as out of scope.
-13. Milestone 4b: the machine-contract qualification gate for the stable core
+9. Milestone 3b: the machine-contract qualification gate for the stable core
     (`inspect`, `disasm`, `validate`, `export`, `capabilities`, `diagnostics`,
     `schema`) becomes a required routine CI job, every JSON/JSONL example in the
     documentation executes against the live schemas in a test, the remaining commands
     carry an experimental label on every surface, and the partial-facts truncation
     marker ships as an experimental flag.
-14. Milestone 4c: the 1.x compatibility policy in the machine-interface reference and
+10. Milestone 3c: the 1.x compatibility policy in the machine-interface reference and
     the release-notes compatibility statement template in the release procedure.
-15. Milestone 5a: runtime and peak-memory tripwires for the five named workloads, each a
+11. Milestone 4a: runtime and peak-memory tripwires for the five named workloads, each a
     falsifiable assertion with its threshold defined once and documented.
-16. Milestone 5b: a seed corpus for every maintained fuzz target, drawn from the
+12. Milestone 4b: a seed corpus for every maintained fuzz target, drawn from the
     generated corpus, and one representative time-bounded fuzz campaign with a retained
     artifact and the published configuration, corpus identity, and result format for
     the evidence bundle.
-17. Milestone 5c: the chunk mutator with a ground-truth manifest per variant, and
+13. Milestone 4c: the chunk mutator with a ground-truth manifest per variant, and
     Prometheus-generated control-flow-flattened inputs at each preset strength as
     analysis stress cases.
-18. Milestone 5d: the public hostile-chunk corpus in its own repository with a
+14. Milestone 4d: the public hostile-chunk corpus in its own repository with a
     provenance manifest per chunk, seeded from fuzz findings, width probes, and mutator
     output, and the upstream offer to the corpus that OSS-Fuzz's Lua project clones.
+15. Milestone 5, LNUM32: contract (new candidate identity, authenticated authority and
+    patch series, prerequisite gates by identity), then implementation with the candidate
+    manifest retained in a GitHub release, the out-of-profile refusal proof, the
+    investigation-record template, and the internal uncoached investigation.
+16. Milestone 5, EdgeTX: contract (pinned EdgeTX revision and `edgetx-luac` build recipe,
+    the `lua5.3-edgetx32` profile and layout, the consistency-diagnostic rule for
+    host-built long strings, GPLv2 sdcard inputs recorded per case), then the
+    implementation that turns the survey matrix row green with `luad` the only tool that
+    also names the inconsistency, and symmetric rejection against stock 5.3.
+17. Milestone 5, Lua 5.4.9: contract (pinned archive and compilers, the 5.4.8-to-5.4.9
+    delta review), then the 5.4.9 release gate over the generated corpus and its
+    candidate dispatch.
+18. Milestone 5, stock Lua 5.1.5: contract, then the stock release gate and its
+    candidate dispatch.
 19. Milestone 6a: README reduction, one firmware-researcher guide, one machine-consumer
     example that cross-checks published facts against unluac-rs or rizin, exact-version
     format notes, and the fresh-session transfer record.
@@ -291,7 +296,77 @@ build recipe, and platform.
 
 Stop condition: no fixture without recorded provenance remains referenced by a gate.
 
-### Milestone 3 — exact targets in niche order
+### Milestone 3 — minimal stable machine contract
+
+Outcome: a shell script, Lua developer, or AI agent can consume one small, documented
+interface throughout the 1.x line.
+
+Required work:
+
+- freeze the stable core at `inspect`, `disasm`, `validate`, and `export`, plus
+  `capabilities`, `diagnostics`, and `schema`; keep CFG, xrefs, query, diff, explain,
+  callees, origins, and relations available and labeled experimental;
+- stabilize command discovery, schemas, envelopes, interpretation identity,
+  diagnostics, exit codes, stdout/stderr separation, pagination, and resource-limit
+  reporting for the stable core;
+- retain recursive batch export with per-input outcomes and explicit fact-family
+  selection;
+- add an experimental partial-facts mode that emits every fact up to a failure with an
+  explicit truncation marker, so a firmware triage never receives nothing;
+- make every JSON/JSONL example executable against the same schemas as live output;
+- define the 1.x compatibility policy for closed variants, open vocabularies, additive
+  fields, schema-major changes, target identities, and prototype-content schemes; and
+- ensure `luad capabilities --format json --evidence` distinguishes implementation
+  presence, experimental evidence, and exact promoted targets, and lists LuaJIT and
+  Luau as out of scope rather than planned.
+
+Evidence boundary: one machine-contract qualification gate exercises every stable
+command and format at the public CLI, validates live output against schemas, compares
+shared facts across text/JSON/JSONL consumers, and includes corruption controls.
+
+Stop condition: after this milestone, an incompatible change to the stable core
+requires an explicit schema-major or CLI-major qualification contract; experimental
+surfaces may still change with a changelog entry.
+
+### Milestone 4 — hostile-input evidence and the public hostile-chunk corpus
+
+Outcome: every target candidate crosses the same boundedness and fuzzing tripwires,
+and the malformed chunks that prove it are published for everyone.
+
+Required work:
+
+- audit every parser allocation and recursive or traversal boundary against declared
+  resource limits;
+- exercise detection, every parser in the support matrix, post-parse analysis, and
+  text/JSON rendering through maintained fuzz targets, each with a seed corpus;
+- turn every crash, timeout, excessive allocation, or inconsistent verdict into a
+  minimized redistributable regression;
+- build a chunk mutator that writes a ground-truth manifest beside each variant
+  (constant reordering, dead slots, stripped or restored debug info, permuted opcode
+  tables via a map, swapped constant tags, re-emission under another layout), so
+  expected facts are known by construction;
+- generate labeled control-flow-flattened inputs with Prometheus over this
+  repository's own sources, at each preset strength, as analysis stress cases;
+- publish the hostile-chunk corpus in its own public repository, one provenance
+  manifest per chunk, seeded from fuzz findings, width probes, and mutator output, and
+  offer it upstream to the corpus that OSS-Fuzz's Lua project clones;
+- record runtime and peak-memory tripwires for small input, a large instruction vector,
+  deep prototypes, long strings, and the firmware-scale mixed workflow; and
+- retain bounded fuzz smoke in routine CI and run one representative time-bounded
+  campaign on the 1.0 candidate.
+
+Deferred from the 1.0 path: runner isolation for public-fork pull requests waits for
+the first external pull request; the standalone security-review packet folds into the
+release procedure's checklist.
+
+Evidence boundary: CI proves that every maintained target executes under the common
+smoke envelope, each tripwire has a falsifiable assertion, and the published corpus
+reproduces every retained regression.
+
+Stop condition: any known panic, unbounded allocation or traversal defect, unexplained
+timeout, or P0 correctness or security defect blocks qualification.
+
+### Milestone 5 — exact targets in niche order
 
 Outcome: the promotion machinery proves two vendor profiles and two stock targets, in
 the order that serves the unfilled niche first.
@@ -339,76 +414,6 @@ check close over one revision with zero required skips.
 Stop condition: promote exactly the four named profiles and layouts. Capability and
 documentation records name each exact layout and never collapse into a broad
 `Lua 5.x supported` claim.
-
-### Milestone 4 — minimal stable machine contract
-
-Outcome: a shell script, Lua developer, or AI agent can consume one small, documented
-interface throughout the 1.x line.
-
-Required work:
-
-- freeze the stable core at `inspect`, `disasm`, `validate`, and `export`, plus
-  `capabilities`, `diagnostics`, and `schema`; keep CFG, xrefs, query, diff, explain,
-  callees, origins, and relations available and labeled experimental;
-- stabilize command discovery, schemas, envelopes, interpretation identity,
-  diagnostics, exit codes, stdout/stderr separation, pagination, and resource-limit
-  reporting for the stable core;
-- retain recursive batch export with per-input outcomes and explicit fact-family
-  selection;
-- add an experimental partial-facts mode that emits every fact up to a failure with an
-  explicit truncation marker, so a firmware triage never receives nothing;
-- make every JSON/JSONL example executable against the same schemas as live output;
-- define the 1.x compatibility policy for closed variants, open vocabularies, additive
-  fields, schema-major changes, target identities, and prototype-content schemes; and
-- ensure `luad capabilities --format json --evidence` distinguishes implementation
-  presence, experimental evidence, and exact promoted targets, and lists LuaJIT and
-  Luau as out of scope rather than planned.
-
-Evidence boundary: one machine-contract qualification gate exercises every stable
-command and format at the public CLI, validates live output against schemas, compares
-shared facts across text/JSON/JSONL consumers, and includes corruption controls.
-
-Stop condition: after this milestone, an incompatible change to the stable core
-requires an explicit schema-major or CLI-major qualification contract; experimental
-surfaces may still change with a changelog entry.
-
-### Milestone 5 — hostile-input evidence and the public hostile-chunk corpus
-
-Outcome: every target candidate crosses the same boundedness and fuzzing tripwires,
-and the malformed chunks that prove it are published for everyone.
-
-Required work:
-
-- audit every parser allocation and recursive or traversal boundary against declared
-  resource limits;
-- exercise detection, every parser in the support matrix, post-parse analysis, and
-  text/JSON rendering through maintained fuzz targets, each with a seed corpus;
-- turn every crash, timeout, excessive allocation, or inconsistent verdict into a
-  minimized redistributable regression;
-- build a chunk mutator that writes a ground-truth manifest beside each variant
-  (constant reordering, dead slots, stripped or restored debug info, permuted opcode
-  tables via a map, swapped constant tags, re-emission under another layout), so
-  expected facts are known by construction;
-- generate labeled control-flow-flattened inputs with Prometheus over this
-  repository's own sources, at each preset strength, as analysis stress cases;
-- publish the hostile-chunk corpus in its own public repository, one provenance
-  manifest per chunk, seeded from fuzz findings, width probes, and mutator output, and
-  offer it upstream to the corpus that OSS-Fuzz's Lua project clones;
-- record runtime and peak-memory tripwires for small input, a large instruction vector,
-  deep prototypes, long strings, and the firmware-scale mixed workflow; and
-- retain bounded fuzz smoke in routine CI and run one representative time-bounded
-  campaign on the 1.0 candidate.
-
-Deferred from the 1.0 path: runner isolation for public-fork pull requests waits for
-the first external pull request; the standalone security-review packet folds into the
-release procedure's checklist.
-
-Evidence boundary: CI proves that every maintained target executes under the common
-smoke envelope, each tripwire has a falsifiable assertion, and the published corpus
-reproduces every retained regression.
-
-Stop condition: any known panic, unbounded allocation or traversal defect, unexplained
-timeout, or P0 correctness or security defect blocks qualification.
 
 ### Milestone 6 — transfer and one frozen 1.0
 
@@ -556,6 +561,8 @@ decisions.
 - Silent incorrect answers interrupt planned feature work. A lying header reported
   valid is a silent incorrect answer.
 - A vendor profile enters only with a public authority compiler or GPL source drop.
+- No target is promoted before the stable contract and the boundedness tripwires freeze;
+  changing either afterwards requalifies every promoted target.
 - Release infrastructure is complete for 1.0 except the production publication mode;
   it absorbs no other work before the release.
 - Schema promotion precedes compatibility promises. Experimental fields and commands

@@ -129,9 +129,10 @@ The primary product should be a self-documenting CLI rather than a GUI or TUI. T
 
 Development proceeds through customer-visible, public-boundary vertical slices rather
 than broad parser presence. The first promotion path qualifies the exact
-OpenWrt-derived Lua 5.1 LNUM32 target and the firmware-tree machine contract. Version
-1.0 then closes the same public contract independently for the exact stock PUC Lua
-5.1.5 64-bit layout and the final PUC Lua 5.4.9 release. No target inherits support
+OpenWrt-derived Lua 5.1 LNUM32 target and the firmware-tree machine contract, followed
+by the EdgeTX Lua 5.3.6 32-bit profile as the second vendor layout. Version 1.0 then
+closes the same public contract independently for the final PUC Lua 5.4.9 release and
+the exact stock PUC Lua 5.1.5 64-bit layout. No target inherits support
 from a nearby version, profile, or layout.
 
 Dynamic tracing, assembly, SSA, decompilation, persistent research state, and security
@@ -324,7 +325,8 @@ Requirement identifiers are stable references for design, implementation, tests,
 - **FR-INPUT-001:** Accept a regular file, standard input, or an explicit byte range within a file.
 - **FR-INPUT-002:** Compute and report input length and SHA-256 without altering input.
 - **FR-INPUT-003:** Detect intact stock-Lua signatures and version bytes.
-- **FR-INPUT-004:** Detect LuaJIT and Luau signatures once those dialects are supported.
+- **FR-INPUT-004:** Recognize LuaJIT and Luau signatures and report them as
+  out-of-scope formats with an actionable diagnostic, never as a parseable dialect.
 - **FR-INPUT-005:** Report all plausible formats with confidence and evidence when identification is ambiguous.
 - **FR-INPUT-006:** Permit an explicit dialect/version override without suppressing mismatch diagnostics.
 - **FR-INPUT-007:** Support an explicit base offset for chunks extracted from containers.
@@ -765,7 +767,7 @@ A dialect module contains:
 
 Stock releases are immutable named targets such as `lua5.4` and `lua5.5`. Patch releases that share a VM remain recorded as oracle/compiler versions even when they share one dialect implementation.
 
-LuaJIT is not implemented as `lua5.1 + extensions`; it receives its own chunk model and semantics module. Luau follows the same rule if supported later.
+Vendor profiles are never implemented as `stock + extensions`; each declares its own layout, and a chunk is read under a detected or explicitly selected profile. LuaJIT and Luau are separate bytecode systems outside the product and receive no chunk model here.
 
 ### 8.4 Vendor-profile extensibility
 
@@ -973,8 +975,9 @@ implying stock Lua 5.1 support. It requires:
 
 ### 13.2 Version 1.0
 
-Version 1.0 promotes the exact LNUM32, stock Lua 5.1.5 64-bit, and stock Lua 5.4.9
-targets in the canonical [release boundary](docs/RELEASING.md#frozen-version-1-boundary).
+Version 1.0 promotes the exact LNUM32, EdgeTX Lua 5.3.6 32-bit, stock Lua 5.4.9, and
+stock Lua 5.1.5 64-bit targets in the canonical
+[release boundary](docs/RELEASING.md#frozen-version-1-boundary).
 It additionally requires:
 
 - enveloped command JSON and the other major-1 JSON families at schema major 1,
@@ -987,9 +990,9 @@ It additionally requires:
 - no open P0 correctness or security defect;
 - an explicit compatibility policy for exact dialect releases and profiles.
 
-Version 1.0 does not require Lua 5.2, 5.3, 5.5, LuaJIT, Luau, another Lua 5.1 layout,
-or another vendor profile. Breadth must not delay or dilute exact evidence for the
-support scope actually advertised.
+Version 1.0 does not require Lua 5.2, stock Lua 5.3, 5.5, another Lua 5.1 layout, or
+another vendor profile. LuaJIT and Luau are outside the product entirely. Breadth must
+not delay or dilute exact evidence for the support scope actually advertised.
 
 ## 14. Success metrics
 
@@ -1068,7 +1071,7 @@ Adoption is secondary to correctness, but useful signals include:
   PUC Lua 5.4.9 target named by the roadmap.
 - Lua 5.2, 5.3, 5.5, additional Lua 5.1 layouts, and every other vendor profile remain
   experimental until independently promoted.
-- LuaJIT and Luau require separate dialect families and an explicit post-release prioritization decision.
+- LuaJIT and Luau are outside the product. They are separate bytecode systems, not dialect rows, and no roadmap stage may authorize reading them.
 - Decompilation is not part of version 1.
 - Losslessness, provenance, validation, and determinism are release requirements rather than optional polish.
 - Persistent researcher state, interpretations, hypotheses, and agent planning remain outside `luad`.
@@ -1082,7 +1085,7 @@ Adoption is secondary to correctness, but useful signals include:
 ### 16.2 Decisions required before expanding the post-1.0 scope
 
 1. Does the next dialect investment optimize for another stock-Lua correctness
-   reference or a prevalent reverse-engineering ecosystem such as LuaJIT?
+   reference or another vendor profile with a public compiler authority?
 2. Which additional target platforms need release binaries and scheduled compatibility runners?
 3. Which safety-limit values should become stable version-1 defaults?
 4. Which public schemas can freeze at version 1, and which dialect-specific records still require tagged extension points?

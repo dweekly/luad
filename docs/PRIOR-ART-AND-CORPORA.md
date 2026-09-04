@@ -262,10 +262,11 @@ moonscript, argparse.
 LuaJIT `-b` output (`ESC L J` magic, `BCDUMP_VERSION`, flags `BE`, `STRIP`, `FFI`;
 [bcsave.lua](https://github.com/LuaJIT/LuaJIT/blob/v2.1/src/jit/bcsave.lua)), Cocos2d-x
 `luacompile -e -k KEY -b SIGN` XXTEA envelopes
-([reference](https://github.com/xpol/lua-cocos2d-x-xxtea)), and OpenResty belong to the
-LuaJIT product decision in `ROADMAP.md`, not to the stock matrix.
-[luajit-decompiler-v2](https://github.com/marsinator358/luajit-decompiler-v2) is the
-reference implementation to test against if that decision is taken.
+([reference](https://github.com/xpol/lua-cocos2d-x-xxtea)), and OpenResty are LuaJIT
+bytecode, which is outside the product: a separate container, instruction set, and
+runtime authority. They are listed here so a reader recognizes them and stops, not as
+candidates. [luajit-decompiler-v2](https://github.com/marsinator358/luajit-decompiler-v2)
+is the tool to use on them.
 
 ### 4e. Hostile-chunk generators
 
