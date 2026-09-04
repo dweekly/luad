@@ -30,7 +30,7 @@ Today, answering these questions usually requires a collection of version-specif
 
 Lua's bytecode is an internal implementation format rather than a stable cross-version interchange format. Lua's own documentation states that the virtual machine is likely to change between versions and that precompiled programs from one version will not load in another. Lua 5.1 encoded host details such as endianness, word sizes, and numeric representation in its header. Later releases changed both the serialized chunk layout and instruction encoding. LuaJIT, OpenResty LuaJIT, and Luau use distinct formats and instruction sets rather than merely adding a few opcodes.
 
-The product opportunity is therefore not “another Lua decompiler.” It is a trustworthy, explainable bytecode analysis tool that establishes facts first and makes higher-level analysis auditable.
+Parsing, disassembly, and decompilation of that bytecode are commodities: rizin, unluac, and unluac-rs already read it, including embedded 32-bit layouts. Verification is not. No tool proves its output against the producing compiler with negative controls, none reports a header that contradicts its body, and no public corpus of malformed chunks or licensed bytecode exists. The product opportunity is the Lua bytecode verifier and fact source: honest refusal that names the lying field, an authority discipline behind every claim, public corpora that make the claim testable, and a machine contract that decompilers, devirtualizers, and reverse-engineering platforms consume rather than compete with.
 
 ### 1.2 Who needs it
 
@@ -72,13 +72,17 @@ The existing ecosystem contains valuable components but no complete solution.
 | [OpenResty LuaJIT](https://github.com/openresty/luajit2) bytecode listing | Adds source-line and constant-table improvements useful to OpenResty users | Specific to that runtime family; not a general cross-version format reader |
 | [ChunkSpy](https://github.com/viruscamp/luadec/blob/master/ChunkSpy/ChunkSpy51.lua) | Excellent historical binary-inspection model: offsets, raw bytes, profiles, rewriting, and source merging | Primarily Lua 5.0/5.1 and no longer covers modern formats |
 | [LuaDec](https://github.com/viruscamp/luadec) | Widely known Lua 5.1 decompiler with disassembly and recompilation comparison | Experimental for 5.2/5.3 and no support for modern Lua; decompiler-oriented architecture |
-| [unluac](https://github.com/Jeong-Min-Cho/unluac) | Established stock-Lua decompiler lineage, claiming Lua 5.0-5.4 | Source reconstruction depends heavily on debug information and has known stripped-bytecode and complex-control-flow limitations |
-| [unluac-rs](https://github.com/x3zvawq/unluac-rs) | Broad modern claim: Lua 5.1-5.5, LuaJIT 2.1, and Luau; Rust, CFG/dominator analysis, CLI, library, and Wasm | Self-described as testing-stage; breadth and decompilation quality are not yet substitutes for independently proven lossless disassembly |
-| [luac-parser-rs](https://github.com/metaworm/luac-parser-rs) | Memory-safe parser foundation for Lua 5.1-5.4, LuaJIT, and Luau | No advertised Lua 5.5 support and historically coupled to a separate decompiler workflow |
-| [cLuaDecompiler](https://github.com/Coldzer0/LuaDecompiler) | Promising version-aware disassembly, CFG/SSA, custom opcode tables, and validation workflow | Young, lightly proven, AGPL-licensed, and based on a less commonly embedded Free Pascal stack |
+| [unluac](https://sourceforge.net/projects/unluac/) (Java) and the [Jeong-Min-Cho fork](https://github.com/Jeong-Min-Cho/unluac) | Established stock-Lua decompiler lineage; honours declared header widths end to end, so it reads embedded 32-bit layouts correctly; the fork adds `--opmap` and `--typemap` for modified VMs | Decompiler-first; malformed input surfaces as a Java exception without an offset; no oracle or negative controls; source reconstruction depends on debug information |
+| [unluac-rs](https://github.com/x3zvawq/unluac-rs) | MIT, actively maintained Rust decompiler for Lua 5.1-5.5, LuaJIT, and Luau with CFG/dominator analysis, CLI, library, and Wasm; honours declared widths and names the offset and tag on malformed input | Decompiler-first; widens 4-byte floats to double before printing; no differential oracle, negative controls, or machine contract; the closest neighbour and a candidate independent second decoder |
+| [luac-parser-rs](https://github.com/metaworm/luac-parser-rs) | Memory-safe parser foundation for Lua 5.1-5.4, LuaJIT, and Luau; custom parsers compile to WASM and are hot-loaded by a hosted decompiler | No license file; no Lua 5.5; requires nightly Rust; accepts embedded headers and then fails inside the body |
+| [LuaDecompiler](https://github.com/Coldzer0/LuaDecompiler) (Free Pascal) | Disassembler and decompiler claiming Lua 5.1 through 5.5 with custom opcode tables | AGPL-licensed, lightly proven, and based on a less commonly embedded stack |
 | [LuaJIT Decompiler v2](https://github.com/marsinator358/luajit-decompiler-v2) | Strong dedicated LuaJIT source-recovery candidate with stripped-bytecode support | Windows-oriented, decompiler-first, and still lists big-endian support as unfinished |
-| [radare2 Lua support](https://github.com/radareorg/radare2-book/blob/master/src/arch/plugins.md) | General reverse-engineering navigation, graphs, scripting, and analysis concepts | Lua support is not a complete modern multi-version Lua analysis implementation |
+| [rizin](https://github.com/rizinorg/rizin) | Native `luac` architecture with per-version ISA tables for Lua 5.0 through 5.5 and LuaJIT, a loader, and rizin's CFG, xref, and graph machinery | Refuses non-stock headers by name and then falls back to disassembling the bytes as native code; no oracle discipline, no machine-readable fact contract, interactive-session oriented; the platform `luad` should feed, not fight |
 | [Luau official tooling](https://github.com/luau-lang/luau/blob/master/CLI/src/Compile.cpp) | Rich official dump for the Luau ecosystem | Luau is a separate, rapidly evolving bytecode system and cannot stand in for stock Lua |
+
+The [prior-art and corpus survey](docs/PRIOR-ART-AND-CORPORA.md) keeps a reproduced
+matrix of these tools against the same non-stock chunks; it is the public acceptance
+picture for every vendor profile.
 
 ### 1.4 Why current options are deficient
 
@@ -249,7 +253,8 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 - Guaranteeing compilable decompiler output.
 - Executing analyzed chunks.
 - Defeating arbitrary virtualization, encryption, packing, or opcode randomization automatically.
-- Treating LuaJIT or Luau as ordinary stock-Lua versions.
+- Reading LuaJIT or Luau bytecode; both are separate bytecode systems outside the product.
+- Competing with decompilers or reverse-engineering platforms on breadth of dialect parsing.
 - Providing a GUI, TUI, IDE extension, or hosted web service.
 - Editing chunks in place.
 - Debugging native code generated by LuaJIT.

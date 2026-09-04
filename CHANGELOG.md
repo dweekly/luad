@@ -4,6 +4,22 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ## Unreleased
 
+### Release planning
+
+- Refocused the roadmap on the verifier-and-fact-source niche: layout truth (every
+  declared header width honoured or refused by name) is Milestone 1 and precedes all
+  feature work; the differential oracle generalizes to the producing compiler's listing
+  with unluac and unluac-rs as independent second decoders; the stock regression corpus
+  is generated from the per-release official test suites; the 1.0 boundary gains EdgeTX
+  Lua 5.3 32-bit as a fourth target; the 1.0 stable contract shrinks to `inspect`,
+  `disasm`, `validate`, `export`, `capabilities`, `diagnostics`, and `schema`; the
+  hostile-chunk corpus becomes a public artifact; LuaJIT and Luau move from planned to
+  out of scope; no further release infrastructure is built before 1.0. The PRD's
+  prior-art table now describes rizin, unluac, unluac-rs, luac-parser-rs, and
+  LuaDecompiler as measured. The release execution sequence now opens with the Lua 5.2,
+  5.3, and 5.5 header-width slice of Milestone 1; the sprint checkpoint stays neutral
+  until that stage's pull request places the contract, per the contract lifecycle.
+
 ### Documentation
 
 - Added a tool-comparison matrix to `docs/PRIOR-ART-AND-CORPORA.md`: official `luac`,
