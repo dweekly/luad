@@ -90,7 +90,7 @@ This table describes code present in the repository, not verified support status
 | Lua 5.3 | 47 | Yes | Experimental; proof gates incomplete |
 | Lua 5.4 | 83 | Yes | Experimental; public disassembly, validation, analysis, lossless, and machine-contract evidence exists; exact target promotion remains pending |
 | Lua 5.5 | 85 | Yes | Experimental; independent proof gates incomplete |
-| LuaJIT 2.x | — | No | Out of scope; the capability manifest still lists it as planned until the machine-contract milestone retires the entry |
+| LuaJIT 2.x | — | No | Not supported and out of scope for the product; the capability manifest still reports the Planned tier until the machine-contract milestone retires the entry |
 
 The embedded Lua 5.1 release scope is driven by a 252-file TP-Link corpus: header-declared 32-bit `size_t`, an explicit LNUM profile, correct closure-binding records, precise offsets, and inline resolved constants. Private-corpus results supplement—but never replace—redistributable fixtures and public-boundary proof. See the [embedded-firmware requirements](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md).
 
