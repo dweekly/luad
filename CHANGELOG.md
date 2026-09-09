@@ -6,6 +6,13 @@ All notable changes will be documented here. The project has not yet made a prod
 
 ### Release planning
 
+- Focused the 1.0 roadmap on a complete extracted-firmware workflow and two exact
+  profiles: OpenWrt LNUM32 and stock Lua 5.1.5. Deferred EdgeTX, stock 5.4.9, broad
+  corpus generators, and partial-facts recovery; moved executable walkthroughs and an
+  outside researcher trial before interface freeze. Aligned the PRD and release policy,
+  bounded diagnostic claims to observable evidence, and replaced exclusivity goals
+  with task-specific tool handoffs and upstream cooperation.
+
 - Refocused the roadmap on the verifier-and-fact-source niche: layout truth (every
   declared header width honoured or refused by name) is Milestone 1 and precedes all
   feature work; the differential oracle generalizes to the producing compiler's listing

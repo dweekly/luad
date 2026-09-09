@@ -2,587 +2,414 @@
 
 Status: authoritative product direction.
 
-Fresh as of: 2026-09-03.
+Fresh as of: 2026-09-06.
 
 Product requirements live in [PRD.md](PRD.md). Exact implementation and acceptance
-details live only in [the active sprint](docs/NEXT-SPRINT.md). This roadmap orders
-future obligations; it does not promote a target, authorize product work, or replace an
-executable gate.
+commands belong in [the active sprint](docs/NEXT-SPRINT.md). This roadmap orders
+future obligations; it does not promote a target or authorize product implementation.
 
 ## Destination
 
-`luad` 1.0 will be the Lua bytecode verifier and fact source: the tool that tells the
-truth about a chunk's layout and internal consistency across every Lua release and
-vendor layout, proves each claim against the producing compiler's own listing with
-negative controls, exports those facts under a stable machine contract, and publishes
-the corpora that let anyone test the claim. It turns untrusted compiled chunks into
-exact, auditable facts for humans, scripts, and AI agents without executing the input,
-and equivalent inputs and options produce byte-for-byte deterministic output on every
-advertised host.
+`luad` 1.0 will be a dependable companion for investigating Lua inside extracted
+firmware. A researcher will identify an explicitly qualified bytecode profile, retrieve
+useful facts with byte-level evidence, account for unreadable or unsupported files,
+and continue in a preferred decompiler or reverse-engineering platform without writing
+a parser.
 
-Parsing, disassembly, and decompilation are commodities in this ecosystem. Three things
-are not, and everything below is ordered by how directly it serves them:
+The release will serve one complete firmware workflow before adding target breadth:
 
-1. **honest refusal**: a chunk whose body contradicts its header is never reported
-   valid, and every refusal names the field, the declared value, and the offset;
-2. **an authority discipline**: every public claim is proven against the producing
-   compiler's listing plus an independent decoder, with a negative control; and
-3. **public corpora**: the stock regression corpus, the vendor-layout matrix, and the
-   hostile-chunk corpus are published so the claim is testable by anyone.
+1. inventory a mixed extracted tree by content, including compiled chunks named `.lua`
+   or `.luac`, source files, malformed chunks, and unsupported layouts;
+2. find a literal or global lookup and inspect the relevant instructions, prototypes,
+   constants, and closure bindings;
+3. export only the needed fact families while preserving artifact and interpretation
+   identity, offsets, explicit limits, and a terminal outcome for every input; and
+4. reproduce a finding from the original bytes and hand a compatible chunk to an
+   external tool for source reconstruction or a broader investigation.
 
-The public product should feel consistent with Lua itself: narrow claims, exact version
-names, portable behavior, plain documentation, liberal licensing, and releases that are
-easy to download and verify. The proof machinery can remain detailed internally; a user
-should need only the support matrix, command reference, limitations, checksums, and one
-evidence link. The [prior-art and corpus survey](docs/PRIOR-ART-AND-CORPORA.md) is the
-public acceptance picture: its tool-comparison matrix must show `luad` as the only row
-that reads every column correctly and names the inconsistency in the one that lies.
+The differentiator will be this useful combination of exact firmware profiles,
+reproducible evidence, bounded behavior, and a documented machine interface. Release
+acceptance will not depend on being the first or only tool with a capability. An
+upstream project fixing a defect will strengthen the workflow rather than invalidate
+our reason to ship.
 
 ### Version 1 support boundary
 
-Version 1.0 will promote only the independently qualified targets in the canonical
-[release boundary](docs/RELEASING.md#frozen-version-1-boundary):
+Version 1.0 will promote exactly two independently qualified targets, as defined by the
+canonical [release boundary](docs/RELEASING.md#frozen-version-1-boundary):
 
 1. OpenWrt-derived Lua 5.1.5 profile `lua5.1-lnum32` with
    `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4`;
-2. EdgeTX Lua 5.3.6 profile `lua5.3-edgetx32` with 4-byte `int`, a 4-byte `size_t`
-   header slot, 4-byte instructions, 4-byte `lua_Integer`, 4-byte `lua_Number`, and
-   `LUAC_NUM` serialized as a single-precision float, as produced by the EdgeTX
-   `edgetx-luac` host compiler at a pinned revision;
-3. stock PUC Lua 5.4.9 profile `lua5.4`, format 0, with 4-byte instructions, 8-byte
-   `lua_Integer`, 8-byte `lua_Number`, and the pinned official compiler's standard
-   little-endian representation; and
-4. stock PUC Lua 5.1.5 profile `lua5.1` with
+2. stock PUC Lua 5.1.5 profile `lua5.1` with
    `int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0`.
 
-[Lua 5.4.9](https://www.lua.org/versions.html) replaces 5.4.8 as the forward-looking
-1.0 target because it is the final Lua 5.4 bug-fix release. Accepted 5.4.8 evidence may
-be a prerequisite where the exact 5.4.9 qualification contract proves the relevant
-format and opcode facts unchanged, but it cannot by itself promote 5.4.9.
+Passing LNUM32 will not imply stock Lua 5.1 support. Each profile, numeric
+representation, word size, and byte order remains a separate claim. EdgeTX Lua 5.3
+32-bit, stock Lua 5.4.9, Lua 5.2, stock 5.3, 5.5, and other layouts or vendor profiles
+will remain experimental or unsupported until their own post-1.0 contracts pass.
 
-Each profile and layout is a separate claim. Passing LNUM32 never implies stock Lua 5.1
-support, passing EdgeTX never implies stock Lua 5.3 support, and passing one stock
-layout never implies a different numeric representation, word size, or byte order.
-Lua 5.2, stock 5.3, 5.5, other stock layouts, and other vendor profiles remain
-experimental or unsupported until their own post-1.0 contracts pass. LuaJIT and Luau
-are out of scope.
-
-The 1.0 distribution boundary is Linux x86-64 and macOS arm64. Additional package
-targets require their own build and smoke evidence but do not broaden the bytecode
-support matrix.
+The package boundary will remain Linux x86-64 and macOS arm64, distributed through
+verified GitHub release archives. Additional package platforms will require build and
+smoke evidence without broadening the bytecode support claim.
 
 ## Product boundaries
 
-`luad` owns:
+`luad` will own hostile-input parsing, explicit profile selection, validated layouts,
+lossless byte provenance, physical instruction roles, typed operands, constants,
+closure bindings, structural validation, and deterministic text/JSON/JSONL export.
 
-- hostile-input parsing, layout detection, validation, and lossless byte provenance;
-- header-versus-body consistency: every declared width honoured on every surface or
-  refused by name, never assumed;
-- version-specific instruction decoding, physical roles, operands, constants, effects,
-  targets, source locations, and closure bindings;
-- deterministic text plus versioned JSON and JSONL contracts;
-- structural navigation through prototypes, cross-references, control flow, queries,
-  exports, and exact comparisons; and
-- explicit evidence for every public support claim, including the public corpora that
-  evidence is drawn from.
+Verification will mean consistency with the selected format and the named checks.
+It will not establish safe execution, the producer's intent, or a unique origin from
+ambiguous bytes. A diagnostic will name the observed failure and exact location;
+attributing it to a contradicted header field will require evidence of that
+contradiction. Unknown causes will remain unknown. Merely changing a header byte does
+not prove a contradiction if the affected representation is unused in that chunk.
 
-`luad` will not own decompilation, guessed source reconstruction, security policy,
+Firmware extraction, decompilation, source reconstruction, security policy,
 attacker-control or exploitability judgments, target execution, persistent research
-state, or autonomous investigation. Those consumers compose over the factual CLI.
-Decompilers, devirtualizers, and reverse-engineering platforms are consumers of
-`luad`'s facts, not competitors, and `luad` does not compete with them on breadth of
-dialect parsing. LuaJIT and Luau are separate bytecode systems outside the product.
+state, and autonomous investigation will remain outside the core. LuaJIT and Luau are separate bytecode systems outside the product.
 
-## Engineering mountains
+Existing CFG, xref, query, diff, explanation, symbolic-callee, origin, call-relation,
+and prototype-content-identity surfaces will remain experimental unless a dedicated
+contract qualifies an exact subset. Version 1 will not require new dataflow analysis,
+a GUI, a plugin platform, or a custom query language expansion. Examples using
+experimental facts will say so; the required stable workflow will not depend on them.
 
-The roadmap does not assign equal weight to unequal work.
+### Compose with the ecosystem
 
-| Mountain | Size | Release position | Core difficulty |
-|---|---:|---|---|
-| Layout truth and honest refusal | Large | First, before any feature work | Every declared width honoured end to end or refused by name in every dialect; consistency diagnostics; offset-anchored failures; declared-precision rendering |
-| Authority discipline and public corpora | Large | Version 1 | The producing compiler's listing as the oracle for stock and vendor profiles; independent second decoders; a generated, provenance-tracked stock corpus; negative controls everywhere |
-| Exact target fidelity, vendor first | Large | Version 1, after the contract freezes | Serialized layouts, opcode semantics, and malformed-input behavior across four claimed targets, two of them vendor profiles |
-| Stable machine contract, minimal core | Medium | Version 1, before any target is promoted | Typed facts, schemas, diagnostics, exit codes, and platform-independent scalar rendering for the smallest surface the niche needs |
-| Hostile-input robustness | Medium | Version 1, trimmed | Resource limits, fuzz targets with seeds, minimized regressions, and the public hostile-chunk corpus |
-| Distribution and release mechanics | Small | Already built | No further investment before 1.0; publish with what exists |
-| Structural navigation and comparison | Medium–large | Experimental in 1.0 | CFGs, xrefs, query, and diff stay available and labeled experimental until a post-1.0 contract promotes them |
-| Bounded value and call analysis | Extra large | After version 1 | Reaching definitions, joins, loops, aliasing, captures, cutoffs, and evidence-preserving uncertainty |
+Publish task-specific pointers and tested handoffs, with exact tool versions and
+profile limitations where relevant:
+
+| Researcher task | Recommended starting point to document |
+|---|---|
+| Extract firmware containers and retain extraction metadata | [Unblob](https://github.com/onekey-sec/unblob) or [Binwalk](https://github.com/ReFirmLabs/binwalk) |
+| Recover readable Lua source | [unluac](https://sourceforge.net/projects/unluac/) or [unluac-rs](https://github.com/x3zvawq/unluac-rs), after checking the exact input profile |
+| Work with explicit opcode/type maps | The [unluac fork's mapping conventions](https://github.com/Jeong-Min-Cho/unluac), without guessing a map |
+| Conduct an interactive reverse-engineering session | [Rizin](https://github.com/rizinorg/rizin) |
+| Investigate LuaJIT bytecode | [LuaJIT Decompiler v2](https://github.com/marsinator358/luajit-decompiler-v2) |
+| Work with Luau | [Luau's own tooling](https://github.com/luau-lang/luau) |
+
+Keep comparisons dated, reproducible, and specific to the measured task. Revalidate
+recommendations when writing a walkthrough. Share minimized public reproducers and
+useful fixtures upstream; do not make upstream acceptance a release dependency.
 
 ## Release train
 
-The dependency order is:
-
 ```text
-layout truth: honour every declared width end to end or refuse by name
-  -> authority generalization and the generated public stock corpus
-  -> minimal stable machine contract
-  -> hostile-input evidence and the public hostile-chunk corpus
-  -> exact targets in niche order: LNUM32, EdgeTX 5.3-32, stock 5.4.9, stock 5.1.5
-  -> transfer and one frozen 1.0
+layout truth and bounded refusal on every exposed parser
+  -> compact evidence and one public firmware workflow
+  -> outside-user trial and correction of workflow friction
+  -> minimal stable interface and hostile-input tripwires
+  -> exact qualification: LNUM32, then stock Lua 5.1.5
+  -> fresh-session transfer and one frozen 1.0
 ```
 
-A target manifest binds to the exact tool revision that produced it, so the public
-contract and the boundedness tripwires freeze before any target is promoted against
-them. A later change to the stable contract requalifies every promoted target rather
-than inheriting its evidence.
+An installable candidate may support a user trial without promoting a target. Freeze
+the stable interface and boundedness tripwires before target promotion. A subsequent
+change that invalidates a promoted claim will require requalification; no target may
+inherit stale evidence.
 
-Accepted prerequisite gates are referenced by identity. A downstream milestone does
-not duplicate their semantic suites unless it owns a new interaction capable of
-falsifying the release claim.
+Reference accepted prerequisite gates by identity. A downstream gate will add a suite
+only when it owns a new interaction that those prerequisites cannot falsify. A compiler
+listing can establish the facts it exposes; malformed-input behavior, byte provenance,
+analysis semantics, and machine contracts need their own applicable evidence.
 
 ## Release execution sequence
 
-The milestones below are delivered as the stages in this list, in this order. Each
-stage is one sprint contract in `docs/NEXT-SPRINT.md` and one pull request, following
-the contract lifecycle in
-[the development workflow](docs/DEVELOPMENT-WORKFLOW.md#12-preservation-documentation-and-escalation):
-the stage's first commit replaces the checkpoint with its contract, and its last commit
-restores the checkpoint. A target-qualification stage (the four targets of Milestone 5)
-instead merges its contract as a separate planning change before any implementation,
-because its acceptance commands must be fixed before code. A stage is deleted from this
-list when its evidence is accepted: for most stages that is the merge of its pull
-request, and for the final publication stage it is the fresh-environment verification
-of the published artifacts. The list holds only unmet obligations.
+Deliver the stages below in dependency order, one sprint contract and one pull request
+at a time, following [the contract lifecycle](docs/DEVELOPMENT-WORKFLOW.md#12-preservation-documentation-and-escalation).
+A target-qualification contract must merge as a separate planning change before
+implementation. Other stages place their contract in the first commit of their own
+pull request. Restore the neutral checkpoint in the final commit. Remove a stage when
+its evidence is accepted; remove publication only after fresh downloads verify.
 
-1. Milestone 1a: declared header widths in Lua 5.2, 5.3, and 5.5. For every width byte
-   the dialect serializes, the reader either decodes at the declared width on every
-   public surface (`Layout` reports it, constants and test values use it) or refuses
-   the header with a diagnostic naming the field and declared width at that byte's
-   offset with a non-zero `validate` exit, as the Lua 5.4 reader already does for
-   `lua_Number`. `Layout` never differs from the declared header. Allowed paths: the
-   three dialects' `header.rs`, their `chunk.rs` only where a declared width is
-   decoded, the diagnostic catalog, and one new oracle test. Evidence: a width-probe
-   test that rewrites each width byte of every maintained 5.2, 5.3, and 5.5 fixture
-   through the public CLI and asserts honour-or-refuse, with the unmodified fixture and
-   the 5.4 refusal as controls. Honouring a 4-byte 5.3 body end to end is the EdgeTX
-   stage's work; refusing it by name is sufficient here.
-2. Milestone 1b: header-versus-body consistency diagnostics (a long-string length
-   width that contradicts the declared `size_t`, `LUAC_NUM` and `LUAC_INT` checked at
-   the declared width, integral flags that contradict constant tags), and every
-   layout-mismatch body failure anchored at the observed offset naming the
-   contradicted header field.
-3. Milestone 1c: 4-byte floats rendered at 4-byte precision on every human and machine
-   surface, and retirement of diagnostics that blame a symptom when the cause is a
-   declared width.
-4. Documentation truth pass: retire the remaining stale present-tense claims (Lua 5.4.8
-   evidence described as the 1.0 target, the duplicate MSRV statements in the
-   changelog, the archived candidate guide indexed as maintained, the PRD's open
-   platform question), name the 1.0 distribution channel, owner, and MSRV in the PRD,
-   and align `docs/DEVELOPMENT-WORKFLOW.md` with the review and model roles actually in
-   use.
-5. Milestone 2a: the differential oracle takes the authority compiler's listing per
-   profile (pinned official compilers, the OpenWrt LNUM32 build, `edgetx-luac`, NodeMCU
-   `luac.cross`), and unluac and unluac-rs enter the harness as independent second
-   decoders consumed as external programs.
-6. Milestone 2b: the generated stock regression corpus from the per-release official
-   test suites, pinned by published SHA-256 and compiled by the matching pinned
-   compiler, with the manifest, the generator script, the family/version/preset layout
-   with a metadata sidecar, the per-construct micro-corpus, and the existing oracle
-   gates passing over it; the five shared toy programs cease to be the sole evidence.
-7. Milestone 2c: the internal layout re-emission generator and the NodeMCU authority,
-   used to put the 32-bit and integral Lua 5.1 fixtures under recorded provenance, to
-   produce cross-layout negative controls, and to seed the analysis fuzz targets.
-8. Milestone 3a: `capabilities --format json --evidence` distinguishes implementation
-    presence, experimental evidence, and exact promoted targets, fed by recorded gate
-    results, and lists LuaJIT and Luau as out of scope.
-9. Milestone 3b: the machine-contract qualification gate for the stable core
-    (`inspect`, `disasm`, `validate`, `export`, `capabilities`, `diagnostics`,
-    `schema`) becomes a required routine CI job, every JSON/JSONL example in the
-    documentation executes against the live schemas in a test, the remaining commands
-    carry an experimental label on every surface, and the partial-facts truncation
-    marker ships as an experimental flag.
-10. Milestone 3c: the 1.x compatibility policy in the machine-interface reference and
-    the release-notes compatibility statement template in the release procedure.
-11. Milestone 4a: runtime and peak-memory tripwires for the five named workloads, each a
-    falsifiable assertion with its threshold defined once and documented.
-12. Milestone 4b: a seed corpus for every maintained fuzz target, drawn from the
-    generated corpus, and one representative time-bounded fuzz campaign with a retained
-    artifact and the published configuration, corpus identity, and result format for
-    the evidence bundle.
-13. Milestone 4c: the chunk mutator with a ground-truth manifest per variant, and
-    Prometheus-generated control-flow-flattened inputs at each preset strength as
-    analysis stress cases.
-14. Milestone 4d: the public hostile-chunk corpus in its own repository with a
-    provenance manifest per chunk, seeded from fuzz findings, width probes, and mutator
-    output, and the upstream offer to the corpus that OSS-Fuzz's Lua project clones.
-15. Milestone 5, LNUM32: contract (new candidate identity, authenticated authority and
-    patch series, prerequisite gates by identity), then implementation with the candidate
-    manifest retained in a GitHub release, the out-of-profile refusal proof, the
-    investigation-record template, and the internal uncoached investigation.
-16. Milestone 5, EdgeTX: contract (pinned EdgeTX revision and `edgetx-luac` build recipe,
-    the `lua5.3-edgetx32` profile and layout, the consistency-diagnostic rule for
-    host-built long strings, GPLv2 sdcard inputs recorded per case), then the
-    implementation that turns the survey matrix row green with `luad` the only tool that
-    also names the inconsistency, and symmetric rejection against stock 5.3.
-17. Milestone 5, Lua 5.4.9: contract (pinned archive and compilers, the 5.4.8-to-5.4.9
-    delta review), then the 5.4.9 release gate over the generated corpus and its
-    candidate dispatch.
-18. Milestone 5, stock Lua 5.1.5: contract, then the stock release gate and its
-    candidate dispatch.
-19. Milestone 6a: README reduction, one firmware-researcher guide, one machine-consumer
-    example that cross-checks published facts against unluac-rs or rizin, exact-version
-    format notes, and the fresh-session transfer record.
-20. Milestone 6b: a production publication mode for the release workflow (today only
-    the rehearsal path exists), then the freeze change (version, release notes,
-    compatibility statement, completed security checklist, tripwire record, extended
-    campaign rerun).
-21. Milestone 6c: with the frozen candidate on remote `main`, tag `v1.0.0`, publish,
-    download every public artifact into a fresh environment, and repeat checksum and
-    smoke verification. This stage is deleted only after that verification succeeds.
+1. **Layout declarations:** make the Lua 5.2, 5.3, and 5.5 readers honor or explicitly
+   refuse every declared width on all public surfaces. Probe maintained fixtures
+   through the CLI, retaining valid originals and unsupported-width controls. Refusal
+   is sufficient for layouts outside the release boundary; no EdgeTX implementation
+   is implied.
+2. **Consistency and rendering:** preserve the deepest failure offset, check serialized
+   test values and numeric modes at their declared widths, and report only demonstrable
+   header/body contradictions. Render supported 4-byte floats at their declared
+   precision while preserving raw bits. Define corruption controls before changing
+   diagnostics; do not infer a root cause from a downstream parse error alone.
+3. **Compact target evidence:** close fixture-provenance gaps, adapt existing compiler
+   comparisons for the two release profiles, select an implementation-independent
+   second decoder for facts it can expose, and generate the smallest public corpus
+   covering the release claim. Include applicable official tests, firmware-shaped
+   microcases, stripped/debug pairs, and minimized defects. Seed maintained fuzz
+   targets; no required tool or fixture may skip.
+4. **Public firmware workflow:** deliver the three executable walkthroughs in
+   Milestone 2 below, a concise README entry path, and one safe external consumer.
+   Address missing core facts or composition defects in bounded contracts; do not
+   expand experimental analysis to make the demonstration work.
+5. **Outside trial:** give an outside firmware researcher an installable candidate,
+   public inputs, and the public guide before freezing the interface. Record results
+   and correct blocking friction within the product boundary. Internal trials may
+   prepare this stage but cannot substitute for it.
+6. **Machine-contract qualification:** qualify the minimal stable commands and selected
+   fact families against live schemas, including executable examples, identity,
+   diagnostics, exit behavior, limit reporting, and capabilities driven by evidence.
+   Freeze the 1.x compatibility policy only after trial findings are resolved.
+7. **Hostile-input qualification:** audit allocation and traversal limits, establish
+   runtime and peak-memory tripwires, retain a time-bounded fuzz campaign and minimized
+   regressions, and publish the compact hostile-input corpus with provenance.
+8. **LNUM32 qualification:** merge the exact contract, then produce a new candidate
+   identity with the authenticated OpenWrt authority, prerequisite references,
+   out-of-profile refusal proof, and internal uncoached investigation. Complete the
+   required open-window corpus replay without turning derived coverage into a stable
+   analysis promise.
+9. **Stock Lua 5.1.5 qualification:** merge its independent contract, then qualify the
+   exact stock layout, physical roles, constants, offsets, malformed-input behavior,
+   and symmetric stock/LNUM rejection.
+10. **Candidate transfer and freeze:** rerun the public walkthroughs from packaged
+    artifacts in a fresh session, finish the security checklist and production
+    publication mode, freeze version/compatibility notes, and close required evidence
+    over the release revision. Reuse packaging, SBOM, and bundle mechanisms.
+11. **Publication:** tag and publish the accepted candidate, download every public
+    artifact into a fresh environment, and verify checksums, identity, and smoke
+    behavior. A failed publication leaves promotion and rollback rules intact.
 
 ### Milestone 1 — layout truth
 
-Outcome: no chunk whose body contradicts its header is ever reported valid, on any
-dialect, and every refusal tells the reader which field lied.
+Outcome: no exposed parser silently substitutes its preferred layout for a declared
+one. Every accepted interpretation reports the layout actually used.
 
-Required work:
+Evidence must exercise each serialized width and applicable byte-order/numeric flag
+through the public CLI. Unsupported declarations must fail by field name and offset;
+supported declarations must govern body reads, reported facts, and scalar rendering.
+Known inconsistent bodies must fail with location and context. Positive originals and
+corruption controls must exercise the same comparators. Preserve exact encoded facts
+separately from interpreted values.
 
-- honour every header width byte in Lua 5.1 through 5.5 end to end (parse, reported
-  layout, constants, scalar rendering) or refuse it with a diagnostic naming the field
-  and the declared width, to the standard the Lua 5.4 header reader already meets;
-- report the declared layout, never a stock layout substituted for it;
-- add header-versus-body consistency diagnostics: a long-string length field whose
-  width contradicts the declared `size_t`, a `LUAC_NUM` or `LUAC_INT` test value
-  checked at the declared width, and integral flags that contradict constant tags;
-- anchor a body failure caused by a layout mismatch at the offset where the
-  contradiction was observed and name the contradicted header field, instead of
-  reporting the first downstream symptom at offset 0;
-- render a 4-byte float at 4-byte precision on every human and machine surface, never
-  widened to double first; and
-- retire every diagnostic whose text blames a symptom when the cause is a declared
-  width.
+Stop before feature work while a known silent layout substitution or false valid
+verdict remains. Do not expand support merely to satisfy a width probe.
 
-Evidence boundary: a width-probe gate takes every maintained fixture in every dialect,
-sets each header width byte to every other value, and asserts that the result is
-either decoded at the declared width or refused by name, never reported valid with a
-stock width; unmodified fixtures remain valid as the negative control. The EdgeTX
-chunks are the second control at this milestone: each one is refused with a diagnostic
-naming the declared width, never accepted at the header and failed in the body. Reading
-them correctly is the EdgeTX profile's acceptance criterion in the exact-target
-milestone, not this milestone's.
+### Milestone 2 — one useful firmware workflow
 
-Stop condition: `validate` cannot return a valid verdict for a lying header in any
-dialect. Feature work does not resume until this holds.
+Outcome: an analyst can answer a concrete question using public inputs, without
+writing an instruction decoder or reconstructing file identity from stream order.
 
-### Milestone 2 — authority and corpus
+Provide three executable walkthroughs with input provenance, download/build commands,
+expected results, bounded output, failure behavior, and exact tool/profile versions:
 
-Outcome: every public claim is proven against the compiler that produced the chunk,
-and the evidence is drawn from a corpus anyone can regenerate.
+- **Inventory:** a mixed extracted tree with bytecode named both `.lua` and `.luac`,
+  source, malformed input, and an unsupported profile. Account for every input and
+  distinguish export completion, validation verdict, and truncation.
+- **Investigate:** find a literal or global lookup, inspect the relevant physical
+  instructions and closure bindings, and retain evidence locating each fact in the
+  original artifact. No security conclusion or runtime callee identity is implied.
+- **Hand off:** pass a compatible chunk to a documented external decompiler and
+  cross-check a disputed raw detail using published `luad` output. An incompatible
+  profile must receive an honest limitation and next step, not a claimed integration.
 
-Required work:
+Make the README lead with purpose, installation, one short example with useful output,
+exact support, limitations, and task-specific tool pointers. Move maintainer release
+mechanics behind links. Reconcile stale target and MSRV claims, archive indexing,
+release channel/owner requirements, and workflow-role documentation with their owning
+contracts without adding release infrastructure. Provide exact-version format notes tied to official/vendor
+sources. Keep research-history and internal proof machinery out of the first-use path.
 
-- generalize the differential oracle from the official `luac -l -l` listing to the
-  authority compiler's listing, recorded per profile: the pinned official compiler for
-  stock profiles, the OpenWrt LNUM32 build, `edgetx-luac`, and NodeMCU `luac.cross`;
-- admit unluac and unluac-rs as independent second decoders in the differential
-  harness, consumed as external oracles and never as code;
-- generate the stock regression corpus from the per-release official Lua test suites,
-  pinned by their published SHA-256 and compiled by the matching pinned compiler, with
-  provenance recorded per `CONTRIBUTING.md`, and add permissively licensed real-world
-  sources (Kong, Penlight, luvit, the Neovim runtime) for breadth;
-- lay out fixtures as family, version, and preset directories with a metadata sidecar,
-  and add a per-construct micro-corpus (`adjust01..`, `booleanassign01..`, and so on)
-  as the skeleton for control-flow and dominator goldens;
-- build an internal layout re-emission generator that re-dumps one chunk under another
-  layout tuple, and use it with NodeMCU `luac.cross` to put the 32-bit and integral
-  Lua 5.1 fixtures under recorded provenance and to produce cross-layout negative
-  controls; a public `luad rewrite` command is a post-1.0 decision;
-- seed the analysis fuzz targets from the generated corpus; and
-- retire the five shared toy programs as the sole evidence for any dialect.
+Provide a small external SQLite or equivalent consumer using parameterized writes,
+artifact-plus-interpretation-scoped keys, and explicit file/stream completion checks.
+Test duplicate prototype IDs across files, unusual paths/string bytes, failed inputs,
+and truncated streams. Persistence stays outside the core. Existing prototype-content
+comparison may have a clearly experimental recipe; equal content is not a claim of
+behavioral equivalence.
 
-Evidence boundary: the corpus manifest, the generator script, and every existing oracle
-gate pass over the generated corpus; each authority is pinned by archive URL, SHA-256,
-build recipe, and platform.
+Stop when the workflow and its failure cases reproduce from published examples. Do
+not add a general importer framework, extraction engine, or analysis platform.
 
-Stop condition: no fixture without recorded provenance remains referenced by a gate.
+### Milestone 3 — trial and minimal stable machine contract
 
-### Milestone 3 — minimal stable machine contract
+Outcome: a researcher can use the interface without coaching, and a small external
+consumer can depend on the qualified surface throughout 1.x.
 
-Outcome: a shell script, Lua developer, or AI agent can consume one small, documented
-interface throughout the 1.x line.
+Before freeze, an outside firmware researcher must try the candidate on authorized,
+public, in-profile inputs pre-screened only for profile applicability. Record commands,
+time to first useful answer, custom glue, missed files, misunderstandings, unresolved
+questions, and incorrect answers. Set the concrete task and success assertions before
+the trial; do not coach to a passing result. Correct blocking defects and repeat the
+invalidated portion. One trial demonstrates transfer, not broad adoption.
 
-Required work:
+Freeze `inspect`, `disasm`, `validate`, `export`, `capabilities`, `diagnostics`, and
+`schema`, and enumerate the stable export fact families explicitly. Stabilizing the
+export envelope must not accidentally stabilize every experimental record it carries.
+Required behavior includes selective bounded export, per-file outcomes, input and
+interpretation identity, diagnostics, stdout/stderr separation, exit codes, deterministic
+ordering, live schemas, and machine-visible limits. Qualify every shared fact across
+text/JSON/JSONL and run documented consumers against actual output.
 
-- freeze the stable core at `inspect`, `disasm`, `validate`, and `export`, plus
-  `capabilities`, `diagnostics`, and `schema`; keep CFG, xrefs, query, diff, explain,
-  callees, origins, and relations available and labeled experimental;
-- stabilize command discovery, schemas, envelopes, interpretation identity,
-  diagnostics, exit codes, stdout/stderr separation, pagination, and resource-limit
-  reporting for the stable core;
-- retain recursive batch export with per-input outcomes and explicit fact-family
-  selection;
-- add an experimental partial-facts mode that emits every fact up to a failure with an
-  explicit truncation marker, so a firmware triage never receives nothing;
-- make every JSON/JSONL example executable against the same schemas as live output;
-- define the 1.x compatibility policy for closed variants, open vocabularies, additive
-  fields, schema-major changes, target identities, and prototype-content schemes; and
-- ensure `luad capabilities --format json --evidence` distinguishes implementation
-  presence, experimental evidence, and exact promoted targets, and lists LuaJIT and
-  Luau as out of scope rather than planned.
+Capabilities must distinguish implementation presence, experimental evidence, and exact
+promoted targets, with LuaJIT and Luau out of scope. Define additive fields, open and
+closed vocabularies, schema-major changes, CLI compatibility, and content-ID schemes.
+Partial-facts recovery remains deferred; failed inputs must still produce their
+identification and diagnostic outcome without invented recovered semantics.
 
-Evidence boundary: one machine-contract qualification gate exercises every stable
-command and format at the public CLI, validates live output against schemas, compares
-shared facts across text/JSON/JSONL consumers, and includes corruption controls.
+Stop before interface freeze until the outside trial and its blocking corrections
+close. Waiting for a participant does not authorize unrelated product work.
 
-Stop condition: after this milestone, an incompatible change to the stable core
-requires an explicit schema-major or CLI-major qualification contract; experimental
-surfaces may still change with a changelog entry.
+### Milestone 4 — proportional public evidence and hostile-input bounds
 
-### Milestone 4 — hostile-input evidence and the public hostile-chunk corpus
+Outcome: each release claim is falsifiable against a compact, reproducible corpus, and
+arbitrary input remains within declared allocation, traversal, recursion, diagnostic,
+and output limits on every exposed path.
 
-Outcome: every target candidate crosses the same boundedness and fuzzing tripwires,
-and the malformed chunks that prove it are published for everyone.
+Pin the producing authorities for stock Lua 5.1.5 and OpenWrt LNUM32, including source,
+patches, configuration, build recipes, and fixture hashes. Reuse applicable
+[official Lua tests](https://www.lua.org/tests/) and existing gates; add independent
+comparisons only for facts their authorities actually expose. Prove each comparator
+rejects meaningful corruption. A shared implementation lineage is not by itself an
+independent semantic authority.
 
-Required work:
+Publish valid and hostile fixtures with provenance in the repository or release.
+Include compiler-generated firmware shapes, closure companions, malformed widths and
+counts, truncations, and minimized fuzz findings. Correct provenance for every fixture
+referenced by a retained gate; narrowing the release cannot excuse missing evidence.
+A separate corpus repository, all-version dataset, general mutator, layout re-emitter,
+and Prometheus preset matrix will not be prerequisites.
 
-- audit every parser allocation and recursive or traversal boundary against declared
-  resource limits;
-- exercise detection, every parser in the support matrix, post-parse analysis, and
-  text/JSON rendering through maintained fuzz targets, each with a seed corpus;
-- turn every crash, timeout, excessive allocation, or inconsistent verdict into a
-  minimized redistributable regression;
-- build a chunk mutator that writes a ground-truth manifest beside each variant
-  (constant reordering, dead slots, stripped or restored debug info, permuted opcode
-  tables via a map, swapped constant tags, re-emission under another layout), so
-  expected facts are known by construction;
-- generate labeled control-flow-flattened inputs with Prometheus over this
-  repository's own sources, at each preset strength, as analysis stress cases;
-- publish the hostile-chunk corpus in its own public repository, one provenance
-  manifest per chunk, seeded from fuzz findings, width probes, and mutator output, and
-  offer it upstream to the corpus that OSS-Fuzz's Lua project clones;
-- record runtime and peak-memory tripwires for small input, a large instruction vector,
-  deep prototypes, long strings, and the firmware-scale mixed workflow; and
-- retain bounded fuzz smoke in routine CI and run one representative time-bounded
-  campaign on the 1.0 candidate.
+Seed every maintained fuzz target. Retain bounded CI smoke and a representative
+extended campaign over the exact candidate, with configuration, corpus identity,
+duration, and results. Set falsifiable runtime and peak-memory tripwires for small
+input, a large instruction vector, deep prototypes, long strings, and a representative
+mixed firmware batch. Turn crashes, excessive allocation, timeouts, and inconsistent
+verdicts into minimized redistributable regressions.
 
-Deferred from the 1.0 path: runner isolation for public-fork pull requests waits for
-the first external pull request; the standalone security-review packet folds into the
-release procedure's checklist.
+Stop qualification for a known panic, unbounded allocation/traversal, unexplained
+timeout, or P0 correctness/security defect. Share useful reproducers upstream without
+requiring a new dataset service or upstream acceptance to release.
 
-Evidence boundary: CI proves that every maintained target executes under the common
-smoke envelope, each tripwire has a falsifiable assertion, and the published corpus
-reproduces every retained regression.
+### Milestone 5 — exact targets in firmware order
 
-Stop condition: any known panic, unbounded allocation or traversal defect, unexplained
-timeout, or P0 correctness or security defect blocks qualification.
+Outcome: promote only the two exact profiles after machine and boundedness contracts
+freeze, with no support inherited from neighboring layouts.
 
-### Milestone 5 — exact targets in niche order
+**LNUM32:** issue a new candidate identity rather than reuse RC1. Authenticate the Lua
+5.1.5 archive, OpenWrt revision, ordered patches, build recipe, platform binaries,
+fixtures, and exact profile/layout. Reference accepted public-read, validator,
+diagnostic, machine-contract, retrieval, scalar-rendering, export-bound, and hostile
+prerequisites rather than duplicating them. Prove unaffected callee registers survive
+open argument/result windows and complete the preregistered firmware replay. Retain
+an internal uncoached investigation and an actionable out-of-profile refusal.
+Experimental derived facts cannot expand the stable target claim.
 
-Outcome: the promotion machinery proves two vendor profiles and two stock targets, in
-the order that serves the unfilled niche first.
+**Stock Lua 5.1.5:** pin its official authority and the exact little-endian, 64-bit
+`size_t`, non-integral-double layout. Qualify profile selection and symmetric rejection
+against LNUM, closure descriptors, `SETLIST C == 0` data words, stripped/debug
+prototypes, constants, offsets, jump targets, and bounded malformed-input handling.
+Other stock layouts remain experimental.
 
-**LNUM32.** As previously specified: issue a new candidate identity for the current
-revision rather than reusing the superseded `lua51-lnum32-0.1.0-rc1`; authenticate the
-Lua 5.1.5 source, OpenWrt revision and ordered patch series, build recipe, platform
-compiler binaries, fixtures, profile, and exact layout; reference the accepted
-public-read, validator, diagnostic, machine-contract, retrieval, scalar-rendering,
-export-bound, and hostile-input prerequisites; prove that open argument/result windows
-cannot erase a callee already established in an unaffected register; run one internal
-uncoached investigation; prove that an out-of-profile sample fails with an actionable
-diagnostic; minimize every reproducible
-finding before promotion.
-
-**EdgeTX Lua 5.3 32-bit.** Pin the EdgeTX revision and the `edgetx-luac` build recipe as
-the authority; qualify the `lua5.3-edgetx32` profile with this repository's MIT sources
-and EdgeTX SD-card scripts (GPLv2, recorded per case) as inputs, stripped and
-debug-bearing; define the profile's treatment of a host-built chunk whose long-string
-lengths contradict the header slot (a named consistency diagnostic, never a parse);
-require the survey matrix row to be green with `luad` the only tool that also names the
-inconsistency; prove symmetric rejection between `lua5.3-edgetx32` and stock 5.3. This
-stage converts the layout-truth milestone's named refusal of the 4-byte Lua 5.3 layout
-into a correct read under the explicit profile.
-
-**Stock PUC Lua 5.4.9.** Pin the final archive, official compiler binaries, reference
-manual, source tables, fixtures, and exact standard layout; review the 5.4.8-to-5.4.9
-delta and accept prior evidence only for facts the delta proof preserves; qualify
-parsing, byte accounting, physical instruction roles, typed operands, constants,
-prototype and upvalue identity, targets, source lines, validation, deterministic scalar
-rendering, text/JSON/JSONL agreement, and malformed-input behavior over the generated
-corpus; require the official listing plus an independent decoder and corruption
-controls.
-
-**Stock PUC Lua 5.1.5.** Pin the official authority and the exact little-endian 64-bit
-`size_t`, non-integral-double layout; prove profile selection and symmetric
-stock-versus-LNUM rejection; qualify closure descriptors, `SETLIST C == 0` data words,
-stripped and debug prototypes, constants, offsets, jump targets, and bounded
-malformed-input handling; keep big-endian and other Lua 5.1 layouts experimental.
-
-Evidence boundary: each target's promotion gate emits its own manifest only after all
-clean prerequisite results, platform attestations, mutation probes, and the aggregate
-check close over one revision with zero required skips.
-
-Stop condition: promote exactly the four named profiles and layouts. Capability and
-documentation records name each exact layout and never collapse into a broad
-`Lua 5.x supported` claim.
+Each promotion gate must emit its own manifest only after clean prerequisites,
+platform attestations, mutation controls, and the aggregate check close over the
+candidate revision with zero required skips. Stop at the exact two-target set.
 
 ### Milestone 6 — transfer and one frozen 1.0
 
-Outcome: the release can be understood and used without access to the implementation
-history, and one revision, one support matrix, and one set of artifacts can be
-independently verified after publication.
+Outcome: a fresh user can install the package, complete the documented workflow,
+reproduce supporting bytes, understand unknowns, and continue in another tool.
 
-Required work:
+Verify the walkthroughs and external consumer from packaged artifacts in a fresh
+session. Retain the outside trial and candidate transfer records without private
+firmware, sensitive findings, or investigation-specific judgments. If interface
+changes invalidate a trial, repeat the affected workflow before release.
 
-- reduce the README entry path to purpose, exact support table, installation, three
-  first commands, limitations, and links;
-- provide one firmware-researcher guide and one machine-consumer example; the worked
-  consumer cross-checks `luad`'s facts against unluac-rs or rizin using only published
-  output, without embedding sink, taint, or exploitability policy;
-- publish exact-version format notes with links to the relevant official Lua and
-  vendor sources;
-- commit customer-trial records using a stable template while excluding private
-  firmware and investigation-specific security judgments;
-- freeze a clean candidate, run each promotion gate with its exact authority and no
-  required skips, run the aggregate check and the extended fuzz campaign once, build
-  both platform archives with the existing packaging and SBOM machinery, assemble the
-  evidence index, confirm that capabilities, README, security policy, release notes,
-  schemas, and artifacts identify the same targets and revision, tag `v1.0.0`, publish,
-  and verify fresh downloads.
+Freeze one clean revision, support matrix, schema set, and evidence index. Run required
+promotion gates, the aggregate check, and candidate fuzz evidence with exact authorities
+and no required skips. Build both archives using the existing packaging/SBOM machinery;
+finish only the missing production publication mode. Align capabilities, documentation,
+security policy, release notes, checksums, and artifacts, then publish and verify fresh
+downloads. Use the release procedure's rollback path after partial publication.
 
-No new release infrastructure is built before 1.0 beyond the production publication
-mode that the rehearsal path lacks; the archive, SBOM, bundle, and rehearsal that exist
-are sufficient.
-
-Evidence boundary: a fresh human or agent installs the packaged candidate and completes
-inspection, disassembly, validation, and export using only published help and
-documentation; the published artifacts verify against the retained evidence.
-
-Stop condition: documentation never calls an experimental dialect supported, never
-implies affiliation with Lua.org or PUC-Rio, and never makes a security conclusion from
-static facts. A failed or partial publication does not change capability status; use
-the documented rollback procedure, correct the bounded defect, issue a new candidate,
-and rerun only the invalidated evidence.
+Stop for failed transfer, inconsistent evidence identity, or unresolved release defects.
+Do not claim broad adoption from one trial, affiliation with Lua.org or PUC-Rio, or
+safe execution from structural checks.
 
 ## Version 1 acceptance
 
-Version 1 is eligible only when all of these statements are true for the exact promoted
-targets:
+Release only when all of the following hold for the exact candidate:
 
-1. No maintained fixture, generated corpus chunk, or width-probe variant is reported
-   valid when its header and body disagree, on any dialect, and every refusal names the
-   contradicted field.
-2. Every maintained release fixture crosses the public CLI and agrees with the pinned
-   authority compiler's listing plus an implementation-independent decoder.
-3. Mutation probes prove that gates reject wrong opcodes, operands, constants, roles,
-   targets, metadata, schema fields, and evidence substitutions.
-4. Text, JSON, JSONL, and export consumers agree on shared facts and remain
-   deterministic across advertised hosts, including floating-point rendering at the
-   declared width.
-5. Resource limits, malformed-input tests, the extended fuzz campaign, and clean builds
-   support the safety claim, and the hostile-chunk corpus is public.
-6. The capability manifest, release evidence, documentation, SBOM, checksums, and
-   downloadable artifacts identify the same targets, revision, and limitations.
-7. A fresh human or agent can install the tool and complete the documented inspection,
-   disassembly, validation, and export workflows using only public help and examples.
+1. Every exposed parser honors or refuses declared layouts; known contradictory
+   fixtures fail, and diagnostics separate observed facts from uncertain causes.
+2. The two release targets pass their named evidence gates with pinned authorities,
+   independent comparisons where applicable, corruption controls, and no required skips.
+3. Stable commands and fact families agree across formats, preserve interpretation and
+   byte provenance, and remain deterministic within the advertised host contract.
+4. A mixed firmware batch accounts for every input, selected fact families avoid an
+   unnecessary full export, and incomplete output cannot appear complete to the consumer.
+5. Resource tripwires, seeded fuzzing, the candidate campaign, and public regressions
+   establish the named hostile-input bounds.
+6. An outside researcher has completed the concrete public workflow before interface
+   freeze, blocking friction is resolved, and fresh packaged-candidate transfer passes.
+7. The support matrix, schemas, evidence, SBOM, checksums, and downloadable artifacts
+   identify the same revision, exact targets, and limitations.
 
 ## Post-version-1 research
 
-### Additional targets
+### Additional targets and profile facilities
 
-Promote one exact target at a time in customer-value order. Lua 5.2, stock 5.3, 5.5,
-and additional stock layouts may reuse the stock-Lua qualification contract. A vendor
-profile is a candidate only when a public first-party compiler or a vendor GPL source
-drop can serve as its authority. The current candidates, in customer-value order, with
-their authorities recorded in
-[docs/PRIOR-ART-AND-CORPORA.md](docs/PRIOR-ART-AND-CORPORA.md):
+Choose one target by demonstrated researcher need and public compiler authority.
+EdgeTX Lua 5.3.6 32-bit is a strong next candidate, not a mandatory next release. Pin
+`edgetx-luac`, define `lua5.3-edgetx32` precisely, distinguish radio-compatible bodies
+from host long-string width inconsistencies using reproducible evidence, and prove
+symmetric rejection against stock 5.3. Record any SD-card source license per case.
 
-- OpenTX and EdgeTX 2.10 Lua 5.2 (`size_t` 4, `lua_Number` 8) from the firmware source.
-- NodeMCU Lua 5.1 integral and byte-swapped layouts (`luac.cross`), and NodeMCU LFS
-  images as a multi-prototype container.
-- Playdate Lua 5.4 32-bit with appended opcodes (`pdc`).
-- TP-Link AX1800 Lua 5.1 with a reordered opcode table (vendor GPL drop).
+Stock PUC Lua 5.4.9 may follow a demonstrated workflow need. Pin its exact layout and
+compiler, and reuse 5.4.8 evidence only where a reviewed delta preserves the relevant
+facts. Neither target is a 1.0 dependency.
 
-### Profile facilities
+A provenance-bound TP-Link opcode-map profile may outrank another stock version when
+router researchers repeatedly need it and a public GPL source drop supplies authority.
+Reuse compatible `.op N name` and `.type N kind` conventions. Automatic map recovery,
+declarative parser plugins, and origin-ecosystem inference require separate decisions;
+no default may guess a layout or map.
 
-- Opcode-table maps and constant-type-tag maps are explicit, provenance-bound profiles,
-  file-compatible with the `.op N name` and `.type N kind` formats that unluac users
-  already have for shipped games and routers.
-- Deriving an opcode map from a canary chunk compiled by the target VM is a separate
-  tool, never a default.
-- Declarative dialect descriptors, so a new vendor layout is data rather than a fork of
-  the parser.
-- A layout-tuple fact that names the likely origin ecosystem of a chunk without
-  asserting it as a dialect selection.
-- A public `luad rewrite` command that re-emits a chunk under another layout tuple,
-  promoted from the Milestone 2 internal generator.
+Other candidates include OpenTX/older EdgeTX Lua 5.2, NodeMCU integral/byte-swapped
+layouts and LFS containers, Playdate, other stock releases, and additional layouts.
+Consult the [prior-art survey](docs/PRIOR-ART-AND-CORPORA.md), verify its dated claims,
+and require an exact authority and customer outcome before scheduling one.
 
-### Corpus and authority sources
+### Corpus and ecosystem contributions
 
-- Fixtures compiled from GPL sources record that license per case, following the
-  `tests/fixtures/embedded/MANIFEST.json` convention; share-alike, proprietary, and
-  malware-derived samples never enter the tree.
-- The stock regression corpus and the hostile-chunk corpus receive a citable dataset
-  record once a release depends on them.
+Expand corpora when a new claim needs coverage. NodeMCU `luac.cross`, a general layout
+re-emitter, a composable chunk mutator, Prometheus stress inputs, and an all-version
+stock corpus need their own bounded justification. Preserve source licensing and
+provenance; do not vendor proprietary or malware-derived samples by implication.
+A separate corpus repository or citable dataset may follow actual reuse.
 
-### Ecosystem contributions
-
-- A WASM build of `luad` for a browser drop-target and for embedding in other tools.
-- A `luac.ksy` for the Kaitai Struct format gallery, a Lua 5.5 ImHex pattern, and an
-  exporter that feeds `luad`'s structural model to rizin, all derived from this
-  repository's model rather than imported.
+Consider Kaitai/ImHex contributions, a Rizin adapter, or WASM only with a concrete
+consumer. Reuse existing formats and contribute shared fixes rather than building a
+parallel platform. A public rewriting command requires a separate product decision.
 
 ### Bounded value and call facts
 
-Before expanding value analysis, run a design spike over representative public chunks
-and measure the proportion of call sites resolved under deliberately conservative
-rules. A proposal must define join, loop, alias, capture-mutation, and cutoff semantics
-before committing to a stable schema. Path-specific facts must not be replaced by a
-union over unrelated paths or callers. The first admissible increments are
-intraprocedural and evidence-linked. SSA, whole-program interprocedural dataflow,
-high-level expressions, and security classification remain outside version 1.
+Before expanding analysis, measure useful resolution on representative public chunks
+under conservative rules. Define joins, loops, aliases, capture mutation, path-specific
+alternatives, and cutoff semantics before a stable schema. Promote a narrow existing
+fact family only when a user workflow needs it and independent evidence qualifies it.
+Whole-program inference, source recovery, execution, and security policy remain outside
+version 1; partial-facts recovery and comparison promotion need separate contracts.
 
 ### Outside validation
 
-The first 1.1 obligations are the two checkpoints that need a participant outside the
-project:
-
-- an outside-human in-profile trial: pre-screen an authorized public firmware sample only
-  far enough to establish that it resolves to the exact LNUM32 profile, then hand an
-  outside human the released binary and public quick start without coaching, and record
-  commands, elapsed work, incorrect or ambiguous answers, and remaining workarounds; and
-- Lua community review of terminology, target claims, build instructions, and
-  surprising output, with each correction landing as its own bounded change.
-
-Version 1.0 rests on the internal uncoached investigation, the out-of-profile refusal
-proof, and the fresh-session transfer record. Those are usability evidence from inside
-the project; independent adoption evidence arrives with these checkpoints, and no 1.0
-document may describe the release as externally validated before they close.
-
-### Other deferred surfaces
-
-Promotion of CFG, xrefs, query, diff, explain, callees, origins, and relations to the
-stable contract; a stable partial-facts mode; decompiler output, source reconstruction,
-an assembler, execution, tracing, persistent research state, GUI/TUI work, hosted
-services, and policy-bearing security analysis all require separate post-1.0 product
-decisions.
+Continue outside trials across firmware families, and request Lua community review of
+terminology, profile claims, build instructions, and surprising output. Record adoption
+separately from transfer success. Use repeated workarounds and mistaken interpretations
+to prioritize the next bounded change; do not expand the release merely to accumulate
+features or badges.
 
 ## Sequencing rules
 
-- Silent incorrect answers interrupt planned feature work. A lying header reported
-  valid is a silent incorrect answer.
-- A vendor profile enters only with a public authority compiler or GPL source drop.
-- No target is promoted before the stable contract and the boundedness tripwires freeze;
-  changing either afterwards requalifies every promoted target.
-- Release infrastructure is complete for 1.0 except the production publication mode;
-  it absorbs no other work before the release.
-- Schema promotion precedes compatibility promises. Experimental fields and commands
-  remain labeled as such.
-- Private or downloaded corpora may find defects and measure usefulness but never
-  replace redistributable fixtures and independent authorities.
-- A release checkpoint measures an external user outcome, but self-run evaluation is
-  usability evidence rather than independent adoption evidence.
-- Waiting for an outside participant does not authorize unrelated product work. A
-  disjoint documentation, packaging, or evidence-retention batch may proceed only under
-  its own sprint contract.
-- One gate per release claim is preferred over a public thicket of badges. Internal
-  prerequisite gates remain discoverable through the evidence manifest.
-
-## Preserved planning provenance
-
-The archived [2026-08-25 roadmap and release-readiness
-review](docs/reviews/2026-08-25-roadmap-review.md) records the exploration that exposed
-the open-window replay, fuzzing, manifest, publication, string-limit, performance,
-customer-transfer, external-layer, documentation, and distribution gaps. The
-[prior-art and corpus survey](docs/PRIOR-ART-AND-CORPORA.md) records the ecosystem
-evidence behind the current ordering. Both remain point-in-time inputs rather than
-current status; this roadmap preserves their concerns as forward obligations.
+- Silent incorrect answers interrupt planned feature work.
+- Only an active sprint contract authorizes implementation; a planning checkpoint does not.
+- Private corpora may find defects and measure usefulness but cannot define or promote
+  a format without public authority and redistributable evidence.
+- Stable contracts and boundedness tripwires precede target promotion; invalidated
+  evidence must be rerun against the changed candidate.
+- Outside feedback precedes interface freeze. Self-run evaluation cannot replace the
+  outside participant or establish independent adoption.
+- Release work must reference accepted prerequisites instead of rebuilding proof or
+  packaging infrastructure without a specific unmet requirement.
+- Upstream improvement is a success. No gate may require other tools to remain deficient.
+- Stop at the useful two-profile workflow. Additional dialects, analysis, datasets, and
+  integrations require a separate customer-backed decision.
