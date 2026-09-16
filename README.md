@@ -50,8 +50,9 @@ $ luad disasm hello.luac
    3  RETURN       R(0) 1
 ```
 
-Everything is also available as JSON and JSONL with published schemas, so you can build
-on it without scraping text. See [machine interface](#machine-interface).
+Most of this is also available as JSON and JSONL with published schemas, so you can
+build on it without scraping text. Supported formats vary by command — see
+[machine interface](#machine-interface).
 
 ## Install
 
@@ -86,7 +87,20 @@ luad diagnostics L51-REG-SPAN-001           # look up a diagnostic code
 
 Also present, and explicitly experimental: `cfg`, `callees`, `callgraph`, `origins`,
 `xrefs`, `query`, and `diff`. These produce useful output but their schemas and
-semantics may change without notice.
+semantics may change without notice. `callees`, `callgraph`, and `origins` currently
+require a Lua 5.1 profile and say so when given anything else.
+
+Output formats are not uniform across commands:
+
+| Command | `text` | `json` | `jsonl` |
+|---|:--:|:--:|:--:|
+| `inspect`, `disasm`, `explain` | yes | yes | yes |
+| `cfg`, `xrefs`, `query`, `diff` | yes | yes | yes |
+| `validate` | yes | yes | no |
+| `diagnostics` | yes | yes | no |
+| `export` | no | no | **jsonl only** |
+
+`export` is the streaming batch interface and deliberately emits JSONL only.
 
 The repository ships precompiled fixtures, so you can try it without a Lua compiler:
 

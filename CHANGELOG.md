@@ -14,7 +14,10 @@ non-standard layouts found in extracted router firmware, and it is published as
 experimental rather than held back until a 1.0 evidence program completes.
 
 **What works.** `inspect`, `disasm`, `validate`, `explain`, `export`, and `diagnostics`
-across Lua 5.1 through 5.5, in text, JSON, and JSONL with published schemas. Profile
+across Lua 5.1 through 5.5, with published schemas. Output formats vary by command:
+`inspect`, `disasm`, and `explain` emit text, JSON, and JSONL; `validate` and
+`diagnostics` emit text and JSON; `export` is a streaming batch interface and emits
+JSONL only. The README has the full matrix. Profile
 detection distinguishes OpenWrt-style LNUM32 builds from stock layouts. Analysis
 commands (`cfg`, `callees`, `callgraph`, `origins`, `xrefs`, `query`, `diff`) are
 present and explicitly experimental. The workspace forbids `unsafe` code.
