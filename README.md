@@ -20,8 +20,11 @@ See [limitations](#limitations) for what specifically does not work yet.
 
 ## What it does
 
+Every command below runs against a fixture in this repository, so you can reproduce it
+after cloning.
+
 ```console
-$ luad inspect hello.luac
+$ luad inspect tests/fixtures/precompiled/lua51_lnum32/hello.luac
 === Chunk Overview ===
 SHA-256:           8376be37ec3042d3b0a87aa39db7d7396fb54ae390abe346d885e1527d23e353
 Byte Length:       249 bytes
@@ -34,21 +37,34 @@ Verdict:           ValidForParser
 
 That `Layout` line is the point. This chunk is an OpenWrt-style build with a 32-bit
 `size_t` and an integer-flavored number representation — stock desktop Lua never emits
-it, and tools built on the stock loader refuse it or read it wrong.
+it, and tools built on the stock loader refuse it or read it wrong. The command prints
+the full header and prototype summary below this; the overview is the first block.
 
 ```console
-$ luad disasm hello.luac
-; proto:0 (source: @hello.lua, lines 0-0, stack: 4)
+$ luad disasm tests/fixtures/precompiled/lua51_lnum32/hello.luac
+; ==========================================================================
+; proto:0 (source: @tests/fixtures/hello.lua, lines 0-0, stack: 4)
 ; params: 0, is_vararg: 2, instructions: 9, constants: 4
+; ==========================================================================
 ; Constants:
 ;   k[0] = "print"
 ;   k[1] = "Hello, luad!"
+;   k[2] = "Lua 5.4 bytecode analysis"
+;   k[3] = 42
 
    0  GETGLOBAL    R(0) K(0) ; "print"
    1  LOADK        R(1) K(1) ; "Hello, luad!"
    2  CALL         R(0) 2 1
-   3  RETURN       R(0) 1
+   3  LOADK        R(0) K(2) ; "Lua 5.4 bytecode analysis"
+   4  LOADK        R(1) K(3) ; 42
+   5  MOVE         R(2) R(0)
+   6  MOVE         R(3) R(1)
+   7  RETURN       R(2) 3
+   8  RETURN       R(0) 1
 ```
+
+Constants are resolved inline at their use sites. Add `--raw` for the encoded words and
+`--effects` for each instruction's semantic effect.
 
 Most of this is also available as JSON and JSONL with published schemas, so you can
 build on it without scraping text. Supported formats vary by command — see
