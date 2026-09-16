@@ -1,49 +1,35 @@
-# Sprint contract: retire the `luajit` planned tier
+# Sprint checkpoint: no active product batch
 
-Lane: product. Roadmap position: item 3 under [next steps](../ROADMAP.md#next).
+Lane: planning. Roadmap position: the next stage is the top unmet item under
+[next steps](../ROADMAP.md#next).
 
-## Public outcome
+## Current decision
 
-`luad capabilities` stops advertising a LuaJIT dialect. The product boundary states that
-LuaJIT is a separate bytecode system outside the product, so a `planned` tier for it is a
-promise the product will not keep, and a reader comparing the manifest against the
-roadmap gets two different answers.
+No product implementation is authorized by this checkpoint. Before implementation
+begins, this file is replaced with that stage's contract, following the lifecycle in
+[the development workflow](DEVELOPMENT-WORKFLOW.md#12-preservation-documentation-and-escalation):
+a target-qualification stage merges its contract in a dedicated planning change first;
+every other stage places its contract here in the first commit of its own pull request
+and restores this checkpoint in its last.
 
-After this change the capability manifest contains the five stock Lua dialects and
-nothing else, and `planned_dialects` is empty.
+The execution sequence is a dependency order, not a standing batch authorization. Take
+only the first unmet stage whose prerequisites are accepted; do not combine
+public-contract, robustness, target-promotion, or customer-transfer work merely because
+they share the 1.0 destination.
 
-## Target boundary
+The contract must name:
 
-The `SupportTier::Planned` variant and the `planned_dialects` field stay. They are part
-of the capabilities schema vocabulary at major 2, a future dialect may legitimately
-occupy that tier, and emptying the list is the honest statement that nothing does today.
-Removing the variant is a schema change with no current need.
+- one public outcome and its exact target boundary;
+- the production and ordinary-test paths allowed to change;
+- the narrow regression and any already-established gate that prove the claim;
+- explicit non-goals; and
+- a stop condition that prevents adjacent roadmap work from entering the batch.
 
-## Paths allowed to change
-
-- `crates/luad-core/src/capabilities.rs` — the dialect table and its unit tests.
-- `crates/luad-oracle/tests/test_cli_e2e.rs`, `crates/luad-oracle/tests/test_release_lua54.rs`
-  — assertions naming the retired dialect.
-- `README.md`, `CHANGELOG.md`, `ROADMAP.md` — the limitations table, the release entry,
-  and the retired roadmap item.
-
-## Proof
-
-- `test_capabilities_manifest_shape` and `test_capabilities_readme_status_consistency`
-  assert the manifest's dialect set and its agreement with the README.
-- A regression asserting no manifest dialect sits in the `Planned` tier and that
-  `planned_dialects` is empty, exercised through the public CLI rather than the library,
-  so the check follows the path a consumer actually takes.
-- `bash scripts/check.sh` for the aggregate.
-
-## Non-goals
-
-No LuaJIT parsing, no dialect added, no schema major change, no removal of the
-`SupportTier::Planned` variant or the `planned_dialects` field, and no change to any
-other dialect's tier or evidence.
+Qualification infrastructure, new evidence layers, and target promotion require their
+own stated need and acceptance boundary. They are not implied by selecting a product
+outcome.
 
 ## Stop condition
 
-Stop when the manifest no longer names a LuaJIT dialect and the documentation agrees.
-Do not take any other roadmap item in this batch, and do not adjust another dialect's
-tier because the table is open in the editor.
+Stop before changing product code. Every implementation commit follows one that placed
+its claim in this file; a checkpoint never coexists with a contract.
