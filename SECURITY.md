@@ -10,9 +10,10 @@ as the sole control for accepting, rejecting, or characterizing hostile code. Se
 the evidence boundaries in the [product roadmap](ROADMAP.md), [active sprint](docs/NEXT-SPRINT.md), and
 [machine-interface contract](docs/MACHINE-INTERFACE.md).
 
-The planned 1.0 matrix contains three separate claims: the exact OpenWrt-derived Lua
-5.1.5 LNUM32 profile, one exact stock PUC Lua 5.1.5 64-bit layout, and the exact stock
-PUC Lua 5.4.9 target. The canonical profile and layout identities live in the
+The planned 1.0 matrix contains two separate claims: the exact OpenWrt-derived Lua
+5.1.5 LNUM32 profile `lua5.1-lnum32`, and one exact stock PUC Lua 5.1.5 64-bit layout
+`lua5.1`. Stock PUC Lua 5.4.9 is a post-1.0 candidate, not a planned 1.0 target. The
+canonical profile and layout identities live in the
 [frozen version-1 boundary](docs/RELEASING.md#frozen-version-1-boundary). This future
 matrix does not designate any current code or candidate as security-supported. After
 release, this section must be replaced with the actual supported tool versions and

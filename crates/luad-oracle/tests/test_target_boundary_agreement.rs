@@ -10,9 +10,10 @@
 //! 1. The frozen boundary table names at least two profiles and its prose count word
 //!    matches the number of table rows.
 //! 2. Every profile identity in the table appears in the roadmap's support boundary,
-//!    the release qualification order, and the product requirements' version-1 goals,
-//!    1.0 release criterion, and decision summary; the two sections that enumerate the
-//!    promoted set name it exactly, so an extra entry fails as well as a missing one.
+//!    the release qualification order, the security policy's planned matrix, and the
+//!    product requirements' version-1 goals, 1.0 release criterion, and decision
+//!    summary; the three sections that enumerate the promoted set name it exactly, so
+//!    an extra entry fails as well as a missing one.
 //! 3. The product boundary states that LuaJIT and Luau are outside the product, and the
 //!    specific wordings that previously scheduled them as future work stay retired.
 
@@ -111,6 +112,7 @@ fn test_every_promoted_profile_appears_in_each_authoritative_document() {
     let releasing = read(&root, "docs/RELEASING.md");
     let roadmap = read(&root, "ROADMAP.md");
     let prd = read(&root, "PRD.md");
+    let security = read(&root, "SECURITY.md");
 
     let promoted = profile_identities(section(&releasing, "## Frozen version-1 boundary"));
     assert!(
@@ -120,10 +122,14 @@ fn test_every_promoted_profile_appears_in_each_authoritative_document() {
 
     // Each site is bounded to its own section so a profile named elsewhere in the
     // document cannot satisfy the check.
-    let sites: [(&str, &str); 5] = [
+    let sites: [(&str, &str); 6] = [
         (
             "the roadmap's version-1 support boundary",
             section(&roadmap, "### Version 1 support boundary"),
+        ),
+        (
+            "the security policy's planned 1.0 matrix",
+            section(&security, "## Status and supported versions"),
         ),
         (
             "the release qualification order",
@@ -163,6 +169,10 @@ fn test_every_promoted_profile_appears_in_each_authoritative_document() {
         (
             "the release qualification order",
             section(&releasing, "## Release scope and order"),
+        ),
+        (
+            "the security policy's planned 1.0 matrix",
+            section(&security, "## Status and supported versions"),
         ),
     ] {
         let named = profile_identities(body);
