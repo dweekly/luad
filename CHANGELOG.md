@@ -1,8 +1,32 @@
 # Changelog
 
-All notable changes will be documented here. The project has not yet made a production release.
+All notable changes are documented here. `luad` is a 0.x experimental tool: no dialect
+is promoted to a supported tier and no interface carries a compatibility promise yet.
 
 ## Unreleased
+
+## 0.1.0 — 2026-09-16
+
+First public release. `luad` reads compiled Lua bytecode and reports the exact format a
+chunk was built for, its instructions, constants, and closure bindings, with byte-level
+provenance for every fact. It is useful today on Lua 5.1 and 5.4 chunks, including the
+non-standard layouts found in extracted router firmware, and it is published as
+experimental rather than held back until a 1.0 evidence program completes.
+
+**What works.** `inspect`, `disasm`, `validate`, `explain`, `export`, and `diagnostics`
+across Lua 5.1 through 5.5, in text, JSON, and JSONL with published schemas. Profile
+detection distinguishes OpenWrt-style LNUM32 builds from stock layouts. Analysis
+commands (`cfg`, `callees`, `callgraph`, `origins`, `xrefs`, `query`, `diff`) are
+present and explicitly experimental. The workspace forbids `unsafe` code.
+
+**Known defects.** Lua 5.2 and 5.3 do not fully honor or refuse declared header widths
+by name, which can produce a confident wrong answer rather than an error; treat their
+output as a hint. EdgeTX chunks fail inside the body with a diagnostic anchored at
+offset 0. The capability manifest still reports a stale `planned` tier for `luajit`,
+which is out of scope. See the README for the current limitations table.
+
+**No support claims.** The supported dialect set is empty. "Valid" means consistent with
+the selected format and the named checks, not safe to execute or of known origin.
 
 ### Release planning
 
