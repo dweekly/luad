@@ -20,20 +20,25 @@ cost for each one.
    refused by name, never silently replaced with the reader's preferred one. This is the
    only defect class that produces a confident wrong answer instead of an error, so it
    outranks every feature. Fix 5.2 and 5.3; probe 5.5 the same way.
-2. **Fix the offset in body-parse diagnostics.** EdgeTX chunks fail inside the body with
+2. **Stop panicking on a closed pipe**
+   ([#78](https://github.com/dweekly/luad/issues/78)). `luad disasm … | head` exits 101
+   with a Rust panic instead of terminating quietly, so the first thing a new user does
+   with a long listing looks like a crash, and the exit code falls outside the range the
+   machine-interface contract documents.
+3. **Fix the offset in body-parse diagnostics.** EdgeTX chunks fail inside the body with
    a diagnostic anchored at offset 0, which sends a reader to the wrong place. Report the
    deepest failure offset reached.
-3. **One firmware walkthrough in the README.** Take a real extracted tree, inventory it,
+4. **One firmware walkthrough in the README.** Take a real extracted tree, inventory it,
    find a global lookup, inspect the instruction, and hand the chunk to a decompiler.
    Public inputs, exact commands, expected output.
-4. **Make the integration tests resolve `luad` once.** Each test binary that shells out
+5. **Make the integration tests resolve `luad` once.** Each test binary that shells out
    to the CLI spawns its own nested `cargo build -p luad-cli` when `CARGO_BIN_EXE_luad`
    is unset, so a workspace run races several cargo invocations against each other and
    against the outer build. `test_cli_inspect_and_disasm` was observed failing three
    times on the first run after a rebuild and passing on repeat runs; the mechanism is
    understood but not deterministically reproduced. Resolve the binary through one
    helper that does not build.
-5. **Hostile-input bounds.** Runtime and peak-memory tripwires on the exposed paths, and
+6. **Hostile-input bounds.** Runtime and peak-memory tripwires on the exposed paths, and
    minimized regressions from the fuzz corpus. The fuzz smoke suite already runs in CI;
    this makes its findings durable.
 
