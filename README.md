@@ -1,43 +1,161 @@
 # `luad`
 
-`luad` is a memory-safe, dialect-aware Rust CLI and library for inspecting, disassembling, validating, and analyzing compiled Lua bytecode.
+`luad` reads compiled Lua bytecode and tells you what is in it: the exact format it was
+built for, the instructions, the constants, the closure bindings, and where every one of
+those facts lives in the original bytes. It is a memory-safe Rust CLI and library for
+inspecting, disassembling, validating, and analyzing Lua chunks — including the
+non-standard ones that turn up inside extracted router and embedded firmware.
 
-## Project status
+It does not decompile. When you want source back, `luad` tells you exactly which profile
+the chunk uses so you can hand it to a decompiler that reads that profile.
 
-`luad` is a pre-release research tool. It is not currently suitable as the sole basis
-for security conclusions or production reverse-engineering decisions. No dialect or
-profile is promoted to the supported tier.
+## Status: 0.1.0, experimental
 
-`luad` aims to be a dependable companion for investigating Lua in extracted firmware:
-identify an exact profile, retrieve useful facts with byte-level evidence, account for
-unreadable inputs, and continue in a preferred decompiler or reverse-engineering tool.
-The planned 1.0 boundary is OpenWrt-derived Lua 5.1.5 LNUM32 and one exact stock Lua
-5.1.5 layout. Neither is promoted yet. Verification means consistency with the selected
-format and named checks, not safe execution or a proven producer identity.
+This is an early release of a tool built for fun. It works, and it gives real answers on
+real firmware, but no dialect is promoted to a supported tier and nothing here is
+qualified as a basis for security conclusions. Expect wrong answers on Lua 5.2 and 5.3.
+Please file issues.
 
-Known header-width/reporting defects remain in Lua 5.2 and 5.3, and EdgeTX chunks fail
-inside the body. Layout truth is the first roadmap milestone; declining a layout is
-sufficient when it lies outside the support boundary.
+See [limitations](#limitations) for what specifically does not work yet.
 
-The repository has public-boundary evidence for exact Lua 5.4.8 disassembly and a broad
-experimental Lua 5.1 surface. The OpenWrt-derived Lua 5.1.5 LNUM32 public read contract
-and compiler authority are qualified as prerequisites, but the retained RC1 candidate
-is non-promoting and predates later correctness and machine-interface changes. Lua 5.2,
-5.3, 5.5, stock Lua 5.1 layouts, and every other target remain experimental.
+## What it does
 
-The [release procedure](docs/RELEASING.md#frozen-version-1-boundary) records the exact
-future 1.0 targets, layouts, package platforms, machine-contract majors, owner, and
-evidence location. The [path to 1.0](ROADMAP.md) orders layout truth, compact target
-evidence, public firmware walkthroughs and an outside-user trial, then interface freeze,
-hostile-input qualification, the two exact targets, and packaged-candidate transfer.
-EdgeTX and stock Lua 5.4.9 are post-1.0 candidates. Future targets and compatibility
-promises are obligations, not present support claims.
+```console
+$ luad inspect hello.luac
+=== Chunk Overview ===
+SHA-256:           8376be37ec3042d3b0a87aa39db7d7396fb54ae390abe346d885e1527d23e353
+Byte Length:       249 bytes
+Dialect:           lua5.1-lnum32
+Profile:           lua5.1-lnum32
+Selection Mode:    Detected
+Layout:            int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4
+Verdict:           ValidForParser
+```
 
-The architectural boundary is deliberate: `luad` owns deterministic VM facts that
-competent analysts should agree on, while callers own investigation-specific judgments
-such as whether a callee is dangerous, whether a value is attacker-controlled, or
-whether a path is exploitable. The CLI should make an external security layer easy to
-write correctly without absorbing that layer's policy or persistent state.
+That `Layout` line is the point. This chunk is an OpenWrt-style build with a 32-bit
+`size_t` and an integer-flavored number representation — stock desktop Lua never emits
+it, and tools built on the stock loader refuse it or read it wrong.
+
+```console
+$ luad disasm hello.luac
+; proto:0 (source: @hello.lua, lines 0-0, stack: 4)
+; params: 0, is_vararg: 2, instructions: 9, constants: 4
+; Constants:
+;   k[0] = "print"
+;   k[1] = "Hello, luad!"
+
+   0  GETGLOBAL    R(0) K(0) ; "print"
+   1  LOADK        R(1) K(1) ; "Hello, luad!"
+   2  CALL         R(0) 2 1
+   3  RETURN       R(0) 1
+```
+
+Everything is also available as JSON and JSONL with published schemas, so you can build
+on it without scraping text. See [machine interface](#machine-interface).
+
+## Install
+
+Prebuilt archives for `linux-x86_64` and `macos-aarch64` are attached to each
+[GitHub release](https://github.com/dweekly/luad/releases). Download, verify the
+checksum, and extract.
+
+From source, with a Rust 1.85 or newer toolchain:
+
+```console
+git clone https://github.com/dweekly/luad.git
+cd luad
+cargo install --path crates/luad-cli --locked
+```
+
+This is a source install. Workspace packages are marked `publish = false`, so
+`cargo install luad` from crates.io is not a supported channel.
+
+Contributors setting up the full toolchain, the official Lua compilers, and the fuzz
+suite should use [docs/BRINGUP.md](docs/BRINGUP.md) instead.
+
+## Commands
+
+```console
+luad inspect chunk.luac                     # identify format and summarize
+luad disasm chunk.luac --raw --effects      # faithful listing with byte provenance
+luad validate chunk.luac --strict           # structural and VM-invariant checks
+luad explain chunk.luac 'proto:0:pc:3'      # explain one field or instruction
+luad export firmware/*.lua --format jsonl   # deterministic batch export
+luad diagnostics L51-REG-SPAN-001           # look up a diagnostic code
+```
+
+Also present, and explicitly experimental: `cfg`, `callees`, `callgraph`, `origins`,
+`xrefs`, `query`, and `diff`. These produce useful output but their schemas and
+semantics may change without notice.
+
+The repository ships precompiled fixtures, so you can try it without a Lua compiler:
+
+```console
+cargo run -q -p luad-cli -- inspect tests/fixtures/precompiled/lua54/hello.luac
+```
+
+`luad` analyzes bytecode as data. It never invokes an external compiler and never
+executes the chunk.
+
+## Limitations
+
+Honest current state, as of 0.1.0:
+
+| Dialect | Opcodes | Tier | State |
+|---|---:|---|---|
+| `lua5.1` | 38 | Experimental | Best exercised. LNUM32 firmware profile and stock layouts both read. |
+| `lua5.2` | 40 | Experimental | **Known defects.** Declared header widths are not fully honored or refused by name. |
+| `lua5.3` | 47 | Experimental | **Known defects.** Same header-width class as 5.2. EdgeTX chunks fail inside the body. |
+| `lua5.4` | 83 | Experimental | Reads well; exact-disassembly evidence exists for 5.4.8. |
+| `lua5.5` | 85 | Experimental | Present, least exercised. |
+| `luajit` | — | Planned | Stale tier. LuaJIT is out of scope; [the roadmap](ROADMAP.md#next) retires this entry. |
+| Luau | — | — | Separate bytecode system, out of scope. |
+
+No dialect is in the `supported` tier and the supported set is empty, which is what
+`luad capabilities` reports. Experimental means the code is present and gives useful
+answers, not that its correctness has been qualified.
+
+The defect that matters most: on some Lua 5.2 and 5.3 inputs a declared layout width can
+be silently substituted rather than honored or refused by name, which means a confident
+wrong answer rather than an error. This is the first thing being fixed. Until it is,
+treat 5.2 and 5.3 output as a hint, not a fact.
+
+`luad` also does not do firmware extraction, decompilation, source reconstruction,
+exploitability judgment, or persistent research state. Those belong in other tools, and
+[the roadmap](ROADMAP.md) lists which ones to reach for.
+
+"Valid" from `luad validate` means consistent with the selected format and the named
+checks. It does not mean the chunk is safe to execute, or that its producer is known.
+
+## Machine interface
+
+Discover the live surface rather than scraping human output:
+
+```console
+luad capabilities --format json
+luad diagnostics --format json
+luad schema capabilities
+luad schema chunk
+```
+
+Consumers should read [docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md) for exit
+codes, stable-ID scope, truncation behavior, and the stdout/stderr contract. Schemas are
+versioned, but at 0.1.0 nothing carries a compatibility promise yet.
+
+[docs/examples/RECIPES.md](docs/examples/RECIPES.md) has practical composition recipes.
+
+## How `luad` compares on non-stock chunks
+
+[docs/PRIOR-ART-AND-CORPORA.md](docs/PRIOR-ART-AND-CORPORA.md) keeps a matrix of every
+runnable Lua bytecode tool against chunks that stock desktop Lua never produces,
+starting with EdgeTX radio firmware (32-bit Lua 5.3, 4-byte floats, a header slot that
+does not describe the body). The honest summary as of 2026-09-02: tools built on the
+stock loader (official `luac`, luadec, rizin, ChunkSpy) refuse those chunks by name; the
+two unluac lineages read them correctly; `luad` accepts the header and then fails inside
+the body with a diagnostic anchored at the wrong offset.
+
+This dated comparison informs the work. No goal here requires other tools to remain
+deficient — an upstream project fixing a defect is a good outcome.
 
 ## Documentation index
 
@@ -48,267 +166,40 @@ delete the document in the same change and update this index.
 
 | Document | Purpose | Fresh as of | Revalidate or delete when |
 |---|---|---:|---|
-| [`README.md`](README.md) | Project status, entry points, documentation index, build, and first-use commands. | 2026-09-06 | Public scope, support status, setup, primary commands, or the documentation set changes. |
+| [`README.md`](README.md) | What `luad` is, install, first commands, honest limitations, and the documentation index. | 2026-09-16 | Public scope, support status, setup, primary commands, or the documentation set changes. |
 | [`AGENTS.md`](AGENTS.md) | Binding repository instructions, product-batch boundaries, and safety constraints for coding agents. | 2026-08-27 | Development workflow, proof policy, current priority, or repository invariants change. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-27 | Crates, ownership boundaries, core representations, or evidence layers change. |
-| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of unreleased and released user-visible changes. | 2026-09-06 | Every user-visible change or release; never use it as a forward plan. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of released and unreleased user-visible changes. | 2026-09-16 | Every user-visible change or release; never use it as a forward plan. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor verification commands, test taxonomy, fixture provenance, and definition of done. | 2026-09-03 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
 | [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-09-06 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
-| [`ROADMAP.md`](ROADMAP.md) | Focused firmware path to 1.0: two exact Lua 5.1 profiles, executable workflows, an outside trial before interface freeze, proportional evidence, and release stop conditions. | 2026-09-06 | Product targets, milestone order, release acceptance, package platforms, compatibility boundary, or exclusions change. |
+| [`ROADMAP.md`](ROADMAP.md) | Stack-ranked next steps after 0.1.0, the version-1 support boundary, and the ecosystem tools to reach for. | 2026-09-16 | Product targets, next-step order, the support boundary, or exclusions change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, vulnerability reporting, and hostile-input threat model. | 2026-08-27 | Support policy, reporting channel, trust boundary, or threat model changes. |
+| [`docs/ROADMAP-1.0.md`](docs/ROADMAP-1.0.md) | The full qualification program a future 1.0 would need: milestones, evidence gates, target promotion, and release acceptance. | 2026-09-16 | The 1.0 destination, milestone order, release acceptance, or the qualification lifecycle changes. |
 | [`docs/BRINGUP.md`](docs/BRINGUP.md) | Setup for a developer machine, a self-hosted Actions runner, and a release builder, with the owning file for every tool pin. | 2026-09-02 | A tool pin, its owning file, the doctor's checks, runner labels or security boundary, or the release dry-run and rehearsal entry points change. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, separate product and qualification CI lanes, proportional evidence, process budgets, and agent orchestration. | 2026-08-27 | Planning artifacts, CI lanes, customer cadence, agent roles, evidence policy, process budgets, provider interfaces, or sprint-advance mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Neutral checkpoint authorizing no product implementation while the next stage of the release execution sequence is selected. | 2026-09-03 | The first unmet stage of the roadmap sequence replaces it with its contract: a qualification stage through a dedicated planning change, any other stage in the first commit of its own pull request. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Neutral checkpoint authorizing no product implementation while the next stage is selected. | 2026-09-16 | A stage replaces it with its contract: a qualification stage through a dedicated planning change, any other stage in the first commit of its own pull request. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-27 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/PRIOR-ART-AND-CORPORA.md`](docs/PRIOR-ART-AND-CORPORA.md) | External tools, datasets, and bytecode-emitting ecosystems evaluated against the product scope, candidate fixture sources with license and provenance constraints, and the fidelity gaps they expose. | 2026-09-06 | A listed project changes license or status, a candidate corpus or vendor profile is adopted or rejected, or the PRD prior-art table is revised. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-27 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
-| [`docs/RELEASING.md`](docs/RELEASING.md) | Release stop, exact-target order, qualification checklist, evidence bundle, packaging, compatibility, publication, and rollback policy. | 2026-09-06 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |
+| [`docs/RELEASING.md`](docs/RELEASING.md) | Release policy for 0.x and 1.0, exact-target order, qualification checklist, packaging, publication, and rollback. | 2026-09-16 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |
 | [`docs/LUA51-LNUM32-CANDIDATE.md`](docs/LUA51-LNUM32-CANDIDATE.md) | Archived verification and firmware-handoff guide for the immutable, non-promoting Lua 5.1 LNUM32 RC1 artifact. | 2026-08-27 | RC1 evidence is retired, its retained artifacts become unverifiable, or a new LNUM32 candidate guide replaces it. |
 | [`docs/examples/RECIPES.md`](docs/examples/RECIPES.md) | Practical command-line and composition recipes for consuming machine JSON and JSONL output. | 2026-08-27 | Machine interface envelopes, export records, or CLI subcommands change. |
 | [`docs/reviews/2026-08-25-roadmap-review.md`](docs/reviews/2026-08-25-roadmap-review.md) | Archived point-in-time roadmap and release-readiness critique retained as planning provenance, not current status. | 2026-08-27 | Delete only when its planning provenance is intentionally retired; never revalidate it as current release evidence. |
 
-## Intended scope
-
-`luad` aims to provide deterministic facts derived from Lua bytecode:
-
-- lossless structural parsing with byte provenance;
-- dialect-specific instruction decoding and validation;
-- semantic instruction effects;
-- control-flow graphs, dominators, cross-references, queries, and diffs;
-- stable machine-readable output and schemas;
-- bounded behavior on malformed or adversarial input.
-
-Researcher judgment, persistent interpretations, project state, and agent planning
-belong outside `luad`. The CLI exports deterministic facts for external tools and
-agents to interpret.
-
-## Implemented dialect surface
-
-This table describes code present in the repository, not verified support status.
-
-| Dialect | Opcode table | Parser/lifter present | Current evidence status |
-|---|---:|---|---|
-| Lua 5.1 | 38 | Yes | Experimental; the exact LNUM32 public read surface and compiler authority are qualified, while stock layouts and release promotion remain independent |
-| Lua 5.2 | 40 | Yes | Experimental; proof gates incomplete |
-| Lua 5.3 | 47 | Yes | Experimental; proof gates incomplete |
-| Lua 5.4 | 83 | Yes | Experimental; public disassembly, validation, analysis, lossless, and machine-contract evidence exists; exact target promotion remains pending |
-| Lua 5.5 | 85 | Yes | Experimental; independent proof gates incomplete |
-| LuaJIT 2.x | — | No | Not supported and out of scope for the product; the capability manifest still reports the Planned tier until the machine-contract milestone retires the entry |
-
-The embedded Lua 5.1 release scope is driven by a 252-file TP-Link corpus: header-declared 32-bit `size_t`, an explicit LNUM profile, correct closure-binding records, precise offsets, and inline resolved constants. Private-corpus results supplement—but never replace—redistributable fixtures and public-boundary proof. See the [embedded-firmware requirements](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md).
-
-## How `luad` compares on non-stock chunks
-
-[docs/PRIOR-ART-AND-CORPORA.md](docs/PRIOR-ART-AND-CORPORA.md) keeps a matrix of every
-runnable Lua bytecode tool against chunks that stock desktop Lua never produces,
-starting with EdgeTX radio firmware (32-bit Lua 5.3, 4-byte floats, a header slot that
-does not describe the body). The honest summary as of 2026-09-02: tools built on the
-stock loader (official `luac`, luadec, rizin, ChunkSpy) refuse those chunks by name; the
-two unluac lineages read them correctly; `luad` accepts the header and then fails inside
-the body with a diagnostic anchored at the wrong offset. The [roadmap](ROADMAP.md)
-defers EdgeTX qualification until a post-1.0 researcher workflow needs it. This dated comparison informs that work; release
-acceptance does not require other tools to remain deficient.
-
-## Build
-
-The stable workspace MSRV is Rust 1.85. The repository separately pins a newer Rust
-release in `rust-toolchain.toml` for contributors and release builders, and the fuzz
-suite uses its own pinned nightly. All production crates inherit the workspace's
-`unsafe_code = "forbid"` policy.
-
-Machine setup is one document: [docs/BRINGUP.md](docs/BRINGUP.md). It covers the
-toolchains, the dependency-policy and SBOM tools, the fuzz nightly and `cargo-fuzz`, the
-five official Lua compilers, and the OpenWrt LNUM32 authority compiler, and it names the
-file that owns each pinned version.
-
-```console
-git clone https://github.com/dweekly/luad.git
-cd luad
-bash scripts/bringup.sh --install
-bash scripts/check.sh
-```
-
-`scripts/bringup.sh --doctor` reports every required tool with its expected and found
-version at any time, and exits non-zero if one is missing or wrong.
-
-A checked-out source tree can install the `luad` binary into Cargo's normal install root:
-
-```console
-cargo install --path crates/luad-cli --locked
-```
-
-This is a source install, not a crates.io channel. All workspace packages are marked
-`publish = false`; `cargo install luad` is not supported or advertised for 1.0. The
-primary planned 1.0 channel remains the verified GitHub release archives.
-
-The required dependency-policy job runs the pinned `cargo-deny` release against the
-locked Linux and macOS graph:
-
-```console
-cargo deny --locked check advisories licenses
-```
-
-The reviewed policy is [`deny.toml`](deny.toml). This gate checks declared dependency
-licenses and current RustSec advisories; it is not a legal opinion, manual source-license
-review, SBOM, or binary-composition proof.
-
-To run the bounded hostile-input fuzz smoke suite:
-
-```console
-scripts/fuzz_smoke.sh artifacts/fuzz-smoke
-```
-
-The aggregate check is necessary repository evidence, not instruction-level proof. See [CONTRIBUTING.md](CONTRIBUTING.md) for the test taxonomy and required gates.
-
-## Local release archive dry run
-
-From a clean checkout on Linux x86-64 or macOS arm64, the maintained packaging command
-builds the host binary, creates the deterministic archive and sidecars, independently
-verifies them, extracts into a fresh temporary directory, and runs the packaged version
-and capabilities smokes:
-
-```console
-./scripts/package-release.sh /tmp/luad-release
-```
-
-The output directory must be new or empty. It receives
-`luad-<version>-<platform>.tar.gz`, its JSON member ledger, `SHA256SUMS`, and a JSON
-installation transcript. The archive contains only a top-level
-`luad-<version>-<platform>/` directory with `luad`, `README.md`, `LICENSE`,
-`LICENSE-APACHE`, and `VERSION.json`.
-
-This is a local, non-promoting packaging check. It does not publish an artifact, qualify
-a host or Lua target, or include the separately generated SBOM.
-
-The required `Release Archives` CI check runs the same command in two independent Rust
-1.97.1 jobs for each planned release platform. It requires byte-identical archives,
-ledgers, one-entry checksums, and installation transcripts for each platform, verifies
-a combined two-entry `SHA256SUMS`, and exercises archive-byte and checksum corruption
-controls. Its seven-day `release-archives` upload is diagnostic transport, not a
-published release or durable authority. The result proves repeatability only within the
-named `luad-linux` and `luad-macos` self-hosted runner classes and pinned toolchain;
-each job also verifies its declared OS, architecture, and Rust host triple. The
-remaining release work is tracked in the [roadmap](ROADMAP.md).
-
-## Release SBOM dry run
-
-With the exact `cargo-cyclonedx` 0.5.9 executable installed, a clean checkout can write
-and independently verify the release dependency inventory:
-
-```console
-CARGO_CYCLONEDX="$(command -v cargo-cyclonedx)" \
-  ./scripts/generate-release-sbom.sh /tmp/luad-sbom
-```
-
-The new or empty output directory receives exactly `luad-<version>.cdx.json`: canonical,
-path-independent CycloneDX 1.5 JSON bound to the clean source revision and `Cargo.lock`
-digest. The verifier compares components, scopes, licenses, registry checksums, and
-dependency edges with locked Cargo metadata. CI pins the official Linux generator asset
-and compares output from two clean checkout paths.
-
-This is a conservative source inventory for the `luad` executable's normal and build
-dependency graph across all Cargo target conditions. It is not a platform-specific
-binary-composition attestation, vulnerability result, published release asset, or target
-promotion record.
-
-## Release bundle dry run
-
-The required `Release Bundle` CI check combines the accepted two-platform archive
-artifact and SBOM with references to the successful dependency-audit, Linux archive
-oracle, SBOM, and hosted archive checks from the same clean revision. The maintained
-entry point is:
-
-```console
-./scripts/assemble-release-bundle.sh \
-  /tmp/release-archives \
-  /tmp/release-sbom/luad-<version>.cdx.json \
-  /tmp/release-prerequisites.json \
-  /tmp/release-bundle
-```
-
-The output is exactly the two archives, the SBOM, `evidence-index.json`, and a
-`SHA256SUMS` covering those four payload files. The index preserves each archive's
-member ledger and installation transcript, binds every input and prerequisite reference
-to one revision, and requires an empty promoted-target set. CI assembles twice, compares
-all five files byte for byte, verifies them, and exercises a corruption control.
-
-The hosted workflow creates the prerequisite-reference document from actual job
-results. A locally authored document or seven-day `release-bundle` upload is not proof
-of those results or target promotion.
-
-## Non-production publication rehearsal
-
-Maintainers can dispatch `Release Publication` from `main` with one full source
-revision and its successful `CI` run ID. The workflow reuses that run's exact bundle,
-exercises failed-publication cleanup and valid-release withdrawal, then retains one
-plainly labeled prerelease:
-
-```text
-publication-rehearsal-<version>-<12-revision-hex>
-```
-
-The retained release contains the same five custom files plus GitHub's normal source
-archives. Fresh downloads, checksums, bundle identity, tag target, release metadata, and
-both source archive forms are verified. It is not latest, not signed, names no supported
-target, and is not a product release or 1.0 candidate. The exact dispatch and withdrawal
-commands are in the [release procedure](docs/RELEASING.md#non-production-publication-rehearsal).
-
-## First use
-
-The repository includes precompiled fixtures, so no Lua compiler is needed for a basic smoke test:
-
-```console
-cargo run -q -p luad-cli -- \
-  inspect tests/fixtures/precompiled/lua54/hello.luac --summary
-
-cargo run -q -p luad-cli -- \
-  disasm tests/fixtures/precompiled/lua54/hello.luac --raw --effects
-```
-
-Common commands:
-
-```console
-luad inspect chunk.luac
-luad disasm chunk.luac --raw --debug-info --effects
-luad validate chunk.luac --strict
-luad explain chunk.luac 'proto:0:pc:3'
-luad cfg chunk.luac --proto 'proto:0' --format dot
-luad callees chunk.luac --format jsonl
-luad callgraph chunk.luac --format jsonl
-luad origins chunk.luac --format jsonl
-luad xrefs chunk.luac --to 'proto:0:upvalue:0' --format json
-luad query chunk.luac --where 'opcode == "CALL"' --format json
-luad diff old.luac new.luac --semantic --format json
-luad export firmware/*.lua --format jsonl --max-facts-per-file 10000
-luad diagnostics L51-REG-SPAN-001
-```
-
-`luad` analyzes bytecode as data and does not invoke external compilers.
-
-## Machine interface
-
-Discover the live command and schema surface instead of scraping human-readable output:
-
-```console
-luad --help
-luad capabilities --format json
-luad diagnostics --format json
-luad schema capabilities
-luad schema diagnostics
-luad schema chunk
-luad schema instruction
-```
-
-Machine consumers should read [docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md), including the stability warning, exit codes, stable-ID scope, truncation behavior, and stdout/stderr contract.
-
 ## Contributing
 
-- Human contributors: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Coding agents: [AGENTS.md](AGENTS.md)
-- Architecture and invariants: [ARCHITECTURE.md](ARCHITECTURE.md)
-- Security policy: [SECURITY.md](SECURITY.md)
-- Release procedure: [docs/RELEASING.md](docs/RELEASING.md)
-- Product requirements: [PRD.md](PRD.md)
+Issues and pull requests welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) for the
+test taxonomy and required gates, [ARCHITECTURE.md](ARCHITECTURE.md) for the crate
+boundaries, and [AGENTS.md](AGENTS.md) if you are driving a coding agent.
+
+Security policy and the hostile-input threat model: [SECURITY.md](SECURITY.md).
+Release mechanics: [docs/RELEASING.md](docs/RELEASING.md).
+
+To run the aggregate check:
+
+```console
+bash scripts/check.sh
+```
 
 ## License
 

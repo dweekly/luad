@@ -8,18 +8,26 @@ Revalidate or delete when: the release target matrix, qualification lifecycle, p
 platforms, artifact channel, compatibility policy, signing/checksum policy, release
 ownership, or rollback procedure changes.
 
-## Current release stop
+## What may be released today
 
-Do not make a production release. No exact target is currently promoted, the active
-sprint is a no-work checkpoint, and the required public-contract, customer,
+**0.x experimental releases are allowed.** A 0.x tag publishes the tool as it actually
+is: no promoted target, no compatibility promise, and documented known defects. It
+requires only that CI is green on the tagged revision, that `CHANGELOG.md` and the
+README describe the release honestly, and that the capability manifest promotes nothing
+it has not earned. The point of a 0.x line is to put a useful tool in someone's hands
+while the evidence program below is still incomplete.
+
+**1.0 remains stopped.** No exact target is promoted, and the public-contract,
 extended-fuzz, security-review, target-qualification, and final-candidate evidence has
-not closed over one clean revision. The publication rehearsal below proves mechanics;
-it does not authorize a `v*` tag or production release.
+not closed over one clean revision. A `v1.0.0` tag is not authorized, and no 0.x release
+advances that claim. Passing an ordinary test, prerequisite gate, candidate packaging
+workflow, private corpus run, or model review cannot remove the 1.0 stop.
 
-The dependency-ordered path is [the product roadmap](../ROADMAP.md). Exact release work
-begins only under a qualification contract in [the active sprint](NEXT-SPRINT.md).
-Passing an ordinary test, prerequisite gate, candidate packaging workflow, private
-corpus run, or model review cannot remove this stop.
+The two are separate promises. Shipping 0.x says "this works, here is what is broken."
+Shipping 1.0 says "a researcher may rely on this," which is what
+[the 1.0 program](ROADMAP-1.0.md) exists to earn. Day-to-day direction lives in
+[the roadmap](../ROADMAP.md); exact target-qualification work begins only under a
+contract in [the active sprint](NEXT-SPRINT.md).
 
 ## Frozen version-1 boundary
 
@@ -141,7 +149,7 @@ An internal or model-run investigation does not substitute for this outside tria
 Fresh packaged-candidate transfer must also pass before publication. Repeat any trial
 workflow invalidated by an interface change. One outside trial is transfer evidence,
 not broad adoption or general firmware compatibility. Continued trials and community
-review belong to [post-release validation](../ROADMAP.md#outside-validation).
+review belong to [post-release validation](ROADMAP-1.0.md#outside-validation).
 
 Retain a sanitized customer-trial record in the matching candidate GitHub release in
 `dweekly/luad`. Do not commit private firmware, sensitive findings, model transcripts, or

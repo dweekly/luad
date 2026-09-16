@@ -1,7 +1,7 @@
 # Sprint checkpoint: no active product batch
 
-Lane: planning. Roadmap position: the next stage is the first unmet entry of the
-[release execution sequence](../ROADMAP.md#release-execution-sequence).
+Lane: planning. Roadmap position: the next stage is the top unmet item under
+[next steps](../ROADMAP.md#next).
 
 ## Current decision
 
