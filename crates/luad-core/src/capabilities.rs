@@ -181,16 +181,6 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
             completed_gates: vec![],
             evidence: vec!["Experimental dialect; formal proof gates deferred".to_string()],
         },
-        DialectCapability {
-            id: "luajit".to_string(),
-            display_name: "LuaJIT 2.0 / 2.1".to_string(),
-            opcode_count: 0,
-            features: vec!["planned".to_string()],
-            status: SupportTier::Planned,
-            required_gates: vec!["gate-luajit-parser".to_string()],
-            completed_gates: vec![],
-            evidence: vec!["Planned dialect; formal specification and parser deferred".to_string()],
-        },
     ];
 
     let supported_dialects = dialects
@@ -275,7 +265,10 @@ mod tests {
             manifest.experimental_dialects,
             vec!["lua5.1", "lua5.2", "lua5.3", "lua5.4", "lua5.5"]
         );
-        assert_eq!(manifest.planned_dialects, vec!["luajit"]);
+        assert!(
+            manifest.planned_dialects.is_empty(),
+            "no dialect occupies the planned tier; LuaJIT and Luau are outside the product"
+        );
     }
 
     #[test]
@@ -291,19 +284,17 @@ mod tests {
     fn test_all_stock_dialects_experimental_without_promoted_release_evidence() {
         let manifest = get_canonical_capabilities("0.1.0");
         for dialect in &manifest.dialects {
-            if dialect.id != "luajit" {
-                assert_eq!(
-                    dialect.status,
-                    SupportTier::Experimental,
-                    "Dialect '{}' must remain Experimental without promoted release evidence",
-                    dialect.id
-                );
-                assert!(
-                    dialect.completed_gates.is_empty(),
-                    "Dialect '{}' must have empty completed_gates",
-                    dialect.id
-                );
-            }
+            assert_eq!(
+                dialect.status,
+                SupportTier::Experimental,
+                "Dialect '{}' must remain Experimental without promoted release evidence",
+                dialect.id
+            );
+            assert!(
+                dialect.completed_gates.is_empty(),
+                "Dialect '{}' must have empty completed_gates",
+                dialect.id
+            );
         }
     }
 

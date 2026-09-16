@@ -2,13 +2,13 @@
 
 **Status:** Living product requirements
 
-**Fresh as of:** 2026-08-27
+**Fresh as of:** 2026-09-06
 
 **Product roadmap:** [ROADMAP.md](ROADMAP.md)
 
 **Active sprint:** [docs/NEXT-SPRINT.md](docs/NEXT-SPRINT.md)
 **Primary deliverable:** Self-documenting command-line interface with a versioned machine-readable output contract  
-**Primary users:** Lua security researchers and AI coding/reverse-engineering agents
+**Primary users:** Firmware reverse engineers and the scripts or agents assisting their investigations
 
 ## 1. Overview
 
@@ -30,7 +30,17 @@ Today, answering these questions usually requires a collection of version-specif
 
 Lua's bytecode is an internal implementation format rather than a stable cross-version interchange format. Lua's own documentation states that the virtual machine is likely to change between versions and that precompiled programs from one version will not load in another. Lua 5.1 encoded host details such as endianness, word sizes, and numeric representation in its header. Later releases changed both the serialized chunk layout and instruction encoding. LuaJIT, OpenResty LuaJIT, and Luau use distinct formats and instruction sets rather than merely adding a few opcodes.
 
-Parsing, disassembly, and decompilation of that bytecode are commodities: rizin, unluac, and unluac-rs already read it, including embedded 32-bit layouts. Verification is not. No tool proves its output against the producing compiler with negative controls, none reports a header that contradicts its body, and no public corpus of malformed chunks or licensed bytecode exists. The product opportunity is the Lua bytecode verifier and fact source: honest refusal that names the lying field, an authority discipline behind every claim, public corpora that make the claim testable, and a machine contract that decompilers, devirtualizers, and reverse-engineering platforms consume rather than compete with.
+Existing decompilers and reverse-engineering platforms provide valuable Lua support.
+The product opportunity is a dependable companion for extracted firmware: explicit
+qualified profiles, focused fact retrieval with byte provenance, complete batch
+accounting, bounded behavior, and a documented machine interface. This combination
+must save researchers from writing parsers or identity adapters. Product acceptance
+does not require exclusive capabilities or other tools to remain deficient.
+
+Verification establishes consistency with a selected format and named checks, not
+safe execution or the producer's intent. Diagnostics preserve observed offsets and
+context; attributing a failure to a header/body contradiction requires evidence.
+Unknown causes and ambiguous origins remain explicit.
 
 ### 1.2 Who needs it
 
@@ -81,8 +91,9 @@ The existing ecosystem contains valuable components but no complete solution.
 | [Luau official tooling](https://github.com/luau-lang/luau/blob/master/CLI/src/Compile.cpp) | Rich official dump for the Luau ecosystem | Luau is a separate, rapidly evolving bytecode system and cannot stand in for stock Lua |
 
 The [prior-art and corpus survey](docs/PRIOR-ART-AND-CORPORA.md) keeps a reproduced
-matrix of these tools against the same non-stock chunks; it is the public acceptance
-picture for every vendor profile.
+matrix of these tools against the same non-stock chunks. These dated observations
+need revalidation before a recommendation; target acceptance does not depend on another
+tool failing.
 
 ### 1.4 Why current options are deficient
 
@@ -127,13 +138,12 @@ Common deficiencies include:
 
 The primary product should be a self-documenting CLI rather than a GUI or TUI. The CLI is the common denominator for both human researchers and AI agents; it is composable, automatable, testable, remotely usable, and capable of producing durable artifacts. A stable JSON interface is as important as the human text interface.
 
-Development proceeds through customer-visible, public-boundary vertical slices rather
-than broad parser presence. The first promotion path qualifies the exact
-OpenWrt-derived Lua 5.1 LNUM32 target and the firmware-tree machine contract, followed
-by the EdgeTX Lua 5.3.6 32-bit profile as the second vendor layout. Version 1.0 then
-closes the same public contract independently for the final PUC Lua 5.4.9 release and
-the exact stock PUC Lua 5.1.5 64-bit layout. No target inherits support
-from a nearby version, profile, or layout.
+Development proceeds through complete firmware workflows. Version 1.0 independently
+qualifies OpenWrt-derived Lua 5.1.5 LNUM32 and the exact stock Lua 5.1.5 64-bit layout.
+EdgeTX Lua 5.3 32-bit and stock Lua 5.4.9 are post-release candidates, selected by
+researcher need. No target inherits support from a nearby version, profile, or layout.
+A public workflow and an outside firmware-researcher trial precede interface freeze;
+exact target promotion follows machine-contract and hostile-input qualification.
 
 Dynamic tracing, assembly, SSA, decompilation, persistent research state, and security
 judgment remain separate layers over the factual substrate. The roadmap defines the
@@ -144,15 +154,11 @@ checkpoint.
 
 ### 2.1 Product vision
 
-`luad` is an explainable Lua bytecode laboratory for safely inspecting, validating, navigating, comparing, and understanding compiled Lua code.
-
-It should feel like a purpose-built combination of:
-
-- `objdump` for reliable structural and instruction listings;
-- `javap -v` for integrated metadata;
-- a small portion of Ghidra/Binary Ninja for references, CFG, and layered representations;
-- WABT for validation and eventual lossless text/binary round trips; and
-- a self-describing data service exposed through a CLI rather than a network daemon.
+`luad` helps a firmware researcher identify the exact supported format, retrieve
+useful bytecode facts, reproduce the supporting bytes, understand unknowns, and
+continue in another tool. The first release completes that workflow for two explicit
+Lua 5.1 profiles. Extraction, readable source recovery, and interactive investigation
+compose with existing tools through documented handoffs.
 
 ### 2.2 Product form
 
@@ -172,7 +178,8 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 6. **Human and machine interfaces are peers.** Text output and JSON are both designed products.
 7. **Determinism is a feature.** Equivalent invocation and input produce byte-for-byte identical output unless explicitly requesting runtime or timing data.
 8. **Dialects are explicit.** Separate VM families use separate front ends; ambiguity is reported rather than guessed away.
-9. **Useful partial results beat opaque failure.** Permissive forensic recovery is available, but never silently treated as a valid parse.
+9. **Failures retain evidence.** Failed inputs retain identification, diagnostics, and
+   completion accounting. Partial-facts recovery is deferred and must never imply validity.
 10. **The CLI teaches its own use.** Help, schemas, examples, diagnostics, and suggested next actions are available locally.
 11. **Facts and judgment are different products.** Deterministic VM relationships belong
     in `luad`; sink, taint, authentication, and exploitability policy belong outside.
@@ -211,15 +218,8 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 - Qualify OpenWrt-derived Lua 5.1.5 profile `lua5.1-lnum32` with
   `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4` through a public,
   reproducible compiler authority.
-- Qualify EdgeTX Lua 5.3.6 profile `lua5.3-edgetx32` through the `edgetx-luac` host
-  compiler at a pinned EdgeTX revision, with 4-byte `int`, a 4-byte `size_t` header
-  slot, 4-byte instructions, 4-byte `lua_Integer`, 4-byte `lua_Number`, and `LUAC_NUM`
-  serialized as a single-precision float.
 - Qualify stock PUC Lua 5.1.5 profile `lua5.1` independently with
   `int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0`.
-- Qualify stock PUC Lua 5.4.9 profile `lua5.4` independently at format 0, with 4-byte
-  instructions, 8-byte `lua_Integer`, 8-byte `lua_Number`, and the pinned official
-  compiler's standard little-endian representation.
 - Preserve parsing surfaces for all other dialects, releases, profiles, and layouts as
   experimental without promoting them through the version-1 claim.
 - Detect and report the exact dialect, profile, layout, and selection evidence.
@@ -227,15 +227,19 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 - Decode all instructions and semantically type all operands.
 - Show nested prototypes, constants, upvalues, debug metadata, offsets, and raw instruction words.
 - Validate structural and important VM invariants.
-- Construct basic blocks and control-flow graphs.
-- Provide instruction-level use/definition effects and common cross-references.
+- Provide instruction-level effects and explicit closure bindings; retain CFG, xref,
+  query, diff, and explanation commands as experimental rather than release prerequisites.
 - Produce self-identifying, deterministic JSONL over firmware-scale mixed file sets.
 - Freeze only the command and fact families admitted by the public automation-contract
   milestone. Existing symbolic-callee, bounded value-origin, provable-call-relation,
   and prototype-identity surfaces remain available as experimental research unless
   that milestone qualifies an exact stable subset.
-- Explain instructions in context.
-- Compare two chunks structurally and semantically.
+- Complete executable inventory, focused investigation, and external-tool handoff
+  walkthroughs on public fixtures, including bytecode named `.lua` and `.luac`.
+- Complete an outside firmware-researcher trial and correct blocking friction before
+  the stable machine interface freezes; repeat invalidated workflows before release.
+- Publish a compact provenance-tracked valid/hostile corpus for the release claims;
+  broad corpus generators and separate dataset infrastructure are not prerequisites.
 - Support stripped chunks without treating absent debug data as an error.
 - Remain safe and bounded on arbitrary input.
 - Provide deterministic output, shell-friendly exit behavior, generated shell completions, local schemas, and extensive `--help` examples.
@@ -975,10 +979,10 @@ implying stock Lua 5.1 support. It requires:
 
 ### 13.2 Version 1.0
 
-Version 1.0 promotes exactly the four target identities in the canonical
+Version 1.0 promotes exactly the two target identities in the canonical
 [release boundary](docs/RELEASING.md#frozen-version-1-boundary): OpenWrt-derived
-Lua 5.1.5 `lua5.1-lnum32`, EdgeTX Lua 5.3.6 `lua5.3-edgetx32`, stock PUC Lua 5.4.9
-`lua5.4`, and stock PUC Lua 5.1.5 `lua5.1`.
+Lua 5.1.5 `lua5.1-lnum32` and stock PUC Lua 5.1.5 `lua5.1`.
+
 It additionally requires:
 
 - enveloped command JSON and the other major-1 JSON families at schema major 1,
@@ -987,13 +991,16 @@ It additionally requires:
 - reproducible packages for every advertised platform;
 - a published evidence bundle and software bill of materials;
 - a completed security review and extended fuzz campaign;
-- documentation for researcher, learner, and AI-agent workflows;
+- executable public firmware walkthroughs and an external consumer that preserves
+  artifact/interpretation identity, uses parameterized storage, and checks completion;
+- an outside researcher trial before interface freeze, resolved blocking findings,
+  and successful fresh-session transfer from the packaged candidate;
 - no open P0 correctness or security defect;
 - an explicit compatibility policy for exact dialect releases and profiles.
 
-Version 1.0 does not require Lua 5.2, stock Lua 5.3, 5.5, another Lua 5.1 layout, or
-another vendor profile. LuaJIT and Luau are outside the product entirely. Breadth must
-not delay or dilute exact evidence for the support scope actually advertised.
+Version 1.0 does not require EdgeTX Lua 5.3 32-bit, stock Lua 5.4.9, Lua 5.2, stock
+Lua 5.3, 5.5, another Lua 5.1 layout, or another vendor profile. LuaJIT and Luau are
+outside the product entirely. Breadth must not delay or dilute exact evidence for the support scope actually advertised.
 
 ## 14. Success metrics
 
@@ -1007,6 +1014,8 @@ not delay or dilute exact evidence for the support scope actually advertised.
 
 ### 14.2 Usability metrics
 
+- Outside trials record time to first useful answer, custom glue, missed files,
+  misunderstood output, and incorrect or unresolved answers against a predefined task.
 - A new user can identify, validate, and obtain a scoped disassembly using only `luad --help` and local help topics.
 - Common triage output fits within a documented bounded summary without requiring a full listing.
 - Every human-facing finding has a corresponding machine-readable representation.
@@ -1068,11 +1077,13 @@ Adoption is secondary to correctness, but useful signals include:
 - Static analysis never executes an input chunk.
 - The first promotable release candidate targets the exact OpenWrt-derived Lua 5.1.5
   `lua5.1-lnum32` profile and firmware-tree workflow.
-- Version 1.0 additionally qualifies the EdgeTX Lua 5.3.6 `lua5.3-edgetx32` profile,
-  the final PUC Lua 5.4.9 `lua5.4` target, and the exact stock PUC Lua 5.1.5 64-bit
-  `lua5.1` layout named by the roadmap.
-- Lua 5.2, stock Lua 5.3, 5.5, additional Lua 5.1 layouts, and every other vendor
-  profile remain experimental until independently promoted.
+- Version 1.0 additionally qualifies the exact stock PUC Lua 5.1.5 64-bit `lua5.1`
+  layout named by the roadmap.
+- EdgeTX Lua 5.3 32-bit, stock Lua 5.4.9, Lua 5.2, stock Lua 5.3, 5.5, additional
+  Lua 5.1 layouts, and other vendor profiles remain experimental or unsupported until
+  independently promoted after 1.0.
+- Outside-user feedback precedes interface freeze; one trial establishes transfer
+  evidence rather than broad adoption.
 - LuaJIT and Luau are outside the product. They are separate bytecode systems, not dialect rows, and no roadmap stage may authorize reading them.
 - Decompilation is not part of version 1.
 - Losslessness, provenance, validation, and determinism are release requirements rather than optional polish.
@@ -1125,7 +1136,15 @@ The project documentation set includes:
 - Architecture and contributor guide.
 - Known limitations and unsupported-format guidance.
 
-Documentation examples must be executable tests. Version-specific pages state the exact Lua release used as their reference.
+Documentation examples must execute against live output and schemas. The 1.0 entry
+path contains three worked examples: mixed-tree inventory, a literal/global lookup
+with byte evidence, and a compatible decompiler handoff. Each includes public inputs,
+provenance, commands, expected output, failure behavior, and tool/profile versions.
+The README leads with purpose, installation, a short useful example, exact support,
+limitations, and task-specific pointers; maintainer mechanics live behind links.
+Version-specific pages state the exact Lua release used as their reference. Additional
+authoring or analysis guides follow their owning post-1.0 feature rather than blocking
+this release.
 
 The root README indexes every maintained Markdown document with a summary, a
 last-fresh date, and a concrete revalidation or deletion trigger. Plans and roadmaps

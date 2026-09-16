@@ -40,8 +40,10 @@ fn test_cli_capabilities() {
     assert!(stdout.contains("lua5.2"));
     assert!(stdout.contains("lua5.1"));
     assert!(stdout.contains("[experimental]"));
-    assert!(stdout.contains("luajit"));
-    assert!(stdout.contains("[planned]"));
+    // LuaJIT is a separate bytecode system outside the product, so the dialect matrix
+    // must not advertise it, and no dialect may sit in the planned tier.
+    assert!(!stdout.contains("luajit"));
+    assert!(!stdout.contains("[planned]"));
 
     // JSON capabilities
     let json_output = Command::new(&luad)
@@ -73,7 +75,48 @@ fn test_cli_capabilities() {
         .as_array()
         .expect("planned_dialects array");
     let planned_strings: Vec<&str> = planned.iter().filter_map(|v| v.as_str()).collect();
-    assert_eq!(planned_strings, vec!["luajit"]);
+    assert!(
+        planned_strings.is_empty(),
+        "no dialect occupies the planned tier, found {planned_strings:?}"
+    );
+}
+
+#[test]
+fn test_no_dialect_occupies_the_planned_tier() {
+    // LuaJIT and Luau are separate bytecode systems outside the product. The manifest
+    // must not advertise a tier for a dialect the product will never build, so this
+    // reads the JSON a consumer reads rather than the library value behind it.
+    let luad = get_luad_bin();
+    let output = Command::new(&luad)
+        .args(["capabilities", "--format", "json"])
+        .output()
+        .expect("luad capabilities must run");
+    assert_eq!(output.status.code(), Some(0));
+
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("capabilities JSON must parse");
+
+    let planned = manifest["planned_dialects"]
+        .as_array()
+        .expect("planned_dialects array");
+    assert!(
+        planned.is_empty(),
+        "planned_dialects must be empty, found {planned:?}"
+    );
+
+    let dialects = manifest["dialects"].as_array().expect("dialects array");
+    for dialect in dialects {
+        let id = dialect["id"].as_str().unwrap_or_default();
+        let status = dialect["status"].as_str().unwrap_or_default();
+        assert_ne!(
+            status, "planned",
+            "dialect '{id}' occupies the planned tier"
+        );
+        assert!(
+            !id.contains("luajit") && !id.contains("luau"),
+            "manifest advertises out-of-scope dialect '{id}'"
+        );
+    }
 }
 
 #[test]

@@ -2,34 +2,40 @@
 
 Status: release policy and operational checklist.
 
-Fresh as of: 2026-09-02.
+Fresh as of: 2026-09-06.
 
 Revalidate or delete when: the release target matrix, qualification lifecycle, package
 platforms, artifact channel, compatibility policy, signing/checksum policy, release
 ownership, or rollback procedure changes.
 
-## Current release stop
+## What may be released today
 
-Do not make a production release. No exact target is currently promoted, the active
-sprint is a no-work checkpoint, and the required public-contract, customer,
+**0.x experimental releases are allowed.** A 0.x tag publishes the tool as it actually
+is: no promoted target, no compatibility promise, and documented known defects. It
+requires only that CI is green on the tagged revision, that `CHANGELOG.md` and the
+README describe the release honestly, and that the capability manifest promotes nothing
+it has not earned. The point of a 0.x line is to put a useful tool in someone's hands
+while the evidence program below is still incomplete.
+
+**1.0 remains stopped.** No exact target is promoted, and the public-contract,
 extended-fuzz, security-review, target-qualification, and final-candidate evidence has
-not closed over one clean revision. The publication rehearsal below proves mechanics;
-it does not authorize a `v*` tag or production release.
+not closed over one clean revision. A `v1.0.0` tag is not authorized, and no 0.x release
+advances that claim. Passing an ordinary test, prerequisite gate, candidate packaging
+workflow, private corpus run, or model review cannot remove the 1.0 stop.
 
-The dependency-ordered path is [the product roadmap](../ROADMAP.md). Exact release work
-begins only under a qualification contract in [the active sprint](NEXT-SPRINT.md).
-Passing an ordinary test, prerequisite gate, candidate packaging workflow, private
-corpus run, or model review cannot remove this stop.
+The two are separate promises. Shipping 0.x says "this works, here is what is broken."
+Shipping 1.0 says "a researcher may rely on this," which is what
+[the 1.0 program](ROADMAP-1.0.md) exists to earn. Day-to-day direction lives in
+[the roadmap](../ROADMAP.md); exact target-qualification work begins only under a
+contract in [the active sprint](NEXT-SPRINT.md).
 
 ## Frozen version-1 boundary
 
-The version-1 bytecode claim contains exactly four independent target identities:
+The version-1 bytecode claim contains exactly two independent target identities:
 
 | Lua release | Canonical profile | Serialized layout |
 |---|---|---|
 | OpenWrt-derived Lua 5.1.5 LNUM32 | `lua5.1-lnum32` | `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4` |
-| EdgeTX Lua 5.3.6 (`edgetx-luac`, pinned EdgeTX revision) | `lua5.3-edgetx32` | format 0; `int=4`; `size_t` header slot 4; 4-byte instructions; 4-byte `lua_Integer`; 4-byte `lua_Number`; `LUAC_INT` 0x5678 as 4 bytes; `LUAC_NUM` 370.5 as a little-endian single-precision float |
-| Stock PUC Lua 5.4.9 | `lua5.4` | format 0; 4-byte instructions; 8-byte `lua_Integer`; 8-byte `lua_Number`; pinned official compiler's standard little-endian representation |
 | Stock PUC Lua 5.1.5 | `lua5.1` | `int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0` |
 
 The package platforms are exactly `linux-x86_64` and `macos-aarch64`. Enveloped command
@@ -55,22 +61,18 @@ supported target set remains empty until exact target manifests are accepted.
 
 Qualification proceeds in this order:
 
-1. OpenWrt-derived Lua 5.1.5 `lua5.1-lnum32`;
-2. EdgeTX Lua 5.3.6 `lua5.3-edgetx32`;
-3. stock PUC Lua 5.4.9 `lua5.4`; and
-4. stock PUC Lua 5.1.5 `lua5.1`.
+1. OpenWrt-derived Lua 5.1.5 `lua5.1-lnum32`; and
+2. stock PUC Lua 5.1.5 `lua5.1`.
 
-The order exercises the vendor-profile workflow first, repeats it on a second vendor
-profile whose declared widths differ from every stock layout, then repeats promotion on
-the final Lua 5.4 release, and closes stock Lua 5.1 without conflating it with
-LNUM32. A
-prerequisite for one target cannot promote another. The 5.4.8 evidence already present
-in the repository can support 5.4.9 only where an exact source/chunk delta gate admits
-it.
+The two profiles independently qualify the firmware workflow and its stock companion.
+No target inherits support from a nearby layout. EdgeTX Lua 5.3 32-bit and stock Lua
+5.4.9 are post-1.0 candidates selected by researcher need, not release prerequisites.
 
-Every other dialect, release, profile, and layout remains `experimental` or is omitted
-from the support claim. Public prose must name exact releases and profiles rather than
-compressing them into “Lua 5.x support.”
+Every other dialect, release, profile, and layout remains experimental or unsupported.
+Public prose names exact releases and profiles rather than compressing them into
+“Lua 5.x support.” An outside firmware-researcher trial and its blocking corrections
+must close before the stable interface freezes; target promotion follows that freeze
+and hostile-input qualification.
 
 ## Candidate, promotion, and release artifacts
 
@@ -116,8 +118,9 @@ Before publishing 1.0, additionally:
    corpus identity, resource envelope, and result.
 2. Complete the focused hostile-input and release-supply-chain security review.
 3. Record the representative runtime and peak-memory tripwires required by the roadmap.
-4. Complete the internal transfer checkpoint and the out-of-profile refusal test below,
-   and retain the fresh-session transfer record required by the roadmap's Milestone 6.
+4. Retain the outside trial completed before interface freeze and its resolved blocking
+   findings, complete the internal transfer and out-of-profile refusal checks below,
+   and pass the fresh packaged-candidate walkthroughs required by Milestone 6.
 5. Confirm no P0 correctness or security defect remains open.
 6. Assemble and verify the two platform archives, evidence index, SBOM, and checksums.
 7. Update `CHANGELOG.md`, version metadata, schemas, README, security policy, candidate
@@ -135,12 +138,18 @@ The LNUM32 candidate must complete both of these before its promotion can feed 1
 - **Out-of-profile refusal test:** a different stock/vendor layout fails with an
   actionable diagnostic and the documented exit code.
 
-The outside-human in-profile workflow (an outside person receives the released binary
-and public quick start without coaching, on public firmware pre-screened only far
-enough to resolve to the exact LNUM32 profile) is the first post-1.0 obligation in the
-[roadmap](../ROADMAP.md#outside-validation). Until it closes, release documentation
-describes 1.0 evidence as internal usability evidence and never as independent
-adoption evidence.
+Before the stable interface freezes, an outside firmware researcher receives an
+installable, non-promoting candidate and public guide without coaching. Public,
+authorized inputs are pre-screened only for the exact LNUM32 profile. The trial's task
+and success assertions are fixed beforehand. Record time to first useful answer,
+commands, custom glue, missed files, misunderstood output, and incorrect or unresolved
+answers. Resolve blocking friction and repeat the affected portion before freeze.
+An internal or model-run investigation does not substitute for this outside trial.
+
+Fresh packaged-candidate transfer must also pass before publication. Repeat any trial
+workflow invalidated by an interface change. One outside trial is transfer evidence,
+not broad adoption or general firmware compatibility. Continued trials and community
+review belong to [post-release validation](ROADMAP-1.0.md#outside-validation).
 
 Retain a sanitized customer-trial record in the matching candidate GitHub release in
 `dweekly/luad`. Do not commit private firmware, sensitive findings, model transcripts, or

@@ -1,10 +1,47 @@
 # Changelog
 
-All notable changes will be documented here. The project has not yet made a production release.
+All notable changes are documented here. `luad` is a 0.x experimental tool: no dialect
+is promoted to a supported tier and no interface carries a compatibility promise yet.
 
 ## Unreleased
 
+## 0.1.0 — 2026-09-16
+
+First public release. `luad` reads compiled Lua bytecode and reports the exact format a
+chunk was built for, its instructions, constants, and closure bindings, with byte-level
+provenance for every fact. It is useful today on Lua 5.1 and 5.4 chunks, including the
+non-standard layouts found in extracted router firmware, and it is published as
+experimental rather than held back until a 1.0 evidence program completes.
+
+**What works.** `inspect`, `disasm`, `validate`, `explain`, `export`, and `diagnostics`
+across Lua 5.1 through 5.5, with published schemas. Output formats vary by command:
+`inspect`, `disasm`, and `explain` emit text, JSON, and JSONL; `validate` and
+`diagnostics` emit text and JSON; `export` is a streaming batch interface and emits
+JSONL only. The README has the full matrix. Profile
+detection distinguishes OpenWrt-style LNUM32 builds from stock layouts. Analysis
+commands (`cfg`, `callees`, `callgraph`, `origins`, `xrefs`, `query`, `diff`) are
+present and explicitly experimental. The workspace forbids `unsafe` code.
+
+**Known defects.** Lua 5.2 and 5.3 do not fully honor or refuse declared header widths
+by name, which can produce a confident wrong answer rather than an error; treat their
+output as a hint. EdgeTX chunks fail inside the body with a diagnostic anchored at
+offset 0. See the README for the current limitations table.
+
+**Scope.** LuaJIT and Luau are separate bytecode systems and are out of scope. The
+capability manifest lists the five stock Lua dialects and nothing else; no dialect
+occupies the `planned` tier.
+
+**No support claims.** The supported dialect set is empty. "Valid" means consistent with
+the selected format and the named checks, not safe to execute or of known origin.
+
 ### Release planning
+
+- Focused the 1.0 roadmap on a complete extracted-firmware workflow and two exact
+  profiles: OpenWrt LNUM32 and stock Lua 5.1.5. Deferred EdgeTX, stock 5.4.9, broad
+  corpus generators, and partial-facts recovery; moved executable walkthroughs and an
+  outside researcher trial before interface freeze. Aligned the PRD and release policy,
+  bounded diagnostic claims to observable evidence, and replaced exclusivity goals
+  with task-specific tool handoffs and upstream cooperation.
 
 - Refocused the roadmap on the verifier-and-fact-source niche: layout truth (every
   declared header width honoured or refused by name) is Milestone 1 and precedes all

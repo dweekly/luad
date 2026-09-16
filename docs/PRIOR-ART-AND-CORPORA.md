@@ -9,8 +9,9 @@ license or origin would poison the fixture tree.
 Read it when choosing the next fixture corpus, the next vendor profile, or the next
 prior-art row in `PRD.md` §1.3. Every row cites a URL. A row marked *unverified* records
 what a source claims, not what this repository has reproduced; promote it only after
-reproducing it. The "fresh as of" date in the `README.md` index is the date these
-claims were last checked against the live URLs.
+reproducing it. External observations below are dated 2026-09-02 and must be rechecked before a
+new tool recommendation or qualification uses them. The README freshness date also
+covers alignment with current product scope; it does not refresh those observations.
 
 ## 1. Surveyed projects and verdicts
 
@@ -195,8 +196,8 @@ dumper (section 4).
 
 ### Relationship to the PRD prior-art table
 
-`PRD.md` §1.3 carries the product-level comparison and cites this document as the
-acceptance picture. This section carries the reproduced detail behind those rows: rizin
+`PRD.md` §1.3 carries the product-level comparison and cites this document as dated
+research input, not an exclusivity requirement for release acceptance. This section carries the reproduced detail behind those rows: rizin
 with its per-version `luac` ISA tables, unluac and unluac-rs as the two implementations
 that honour declared widths, luac-parser-rs's WASM plugin-parser design as the vendor
 profile precedent, and LuaDecompiler as the other public Lua 5.5 claimant. When a tool's
@@ -214,8 +215,8 @@ partial. [Roblox/luau_corpus](https://huggingface.co/datasets/Roblox/luau_corpus
 Luau source.
 
 A provenance-tracked `.luac` corpus spanning Lua 5.1 through 5.5 plus LNUM32, generated
-from MIT and Apache sources by pinned compilers, would be the first of its kind
-published.
+from MIT and Apache sources by pinned compilers, would be a useful public artifact; this survey does not establish
+that no comparable dataset exists.
 
 ## 4. Candidate `.luac` sources
 
@@ -444,46 +445,32 @@ Stated as present constraints on the tool, each traceable to a source above.
   `tests/fixtures/precompiled/MANIFEST.json` while being referenced by many tests, and
   no pinned compiler in CI produces a stock 32-bit `size_t` chunk. `CONTRIBUTING.md`
   requires recorded provenance for every bundled `.luac`.
-- The stock integral-number layout, which the active sprint evidences with hand-built
-  chunks because the pinned compilers cannot emit it, has an MIT-licensed compiler
-  authority available in NodeMCU's `luac.cross`.
+- The stock integral-number fixtures use hand-built chunks; the survey identifies
+  NodeMCU's `luac.cross` as a potential public authority for a future qualification.
+  That layout is outside the 1.0 release boundary.
 - The redistributable corpus is five shared toy programs per stock dialect (debug and
   stripped) plus one Lua 5.1 validator-scale case; Lua 5.2 through 5.5 have no
   validator-scale coverage. The official per-release test suites remove that limit at
   no license cost.
 
-## 7. Recommendations, stack-ranked
+## 7. Use in release planning
 
-Each maps to an entry under "Post-version-1 research" in `ROADMAP.md`, except where
-marked as a candidate for an earlier planning change.
+The [roadmap](../ROADMAP.md) owns ordering and acceptance. The 1.0 claim contains
+OpenWrt LNUM32 and stock Lua 5.1.5 only. This survey supplies candidate evidence and
+reproduction leads; its comparison matrix does not require `luad` to be the only
+successful tool.
 
-1. **Generate the stock regression corpus from the official per-release test suites**,
-   pinned by their published SHA-256 and compiled by the matching pinned `luac`, with
-   `MANIFEST.json` provenance per `CONTRIBUTING.md`. Seed the two analysis fuzz targets
-   from it.
-2. **Adopt NodeMCU `luac.cross` as the compiler authority for the stock integral
-   layout** and for byte-swapped 5.1 chunks. Candidate for a pre-1.0 planning change
-   because it replaces hand-built evidence in an active sprint with an independent
-   compiler.
-3. **Bring Lua 5.2, 5.3, and 5.5 header-width handling up to the 5.4 model**: honour
-   a declared width end to end or refuse it by name, and anchor layout-mismatch
-   diagnostics to the contradicted header field. This is a silent
-   incorrect answer of the kind the ROADMAP's sequencing rules put ahead of feature
-   work.
-4. **Qualify EdgeTX 5.3 32-bit as the first vendor profile after LNUM32**, with
-   `edgetx-luac` as authority and sdcard scripts (GPLv2, recorded per case) plus this
-   repository's MIT sources as inputs; add a header-versus-body width diagnostic. The
-   matrix in section 5 is the acceptance picture: `luad`'s row must become the only
-   one that reads every column correctly and names the inconsistency in the fourth.
-5. **Express opcode maps and constant-type-tag maps as explicit profiles**, with the
-   TP-Link AX1800 GPL drop as the first authority; a type-tag authority is still to be
-   identified.
-6. **Publish a hostile-chunk seed corpus** and offer it upstream to lunapark-corpus.
-7. **Add a chunk mutator** that emits labeled variants with a ground-truth manifest,
-   backed by ChunkSpy-style rewriting.
-8. **Contribute a `luac.ksy` to Kaitai and a 5.5 ImHex pattern**, both derived from
-   `luad`'s model.
-9. **Revise PRD §1.3** per section 2.
+For 1.0, reuse applicable official tests, close provenance gaps for retained fixtures,
+publish a compact valid/hostile corpus, and fix silent declared-layout substitution on
+every exposed parser. Document a compatible decompiler handoff and share useful public
+reproducers upstream.
+
+EdgeTX 5.3 32-bit, stock 5.4.9, NodeMCU authority expansion, opcode/type maps, a general
+layout re-emitter, chunk mutation frameworks, Prometheus stress matrices, an all-version
+dataset, and editor/platform integrations are post-1.0 candidates. A concrete researcher
+workflow and a bounded evidence need must justify each. Correct EdgeTX interpretation
+and evidence-based consistency diagnostics remain candidate requirements; improvements
+in other tools are welcome and cannot invalidate acceptance.
 
 ## 8. Out of scope
 
