@@ -25,8 +25,11 @@ present and explicitly experimental. The workspace forbids `unsafe` code.
 **Known defects.** Lua 5.2 and 5.3 do not fully honor or refuse declared header widths
 by name, which can produce a confident wrong answer rather than an error; treat their
 output as a hint. EdgeTX chunks fail inside the body with a diagnostic anchored at
-offset 0. The capability manifest still reports a stale `planned` tier for `luajit`,
-which is out of scope. See the README for the current limitations table.
+offset 0. See the README for the current limitations table.
+
+**Scope.** LuaJIT and Luau are separate bytecode systems and are out of scope. The
+capability manifest lists the five stock Lua dialects and nothing else; no dialect
+occupies the `planned` tier.
 
 **No support claims.** The supported dialect set is empty. "Valid" means consistent with
 the selected format and the named checks, not safe to execute or of known origin.

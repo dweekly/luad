@@ -20,19 +20,17 @@ fn test_supported_dialects_empty_without_promoted_release_evidence() {
 fn test_unproven_dialects_remain_experimental() {
     let manifest = get_canonical_capabilities("0.1.0");
     for dialect in &manifest.dialects {
-        if dialect.id != "luajit" {
-            assert_eq!(
-                dialect.status,
-                SupportTier::Experimental,
-                "Dialect '{}' must remain Experimental until its gates pass",
-                dialect.id
-            );
-            assert!(
-                dialect.completed_gates.is_empty(),
-                "Unproven dialect '{}' must have empty completed_gates",
-                dialect.id
-            );
-        }
+        assert_eq!(
+            dialect.status,
+            SupportTier::Experimental,
+            "Dialect '{}' must remain Experimental until its gates pass",
+            dialect.id
+        );
+        assert!(
+            dialect.completed_gates.is_empty(),
+            "Unproven dialect '{}' must have empty completed_gates",
+            dialect.id
+        );
     }
 }
 

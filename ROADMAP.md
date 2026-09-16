@@ -23,20 +23,17 @@ cost for each one.
 2. **Fix the offset in body-parse diagnostics.** EdgeTX chunks fail inside the body with
    a diagnostic anchored at offset 0, which sends a reader to the wrong place. Report the
    deepest failure offset reached.
-3. **Retire the `luajit` planned tier from the capability manifest.** LuaJIT and Luau are
-   separate bytecode systems outside the product, so advertising a `planned` tier for one
-   of them is a promise the product will not keep.
-4. **One firmware walkthrough in the README.** Take a real extracted tree, inventory it,
+3. **One firmware walkthrough in the README.** Take a real extracted tree, inventory it,
    find a global lookup, inspect the instruction, and hand the chunk to a decompiler.
    Public inputs, exact commands, expected output.
-5. **Make the integration tests resolve `luad` once.** Each test binary that shells out
+4. **Make the integration tests resolve `luad` once.** Each test binary that shells out
    to the CLI spawns its own nested `cargo build -p luad-cli` when `CARGO_BIN_EXE_luad`
    is unset, so a workspace run races several cargo invocations against each other and
    against the outer build. `test_cli_inspect_and_disasm` was observed failing three
    times on the first run after a rebuild and passing on repeat runs; the mechanism is
    understood but not deterministically reproduced. Resolve the binary through one
    helper that does not build.
-6. **Hostile-input bounds.** Runtime and peak-memory tripwires on the exposed paths, and
+5. **Hostile-input bounds.** Runtime and peak-memory tripwires on the exposed paths, and
    minimized regressions from the fuzz corpus. The fuzz smoke suite already runs in CI;
    this makes its findings durable.
 

@@ -138,8 +138,9 @@ Honest current state, as of 0.1.0:
 | `lua5.3` | 47 | Experimental | **Known defects.** Same header-width class as 5.2. EdgeTX chunks fail inside the body. |
 | `lua5.4` | 83 | Experimental | Reads well; exact-disassembly evidence exists for 5.4.8. |
 | `lua5.5` | 85 | Experimental | Present, least exercised. |
-| `luajit` | — | Planned | Stale tier. LuaJIT is out of scope; [the roadmap](ROADMAP.md#next) retires this entry. |
-| Luau | — | — | Separate bytecode system, out of scope. |
+
+LuaJIT and Luau are separate bytecode systems and are out of scope. The capability
+manifest does not list them in any tier.
 
 No dialect is in the `supported` tier and the supported set is empty, which is what
 `luad capabilities` reports. Experimental means the code is present and gives useful
