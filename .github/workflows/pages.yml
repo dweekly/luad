@@ -1,0 +1,51 @@
+# Publishes the static project site in site/ to GitHub Pages.
+#
+# The repository's docs/ directory holds maintainer documentation and is deliberately
+# not the Pages source; only site/ is published. This workflow builds no artifacts of
+# its own and has no bearing on release evidence or target promotion.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a publish midway; queue instead.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy site to Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify the site has its entry point and assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in site/index.html site/styles.css site/og.png site/favicon.ico; do
+            test -s "$f" || { echo "missing or empty: $f" >&2; exit 1; }
+          done
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
