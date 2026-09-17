@@ -38,7 +38,13 @@ cost for each one.
    times on the first run after a rebuild and passing on repeat runs; the mechanism is
    understood but not deterministically reproduced. Resolve the binary through one
    helper that does not build.
-6. **Hostile-input bounds.** Runtime and peak-memory tripwires on the exposed paths, and
+6. **Signed provenance and an SBOM on every release.** The release already produces a
+   CycloneDX SBOM and it was attached to 0.1.0 by hand. Make both automatic and
+   verifiable: build provenance attestations for each archive, generated in CI and
+   checkable by a consumer, with the SBOM emitted and attached by the same pipeline
+   rather than by a maintainer remembering. This is the missing production publication
+   mode named in the release procedure, not a new evidence layer.
+7. **Hostile-input bounds.** Runtime and peak-memory tripwires on the exposed paths, and
    minimized regressions from the fuzz corpus. The fuzz smoke suite already runs in CI;
    this makes its findings durable.
 
@@ -69,6 +75,19 @@ Passing one will not imply the other. Each profile, numeric representation, word
 and byte order remains a separate claim, and no target inherits support from a nearby
 layout. This is a future compatibility promise, not a present support claim: the
 supported target set is empty today.
+
+## Sequencing: breadth before integration
+
+The integration ideas are the appealing part and they are not next. Feeding rizin,
+exporting a Kaitai spec, handing facts to an existing decompiler, and proposing a chunk
+verifier upstream all presume `luad` reads the chunks people actually have. Today it does
+not: it is behind two decompiler lineages on the embedded layouts that motivated it, and
+it can still report a corrupt chunk valid.
+
+So the order is layout truth, then a defensible read across the dialects, then the
+targets — and only then integration, where being wrong would now be wrong inside someone
+else's tool. A correctness defect exported into a dependent project costs far more than
+the same defect in a standalone CLI.
 
 ## Out of scope
 
