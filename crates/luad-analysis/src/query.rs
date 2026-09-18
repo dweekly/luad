@@ -655,13 +655,16 @@ fn validate_expr(expr: &QueryExpr, chunk: &Chunk) -> Result<(), QueryError> {
                         "literal",
                         "parameter",
                         "upvalue",
+                        "prototype",
                         "global",
                         "field",
                         "call-result",
                         "concat",
                         "table",
+                        "table-literal",
                         "unary",
                         "binary",
+                        "alternatives",
                         "unknown",
                     ];
                     if !VALID.contains(&value.as_str()) {
@@ -809,6 +812,7 @@ fn origin_kind_str(k: &OriginExpressionKind) -> &'static str {
         OriginExpressionKind::TableLiteral { .. } => "table-literal",
         OriginExpressionKind::Unary { .. } => "unary",
         OriginExpressionKind::Binary { .. } => "binary",
+        OriginExpressionKind::Alternatives { .. } => "alternatives",
         OriginExpressionKind::Unknown { .. } => "unknown",
     }
 }

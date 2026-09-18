@@ -1984,6 +1984,27 @@
           "type": "object",
           "required": [
             "kind",
+            "options"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "alternatives"
+              ]
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/OriginExpression"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
             "reason"
           ],
           "properties": {

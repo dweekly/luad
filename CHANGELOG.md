@@ -11,6 +11,9 @@ is promoted to a supported tier and no interface carries a compatibility promise
 - Reconstruct constant-key table-literal origin expressions (`TableLiteral`) with
   deterministically sorted fields, write evidence, and visible partial cutoffs
   (`incomplete: true`) for request-shaped objects in Lua 5.1 origin analysis (R-1a).
+- Emit closed `alternatives` expressions containing deduplicated, deterministically
+  sorted candidate origins with reaching evidence when bounded definitions reach a
+  control-flow join in Lua 5.1 origin analysis (R-1b).
 
 ## 0.2.0 — 2026-09-17
 

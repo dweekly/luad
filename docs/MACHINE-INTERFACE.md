@@ -398,12 +398,18 @@ never guessed.
 
 Expressions preserve typed literals, parameters, safe closure captures, child
 prototypes, global and constant-key field lookups, fixed call results, eager
-concatenations, constant-key table literals, table-construction inputs, and Lua unary and binary operations. `MOD` remains an opcode fact with both
-operands; callers may recognize a string-format convention without `luad` asserting
-runtime formatting semantics. Constant-key table literals emit deterministically
-ordered fields and retain partial reconstruction with `incomplete: true`. Conflicting control-flow definitions, dynamic keys,
-mutable or ambiguous captures, varargs, aliasing boundaries, unreachable code, and
-analysis limits remain distinct machine-visible reasons.
+concatenations, constant-key table literals, table-construction inputs, control-flow
+alternatives across bounded definitions, and Lua unary and binary operations. `MOD`
+remains an opcode fact with both operands; callers may recognize a string-format
+convention without `luad` asserting runtime formatting semantics. Constant-key table
+literals emit deterministically ordered fields and retain partial reconstruction with
+`incomplete: true`. When bounded definitions reach a control-flow join, `alternatives`
+emits a deduplicated, deterministically ordered list of candidate origin expressions
+with reaching evidence. Structurally equal options are deduplicated with their evidence
+unioned. Conflicting control-flow definitions with unresolved predecessors or exceeding
+the option budget (`MAX_ALTERNATIVES = 8`), dynamic keys, mutable or ambiguous captures,
+varargs, aliasing boundaries, unreachable code, and analysis limits remain distinct
+machine-visible reasons.
 
 Operands are captured before the writing instruction changes its destination, so an
 operation such as `CONCAT A A C` cannot recurse into its own result. JSON uses the

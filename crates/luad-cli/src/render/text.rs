@@ -817,6 +817,14 @@ fn format_origin_expression(expression: &luad_analysis::OriginExpression) -> Str
             format_origin_expression(left),
             format_origin_expression(right)
         ),
+        OriginExpressionKind::Alternatives { options } => {
+            let rendered = options
+                .iter()
+                .map(format_origin_expression)
+                .collect::<Vec<_>>()
+                .join(" | ");
+            format!("alternatives({rendered})")
+        }
         OriginExpressionKind::Unknown { reason } => format!("unknown:{reason:?}"),
     }
 }

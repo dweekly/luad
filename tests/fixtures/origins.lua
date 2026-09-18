@@ -62,6 +62,50 @@ local function matrix(parameter, number, ...)
   end
   sink(conflict)
 
+  local alt_param
+  if parameter then
+    alt_param = "literal_val"
+  else
+    alt_param = parameter
+  end
+  sink(alt_param)
+
+  local loop_val = "init"
+  for i = 1, 3 do
+    loop_val = "iter"
+  end
+  sink(loop_val)
+
+  local unresolved_alt
+  if parameter then
+    unresolved_alt = "defined"
+  else
+    unresolved_alt = math[parameter]
+  end
+  sink(unresolved_alt)
+
+  local overflow_alt
+  if parameter == 1 then
+    overflow_alt = "o1"
+  elseif parameter == 2 then
+    overflow_alt = "o2"
+  elseif parameter == 3 then
+    overflow_alt = "o3"
+  elseif parameter == 4 then
+    overflow_alt = "o4"
+  elseif parameter == 5 then
+    overflow_alt = "o5"
+  elseif parameter == 6 then
+    overflow_alt = "o6"
+  elseif parameter == 7 then
+    overflow_alt = "o7"
+  elseif parameter == 8 then
+    overflow_alt = "o8"
+  else
+    overflow_alt = "o9"
+  end
+  sink(overflow_alt)
+
   local vararg = ...
   sink(vararg)
   sink(producer(parameter))

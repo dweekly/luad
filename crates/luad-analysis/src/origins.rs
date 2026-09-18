@@ -17,6 +17,7 @@ const MAX_REGISTER_WINDOW: usize = 256;
 const MAX_TRANSFER_STEPS: usize = 1_000_000;
 const MAX_TABLE_SCAN_STEPS: usize = 64;
 const MAX_TABLE_FIELDS: usize = 64;
+const MAX_ALTERNATIVES: usize = 8;
 
 /// A lossless literal suitable for structural equality in an origin graph.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
@@ -65,7 +66,7 @@ pub enum OriginUnknownReason {
 }
 
 /// One eager, cycle-free value-expression node.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 pub struct OriginExpression {
     #[serde(flatten)]
     pub kind: OriginExpressionKind,
@@ -74,7 +75,7 @@ pub struct OriginExpression {
 }
 
 /// Factual expression kinds. Operation nodes do not imply security policy.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum OriginExpressionKind {
     Literal {
@@ -127,13 +128,16 @@ pub enum OriginExpressionKind {
         left: Box<OriginExpression>,
         right: Box<OriginExpression>,
     },
+    Alternatives {
+        options: Vec<OriginExpression>,
+    },
     Unknown {
         reason: OriginUnknownReason,
     },
 }
 
 /// One constant-key field in a reconstructed table literal expression.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 pub struct TableLiteralField {
     pub key: OriginLiteral,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -377,14 +381,71 @@ fn meet_predecessors(
 fn meet_value(left: &FlowValue, right: &FlowValue) -> FlowValue {
     match (left, right) {
         (FlowValue::Bottom, value) | (value, FlowValue::Bottom) => value.clone(),
-        (FlowValue::Origin(left), FlowValue::Origin(right)) => merge_equal(left, right)
-            .map(FlowValue::Origin)
-            .unwrap_or_else(|| {
-                FlowValue::Origin(unknown(
+        (FlowValue::Origin(left), FlowValue::Origin(right)) => {
+            if let Some(merged) = merge_equal(left, right) {
+                return FlowValue::Origin(merged);
+            }
+            if let Some(cutoff) = first_cutoff(left).or_else(|| first_cutoff(right)) {
+                return FlowValue::Origin(unknown(
+                    cutoff,
+                    left.evidence.iter().chain(&right.evidence).cloned(),
+                ));
+            }
+            if has_unknown(left) || has_unknown(right) {
+                return FlowValue::Origin(unknown(
                     OriginUnknownReason::ControlFlowConflict,
                     left.evidence.iter().chain(&right.evidence).cloned(),
-                ))
-            }),
+                ));
+            }
+            let mut candidates = Vec::new();
+            collect_candidate_options(left, &mut candidates);
+            collect_candidate_options(right, &mut candidates);
+
+            let mut deduplicated: Vec<OriginExpression> = Vec::new();
+            for candidate in candidates {
+                if let Some(existing) = deduplicated
+                    .iter_mut()
+                    .find(|existing| same_shape(existing, &candidate))
+                {
+                    union_expression_evidence(existing, &candidate);
+                } else {
+                    deduplicated.push(candidate);
+                }
+            }
+
+            let mut outer_evidence: BTreeSet<StableId> = left
+                .evidence
+                .iter()
+                .chain(&right.evidence)
+                .cloned()
+                .collect();
+            for opt in &deduplicated {
+                outer_evidence.extend(opt.evidence.iter().cloned());
+            }
+            let outer_evidence: Vec<StableId> = outer_evidence.into_iter().collect();
+
+            if deduplicated.len() == 1 {
+                let single = deduplicated.into_iter().next().unwrap();
+                return FlowValue::Origin(add_expression_evidence(single, outer_evidence));
+            }
+
+            if deduplicated.len() > MAX_ALTERNATIVES {
+                return FlowValue::Origin(unknown(
+                    OriginUnknownReason::AnalysisLimit,
+                    outer_evidence,
+                ));
+            }
+
+            deduplicated.sort();
+
+            let result = bounded_expression(
+                OriginExpressionKind::Alternatives {
+                    options: deduplicated,
+                },
+                outer_evidence,
+            );
+            FlowValue::Origin(result)
+        }
     }
 }
 
@@ -1488,6 +1549,12 @@ fn capture_from_descriptor(
             [child_id, closure.id.clone(), descriptor.id.clone()],
         );
     }
+    if contains_alternatives(&value) {
+        return unknown(
+            OriginUnknownReason::AmbiguousCapture,
+            [child_id, closure.id.clone(), descriptor.id.clone()],
+        );
+    }
     add_expression_evidence(value, [child_id, closure.id.clone(), descriptor.id.clone()])
 }
 
@@ -1761,7 +1828,43 @@ fn first_cutoff(expression: &OriginExpression) -> Option<OriginUnknownReason> {
         OriginExpressionKind::TableLiteral { fields, .. } => {
             fields.iter().find_map(|field| first_cutoff(&field.value))
         }
+        OriginExpressionKind::Alternatives { options } => options.iter().find_map(first_cutoff),
         _ => None,
+    }
+}
+
+fn has_unknown(expression: &OriginExpression) -> bool {
+    match &expression.kind {
+        OriginExpressionKind::Unknown { .. } => true,
+        OriginExpressionKind::Field { base, .. }
+        | OriginExpressionKind::Unary { operand: base, .. } => has_unknown(base),
+        OriginExpressionKind::Binary { left, right, .. } => has_unknown(left) || has_unknown(right),
+        OriginExpressionKind::Concat { parts } | OriginExpressionKind::Table { entries: parts } => {
+            parts.iter().any(has_unknown)
+        }
+        OriginExpressionKind::TableLiteral { fields, .. } => {
+            fields.iter().any(|field| has_unknown(&field.value))
+        }
+        OriginExpressionKind::Alternatives { options } => options.iter().any(has_unknown),
+        _ => false,
+    }
+}
+
+fn contains_alternatives(expression: &OriginExpression) -> bool {
+    match &expression.kind {
+        OriginExpressionKind::Alternatives { .. } => true,
+        OriginExpressionKind::Field { base, .. }
+        | OriginExpressionKind::Unary { operand: base, .. } => contains_alternatives(base),
+        OriginExpressionKind::Binary { left, right, .. } => {
+            contains_alternatives(left) || contains_alternatives(right)
+        }
+        OriginExpressionKind::Concat { parts } | OriginExpressionKind::Table { entries: parts } => {
+            parts.iter().any(contains_alternatives)
+        }
+        OriginExpressionKind::TableLiteral { fields, .. } => fields
+            .iter()
+            .any(|field| contains_alternatives(&field.value)),
+        _ => false,
     }
 }
 
@@ -1800,6 +1903,16 @@ fn expression_size(expression: &OriginExpression) -> (usize, usize) {
             }
             (depth.saturating_add(1), nodes)
         }
+        OriginExpressionKind::Alternatives { options } => {
+            let mut depth = 0usize;
+            let mut nodes = 1usize;
+            for opt in options {
+                let (opt_depth, opt_nodes) = expression_size(opt);
+                depth = depth.max(opt_depth);
+                nodes = nodes.saturating_add(opt_nodes);
+            }
+            (depth.saturating_add(1), nodes)
+        }
         _ => (1, 1),
     }
 }
@@ -1830,6 +1943,7 @@ fn contains_table(expression: &OriginExpression) -> bool {
             contains_table(left) || contains_table(right)
         }
         OriginExpressionKind::Concat { parts } => parts.iter().any(contains_table),
+        OriginExpressionKind::Alternatives { options } => options.iter().any(contains_table),
         _ => false,
     }
 }
@@ -1852,6 +1966,11 @@ fn clear_evidence(expression: &mut OriginExpression) {
             for field in fields {
                 field.evidence.clear();
                 clear_evidence(&mut field.value);
+            }
+        }
+        OriginExpressionKind::Alternatives { options } => {
+            for opt in options {
+                clear_evidence(opt);
             }
         }
         _ => {}
@@ -1921,7 +2040,28 @@ fn union_expression_evidence(left: &mut OriginExpression, right: &OriginExpressi
                 }
             }
         }
+        (
+            OriginExpressionKind::Alternatives { options: left },
+            OriginExpressionKind::Alternatives { options: right },
+        ) if left.len() == right.len() => {
+            for (left, right) in left.iter_mut().zip(right) {
+                union_expression_evidence(left, right);
+            }
+        }
         _ => {}
+    }
+}
+
+fn collect_candidate_options(expr: &OriginExpression, out: &mut Vec<OriginExpression>) {
+    match &expr.kind {
+        OriginExpressionKind::Alternatives { options } => {
+            for opt in options {
+                collect_candidate_options(opt, out);
+            }
+        }
+        _ => {
+            out.push(expr.clone());
+        }
     }
 }
 
@@ -2166,7 +2306,7 @@ mod tests {
     }
 
     #[test]
-    fn conflicting_join_is_explicit() {
+    fn bounded_join_emits_alternatives() {
         let parameter = FlowValue::Origin(expression(
             OriginExpressionKind::Parameter {
                 owner: ProtoPath::root(),
@@ -2181,8 +2321,29 @@ mod tests {
             },
             [],
         ));
+        let joined = meet_value(&parameter, &literal);
+        let FlowValue::Origin(OriginExpression {
+            kind: OriginExpressionKind::Alternatives { options },
+            ..
+        }) = joined
+        else {
+            panic!("expected alternatives, got {joined:?}");
+        };
+        assert_eq!(options.len(), 2);
+    }
+
+    #[test]
+    fn unresolved_join_is_explicit_conflict() {
+        let parameter = FlowValue::Origin(expression(
+            OriginExpressionKind::Parameter {
+                owner: ProtoPath::root(),
+                index: 0,
+            },
+            [],
+        ));
+        let unresolved = FlowValue::Origin(unknown(OriginUnknownReason::DynamicKey, []));
         assert!(matches!(
-            meet_value(&parameter, &literal),
+            meet_value(&parameter, &unresolved),
             FlowValue::Origin(OriginExpression {
                 kind: OriginExpressionKind::Unknown {
                     reason: OriginUnknownReason::ControlFlowConflict

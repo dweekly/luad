@@ -152,6 +152,8 @@ luad origins firmware/controller.lua --format json | jq -c '
 
 `CONCAT` and `table` nodes retain their contributing expressions recursively.
 `prototype` nodes identify callback closures passed as arguments (`{"kind": "prototype", "prototype": "0/1"}`).
+`table-literal` nodes retain constant-key field reconstructions and partial cutoffs (`incomplete: true`).
+`alternatives` nodes retain deduplicated reaching definitions across bounded CFG paths (not path feasibility).
 `unknown` nodes retain the reason analysis stopped or refused to invent a merge.
 
 Group fixed arguments by their top-level origin shape:
