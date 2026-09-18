@@ -14,6 +14,11 @@ is promoted to a supported tier and no interface carries a compatibility promise
 - Emit closed `alternatives` expressions containing deduplicated, deterministically
   sorted candidate origins with reaching evidence when bounded definitions reach a
   control-flow join in Lua 5.1 origin analysis (R-1b).
+- Add corpus-wide `query --input-list <file|-> --where <expression>` supporting streaming
+  JSONL batch queries across file lists or stdin with per-input identity, stream framing,
+  failure/skip retention, limit truncation, and strict-mode exit semantics (R-4).
+- Fix query expression tokenizer hang on invalid expressions containing single '=' or '!'
+  characters.
 
 ## 0.2.0 — 2026-09-17
 

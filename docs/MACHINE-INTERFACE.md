@@ -473,6 +473,35 @@ nonzero when any input is skipped or failed, after emitting the complete framed 
 Zero successful inputs are always nonzero. Stderr ends with a deterministic summary in
 the form `N exported, N skipped, N failed`; stdout remains JSONL only.
 
+### Batch query (`query --input-list`)
+
+`query --input-list <file|-> --where <expression>` runs an exact query across an explicit
+artifact list in streaming JSONL format (`--format jsonl` is the default and only valid format
+for batch mode).
+
+Stream framing uses:
+- `query_start`: emits `record_type: "query_start"`, `schema_version: 2`, `tool_version`,
+  `total_files`, `where: Option<String>`, and `limit: usize`.
+- `file_start`: records per-file identity (`path`, `sha256`, `byte_length`, `interpretation`).
+- Data records: `query_match` records with full per-file `context` identical to single-file JSONL query,
+  along with `diagnostic` records emitted during parsing or analysis.
+- `file_end`: terminal per-file outcome (`status: "succeeded" | "skipped" | "failed"`, `error`,
+  `instruction_count: 0`, `diagnostic_count`, `is_truncated`, `emitted_fact_count`, `available_fact_count`).
+- `query_end`: terminal stream marker reporting `files_processed`, `files_succeeded`,
+  `files_skipped`, `files_failed`, and `total_matches`.
+
+Input files are processed in order and duplicate paths are preserved. Uncompiled Lua source
+text, corrupted bytecode, or unsupported dialects produce explicit `skipped` outcomes with
+diagnostics. Unreadable or missing files produce `failed` outcomes. No skipped or failed
+file becomes an apparently clean zero-match result.
+
+Predicate syntax errors fail closed immediately with exit code 2 (`UsageError`) and empty stdout
+before processing any input artifacts.
+
+Default process exit status is 0 when at least one input succeeds. `--strict` exits with
+exit code 1 (`InvalidInput`) when any input is skipped or failed. Zero successful inputs
+always return exit code 1. Stderr concludes with `N queried, N skipped, N failed (N matches)`.
+
 ## Pagination and truncation
 
 `query` returns a bounded page, `next_cursor`, and `is_truncated`. Emitted cursors are

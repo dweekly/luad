@@ -29,7 +29,7 @@ use luad_core::disasm::DisassembledPrototype;
 use luad_core::envelope::{
     AnalysisConfiguration, ExportEndRecord, ExportStartRecord, FileEndRecord, FileStartRecord,
     InputIdentity, JsonlDataRecord, JsonlMetadataRecord, JsonlRecordContext, JsonlSummaryRecord,
-    MachineDocument, ValidationResponse, JSONL_SCHEMA_VERSION,
+    MachineDocument, QueryEndRecord, QueryStartRecord, ValidationResponse, JSONL_SCHEMA_VERSION,
 };
 use luad_core::id::{ProtoPath, StableId};
 use luad_core::limits::{ParseMode, ResourceLimits};
@@ -131,6 +131,36 @@ fn read_input_bytes_with_reporting(
         }
         Ok(buffer)
     }
+}
+
+fn parse_input_list(list_file: &str) -> Result<Vec<String>, (String, ExitCode)> {
+    let mut file_paths = Vec::new();
+    if list_file == "-" {
+        let stdin = io::stdin();
+        for l in stdin.lock().lines().map_while(Result::ok) {
+            let trimmed = l.trim();
+            if !trimmed.is_empty() {
+                file_paths.push(trimmed.to_string());
+            }
+        }
+    } else {
+        let content = match fs::read_to_string(list_file) {
+            Ok(c) => c,
+            Err(e) => {
+                return Err((
+                    format!("Failed to read input list '{list_file}': {e}"),
+                    ExitCode::IoError,
+                ));
+            }
+        };
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() {
+                file_paths.push(trimmed.to_string());
+            }
+        }
+    }
+    Ok(file_paths)
 }
 
 pub fn classify_diagnostic(diag: &Diagnostic) -> ExitCode {
@@ -1664,92 +1694,532 @@ fn handle_xrefs(args: XrefsArgs, writer: &mut impl io::Write) -> io::Result<Exit
 }
 
 fn handle_query(args: QueryArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
-    let bytes = match read_input_bytes(&args.file) {
-        Ok(b) => b,
-        Err(code) => return Ok(code),
-    };
+    let has_file = args.file.is_some();
+    let has_input_list = args.input_list.is_some();
+    match (has_file, has_input_list) {
+        (true, false) => {
+            let file = args.file.as_ref().unwrap();
+            let format = args.format.unwrap_or(OutputFormat::Json);
+            let bytes = match read_input_bytes(file) {
+                Ok(b) => b,
+                Err(code) => return Ok(code),
+            };
 
-    let (chunk, identity, config, interp) =
-        match parse_chunk(&args.file, &bytes, false, args.dialect.as_deref()) {
-            Ok(c) => c,
-            Err(code) => return Ok(code),
-        };
+            let (chunk, identity, config, interp) =
+                match parse_chunk(file, &bytes, args.strict, args.dialect.as_deref()) {
+                    Ok(c) => c,
+                    Err(code) => return Ok(code),
+                };
 
-    if let Err(diags) = validate_for_analysis(&chunk) {
-        return Ok(handle_analysis_validation_failure("chunk", &diags));
+            if let Err(diags) = validate_for_analysis(&chunk) {
+                return Ok(handle_analysis_validation_failure("chunk", &diags));
+            }
+
+            let response = match execute_query(
+                &chunk,
+                args.r#where.as_deref(),
+                args.limit,
+                args.cursor.as_deref(),
+            ) {
+                Ok(res) => res,
+                Err(e) => {
+                    eprintln!("{}: Query error: {e}", "error".red());
+                    return Ok(ExitCode::UsageError);
+                }
+            };
+
+            match format {
+                OutputFormat::Text => render::render_query(&response, writer)?,
+                OutputFormat::Json => {
+                    let doc = wrap_document(
+                        identity,
+                        interp,
+                        config,
+                        response.clone(),
+                        chunk.diagnostics.clone(),
+                    );
+                    render::print_json(&doc, writer)?;
+                }
+                OutputFormat::Jsonl => {
+                    let meta = JsonlMetadataRecord {
+                        record_type: "metadata".to_string(),
+                        schema_version: JSONL_SCHEMA_VERSION,
+                        tool_version: env!("CARGO_PKG_VERSION").to_string(),
+                        input_identity: identity.clone(),
+                        interpretation: interp.clone(),
+                        analysis_configuration: config,
+                    };
+                    writeln!(
+                        writer,
+                        "{}",
+                        serde_json::to_string(&meta).unwrap_or_default()
+                    )?;
+                    let context = JsonlRecordContext::successful(identity, interp);
+                    for m in &response.matches {
+                        let rec = JsonlDataRecord {
+                            record_type: "query_match".to_string(),
+                            context: context.clone(),
+                            data: m.clone(),
+                        };
+                        writeln!(
+                            writer,
+                            "{}",
+                            serde_json::to_string(&rec).unwrap_or_default()
+                        )?;
+                    }
+                    let summary = JsonlSummaryRecord {
+                        record_type: "summary".to_string(),
+                        total_records: response.matches.len(),
+                        diagnostic_count: chunk.diagnostics.len(),
+                        is_truncated: response.is_truncated,
+                    };
+                    writeln!(
+                        writer,
+                        "{}",
+                        serde_json::to_string(&summary).unwrap_or_default()
+                    )?;
+                }
+                OutputFormat::Dot => {
+                    eprintln!("{}: DOT format not applicable to query", "error".red());
+                    return Ok(ExitCode::UsageError);
+                }
+            }
+
+            Ok(ExitCode::Success)
+        }
+        (false, true) => {
+            let input_list = args.input_list.clone().unwrap();
+            handle_batch_query(args, &input_list, writer)
+        }
+        (true, true) => {
+            eprintln!(
+                "{}: Cannot specify both a file and --input-list",
+                "error".red()
+            );
+            Ok(ExitCode::UsageError)
+        }
+        (false, false) => {
+            eprintln!(
+                "{}: Either a file or --input-list must be provided",
+                "error".red()
+            );
+            Ok(ExitCode::UsageError)
+        }
+    }
+}
+
+fn handle_batch_query(
+    args: QueryArgs,
+    input_list: &str,
+    writer: &mut impl io::Write,
+) -> io::Result<ExitCode> {
+    let format = args.format.unwrap_or(OutputFormat::Jsonl);
+    if format != OutputFormat::Jsonl {
+        eprintln!(
+            "{}: Batch query requires JSONL format (--format jsonl)",
+            "error".red()
+        );
+        return Ok(ExitCode::UsageError);
     }
 
-    let response = match execute_query(
-        &chunk,
-        args.r#where.as_deref(),
-        args.limit,
-        args.cursor.as_deref(),
-    ) {
-        Ok(res) => res,
-        Err(e) => {
-            eprintln!("{}: Query error: {e}", "error".red());
+    if args.cursor.is_some() {
+        eprintln!(
+            "{}: --cursor is not supported with --input-list",
+            "error".red()
+        );
+        return Ok(ExitCode::UsageError);
+    }
+
+    if let Some(where_expr) = args.r#where.as_deref() {
+        if let Err(err) = luad_analysis::QueryExpr::parse(where_expr) {
+            eprintln!("{}: Query error: {err}", "error".red());
             return Ok(ExitCode::UsageError);
+        }
+    }
+
+    let file_paths = match parse_input_list(input_list) {
+        Ok(paths) => paths,
+        Err((msg, code)) => {
+            eprintln!("{}: {msg}", "error".red());
+            return Ok(code);
         }
     };
 
-    match args.format {
-        OutputFormat::Text => render::render_query(&response, writer)?,
-        OutputFormat::Json => {
-            let doc = wrap_document(
-                identity,
-                interp,
-                config,
-                response.clone(),
-                chunk.diagnostics.clone(),
-            );
-            render::print_json(&doc, writer)?;
-        }
-        OutputFormat::Jsonl => {
-            let meta = JsonlMetadataRecord {
-                record_type: "metadata".to_string(),
-                schema_version: JSONL_SCHEMA_VERSION,
-                tool_version: env!("CARGO_PKG_VERSION").to_string(),
-                input_identity: identity.clone(),
-                interpretation: interp.clone(),
-                analysis_configuration: config,
-            };
-            writeln!(
-                writer,
-                "{}",
-                serde_json::to_string(&meta).unwrap_or_default()
-            )?;
-            let context = JsonlRecordContext::successful(identity, interp);
-            for m in &response.matches {
-                let rec = JsonlDataRecord {
-                    record_type: "query_match".to_string(),
-                    context: context.clone(),
-                    data: m.clone(),
+    if file_paths.is_empty() {
+        eprintln!("{}: No input files provided for query", "error".red());
+        return Ok(ExitCode::UsageError);
+    }
+
+    let mut succeeded_count = 0;
+    let mut skipped_count = 0;
+    let mut failed_count = 0;
+    let mut total_matches = 0;
+
+    writeln!(
+        writer,
+        "{}",
+        serde_json::to_string(&QueryStartRecord {
+            record_type: "query_start".to_string(),
+            schema_version: JSONL_SCHEMA_VERSION,
+            tool_version: env!("CARGO_PKG_VERSION").to_string(),
+            total_files: file_paths.len(),
+            r#where: args.r#where.clone(),
+            limit: args.limit,
+        })
+        .unwrap_or_default()
+    )?;
+
+    for path_str in &file_paths {
+        let bytes = match read_input_bytes_with_reporting(path_str, false) {
+            Ok(b) => b,
+            Err(_) => {
+                failed_count += 1;
+                let start_rec = FileStartRecord {
+                    record_type: "file_start".to_string(),
+                    path: path_str.clone(),
+                    sha256: String::new(),
+                    byte_length: 0,
+                    interpretation: None,
                 };
                 writeln!(
                     writer,
                     "{}",
-                    serde_json::to_string(&rec).unwrap_or_default()
+                    serde_json::to_string(&start_rec).unwrap_or_default()
                 )?;
+                let diag = Diagnostic::error(
+                    "IO-001",
+                    DiagnosticCategory::Structure,
+                    StableId::Chunk,
+                    format!("Failed to read input file '{path_str}'"),
+                );
+                let diag_rec = JsonlDataRecord {
+                    record_type: "diagnostic".to_string(),
+                    context: JsonlRecordContext::failed_read(),
+                    data: diag,
+                };
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&diag_rec).unwrap_or_default()
+                )?;
+                let end_rec = FileEndRecord {
+                    record_type: "file_end".to_string(),
+                    path: path_str.clone(),
+                    status: "failed".to_string(),
+                    error: Some(format!("Failed to read input file '{path_str}'")),
+                    instruction_count: 0,
+                    diagnostic_count: 1,
+                    is_truncated: false,
+                    emitted_fact_count: 0,
+                    available_fact_count: 0,
+                };
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&end_rec).unwrap_or_default()
+                )?;
+                eprintln!("error: {path_str}: failed to read input file");
+                continue;
             }
-            let summary = JsonlSummaryRecord {
-                record_type: "summary".to_string(),
-                total_records: response.matches.len(),
-                diagnostic_count: chunk.diagnostics.len(),
-                is_truncated: response.is_truncated,
+        };
+
+        let parse_res = parse_chunk_detailed(
+            path_str,
+            &bytes,
+            args.strict,
+            args.dialect.as_deref(),
+            false,
+        );
+        let (chunk, identity, _config, interp) = match parse_res {
+            Ok(c) => c,
+            Err((parse_code, parse_diag)) => {
+                skipped_count += 1;
+                let sha256 = hex::encode(sha2::Sha256::digest(&bytes));
+                let start_rec = FileStartRecord {
+                    record_type: "file_start".to_string(),
+                    path: path_str.clone(),
+                    sha256: sha256.clone(),
+                    byte_length: bytes.len(),
+                    interpretation: None,
+                };
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&start_rec).unwrap_or_default()
+                )?;
+                let is_source = !bytes.starts_with(b"\x1bLua")
+                    && (bytes.starts_with(b"--")
+                        || bytes
+                            .iter()
+                            .take(256)
+                            .all(|&b| b.is_ascii() || b.is_ascii_whitespace()));
+                let (diag, msg) = if is_source {
+                    let msg = format!("Plain Lua source text is unsupported for bytecode query; compile with luac first: '{path_str}'");
+                    let diag = Diagnostic::error(
+                        "PARSE-SOURCE-001",
+                        DiagnosticCategory::Parse,
+                        StableId::Chunk,
+                        msg.clone(),
+                    );
+                    (diag, msg)
+                } else if parse_code == ExitCode::UnsupportedFormat {
+                    let msg = format!("Unknown or unsupported bytecode format: '{path_str}'");
+                    let mut diag = Diagnostic::error(
+                        "PARSE-UNKNOWN-001",
+                        DiagnosticCategory::Parse,
+                        StableId::Chunk,
+                        msg.clone(),
+                    );
+                    if let Some(underlying) = &parse_diag {
+                        if let Some(loc) = &underlying.source {
+                            diag = diag.with_source(loc.clone());
+                        }
+                        diag.evidence =
+                            Some(format!("{}: {}", underlying.code, underlying.message));
+                    }
+                    (diag, msg)
+                } else {
+                    let msg = format!("Failed to parse Lua bytecode chunk '{path_str}'");
+                    let mut diag = Diagnostic::error(
+                        "PARSE-001",
+                        DiagnosticCategory::Parse,
+                        StableId::Chunk,
+                        msg.clone(),
+                    );
+                    if let Some(underlying) = &parse_diag {
+                        if let Some(loc) = &underlying.source {
+                            diag = diag.with_source(loc.clone());
+                        }
+                        diag.evidence =
+                            Some(format!("{}: {}", underlying.code, underlying.message));
+                    }
+                    (diag, msg)
+                };
+                let stderr_reason = match diag.code.as_str() {
+                    "PARSE-SOURCE-001" => "plain Lua source text is unsupported",
+                    "PARSE-UNKNOWN-001" => "unknown or unsupported bytecode format",
+                    _ => "failed to parse Lua bytecode chunk",
+                };
+                let parse_identity = InputIdentity {
+                    path: path_str.clone(),
+                    sha256,
+                    byte_length: bytes.len(),
+                };
+                let diag_rec = JsonlDataRecord {
+                    record_type: "diagnostic".to_string(),
+                    context: JsonlRecordContext::failed_parse(parse_identity),
+                    data: diag,
+                };
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&diag_rec).unwrap_or_default()
+                )?;
+                let end_rec = FileEndRecord {
+                    record_type: "file_end".to_string(),
+                    path: path_str.clone(),
+                    status: "skipped".to_string(),
+                    error: Some(if let Some(underlying) = &parse_diag {
+                        format!("{msg}: {}", underlying.message)
+                    } else {
+                        msg.clone()
+                    }),
+                    instruction_count: 0,
+                    diagnostic_count: 1,
+                    is_truncated: false,
+                    emitted_fact_count: 0,
+                    available_fact_count: 0,
+                };
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&end_rec).unwrap_or_default()
+                )?;
+                eprintln!("error: {path_str}: {stderr_reason}");
+                continue;
+            }
+        };
+
+        if let Err(diags) = validate_for_analysis(&chunk) {
+            failed_count += 1;
+            let start_rec = FileStartRecord {
+                record_type: "file_start".to_string(),
+                path: identity.path.clone(),
+                sha256: identity.sha256.clone(),
+                byte_length: identity.byte_length,
+                interpretation: Some(interp.clone()),
             };
             writeln!(
                 writer,
                 "{}",
-                serde_json::to_string(&summary).unwrap_or_default()
+                serde_json::to_string(&start_rec).unwrap_or_default()
+            )?;
+            let context = JsonlRecordContext::successful(identity.clone(), interp.clone());
+            for diag in &diags {
+                let diag_rec = JsonlDataRecord {
+                    record_type: "diagnostic".to_string(),
+                    context: context.clone(),
+                    data: diag.clone(),
+                };
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&diag_rec).unwrap_or_default()
+                )?;
+            }
+            let end_rec = FileEndRecord {
+                record_type: "file_end".to_string(),
+                path: identity.path.clone(),
+                status: "failed".to_string(),
+                error: Some("Analysis validation failed".to_string()),
+                instruction_count: 0,
+                diagnostic_count: diags.len(),
+                is_truncated: false,
+                emitted_fact_count: 0,
+                available_fact_count: 0,
+            };
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&end_rec).unwrap_or_default()
+            )?;
+            eprintln!("error: {path_str}: analysis validation failed");
+            continue;
+        }
+
+        writeln!(
+            writer,
+            "{}",
+            serde_json::to_string(&FileStartRecord {
+                record_type: "file_start".to_string(),
+                path: identity.path.clone(),
+                sha256: identity.sha256.clone(),
+                byte_length: identity.byte_length,
+                interpretation: Some(interp.clone()),
+            })
+            .unwrap_or_default()
+        )?;
+
+        let query_result = luad_analysis::query::execute_query_with_total(
+            &chunk,
+            args.r#where.as_deref(),
+            args.limit,
+            None,
+        );
+
+        let (response, available_fact_count) = match query_result {
+            Ok(res) => res,
+            Err(e) => {
+                failed_count += 1;
+                let diagnostic = Diagnostic::error(
+                    "INTERNAL-IDENTITY-001",
+                    DiagnosticCategory::Analysis,
+                    StableId::Chunk,
+                    e.to_string(),
+                );
+                let context = JsonlRecordContext::successful(identity.clone(), interp);
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&JsonlDataRecord {
+                        record_type: "diagnostic".to_string(),
+                        context,
+                        data: diagnostic,
+                    })
+                    .unwrap_or_default()
+                )?;
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&FileEndRecord {
+                        record_type: "file_end".to_string(),
+                        path: identity.path.clone(),
+                        status: "failed".to_string(),
+                        error: Some(e.to_string()),
+                        instruction_count: 0,
+                        diagnostic_count: 1,
+                        is_truncated: false,
+                        emitted_fact_count: 0,
+                        available_fact_count: 0,
+                    })
+                    .unwrap_or_default()
+                )?;
+                eprintln!("error: {path_str}: query execution failed");
+                continue;
+            }
+        };
+
+        let context = JsonlRecordContext::successful(identity.clone(), interp);
+        for m in &response.matches {
+            let rec = JsonlDataRecord {
+                record_type: "query_match".to_string(),
+                context: context.clone(),
+                data: m.clone(),
+            };
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&rec).unwrap_or_default()
             )?;
         }
-        OutputFormat::Dot => {
-            eprintln!("{}: DOT format not applicable to query", "error".red());
-            return Ok(ExitCode::UsageError);
+
+        for diag in &chunk.diagnostics {
+            let rec = JsonlDataRecord {
+                record_type: "diagnostic".to_string(),
+                context: context.clone(),
+                data: diag.clone(),
+            };
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&rec).unwrap_or_default()
+            )?;
         }
+
+        succeeded_count += 1;
+        total_matches += response.matches.len();
+
+        let end_rec = FileEndRecord {
+            record_type: "file_end".to_string(),
+            path: identity.path.clone(),
+            status: "succeeded".to_string(),
+            error: None,
+            instruction_count: 0,
+            diagnostic_count: chunk.diagnostics.len(),
+            is_truncated: response.is_truncated,
+            emitted_fact_count: response.matches.len(),
+            available_fact_count,
+        };
+        writeln!(
+            writer,
+            "{}",
+            serde_json::to_string(&end_rec).unwrap_or_default()
+        )?;
     }
 
-    Ok(ExitCode::Success)
+    writeln!(
+        writer,
+        "{}",
+        serde_json::to_string(&QueryEndRecord {
+            record_type: "query_end".to_string(),
+            files_processed: file_paths.len(),
+            files_succeeded: succeeded_count,
+            files_skipped: skipped_count,
+            files_failed: failed_count,
+            total_matches,
+        })
+        .unwrap_or_default()
+    )?;
+
+    eprintln!(
+        "{succeeded_count} queried, {skipped_count} skipped, {failed_count} failed ({total_matches} matches)"
+    );
+
+    if succeeded_count == 0 || (args.strict && (skipped_count > 0 || failed_count > 0)) {
+        Ok(ExitCode::InvalidInput)
+    } else {
+        Ok(ExitCode::Success)
+    }
 }
 
 fn handle_diff(args: DiffArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
@@ -2233,31 +2703,11 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
     let mut file_paths = args.files;
 
     if let Some(list_file) = &args.input_list {
-        if list_file == "-" {
-            let stdin = io::stdin();
-            for l in stdin.lock().lines().map_while(Result::ok) {
-                let trimmed = l.trim();
-                if !trimmed.is_empty() {
-                    file_paths.push(trimmed.to_string());
-                }
-            }
-        } else {
-            let content = match fs::read_to_string(list_file) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!(
-                        "{}: Failed to read input list '{}': {e}",
-                        "error".red(),
-                        list_file
-                    );
-                    return Ok(ExitCode::IoError);
-                }
-            };
-            for line in content.lines() {
-                let trimmed = line.trim();
-                if !trimmed.is_empty() {
-                    file_paths.push(trimmed.to_string());
-                }
+        match parse_input_list(list_file) {
+            Ok(paths) => file_paths.extend(paths),
+            Err((msg, code)) => {
+                eprintln!("{}: {msg}", "error".red());
+                return Ok(code);
             }
         }
     }

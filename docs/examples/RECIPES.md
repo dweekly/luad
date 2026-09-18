@@ -71,6 +71,14 @@ luad query firmware/main.luac --where "mnemonic == 'GETGLOBAL' or mnemonic == 'C
   jq '.data.matches[] | {id, kind, summary}'
 ```
 
+Or across an entire corpus using `query --input-list`:
+
+```bash
+luad query --input-list firmware-files.txt --where "mnemonic == 'GETGLOBAL' or mnemonic == 'CALL'" | \
+  jq -c 'select(.record_type == "query_match") |
+    {file: .context.input_identity.path, id: .data.id, kind: .data.kind, summary: .data.summary}'
+```
+
 Or from a batch JSONL export:
 
 ```bash

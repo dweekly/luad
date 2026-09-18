@@ -270,12 +270,24 @@ fn tokenize(input: &str) -> Result<Vec<Token>, QueryError> {
         } else if c == ')' {
             tokens.push(Token::RParen);
             i += 1;
-        } else if c == '=' && i + 1 < len && chars[i + 1] == '=' {
-            tokens.push(Token::OpEquals);
-            i += 2;
-        } else if c == '!' && i + 1 < len && chars[i + 1] == '=' {
-            tokens.push(Token::OpNotEquals);
-            i += 2;
+        } else if c == '=' {
+            if i + 1 < len && chars[i + 1] == '=' {
+                tokens.push(Token::OpEquals);
+                i += 2;
+            } else {
+                return Err(QueryError::Malformed(
+                    "Unexpected character '=': expected '=='".to_string(),
+                ));
+            }
+        } else if c == '!' {
+            if i + 1 < len && chars[i + 1] == '=' {
+                tokens.push(Token::OpNotEquals);
+                i += 2;
+            } else {
+                return Err(QueryError::Malformed(
+                    "Unexpected character '!': expected '!='".to_string(),
+                ));
+            }
         } else if c == '"' || c == '\'' {
             let quote = c;
             i += 1;
@@ -322,6 +334,13 @@ fn tokenize(input: &str) -> Result<Vec<Token>, QueryError> {
             {
                 ident.push(chars[i]);
                 i += 1;
+            }
+
+            if ident.is_empty() {
+                return Err(QueryError::Malformed(format!(
+                    "Unexpected character '{}'",
+                    chars[i]
+                )));
             }
 
             match ident.to_lowercase().as_str() {
@@ -911,6 +930,16 @@ pub fn execute_query(
     limit: usize,
     cursor: Option<&str>,
 ) -> Result<QueryResponse, QueryError> {
+    execute_query_with_total(chunk, where_expr, limit, cursor).map(|(resp, _)| resp)
+}
+
+/// Execute a structured query over a chunk, returning both the paginated QueryResponse and total match count.
+pub fn execute_query_with_total(
+    chunk: &Chunk,
+    where_expr: Option<&str>,
+    limit: usize,
+    cursor: Option<&str>,
+) -> Result<(QueryResponse, usize), QueryError> {
     let parsed_ast = match where_expr {
         Some(expr) if !expr.trim().is_empty() => {
             let ast = QueryExpr::parse(expr)?;
@@ -1063,12 +1092,15 @@ pub fn execute_query(
         None
     };
 
-    Ok(QueryResponse {
-        matches: page_items,
-        count: returned_count,
-        next_cursor,
-        is_truncated,
-    })
+    Ok((
+        QueryResponse {
+            matches: page_items,
+            count: returned_count,
+            next_cursor,
+            is_truncated,
+        },
+        total_matches,
+    ))
 }
 
 fn collect_proto_matches(

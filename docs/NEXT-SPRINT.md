@@ -1,70 +1,49 @@
-# Sprint contract: CFG alternatives for bounded definitions (R-1b)
+# Sprint contract: Corpus-wide query --input-list (R-4)
 
-Lane: product lane. Base: `d157878`.
+Lane: product lane. Base: `fd00ecc`.
 
 ## Outcome and public claim
 
-Consumers see bounded definitions reaching a control-flow join instead of an opaque
-`control-flow-conflict`.
+One exact query runs across an explicit artifact list with per-input identity and failures retained.
 
-If all retained reaching definitions are bounded, `origins` emits a closed `alternatives`
-expression containing a deduplicated, deterministically ordered list of candidate origin
-expressions, each with its reaching evidence:
+`query --input-list <file|-> --where <expression>` adopts export's batch input and outcome
+semantics, preserving order, duplicates, identity, and one result or failure outcome for
+every input:
 
-```json
-{
-  "kind": "alternatives",
-  "options": [
-    {
-      "kind": "literal",
-      "value": {"type": "string", "value": {"display": "left", "is_utf8": true, "raw_bytes": [108, 101, 102, 116]}},
-      "evidence": ["proto:0:pc:1", "proto:0:k:0"]
-    },
-    {
-      "kind": "literal",
-      "value": {"type": "string", "value": {"display": "right", "is_utf8": true, "raw_bytes": [114, 105, 103, 104, 116]}},
-      "evidence": ["proto:0:pc:3", "proto:0:k:1"]
-    }
-  ],
-  "evidence": ["proto:0:pc:1", "proto:0:k:0", "proto:0:pc:3", "proto:0:k:1"]
-}
-```
-
-The union represents reaching definitions across CFG paths, not a path-feasibility or
-taint assertion. Structurally equal options are deduplicated with their evidence unioned;
-if all reaching definitions are structurally equal, a single merged origin is emitted
-rather than a redundant singleton alternative.
+- File lists and standard input (`-`) are accepted via a shared list parser.
+- Multi-input streaming JSONL output uses explicit stream framing (`query_start`, `query_end`)
+  and per-file framing (`file_start`, `file_end`) containing exact input identities,
+  match counts, diagnostic counts, and truncation flags.
+- Source files, malformed bytecode, unsupported dialects, and IO errors emit explicit
+  skip or failure records with diagnostics. No failed file becomes an apparently clean
+  zero-match result.
+- Matches and diagnostics retain per-file context and identity.
+- Predicate syntax errors fail closed immediately before processing artifacts.
 
 ## Allowed boundary
 
-- `crates/luad-analysis/src/origins.rs`: add `OriginExpressionKind::Alternatives`,
-  join transfer logic in `meet_value`, structural deduplication, evidence unioning,
-  loop fixed-point bounds, and canonical option sorting.
-- `crates/luad-analysis/src/query.rs`: query support for `alternatives`.
-- `crates/luad-cli/src/render/text.rs`: render `alternatives(...)` in human text output.
-- `tests/schemas/origins.schema.json` and `tests/schemas/export.schema.json`: regenerated schemas.
-- `tests/fixtures/origins.lua`: CFG join fixtures (two literals over `if`, literal vs parameter, equivalent predecessors, loops, overflow, unresolved).
-- `crates/luad-oracle/tests/test_argument_origins_lua51.rs`: assertions for JSON, text, deduplication, loops, and negative controls.
-- `tests/gates/gate-argument-origins-lua51.json`: updated fixture hash and expected tests.
-- `README.md`, `docs/MACHINE-INTERFACE.md`, and this contract: truthful documentation.
+- `crates/luad-cli/src/args.rs`: make `file` optional in `QueryArgs` when `--input-list` is passed; add `input_list` and `strict`.
+- `crates/luad-cli/src/main.rs`: extract shared `parse_input_list` helper; implement batch query execution and streaming JSONL records (`QueryStartRecord`, `QueryEndRecord`, `FileStartRecord`, `FileEndRecord`).
+- `crates/luad-oracle/tests/test_batch_query.rs`: test file vs stdin input lists, mixed outcomes, duplicates, order preservation, limit truncation, zero matches, malformed predicates, and equivalence to filtering `export` on the firmware fixture tree.
+- `docs/MACHINE-INTERFACE.md`, `docs/examples/RECIPES.md`, `README.md`, `CHANGELOG.md`, and this contract: truthful documentation.
 
 ## Evidence
 
 Run these focused checks against the candidate:
 
 ```console
-cargo test -p luad-oracle --test test_argument_origins_lua51 -- --nocapture
-bash scripts/gates/gate-argument-origins-lua51.sh
+cargo test -p luad-oracle --test test_batch_query -- --nocapture
+bash scripts/check.sh
 ```
 
-- Assert exact JSON, JSONL, text, and export output for alternatives.
-- Negative controls: omitted-option, substituted-option, and dropped-evidence mutations in `gate-argument-origins-lua51`.
-- Algorithmic review packet: conducted per `docs/DEVELOPMENT-WORKFLOW.md` line 99.
+- Assert exact JSONL framing records and stderr summaries.
+- Test file lists, stdin lists, duplicates, and order.
+- Test that missing files, source text, and invalid bytecode produce explicit failure/skip records, never false zero-match successes.
+- Assert equivalence between `query --input-list` matches and filtered `export` instructions over `tests/fixtures/firmware_tree/`.
 - Run `bash scripts/check.sh` once on a clean candidate.
 
 ## Non-goals and stop condition
 
-No convention linking (R-2), caller-unioned substitution (R-3), path-condition solving,
-symbolic execution, or decompiler changes. Stop when bounded CFG joins report closed
-deterministic alternatives with exact evidence, unresolved or overflowing joins emit
-explicit cutoffs, and all named checks pass.
+No fact-family discovery (R-5), convention linking (R-2), caller substitution (R-3),
+or query predicate language additions. Stop when `query --input-list` provides complete
+streaming JSONL batch query execution with truthful failure records and all named checks pass.

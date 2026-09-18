@@ -32,7 +32,8 @@ pub use prototype_identity::{
     PROTOTYPE_IDENTITY_SCHEME_V1, PROTOTYPE_IDENTITY_SCHEME_V2,
 };
 pub use query::{
-    execute_query, QueryError, QueryExpr, QueryField, QueryMatch, QueryOp, QueryResponse,
+    execute_query, execute_query_with_total, QueryError, QueryExpr, QueryField, QueryMatch,
+    QueryOp, QueryResponse,
 };
 pub use xrefs::{find_proto, validate_target, XrefEntry, XrefIndex, XrefRelation, XrefResponse};
 

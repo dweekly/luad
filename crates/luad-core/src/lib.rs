@@ -35,7 +35,7 @@ pub use disasm::{
 pub use envelope::{
     AnalysisConfiguration, ExportEndRecord, ExportStartRecord, FileEndRecord, FileStartRecord,
     InputIdentity, JsonlDataRecord, JsonlMetadataRecord, JsonlRecordContext, JsonlSummaryRecord,
-    MachineDocument, ValidationResponse, JSONL_SCHEMA_VERSION,
+    MachineDocument, QueryEndRecord, QueryStartRecord, ValidationResponse, JSONL_SCHEMA_VERSION,
 };
 pub use id::{ProtoPath, StableId};
 
