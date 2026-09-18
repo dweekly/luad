@@ -5,6 +5,25 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+## 0.2.0 — 2026-09-17
+
+Experimental correctness and firmware-workflow release. No dialect is promoted to
+supported, and machine interfaces retain their 0.x compatibility status.
+
+- Validate declared layouts and numeric canaries for Lua 5.2, 5.3, and 5.5; decode
+  implemented widths and refuse unsupported declarations with anchored diagnostics.
+- Expand version-specific operand checks and refuse derived analysis for Lua 5.2,
+  5.3, and 5.5 while keeping structural inspection and validation available.
+- Preserve parse-failure provenance through CLI and batch export, distinguish
+  unsupported formats from malformed inputs, and handle broken pipes quietly.
+- Bound input reads, string declarations, traversal, diagnostics, and subprocess
+  monitoring; cover hostile-input cases and budget breaches with regression tests.
+- Add a public firmware-shaped walkthrough with mixed-input inventory, constants,
+  global queries, raw disassembly, and explicit profile boundaries.
+- Publish Linux x86-64 and macOS ARM64 archives with checksums, a deterministic
+  CycloneDX source SBOM, and GitHub build-provenance attestations. Publication uses
+  accepted CI artifacts and verifies fresh downloads.
+
 - Keep stdin workers under the subprocess tripwire deadline, including descendants
   that hold only stdin open. Cleanup joins only finished workers after its grace period.
 - Remove the simulated unluac oracle and pinned decompiler requirement from the

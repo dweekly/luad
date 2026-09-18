@@ -377,7 +377,10 @@ fn test_release_sbom_deterministic_complete_and_non_promoting() {
     let first_dir = temp.path().join("first");
     let first =
         generate_release_sbom(&repository, &generator, &first_dir).expect("generate first SBOM");
-    assert_eq!(first.sbom, "luad-0.1.0.cdx.json");
+    assert_eq!(
+        first.sbom,
+        format!("luad-{}.cdx.json", env!("CARGO_PKG_VERSION"))
+    );
     assert_eq!(first.generator, "cargo-cyclonedx 0.5.9");
     assert!(first.component_count > 0);
 

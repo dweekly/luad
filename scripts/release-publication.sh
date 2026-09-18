@@ -634,6 +634,13 @@ write_production_notes() {
     printf '# luad %s\n\n' "${version}"
     printf 'Release `%s` built from accepted revision `%s`.\n\n' "${version}" "${revision}"
     printf 'Accepted CI run: %s/actions/runs/%s\n\n' "${REPOSITORY_URL}" "${run_id}"
+    if [[ -f CHANGELOG.md ]]; then
+      awk -v heading="## ${version} " '
+        index($0, heading) == 1 { found=1; next }
+        found && /^## / { exit }
+        found { print }
+      ' CHANGELOG.md
+    fi
     printf '### Checksums\n\n```text\n'
     cat "${accepted}/SHA256SUMS"
     printf '```\n\n'

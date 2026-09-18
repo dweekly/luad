@@ -317,7 +317,7 @@ if args[0] == "attestation" and len(args) >= 3 and args[1] == "verify":
 
     expected_workflow = "dweekly/luad/.github/workflows/ci.yml"
     signer_workflow = option("--signer-workflow")
-    if signer_workflow is not None and signer_workflow != expected_workflow:
+    if signer_workflow != expected_workflow:
         print(f"gh: attestation verification failed: signer workflow mismatch: {signer_workflow} != {expected_workflow}", file=sys.stderr)
         sys.exit(1)
     if mode in ("attestation_wrong_workflow", "lookalike_workflow"):
@@ -325,7 +325,7 @@ if args[0] == "attestation" and len(args) >= 3 and args[1] == "verify":
         sys.exit(1)
 
     source_digest = option("--source-digest")
-    if source_digest is not None and source_digest != revision:
+    if source_digest != revision:
         print(f"gh: attestation verification failed: source digest mismatch: {source_digest} != {revision}", file=sys.stderr)
         sys.exit(1)
     if mode == "attestation_wrong_revision":
@@ -779,6 +779,10 @@ fn audit_publish_success_log(log: &[Vec<String>], revision: &str) -> Result<(), 
             &format!("luad-{VERSION}-linux-x86_64.tar.gz"),
             "--repo",
             "dweekly/luad",
+            "--signer-workflow",
+            "dweekly/luad/.github/workflows/ci.yml",
+            "--source-digest",
+            revision,
         ],
         vec![
             "attestation",
@@ -786,6 +790,10 @@ fn audit_publish_success_log(log: &[Vec<String>], revision: &str) -> Result<(), 
             &format!("luad-{VERSION}-macos-aarch64.tar.gz"),
             "--repo",
             "dweekly/luad",
+            "--signer-workflow",
+            "dweekly/luad/.github/workflows/ci.yml",
+            "--source-digest",
+            revision,
         ],
         vec!["release", "edit", &format!("v{VERSION}"), "--latest"],
     ] {
@@ -1052,6 +1060,23 @@ fn test_release_publication_fake_command_audit_has_negative_controls() {
         audit_publish_success_log(&without_attestation, &pub_fixture.revision).is_err(),
         "omitting attestation verification must fail publish audit"
     );
+
+    for flag in ["--signer-workflow", "--source-digest"] {
+        let missing_policy: Vec<Vec<String>> = pub_log
+            .iter()
+            .map(|command| {
+                command
+                    .iter()
+                    .filter(|word| word.as_str() != flag)
+                    .cloned()
+                    .collect()
+            })
+            .collect();
+        assert!(
+            audit_publish_success_log(&missing_policy, &pub_fixture.revision).is_err(),
+            "omitting {flag} must fail publication audit"
+        );
+    }
 
     let without_latest_edit: Vec<_> = pub_log
         .iter()
