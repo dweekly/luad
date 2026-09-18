@@ -806,6 +806,7 @@ fn origin_kind_str(k: &OriginExpressionKind) -> &'static str {
         OriginExpressionKind::CallResult { .. } => "call-result",
         OriginExpressionKind::Concat { .. } => "concat",
         OriginExpressionKind::Table { .. } => "table",
+        OriginExpressionKind::TableLiteral { .. } => "table-literal",
         OriginExpressionKind::Unary { .. } => "unary",
         OriginExpressionKind::Binary { .. } => "binary",
         OriginExpressionKind::Unknown { .. } => "unknown",

@@ -71,6 +71,41 @@ local function matrix(parameter, number, ...)
   table_value[1] = "changed"
   sink(table_alias)
 
+  local complete_table = {}
+  complete_table.a = "x"
+  complete_table.b = parameter
+  sink(complete_table)
+
+  local dynamic_table = {}
+  dynamic_table.a = "x"
+  dynamic_table[parameter] = 123
+  sink(dynamic_table)
+
+  local escaped_table = {}
+  escaped_table.a = "x"
+  producer(escaped_table)
+  escaped_table.b = "y"
+  sink(escaped_table)
+
+  local aliased_table = {}
+  local alias_ref = aliased_table
+  aliased_table.a = "x"
+  alias_ref.b = "y"
+  sink(alias_ref)
+
+  local overwrite_table = {}
+  overwrite_table.a = "first"
+  overwrite_table.a = "second"
+  sink(overwrite_table)
+
+  local conflict_table = {}
+  if parameter then
+    conflict_table.a = 1
+  else
+    conflict_table.a = 2
+  end
+  sink(conflict_table)
+
   sink(function() end)
 end
 

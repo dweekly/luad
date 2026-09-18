@@ -15,9 +15,11 @@ const MAX_EXPRESSION_DEPTH: usize = 24;
 const MAX_EXPRESSION_NODES: usize = 512;
 const MAX_REGISTER_WINDOW: usize = 256;
 const MAX_TRANSFER_STEPS: usize = 1_000_000;
+const MAX_TABLE_SCAN_STEPS: usize = 64;
+const MAX_TABLE_FIELDS: usize = 64;
 
 /// A lossless literal suitable for structural equality in an origin graph.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum OriginLiteral {
     Nil,
@@ -112,6 +114,10 @@ pub enum OriginExpressionKind {
     Table {
         entries: Vec<OriginExpression>,
     },
+    TableLiteral {
+        fields: Vec<TableLiteralField>,
+        incomplete: bool,
+    },
     Unary {
         operator: String,
         operand: Box<OriginExpression>,
@@ -124,6 +130,16 @@ pub enum OriginExpressionKind {
     Unknown {
         reason: OriginUnknownReason,
     },
+}
+
+/// One constant-key field in a reconstructed table literal expression.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct TableLiteralField {
+    pub key: OriginLiteral,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_id: Option<StableId>,
+    pub value: OriginExpression,
+    pub evidence: Vec<StableId>,
 }
 
 /// One fixed argument position and its pre-call origin.
@@ -939,6 +955,238 @@ fn invalidate_writes(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn reconstruct_table_literal(
+    _proto: &Prototype,
+    block: &crate::BasicBlock,
+    instructions: &[SemanticInstruction],
+    call_pc: usize,
+    arg_register: u8,
+    incoming: &[FlowValue],
+    captures: &CaptureEnvironment,
+    frame_size: usize,
+) -> Option<OriginExpression> {
+    let pcs_before: Vec<usize> = block
+        .instruction_pcs
+        .iter()
+        .copied()
+        .filter(|&pc| pc < call_pc)
+        .collect();
+    if pcs_before.is_empty() {
+        return None;
+    }
+
+    let mut current_reg = arg_register;
+    let mut newtable_pc = None;
+    let mut newtable_inst = None;
+
+    for &pc in pcs_before.iter().rev() {
+        let Some(inst) = instructions.get(pc) else {
+            continue;
+        };
+        let writes_current_reg = inst.writes.iter().any(|target| match target {
+            EffectTarget::Register { index } => *index == current_reg,
+            EffectTarget::RegisterRange { start, end } => (*start..=*end).contains(&current_reg),
+            EffectTarget::RegisterRangeToTop { start } => *start <= current_reg,
+            _ => false,
+        });
+
+        if writes_current_reg {
+            if inst.mnemonic == "MOVE" {
+                if let (Some(dest), Some(src)) =
+                    (register_operand(inst, 0), register_operand(inst, 1))
+                {
+                    if dest == current_reg {
+                        current_reg = src;
+                        continue;
+                    }
+                }
+            } else if inst.mnemonic == "NEWTABLE" {
+                if let Some(dest) = register_operand(inst, 0) {
+                    if dest == current_reg {
+                        newtable_pc = Some(pc);
+                        newtable_inst = Some(inst);
+                        break;
+                    }
+                }
+            }
+            return None;
+        }
+    }
+
+    let (Some(newtable_pc), Some(newtable_inst)) = (newtable_pc, newtable_inst) else {
+        return None;
+    };
+
+    let span_pcs: Vec<usize> = pcs_before
+        .into_iter()
+        .filter(|&pc| pc > newtable_pc)
+        .collect();
+
+    let mut incomplete = false;
+    if span_pcs.len() > MAX_TABLE_SCAN_STEPS {
+        incomplete = true;
+    }
+
+    let initial_reg = register_operand(newtable_inst, 0).unwrap_or(current_reg);
+    let mut aliases = BTreeSet::new();
+    aliases.insert(initial_reg);
+
+    let mut fields: BTreeMap<OriginLiteral, TableLiteralField> = BTreeMap::new();
+    let mut seen_settable = false;
+
+    let mut current_state = incoming.to_vec();
+    for &pc in &block.instruction_pcs {
+        if pc >= newtable_pc {
+            break;
+        }
+        if let Some(inst) = instructions.get(pc) {
+            transfer(inst, &mut current_state, captures, frame_size);
+        }
+    }
+    transfer(newtable_inst, &mut current_state, captures, frame_size);
+
+    for &pc in &span_pcs {
+        let Some(inst) = instructions.get(pc) else {
+            continue;
+        };
+
+        if inst.mnemonic == "SETLIST" {
+            if let Some(dest) = register_operand(inst, 0) {
+                if aliases.contains(&dest) {
+                    return None;
+                }
+            }
+        }
+
+        if inst.mnemonic == "SETTABLE" {
+            if let Some(dest) = register_operand(inst, 0) {
+                if aliases.contains(&dest) {
+                    seen_settable = true;
+                    match inst.operands.get(1) {
+                        Some(TypedOperand::Constant { index, value }) => {
+                            let key_id =
+                                Some(StableId::constant(proto_from_instruction(&inst.id), *index));
+                            if let Some(key) = origin_literal(value) {
+                                if let Some(val_expr) = expression_operand(inst, 2, &current_state)
+                                {
+                                    if fields.contains_key(&key) {
+                                        incomplete = true;
+                                    }
+                                    if fields.len() >= MAX_TABLE_FIELDS {
+                                        incomplete = true;
+                                    } else {
+                                        fields.insert(
+                                            key.clone(),
+                                            TableLiteralField {
+                                                key,
+                                                key_id,
+                                                value: val_expr,
+                                                evidence: vec![inst.id.clone()],
+                                            },
+                                        );
+                                    }
+                                } else {
+                                    incomplete = true;
+                                }
+                            } else {
+                                incomplete = true;
+                            }
+                        }
+                        _ => {
+                            incomplete = true;
+                        }
+                    }
+                } else if let Some(TypedOperand::Register { index }) = inst.operands.get(2) {
+                    if aliases.contains(index) {
+                        incomplete = true;
+                    }
+                }
+            }
+        }
+
+        if matches!(inst.mnemonic.as_str(), "CALL" | "TAILCALL") {
+            let base = register_operand(inst, 0).unwrap_or(0);
+            if aliases.contains(&base) {
+                incomplete = true;
+            }
+            if let Some((count, variable)) = count_operands(inst).first().copied() {
+                if variable {
+                    if aliases.iter().any(|&r| r > base) {
+                        incomplete = true;
+                    }
+                } else {
+                    for arg_idx in 0..count.saturating_sub(1) {
+                        if let Some(r) = base
+                            .checked_add(1)
+                            .and_then(|f| f.checked_add(arg_idx as u8))
+                        {
+                            if aliases.contains(&r) {
+                                incomplete = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if matches!(inst.mnemonic.as_str(), "SETGLOBAL" | "SETUPVAL") {
+            if let Some(src) = register_operand(inst, 0) {
+                if aliases.contains(&src) {
+                    incomplete = true;
+                }
+            }
+        }
+
+        if inst.mnemonic == "MOVE" {
+            if let (Some(dest), Some(src)) = (register_operand(inst, 0), register_operand(inst, 1))
+            {
+                if aliases.contains(&src) {
+                    aliases.insert(dest);
+                } else {
+                    aliases.remove(&dest);
+                }
+            }
+        } else {
+            for target in &inst.writes {
+                match target {
+                    EffectTarget::Register { index } => {
+                        aliases.remove(index);
+                    }
+                    EffectTarget::RegisterRange { start, end } => {
+                        for r in *start..=*end {
+                            aliases.remove(&r);
+                        }
+                    }
+                    EffectTarget::RegisterRangeToTop { start } => {
+                        aliases.retain(|r| *r < *start);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        transfer(inst, &mut current_state, captures, frame_size);
+    }
+
+    if !aliases.contains(&arg_register) {
+        return None;
+    }
+
+    if !seen_settable && !incomplete {
+        return None;
+    }
+
+    let field_vec: Vec<TableLiteralField> = fields.into_values().collect();
+    Some(bounded_expression(
+        OriginExpressionKind::TableLiteral {
+            fields: field_vec,
+            incomplete,
+        },
+        [newtable_inst.id.clone()],
+    ))
+}
+
 fn collect_calls(
     proto: &Prototype,
     instructions: &[SemanticInstruction],
@@ -960,7 +1208,16 @@ fn collect_calls(
                 continue;
             };
             if is_call(instruction) {
-                calls.push(call_fact(proto, instruction, &state, None));
+                calls.push(call_fact(
+                    proto,
+                    Some(block),
+                    instruction,
+                    instructions,
+                    &state,
+                    &in_states[block.index],
+                    captures,
+                    None,
+                ));
             }
             transfer(
                 instruction,
@@ -977,8 +1234,12 @@ fn collect_calls(
         if !reachable_pcs.contains(&instruction.pc) {
             calls.push(call_fact(
                 proto,
+                None,
                 instruction,
+                instructions,
                 &[],
+                &[],
+                captures,
                 Some(OriginUnknownReason::Unreachable),
             ));
         }
@@ -992,21 +1253,39 @@ fn enumerate_calls_with_reason(
     instructions: &[SemanticInstruction],
     reason: OriginUnknownReason,
 ) -> Vec<CallOriginFact> {
+    let dummy_captures = BTreeMap::new();
     instructions
         .iter()
         .filter(|instruction| is_call(instruction))
-        .map(|instruction| call_fact(proto, instruction, &[], Some(reason)))
+        .map(|instruction| {
+            call_fact(
+                proto,
+                None,
+                instruction,
+                instructions,
+                &[],
+                &[],
+                &dummy_captures,
+                Some(reason),
+            )
+        })
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn call_fact(
     proto: &Prototype,
+    block: Option<&crate::BasicBlock>,
     instruction: &SemanticInstruction,
+    instructions: &[SemanticInstruction],
     state: &[FlowValue],
+    incoming: &[FlowValue],
+    captures: &CaptureEnvironment,
     forced_reason: Option<OriginUnknownReason>,
 ) -> CallOriginFact {
     let base = register_operand(instruction, 0).unwrap_or(0);
     let argument_count = count_operands(instruction).first().copied();
+    let frame_size = usize::from(proto.maxstacksize);
     let argument_window = match argument_count {
         Some((_, true)) => CallArgumentWindow::Open {
             reason: forced_reason.unwrap_or(OriginUnknownReason::OpenArgumentWindow),
@@ -1019,7 +1298,23 @@ fn call_fact(
                         .and_then(|first| first.checked_add(argument_index as u8))
                         .unwrap_or(u8::MAX);
                     let origin = forced_reason.map_or_else(
-                        || origin_from_flow(get_register(state, register)),
+                        || {
+                            if let Some(block) = block {
+                                if let Some(table_origin) = reconstruct_table_literal(
+                                    proto,
+                                    block,
+                                    instructions,
+                                    instruction.pc,
+                                    register,
+                                    incoming,
+                                    captures,
+                                    frame_size,
+                                ) {
+                                    return table_origin;
+                                }
+                            }
+                            origin_from_flow(get_register(state, register))
+                        },
                         |reason| unknown(reason, [instruction.id.clone()]),
                     );
                     FixedArgumentOrigin {
@@ -1463,6 +1758,9 @@ fn first_cutoff(expression: &OriginExpression) -> Option<OriginUnknownReason> {
         OriginExpressionKind::Concat { parts } | OriginExpressionKind::Table { entries: parts } => {
             parts.iter().find_map(first_cutoff)
         }
+        OriginExpressionKind::TableLiteral { fields, .. } => {
+            fields.iter().find_map(|field| first_cutoff(&field.value))
+        }
         _ => None,
     }
 }
@@ -1492,6 +1790,16 @@ fn expression_size(expression: &OriginExpression) -> (usize, usize) {
             }
             (depth.saturating_add(1), nodes)
         }
+        OriginExpressionKind::TableLiteral { fields, .. } => {
+            let mut depth = 0usize;
+            let mut nodes = 1usize;
+            for field in fields {
+                let (part_depth, part_nodes) = expression_size(&field.value);
+                depth = depth.max(part_depth);
+                nodes = nodes.saturating_add(part_nodes).saturating_add(1);
+            }
+            (depth.saturating_add(1), nodes)
+        }
         _ => (1, 1),
     }
 }
@@ -1515,7 +1823,7 @@ fn same_shape(left: &OriginExpression, right: &OriginExpression) -> bool {
 
 fn contains_table(expression: &OriginExpression) -> bool {
     match &expression.kind {
-        OriginExpressionKind::Table { .. } => true,
+        OriginExpressionKind::Table { .. } | OriginExpressionKind::TableLiteral { .. } => true,
         OriginExpressionKind::Field { base, .. }
         | OriginExpressionKind::Unary { operand: base, .. } => contains_table(base),
         OriginExpressionKind::Binary { left, right, .. } => {
@@ -1538,6 +1846,12 @@ fn clear_evidence(expression: &mut OriginExpression) {
         OriginExpressionKind::Concat { parts } | OriginExpressionKind::Table { entries: parts } => {
             for part in parts {
                 clear_evidence(part);
+            }
+        }
+        OriginExpressionKind::TableLiteral { fields, .. } => {
+            for field in fields {
+                field.evidence.clear();
+                clear_evidence(&mut field.value);
             }
         }
         _ => {}
@@ -1587,6 +1901,24 @@ fn union_expression_evidence(left: &mut OriginExpression, right: &OriginExpressi
         ) => {
             for (left, right) in left.iter_mut().zip(right) {
                 union_expression_evidence(left, right);
+            }
+        }
+        (
+            OriginExpressionKind::TableLiteral { fields: left, .. },
+            OriginExpressionKind::TableLiteral { fields: right, .. },
+        ) if left.len() == right.len() => {
+            for (left, right) in left.iter_mut().zip(right) {
+                if left.key == right.key {
+                    left.evidence = left
+                        .evidence
+                        .iter()
+                        .chain(&right.evidence)
+                        .cloned()
+                        .collect::<BTreeSet<_>>()
+                        .into_iter()
+                        .collect();
+                    union_expression_evidence(&mut left.value, &right.value);
+                }
             }
         }
         _ => {}

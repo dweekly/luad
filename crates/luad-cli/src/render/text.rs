@@ -783,6 +783,28 @@ fn format_origin_expression(expression: &luad_analysis::OriginExpression) -> Str
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
+        OriginExpressionKind::TableLiteral { fields, incomplete } => {
+            let rendered_fields = fields
+                .iter()
+                .map(|field| {
+                    format!(
+                        "{}: {}",
+                        literal(&field.key),
+                        format_origin_expression(&field.value)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            if *incomplete {
+                if fields.is_empty() {
+                    "table-literal(incomplete)".to_string()
+                } else {
+                    format!("table-literal({{{rendered_fields}}}, incomplete)")
+                }
+            } else {
+                format!("table-literal({{{rendered_fields}}})")
+            }
+        }
         OriginExpressionKind::Unary { operator, operand } => {
             format!("{operator}({})", format_origin_expression(operand))
         }

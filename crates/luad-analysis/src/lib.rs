@@ -24,7 +24,7 @@ pub use diff::{diff_chunks, ChunkDiff, InstructionDiff, ProtoDiff};
 pub use origins::{
     analyze_chunk_origins, CallArgumentWindow, CallOriginFact, ChunkOriginAnalysis,
     FixedArgumentOrigin, OriginAnalysis, OriginExpression, OriginExpressionKind, OriginLiteral,
-    OriginUnknownReason,
+    OriginUnknownReason, TableLiteralField,
 };
 pub use prototype_identity::{
     analyze_chunk_prototype_identities, analyze_chunk_prototype_identities_v1,

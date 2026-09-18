@@ -13,6 +13,7 @@
   ],
   "expected_tests": [
     "test_closure_argument_origin_emits_prototype_expression",
+    "test_constant_key_table_literal_origins_emit_table_literal_expression",
     "test_every_call_and_fixed_argument_slot_has_exactly_one_fact",
     "test_export_origin_records_equal_direct_command",
     "test_origin_killer_mutations_are_rejected",
@@ -33,7 +34,7 @@
   "required_fixtures": [
     {
       "path": "tests/fixtures/origins.lua",
-      "sha256": "97800e4f1200ab4ea1efe4bde5c754031450130df2c199906da5677466872a6a"
+      "sha256": "e349257b598b49256bed34b39eb48c51fb3b1ed7f2e49417d49039b0b4b7c9cf"
     },
     {
       "path": "tests/fixtures/precompiled/lua51_lnum32/hello.luac",

@@ -8,6 +8,9 @@ is promoted to a supported tier and no interface carries a compatibility promise
 - Emit closed `prototype` expressions with child prototype paths and physical PC
   evidence for proven `CLOSURE` call-argument definitions in Lua 5.1 origin analysis
   (R-1c).
+- Reconstruct constant-key table-literal origin expressions (`TableLiteral`) with
+  deterministically sorted fields, write evidence, and visible partial cutoffs
+  (`incomplete: true`) for request-shaped objects in Lua 5.1 origin analysis (R-1a).
 
 ## 0.2.0 — 2026-09-17
 
