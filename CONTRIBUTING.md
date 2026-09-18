@@ -37,6 +37,30 @@ update package metadata, CI evidence, release documentation, and the changelog t
 
 `scripts/check.sh` runs the aggregate repository checks. It is necessary before handoff, but it is not proof that oracle-backed claims are correct; each work package must also pass its canonical gate.
 
+### Line coverage
+
+The separate [Coverage workflow](.github/workflows/coverage.yml) runs on hosted Linux
+for code, fixture, toolchain, or coverage-workflow changes. It installs the required
+official Lua compilers and runs the entire workspace test suite with LLVM
+instrumentation, including the CLI subprocesses exercised by integration tests.
+It uploads an LCOV report through `codecov/codecov-action@v5`, using the repository's
+`CODECOV_TOKEN` Actions secret, and retains a copy as an Actions artifact. Upload
+failures fail the coverage job rather than silently leaving stale data.
+
+For a local report, install the `cargo-llvm-cov` version pinned in that workflow, add
+`llvm-tools-preview` to the repository's Rust toolchain with `rustup component add
+llvm-tools-preview`, and run:
+
+```console
+bash scripts/coverage.sh
+```
+
+The report is `artifacts/coverage/lcov.info`. It includes the CLI and libraries;
+the `luad-oracle` tooling crate and cargo-llvm-cov's default test/dependency exclusions
+are omitted from the report, while their tests still run. The badge measures Linux
+line coverage, not branch coverage, semantic correctness, or supported-target status.
+Coverage tooling is optional for contributors and does not change `scripts/check.sh`.
+
 Dependency changes must also pass the pinned `cargo-deny` policy:
 
 ```console

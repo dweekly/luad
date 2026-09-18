@@ -5,6 +5,10 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Add the project logo and CI, Codecov, release, and dual-license badges to the README.
+  Publish measured Linux line coverage from the workspace suite and instrumented CLI
+  subprocesses through a separate coverage workflow.
+
 - Delimit negative process-group IDs with `--` when the contributor tripwire invokes
   `kill`. Linux procps-ng could misparse the previous command and signal unrelated
   processes, including the CI runner. A signal-0 regression checks the target group
