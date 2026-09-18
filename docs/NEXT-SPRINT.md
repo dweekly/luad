@@ -1,53 +1,52 @@
-# Sprint contract: ship one reproducible firmware investigation walkthrough
+# Sprint contract: finish the firmware walkthrough and subprocess deadline fixes
 
-Lane: product lane. Roadmap position: stage 7 under [0.2 execution and dependencies](../ROADMAP.md#02-execution-and-dependencies).
+Lane: steward-owned correction to stages 6–7. Base: `912a839`.
+Implementation is performed directly, as requested by the user.
 
-## Public outcome
+## Outcome and public claim
 
-Deliver one reproducible firmware investigation walkthrough based on public, redistributable inputs:
-- Standalone fixture tree `tests/fixtures/firmware_tree/` with full provenance in `MANIFEST.json`:
-  - OpenWrt LNUM32 precompiled bytecode named `.lua` (`dispatcher.lua`)
-  - Stock Lua 5.1 precompiled bytecode (`system_service.luac`, decompiler handoff target)
-  - Plain text Lua source (`network_setup.lua`)
-  - Malformed/truncated input (`corrupted_module.luac`)
-  - Unsupported layout (`mips_be_legacy.luac`, Big-Endian Lua 5.1)
-- Automated end-to-end replay test `crates/luad-oracle/tests/test_firmware_walkthrough.rs`:
-  - Phase 1: Inventory and triage via `luad export` with exact closure assertions.
-  - Phase 2: Inspection and dialect layout detection/rejection with truthful exit codes (0, 1, 4).
-  - Phase 3: Targeted fact extraction (`constants`, `query`, `disasm`, `callees`, `origins`).
-  - Phase 4: Pinned decompiler handoff cross-check and honest boundary reporting.
-  - Negative controls: Tampered fixture hash or truncated stream fails closed.
-- Concise walkthrough section in `README.md` and detailed recipe in `docs/examples/RECIPES.md`.
+The public firmware-shaped walkthrough verifies luad's inventory closure, inspection,
+facts, profile selection, and refusal behavior. Building and testing luad requires no
+external decompiler. External decompilation is an optional manual experiment; metadata
+alone does not establish compatibility or correct recovered source.
 
-## Target boundary
+The subprocess tripwire includes stdin completion in its wall-time monitoring and does
+not join unfinished I/O workers after its bounded cleanup grace period.
 
-- `tests/fixtures/firmware_tree/MANIFEST.json` — fixture provenance and outcome specification.
-- `tests/fixtures/firmware_tree/*` — public redistributable fixture tree.
-- `crates/luad-oracle/tests/test_firmware_walkthrough.rs` — automated walkthrough replay test.
-- `docs/examples/RECIPES.md` — detailed firmware investigation recipe.
-- `README.md` — concise reproducible walkthrough.
-- `docs/NEXT-SPRINT.md` — active sprint contract.
+## Allowed boundary
 
-## Proof
+- `crates/luad-oracle/src/tripwire.rs`: completion, bounded cleanup, and regressions.
+- `crates/luad-oracle/tests/test_firmware_walkthrough.rs`: retain luad assertions and
+  corruption controls; remove assertions against the simulated decompiler.
+- `tests/fixtures/firmware_tree/MANIFEST.json`: align the unsupported-layout exit
+  expectation with the public CLI and assert declared outcomes during replay.
+- `tests/fixtures/tools/unluac`: remove the header-only simulated decompiler.
+- `README.md`, `CONTRIBUTING.md`, `docs/examples/RECIPES.md`, `ROADMAP.md`,
+  `CHANGELOG.md`, and this contract: truthful evidence and dependency boundaries.
 
-- Dedicated walkthrough test passes:
-  - `cargo test -p luad-oracle --test test_firmware_walkthrough`
-- Regression test suites pass:
-  - `cargo test -p luad-oracle --test test_hostile_containment`
-  - `cargo test -p luad-oracle --test test_failure_provenance`
-  - `cargo test -p luad-oracle --test test_batch_export`
-  - `cargo test -p luad-oracle --test test_cli_e2e`
-  - `cargo test -p luad-oracle --test test_cli_broken_pipe`
-  - `cargo test -p luad-oracle --test test_analysis_eligibility`
-  - `cargo test -p luad-oracle --test test_layout_truth_matrix`
-- Zero warnings on workspace formatting and clippy:
-  - `cargo fmt --all -- --check`
-  - `cargo clippy --workspace --all-targets -- -D warnings`
+## Evidence
 
-## Non-goals
+Run these focused checks against the candidate:
 
-No private customer samples, no whole-firmware extraction engine, no database product, no external adapter framework.
+```console
+cargo build -p luad-cli --bin luad
+CARGO_BIN_EXE_luad="$PWD/target/debug/luad" cargo test -p luad-oracle --test test_firmware_walkthrough
+cargo test -p luad-oracle --lib tripwire::tests -- --test-threads=1
+CARGO_BIN_EXE_luad="$PWD/target/debug/luad" cargo test -p luad-oracle --test test_hostile_containment -- --test-threads=1
+```
 
-## Stop condition
+- Assert fixture identities, exact export completion, expected facts and profile
+  rejection, including tampered input and incomplete-stream negative controls.
+- A descendant holding only stdin must produce a wall-time error before its natural
+  exit. A deliberately blocked I/O worker must not defeat the cleanup deadline.
+- A successful subprocess must preserve its complete output.
+- Replay the documented inventory and fact filters; no decompiler is invoked by any
+  required test, and no decompiler result is claimed without executing a real tool.
+- Run `bash scripts/check.sh` once on a clean candidate; report named gates, official
+  compiler versions, and skips. Official compiler evidence requirements are unchanged.
 
-Stop when the public fixture tree is created with complete provenance, the automated walkthrough test passes with negative controls, README and RECIPES documentation are updated, and all regression suites pass cleanly.
+## Non-goals and stop condition
+
+No dialect changes, decompiler integration framework, dependency downloads, target
+promotion, release publication, or stage 8 work. Stop after the focused checks and
+aggregate check pass with truthful documentation, at a neutral no-work checkpoint.

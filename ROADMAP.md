@@ -155,7 +155,8 @@ fuzz campaign. A new material finding gets a bounded correction contract.
 
 Put one concise walkthrough in the README, with details in the existing recipes:
 obtain a pinned public input tree, inventory it, find a literal/global lookup, inspect
-its instruction and original bytes, and hand a compatible chunk to a pinned decompiler.
+its instruction and original bytes, and identify its declared profile for an optional
+decompiler handoff.
 Include compiled `.lua` and `.luac` files, source, malformed input, and an unsupported
 layout, with an explicit terminal outcome for every discovered input.
 
@@ -168,7 +169,10 @@ Private customer samples cannot be the prerequisite or the public demonstration.
 directory and assert expected facts, input identities, failure counts, and stream
 completion. Truncating a stream or dropping a file result must fail the consumer check.
 A reader must not need to write a bytecode decoder. Mark experimental facts explicitly
-and revalidate external-tool compatibility when selecting the handoff.
+and keep external decompiler experiments optional. Required acceptance verifies luad
+facts and refusal behavior without installing a decompiler. Any external compatibility
+claim must record the real tool identity, input hash, command, and observed result;
+metadata and a successful exit alone do not establish correct recovered source.
 
 **Stop:** one complete walkthrough, no extraction engine, database product, adapter
 framework, or mandatory outside-user study for 0.2.
