@@ -1,0 +1,47 @@
+{
+  "cases": [
+    {
+      "byte_length": 293,
+      "license": "MIT",
+      "path": "tests/fixtures/cross_chunk/mod_sys.luac",
+      "profile": "lua5.1",
+      "role": "defining_module_luci_sys",
+      "sha256": "45647ae7a798aa507f76c42c620fb7a4f286a3bd0d91cc78cabe7d1a85e8eb33"
+    },
+    {
+      "byte_length": 224,
+      "license": "MIT",
+      "path": "tests/fixtures/cross_chunk/caller_sys.luac",
+      "profile": "lua5.1",
+      "role": "caller_luci_sys_exec",
+      "sha256": "d2f6928d4086e4bee971a79013e992f71749f7d2aa1ac553a4678d0dcee42a7b"
+    },
+    {
+      "byte_length": 314,
+      "license": "MIT",
+      "path": "tests/fixtures/cross_chunk/mod_sys_dup.luac",
+      "profile": "lua5.1",
+      "role": "duplicate_module_luci_sys",
+      "sha256": "ba636f1eebf620e6102153829d745369fc33e0b0f5292f19e0553133257c06ff"
+    },
+    {
+      "byte_length": 225,
+      "license": "MIT",
+      "path": "tests/fixtures/cross_chunk/caller_missing.luac",
+      "profile": "lua5.1",
+      "role": "caller_missing_symbol",
+      "sha256": "b39130018d5d9900024564c46477d44a8cfcf695a1271ccbdb5192bb4cf02bf1"
+    },
+    {
+      "byte_length": 306,
+      "license": "MIT",
+      "path": "tests/fixtures/cross_chunk/mod_dynamic.luac",
+      "profile": "lua5.1",
+      "role": "dynamic_module_declaration",
+      "sha256": "91bd91dd93954adcfdc6b9200ec38fab7f009f490e1f7529cef63119ae79c76b"
+    }
+  ],
+  "convention": "luci-module-setglobal",
+  "purpose": "Mini-corpus fixtures for convention-gated cross-chunk linking (R-2)",
+  "schema_version": 1
+}

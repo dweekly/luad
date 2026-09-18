@@ -125,5 +125,26 @@
       "text"
     ]
   },
+  "export": {
+    "command": "export",
+    "schema": "export",
+    "formats": [
+      "jsonl"
+    ],
+    "fact_families": [
+      "call_relation",
+      "callee",
+      "constant",
+      "instruction",
+      "origin",
+      "prototype",
+      "prototype_identity",
+      "upvalue",
+      "xref"
+    ],
+    "link_conventions": [
+      "luci-module-setglobal"
+    ]
+  },
   "evidence": []
 }

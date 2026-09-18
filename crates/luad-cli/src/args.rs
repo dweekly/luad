@@ -252,7 +252,11 @@ pub struct ExplainArgs {
 #[derive(Args, Debug)]
 pub struct QueryArgs {
     /// Path to compiled Lua bytecode file.
-    pub file: String,
+    pub file: Option<String>,
+
+    /// Path to file containing list of input files (or '-' for standard input).
+    #[arg(long)]
+    pub input_list: Option<String>,
 
     /// Filter predicate expression (e.g. 'effect.write.upvalue == 2').
     #[arg(long, rename_all = "kebab-case")]
@@ -267,12 +271,16 @@ pub struct QueryArgs {
     pub cursor: Option<String>,
 
     /// Output format.
-    #[arg(short, long, value_enum, default_value_t = OutputFormat::Json)]
-    pub format: OutputFormat,
+    #[arg(short, long, value_enum)]
+    pub format: Option<OutputFormat>,
 
     /// Explicit dialect override.
     #[arg(short, long)]
     pub dialect: Option<String>,
+
+    /// Strict fail-fast parsing mode.
+    #[arg(long)]
+    pub strict: bool,
 }
 
 #[derive(Args, Debug)]
@@ -313,7 +321,7 @@ pub struct ExportArgs {
     #[arg(long)]
     pub max_facts_per_file: Option<usize>,
 
-    /// Comma-separated counted fact families to emit.
+    /// Comma-separated counted fact families to emit (call_relation, callee, constant, instruction, origin, prototype, prototype_identity, upvalue, xref).
     #[arg(long)]
     pub facts: Option<String>,
 
@@ -324,6 +332,10 @@ pub struct ExportArgs {
     /// Strict fail-fast parsing mode.
     #[arg(long)]
     pub strict: bool,
+
+    /// Optional cross-chunk linking convention (e.g. 'luci-module-setglobal').
+    #[arg(long)]
+    pub link_convention: Option<String>,
 }
 
 #[derive(Args, Debug)]

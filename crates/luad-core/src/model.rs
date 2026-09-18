@@ -10,7 +10,7 @@ use crate::provenance::SourceLocation;
 use crate::scalar;
 
 /// A lossless Lua string retaining exact byte contents along with escaped display representation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 pub struct LuaString {
     /// Raw byte sequence of the string.
     pub raw_bytes: Vec<u8>,

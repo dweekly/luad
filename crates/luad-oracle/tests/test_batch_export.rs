@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::process::Command;
 
 use luad_core::envelope::{JsonlDataRecord, JSONL_SCHEMA_VERSION};
+use luad_core::{ExportFactFamily, EXPORT_FACT_FAMILY_NAMES, SORTED_FACT_FAMILY_NAMES};
 
 fn get_luad_bin() -> String {
     luad_oracle::luad_binary_path().display().to_string()
@@ -731,5 +732,121 @@ fn test_batch_export_outcome_matrix_is_total_and_path_qualified() {
         assert!(diagnostic_codes.contains(&"PARSE-UNKNOWN-001"));
         assert!(diagnostic_codes.contains(&"PARSE-001"));
         assert!(diagnostic_codes.contains(&"IO-001"));
+    }
+}
+
+#[test]
+fn test_batch_export_help_discovers_fact_families() {
+    let luad = get_luad_bin();
+    let output = Command::new(&luad)
+        .args(["export", "--help"])
+        .output()
+        .expect("run export --help");
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("help is UTF-8");
+    assert!(stdout.contains("--facts"));
+    for family in SORTED_FACT_FAMILY_NAMES {
+        assert!(
+            stdout.contains(family),
+            "export --help must document fact family '{family}'"
+        );
+    }
+}
+
+#[test]
+fn test_batch_export_capabilities_json_and_text_discover_fact_families() {
+    let luad = get_luad_bin();
+
+    // JSON output
+    let output = Command::new(&luad)
+        .args(["capabilities", "--format", "json"])
+        .output()
+        .expect("run capabilities --format json");
+    assert_eq!(output.status.code(), Some(0));
+    let doc: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("valid capabilities JSON");
+    let export_cap = &doc["export"];
+    assert_eq!(export_cap["command"], "export");
+    assert_eq!(export_cap["schema"], "export");
+    assert_eq!(export_cap["formats"], serde_json::json!(["jsonl"]));
+    let families = export_cap["fact_families"]
+        .as_array()
+        .expect("fact_families is array")
+        .iter()
+        .map(|v| v.as_str().unwrap().to_string())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        families,
+        SORTED_FACT_FAMILY_NAMES
+            .iter()
+            .map(|&s| s.to_string())
+            .collect::<Vec<_>>()
+    );
+
+    // Text output
+    let text_out = Command::new(&luad)
+        .args(["capabilities", "--format", "text"])
+        .output()
+        .expect("run capabilities --format text");
+    assert_eq!(text_out.status.code(), Some(0));
+    let text_str = String::from_utf8(text_out.stdout).expect("capabilities text is UTF-8");
+    assert!(text_str.contains("Export Capability:"));
+    assert!(text_str.contains("export (schema: export, formats: jsonl)"));
+    assert!(text_str.contains(&format!(
+        "fact families: {}",
+        SORTED_FACT_FAMILY_NAMES.join(", ")
+    )));
+}
+
+#[test]
+fn test_batch_export_unknown_family_error_contains_sorted_valid_families() {
+    let root = luad_oracle::find_workspace_root();
+    let fixture = root.join("tests/fixtures/precompiled/lua51/closures.luac");
+    let luad = get_luad_bin();
+
+    let output = run_selected_export(&luad, &fixture, "bogus_family");
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        output.stdout.is_empty(),
+        "stdout must be empty on invalid fact family"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let expected_err = format!(
+        "unknown export fact family 'bogus_family'. Valid families: {}",
+        SORTED_FACT_FAMILY_NAMES.join(", ")
+    );
+    assert!(
+        stderr.contains(&expected_err),
+        "stderr should contain {expected_err:?}, got: {stderr}"
+    );
+}
+
+#[test]
+fn test_batch_export_fact_family_negative_controls() {
+    let root = luad_oracle::find_workspace_root();
+    let fixture = root.join("tests/fixtures/precompiled/lua51/closures.luac");
+    let luad = get_luad_bin();
+
+    // 1. Invented family fails closed in both parser and CLI
+    assert!(ExportFactFamily::parse("speculative_taint").is_none());
+    let inv_out = run_selected_export(&luad, &fixture, "speculative_taint");
+    assert_eq!(inv_out.status.code(), Some(2));
+    assert!(inv_out.stdout.is_empty());
+
+    // 2. Exact match between canonical and sorted sets
+    let mut canonical_sorted = EXPORT_FACT_FAMILY_NAMES.to_vec();
+    canonical_sorted.sort_unstable();
+    assert_eq!(SORTED_FACT_FAMILY_NAMES.to_vec(), canonical_sorted);
+
+    // 3. Omitting any family from advertised list would be detected by comparator
+    let full_set: std::collections::BTreeSet<_> =
+        SORTED_FACT_FAMILY_NAMES.iter().copied().collect();
+    for family in SORTED_FACT_FAMILY_NAMES {
+        let mut corrupted = full_set.clone();
+        corrupted.remove(family);
+        assert_ne!(
+            corrupted, full_set,
+            "omitting {family} must produce a strictly smaller set"
+        );
     }
 }

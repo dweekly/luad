@@ -336,6 +336,16 @@ fn test_live_capabilities_json_and_schema_validation() {
         manifest.diagnostic_catalog.formats,
         ["json".to_string(), "text".to_string()]
     );
+    assert_eq!(manifest.export.command, "export");
+    assert_eq!(manifest.export.schema, "export");
+    assert_eq!(manifest.export.formats, ["jsonl".to_string()]);
+    assert_eq!(
+        manifest.export.fact_families,
+        luad_core::SORTED_FACT_FAMILY_NAMES
+            .iter()
+            .map(|&s| s.to_string())
+            .collect::<Vec<_>>()
+    );
     assert!(!manifest.dialects.is_empty());
 }
 

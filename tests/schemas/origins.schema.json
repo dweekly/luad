@@ -501,6 +501,24 @@
           "type": "object",
           "required": [
             "kind",
+            "prototype"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "prototype"
+              ]
+            },
+            "prototype": {
+              "$ref": "#/definitions/ProtoPath"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
             "name"
           ],
           "properties": {
@@ -616,6 +634,31 @@
         {
           "type": "object",
           "required": [
+            "fields",
+            "incomplete",
+            "kind"
+          ],
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/TableLiteralField"
+              }
+            },
+            "incomplete": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "table-literal"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
             "kind",
             "operand",
             "operator"
@@ -658,6 +701,27 @@
             },
             "right": {
               "$ref": "#/definitions/OriginExpression"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "options"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "alternatives"
+              ]
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/OriginExpression"
+              }
             }
           }
         },
@@ -1037,6 +1101,39 @@
     },
     "StableId": {
       "type": "string"
+    },
+    "TableLiteralField": {
+      "description": "One constant-key field in a reconstructed table literal expression.",
+      "type": "object",
+      "required": [
+        "evidence",
+        "key",
+        "value"
+      ],
+      "properties": {
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StableId"
+          }
+        },
+        "key": {
+          "$ref": "#/definitions/OriginLiteral"
+        },
+        "key_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "$ref": "#/definitions/OriginExpression"
+        }
+      }
     }
   }
 }

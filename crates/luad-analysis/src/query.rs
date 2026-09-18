@@ -251,6 +251,8 @@ impl std::fmt::Display for Token {
     }
 }
 
+const MAX_QUERY_TOKENS: usize = 10_000;
+
 fn tokenize(input: &str) -> Result<Vec<Token>, QueryError> {
     let mut tokens = Vec::new();
     let chars: Vec<char> = input.chars().collect();
@@ -258,6 +260,11 @@ fn tokenize(input: &str) -> Result<Vec<Token>, QueryError> {
     let mut i = 0;
 
     while i < len {
+        if tokens.len() >= MAX_QUERY_TOKENS {
+            return Err(QueryError::Malformed(
+                "Query expression exceeds token safety limit".to_string(),
+            ));
+        }
         let c = chars[i];
         if c.is_whitespace() {
             i += 1;
@@ -270,12 +277,24 @@ fn tokenize(input: &str) -> Result<Vec<Token>, QueryError> {
         } else if c == ')' {
             tokens.push(Token::RParen);
             i += 1;
-        } else if c == '=' && i + 1 < len && chars[i + 1] == '=' {
-            tokens.push(Token::OpEquals);
-            i += 2;
-        } else if c == '!' && i + 1 < len && chars[i + 1] == '=' {
-            tokens.push(Token::OpNotEquals);
-            i += 2;
+        } else if c == '=' {
+            if i + 1 < len && chars[i + 1] == '=' {
+                tokens.push(Token::OpEquals);
+                i += 2;
+            } else {
+                return Err(QueryError::Malformed(
+                    "Unexpected character '=': expected '=='".to_string(),
+                ));
+            }
+        } else if c == '!' {
+            if i + 1 < len && chars[i + 1] == '=' {
+                tokens.push(Token::OpNotEquals);
+                i += 2;
+            } else {
+                return Err(QueryError::Malformed(
+                    "Unexpected character '!': expected '!='".to_string(),
+                ));
+            }
         } else if c == '"' || c == '\'' {
             let quote = c;
             i += 1;
@@ -322,6 +341,13 @@ fn tokenize(input: &str) -> Result<Vec<Token>, QueryError> {
             {
                 ident.push(chars[i]);
                 i += 1;
+            }
+
+            if ident.is_empty() {
+                return Err(QueryError::Malformed(format!(
+                    "Unexpected character '{}'",
+                    chars[i]
+                )));
             }
 
             match ident.to_lowercase().as_str() {
@@ -655,13 +681,16 @@ fn validate_expr(expr: &QueryExpr, chunk: &Chunk) -> Result<(), QueryError> {
                         "literal",
                         "parameter",
                         "upvalue",
+                        "prototype",
                         "global",
                         "field",
                         "call-result",
                         "concat",
                         "table",
+                        "table-literal",
                         "unary",
                         "binary",
+                        "alternatives",
                         "unknown",
                     ];
                     if !VALID.contains(&value.as_str()) {
@@ -800,13 +829,16 @@ fn origin_kind_str(k: &OriginExpressionKind) -> &'static str {
         OriginExpressionKind::Literal { .. } => "literal",
         OriginExpressionKind::Parameter { .. } => "parameter",
         OriginExpressionKind::Upvalue { .. } => "upvalue",
+        OriginExpressionKind::Prototype { .. } => "prototype",
         OriginExpressionKind::Global { .. } => "global",
         OriginExpressionKind::Field { .. } => "field",
         OriginExpressionKind::CallResult { .. } => "call-result",
         OriginExpressionKind::Concat { .. } => "concat",
         OriginExpressionKind::Table { .. } => "table",
+        OriginExpressionKind::TableLiteral { .. } => "table-literal",
         OriginExpressionKind::Unary { .. } => "unary",
         OriginExpressionKind::Binary { .. } => "binary",
+        OriginExpressionKind::Alternatives { .. } => "alternatives",
         OriginExpressionKind::Unknown { .. } => "unknown",
     }
 }
@@ -905,6 +937,16 @@ pub fn execute_query(
     limit: usize,
     cursor: Option<&str>,
 ) -> Result<QueryResponse, QueryError> {
+    execute_query_with_total(chunk, where_expr, limit, cursor).map(|(resp, _)| resp)
+}
+
+/// Execute a structured query over a chunk, returning both the paginated QueryResponse and total match count.
+pub fn execute_query_with_total(
+    chunk: &Chunk,
+    where_expr: Option<&str>,
+    limit: usize,
+    cursor: Option<&str>,
+) -> Result<(QueryResponse, usize), QueryError> {
     let parsed_ast = match where_expr {
         Some(expr) if !expr.trim().is_empty() => {
             let ast = QueryExpr::parse(expr)?;
@@ -1057,12 +1099,15 @@ pub fn execute_query(
         None
     };
 
-    Ok(QueryResponse {
-        matches: page_items,
-        count: returned_count,
-        next_cursor,
-        is_truncated,
-    })
+    Ok((
+        QueryResponse {
+            matches: page_items,
+            count: returned_count,
+            next_cursor,
+            is_truncated,
+        },
+        total_matches,
+    ))
 }
 
 fn collect_proto_matches(

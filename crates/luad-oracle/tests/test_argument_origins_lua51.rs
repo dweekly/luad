@@ -9,6 +9,7 @@ use luad_analysis::{
     OriginExpression, OriginExpressionKind, OriginLiteral, OriginUnknownReason,
 };
 use luad_core::envelope::{JsonlDataRecord, MachineDocument};
+use luad_core::model::LuaString;
 use luad_core::{ProtoPath, TypedOperand};
 
 fn fixture_source() -> String {
@@ -58,13 +59,16 @@ fn root_kind(expression: &OriginExpression) -> &'static str {
         OriginExpressionKind::Literal { .. } => "literal",
         OriginExpressionKind::Parameter { .. } => "parameter",
         OriginExpressionKind::Upvalue { .. } => "upvalue",
+        OriginExpressionKind::Prototype { .. } => "prototype",
         OriginExpressionKind::Global { .. } => "global",
         OriginExpressionKind::Field { .. } => "field",
         OriginExpressionKind::CallResult { .. } => "call-result",
         OriginExpressionKind::Concat { .. } => "concat",
         OriginExpressionKind::Table { .. } => "table",
+        OriginExpressionKind::TableLiteral { .. } => "table-literal",
         OriginExpressionKind::Unary { .. } => "unary",
         OriginExpressionKind::Binary { .. } => "binary",
+        OriginExpressionKind::Alternatives { .. } => "alternatives",
         OriginExpressionKind::Unknown { .. } => "unknown",
     }
 }
@@ -101,6 +105,24 @@ fn assert_evidence_tree(expression: &OriginExpression) {
         OriginExpressionKind::Table { entries } => {
             entries.iter().for_each(assert_evidence_tree);
         }
+        OriginExpressionKind::TableLiteral { fields, .. } => {
+            for field in fields {
+                assert!(
+                    !field.evidence.is_empty(),
+                    "field write evidence must not be empty"
+                );
+                assert!(
+                    field.evidence.windows(2).all(|pair| pair[0] < pair[1]),
+                    "field evidence must be sorted and unique"
+                );
+                assert_evidence_tree(&field.value);
+            }
+        }
+        OriginExpressionKind::Alternatives { options } => {
+            for option in options {
+                assert_evidence_tree(option);
+            }
+        }
         _ => {}
     }
 }
@@ -109,7 +131,7 @@ fn assert_evidence_tree(expression: &OriginExpression) {
 fn test_origin_matrix_histogram_and_cardinality_are_pinned() {
     let analysis = analyze_chunk_origins(&fixture_chunk());
     let facts = all_facts(&analysis);
-    assert_eq!(facts.len(), 23);
+    assert_eq!(facts.len(), 35);
     assert_eq!(
         facts
             .iter()
@@ -118,7 +140,7 @@ fn test_origin_matrix_histogram_and_cardinality_are_pinned() {
         1
     );
     let origins = fixed_origins(&analysis);
-    assert_eq!(origins.len(), 40);
+    assert_eq!(origins.len(), 52);
     let mut histogram = BTreeMap::new();
     for origin in origins {
         *histogram.entry(root_kind(origin)).or_insert(0usize) += 1;
@@ -127,14 +149,17 @@ fn test_origin_matrix_histogram_and_cardinality_are_pinned() {
     assert_eq!(
         histogram,
         BTreeMap::from([
+            ("alternatives", 3),
             ("binary", 7),
             ("call-result", 2),
             ("concat", 1),
             ("field", 2),
             ("literal", 13),
             ("parameter", 6),
+            ("prototype", 1),
+            ("table-literal", 6),
             ("unary", 3),
-            ("unknown", 6),
+            ("unknown", 8),
         ])
     );
 }
@@ -198,6 +223,18 @@ fn test_origins_preserve_concat_mod_captures_and_explicit_stops() {
         })
         .collect();
     assert_eq!(owners, ["0/2", "0/2/0", "0/2/0/0"]);
+
+    let proto_origin = origins
+        .iter()
+        .find(|origin| matches!(origin.kind, OriginExpressionKind::Prototype { .. }))
+        .expect("prototype origin");
+    assert_eq!(
+        proto_origin.kind,
+        OriginExpressionKind::Prototype {
+            prototype: "0/3/0".parse().expect("child proto path")
+        }
+    );
+    assert!(!proto_origin.evidence.is_empty());
 
     for reason in [
         OriginUnknownReason::DynamicKey,
@@ -374,6 +411,396 @@ fn test_origin_killer_mutations_are_rejected() {
         reason: OriginUnknownReason::Overwritten,
     };
     reject(&expected, erased_cutoff);
+
+    let mut mutated_prototype_origin = expected.clone();
+    fixed_origin_mut(&mut mutated_prototype_origin, |origin| {
+        matches!(origin.kind, OriginExpressionKind::Prototype { .. })
+    })
+    .kind = OriginExpressionKind::Prototype {
+        prototype: "0/999".parse::<ProtoPath>().expect("path"),
+    };
+    reject(&expected, mutated_prototype_origin);
+
+    let mut mutated_prototype_evidence = expected.clone();
+    fixed_origin_mut(&mut mutated_prototype_evidence, |origin| {
+        matches!(origin.kind, OriginExpressionKind::Prototype { .. })
+    })
+    .evidence
+    .clear();
+    reject(&expected, mutated_prototype_evidence);
+
+    let mut omitted_table_field = expected.clone();
+    let OriginExpressionKind::TableLiteral { fields, .. } =
+        &mut fixed_origin_mut(&mut omitted_table_field, |origin| {
+            matches!(&origin.kind, OriginExpressionKind::TableLiteral { fields, .. } if fields.len() > 1)
+        })
+        .kind
+    else {
+        unreachable!()
+    };
+    fields.pop();
+    reject(&expected, omitted_table_field);
+
+    let mut substituted_table_field_key = expected.clone();
+    let OriginExpressionKind::TableLiteral { fields, .. } =
+        &mut fixed_origin_mut(&mut substituted_table_field_key, |origin| {
+            matches!(&origin.kind, OriginExpressionKind::TableLiteral { fields, .. } if !fields.is_empty())
+        })
+        .kind
+    else {
+        unreachable!()
+    };
+    fields[0].key = OriginLiteral::String {
+        value: LuaString::from_bytes(b"mutated_key"),
+    };
+    reject(&expected, substituted_table_field_key);
+
+    let mut substituted_table_field_value = expected.clone();
+    let OriginExpressionKind::TableLiteral { fields, .. } =
+        &mut fixed_origin_mut(&mut substituted_table_field_value, |origin| {
+            matches!(&origin.kind, OriginExpressionKind::TableLiteral { fields, .. } if !fields.is_empty())
+        })
+        .kind
+    else {
+        unreachable!()
+    };
+    fields[0].value.kind = OriginExpressionKind::Unknown {
+        reason: OriginUnknownReason::DynamicKey,
+    };
+    reject(&expected, substituted_table_field_value);
+
+    let mut toggled_table_incomplete = expected.clone();
+    let OriginExpressionKind::TableLiteral { incomplete, .. } =
+        &mut fixed_origin_mut(&mut toggled_table_incomplete, |origin| {
+            matches!(
+                &origin.kind,
+                OriginExpressionKind::TableLiteral {
+                    incomplete: false,
+                    ..
+                }
+            )
+        })
+        .kind
+    else {
+        unreachable!()
+    };
+    *incomplete = true;
+    reject(&expected, toggled_table_incomplete);
+
+    let mut mutated_table_evidence = expected.clone();
+    fixed_origin_mut(&mut mutated_table_evidence, |origin| {
+        matches!(origin.kind, OriginExpressionKind::TableLiteral { .. })
+    })
+    .evidence
+    .clear();
+    reject(&expected, mutated_table_evidence);
+
+    let mut omitted_alternative_option = expected.clone();
+    let OriginExpressionKind::Alternatives { options } =
+        &mut fixed_origin_mut(&mut omitted_alternative_option, |origin| {
+            matches!(&origin.kind, OriginExpressionKind::Alternatives { options } if options.len() > 1)
+        })
+        .kind
+    else {
+        unreachable!()
+    };
+    options.pop();
+    reject(&expected, omitted_alternative_option);
+
+    let mut substituted_alternative_option = expected.clone();
+    let OriginExpressionKind::Alternatives { options } =
+        &mut fixed_origin_mut(&mut substituted_alternative_option, |origin| {
+            matches!(&origin.kind, OriginExpressionKind::Alternatives { options } if !options.is_empty())
+        })
+        .kind
+    else {
+        unreachable!()
+    };
+    options[0] = OriginExpression {
+        kind: OriginExpressionKind::Literal {
+            constant_id: None,
+            value: OriginLiteral::String {
+                value: LuaString::from_bytes(b"corrupted"),
+            },
+        },
+        evidence: options[0].evidence.clone(),
+    };
+    reject(&expected, substituted_alternative_option);
+
+    let mut dropped_alternative_evidence = expected.clone();
+    let OriginExpressionKind::Alternatives { options } =
+        &mut fixed_origin_mut(&mut dropped_alternative_evidence, |origin| {
+            matches!(&origin.kind, OriginExpressionKind::Alternatives { options } if !options.is_empty())
+        })
+        .kind
+    else {
+        unreachable!()
+    };
+    options[0].evidence.clear();
+    reject(&expected, dropped_alternative_evidence);
+}
+
+#[test]
+fn test_constant_key_table_literal_origins_emit_table_literal_expression() {
+    let analysis = analyze_chunk_origins(&fixture_chunk());
+    let origins = fixed_origins(&analysis);
+
+    let table_literals: Vec<_> = origins
+        .iter()
+        .filter(|origin| matches!(origin.kind, OriginExpressionKind::TableLiteral { .. }))
+        .collect();
+    assert!(!table_literals.is_empty(), "must find table literals");
+
+    // 1. Complete table: fields [a, b], incomplete: false
+    let complete = table_literals
+        .iter()
+        .find(|origin| match &origin.kind {
+            OriginExpressionKind::TableLiteral { fields, incomplete } => {
+                !incomplete
+                    && fields.len() == 2
+                    && matches!(&fields[0].key, OriginLiteral::String { value } if value.as_str() == "a")
+                    && matches!(&fields[1].key, OriginLiteral::String { value } if value.as_str() == "b")
+            }
+            _ => false,
+        })
+        .expect("complete table literal");
+    let OriginExpressionKind::TableLiteral { fields, incomplete } = &complete.kind else {
+        unreachable!()
+    };
+    assert!(!incomplete);
+    assert_eq!(fields.len(), 2);
+    assert_eq!(
+        fields[0].key,
+        OriginLiteral::String {
+            value: LuaString::from_bytes(b"a")
+        }
+    );
+    assert!(matches!(
+        &fields[0].value.kind,
+        OriginExpressionKind::Literal {
+            value: OriginLiteral::String { value },
+            ..
+        } if value.as_str() == "x"
+    ));
+    assert!(!fields[0].evidence.is_empty());
+    assert_eq!(
+        fields[1].key,
+        OriginLiteral::String {
+            value: LuaString::from_bytes(b"b")
+        }
+    );
+    assert!(matches!(
+        &fields[1].value.kind,
+        OriginExpressionKind::Parameter { index: 0, .. }
+    ));
+    assert!(!fields[1].evidence.is_empty());
+    assert!(!complete.evidence.is_empty());
+
+    // 2. Dynamic key table: incomplete: true, field "a" retained
+    let dynamic = table_literals
+        .iter()
+        .find(|origin| match &origin.kind {
+            OriginExpressionKind::TableLiteral { fields, incomplete } => {
+                *incomplete
+                    && fields.len() == 1
+                    && matches!(&fields[0].key, OriginLiteral::String { value } if value.as_str() == "a")
+            }
+            _ => false,
+        })
+        .expect("dynamic key table literal");
+    assert!(matches!(
+        dynamic.kind,
+        OriginExpressionKind::TableLiteral {
+            incomplete: true,
+            ..
+        }
+    ));
+
+    // 3. Post-construction escape: incomplete: true, fields [a, b]
+    let escaped = table_literals
+        .iter()
+        .find(|origin| match &origin.kind {
+            OriginExpressionKind::TableLiteral { fields, incomplete } => {
+                *incomplete && fields.len() == 2
+            }
+            _ => false,
+        })
+        .expect("escaped table literal");
+    assert!(matches!(
+        escaped.kind,
+        OriginExpressionKind::TableLiteral {
+            incomplete: true,
+            ..
+        }
+    ));
+
+    // 4. Aliased table: fields [a, b], incomplete: false
+    let aliased = table_literals
+        .iter()
+        .filter(|origin| match &origin.kind {
+            OriginExpressionKind::TableLiteral { fields, incomplete } => {
+                !incomplete
+                    && fields.len() == 2
+                    && matches!(
+                        &fields[1].value.kind,
+                        OriginExpressionKind::Literal {
+                            value: OriginLiteral::String { value },
+                            ..
+                        } if value.as_str() == "y"
+                    )
+            }
+            _ => false,
+        })
+        .count();
+    assert!(aliased >= 1, "must find aliased table literal");
+
+    // 5. Overwrite / conflicting writes: incomplete: true, field "a" = "second"
+    let overwrite = table_literals
+        .iter()
+        .find(|origin| match &origin.kind {
+            OriginExpressionKind::TableLiteral { fields, incomplete } => {
+                *incomplete
+                    && fields.len() == 1
+                    && matches!(
+                        &fields[0].value.kind,
+                        OriginExpressionKind::Literal {
+                            value: OriginLiteral::String { value },
+                            ..
+                        } if value.as_str() == "second"
+                    )
+            }
+            _ => false,
+        })
+        .expect("overwrite table literal");
+    assert!(matches!(
+        overwrite.kind,
+        OriginExpressionKind::TableLiteral {
+            incomplete: true,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn test_cfg_alternatives_emit_alternatives_expression() {
+    let analysis = analyze_chunk_origins(&fixture_chunk());
+    let origins = fixed_origins(&analysis);
+
+    // 1. Two literals over if: conflict ("left" | "right")
+    let conflict = origins
+        .iter()
+        .find(|origin| match &origin.kind {
+            OriginExpressionKind::Alternatives { options } => {
+                options.len() == 2
+                    && has_string_literal(&options[0], "left")
+                    && has_string_literal(&options[1], "right")
+            }
+            _ => false,
+        })
+        .expect("conflict alternatives origin");
+    let OriginExpressionKind::Alternatives {
+        options: conflict_opts,
+    } = &conflict.kind
+    else {
+        unreachable!()
+    };
+    assert_eq!(conflict_opts.len(), 2);
+    assert!(!conflict.evidence.is_empty());
+    // Verify outer evidence contains union of option evidences
+    for opt in conflict_opts {
+        assert!(!opt.evidence.is_empty());
+        for ev in &opt.evidence {
+            assert!(conflict.evidence.contains(ev));
+        }
+    }
+
+    // 2. Literal vs parameter: alt_param ("literal_val" | parameter[0])
+    let alt_param = origins
+        .iter()
+        .find(|origin| match &origin.kind {
+            OriginExpressionKind::Alternatives { options } => {
+                options.len() == 2
+                    && has_string_literal(&options[0], "literal_val")
+                    && matches!(
+                        options[1].kind,
+                        OriginExpressionKind::Parameter { index: 0, .. }
+                    )
+            }
+            _ => false,
+        })
+        .expect("alt_param alternatives origin");
+    assert!(!alt_param.evidence.is_empty());
+
+    // 3. Equivalent predecessors: same ("same"), single origin not alternatives
+    let same = origins
+        .iter()
+        .find(|origin| has_string_literal(origin, "same"))
+        .expect("same origin");
+    assert!(matches!(same.kind, OriginExpressionKind::Literal { .. }));
+    // Evidence from both branches is retained
+    assert!(same.evidence.len() >= 2);
+
+    // 4. Loop / back edge: loop_val ("init" | "iter")
+    let loop_val = origins
+        .iter()
+        .find(|origin| match &origin.kind {
+            OriginExpressionKind::Alternatives { options } => {
+                options.len() == 2
+                    && has_string_literal(&options[0], "init")
+                    && has_string_literal(&options[1], "iter")
+            }
+            _ => false,
+        })
+        .expect("loop_val alternatives origin");
+    assert!(!loop_val.evidence.is_empty());
+
+    // 5. Unresolved predecessor: unresolved_alt (ControlFlowConflict)
+    assert!(origins.iter().any(|origin| matches!(
+        origin.kind,
+        OriginExpressionKind::Unknown {
+            reason: OriginUnknownReason::ControlFlowConflict
+        }
+    )));
+
+    // 6. Option overflow: overflow_alt (AnalysisLimit)
+    assert!(origins.iter().any(|origin| matches!(
+        origin.kind,
+        OriginExpressionKind::Unknown {
+            reason: OriginUnknownReason::AnalysisLimit
+        }
+    )));
+
+    // Text rendering: check formatted text contains alternatives("left" | "right")
+    let luad = get_luad_bin();
+    let fixture = compiled_fixture_file();
+    let path = fixture.path().to_str().expect("path");
+    let text = Command::new(&luad)
+        .args(["origins", path, "--format", "text"])
+        .output()
+        .expect("origins text");
+    assert!(text.status.success());
+    let text_output = String::from_utf8_lossy(&text.stdout);
+    assert!(
+        text_output.contains("alternatives(\"left\" | \"right\")"),
+        "text output must contain formatted alternatives: {text_output}"
+    );
+
+    // Query: query origin.kind == 'alternatives'
+    let query = Command::new(&luad)
+        .args([
+            "query",
+            path,
+            "--where",
+            "origin.kind == 'alternatives'",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("query alternatives");
+    assert!(query.status.success());
+    let query_output = String::from_utf8_lossy(&query.stdout);
+    let query_val: serde_json::Value = serde_json::from_str(&query_output).expect("valid json");
+    assert_eq!(query_val["data"]["count"], 3);
 }
 
 fn fixed_origin_mut(
@@ -448,6 +875,7 @@ fn test_public_origins_json_jsonl_and_text_agree() {
     assert!(text.contains("CONCAT(\"prefix:\""));
     assert!(text.contains("MOD(\"value=%s\", table(proto:0/3:parameter[0]))"));
     assert!(text.contains("unknown:ExpressionDepthLimit"));
+    assert!(text.contains("prototype 0/3/0"));
     assert!(!text.contains("taint"));
     assert!(!text.contains("safe"));
 }
@@ -524,4 +952,41 @@ fn test_origins_schema_capability_and_lnum_profile_are_public() {
     let document: MachineDocument<ChunkOriginAnalysis> =
         serde_json::from_slice(&output.stdout).expect("lnum document");
     assert_eq!(document.interpretation.profile, "lua5.1-lnum32");
+}
+
+#[test]
+fn test_closure_argument_origin_emits_prototype_expression() {
+    let source = r#"
+local sink = function(...) return ... end
+sink(function() end)
+"#;
+    let chunk = luad_oracle::compile_and_parse_lua51(source, false)
+        .expect("compile closure callback fixture");
+    let analysis = analyze_chunk_origins(&chunk);
+    let facts = all_facts(&analysis);
+    assert_eq!(facts.len(), 1);
+    let fact = facts[0];
+    let CallArgumentWindow::Fixed { arguments } = &fact.argument_window else {
+        panic!("expected fixed argument window");
+    };
+    assert_eq!(arguments.len(), 1);
+    let arg = &arguments[0];
+    assert_eq!(arg.argument_index, 0);
+    assert_eq!(arg.register, 2);
+    assert_eq!(
+        arg.origin.kind,
+        OriginExpressionKind::Prototype {
+            prototype: "0/1".parse().expect("child proto path")
+        }
+    );
+    assert_eq!(arg.origin.evidence.len(), 1);
+    assert_eq!(
+        arg.origin.evidence[0],
+        luad_core::StableId::instruction("0".parse().unwrap(), 2)
+    );
+
+    let val = serde_json::to_value(&arg.origin).expect("json");
+    assert_eq!(val["kind"], "prototype");
+    assert_eq!(val["prototype"], "0/1");
+    assert_eq!(val["evidence"], serde_json::json!(["proto:0:pc:2"]));
 }

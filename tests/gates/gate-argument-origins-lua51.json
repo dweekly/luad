@@ -12,6 +12,9 @@
     "--nocapture"
   ],
   "expected_tests": [
+    "test_cfg_alternatives_emit_alternatives_expression",
+    "test_closure_argument_origin_emits_prototype_expression",
+    "test_constant_key_table_literal_origins_emit_table_literal_expression",
     "test_every_call_and_fixed_argument_slot_has_exactly_one_fact",
     "test_export_origin_records_equal_direct_command",
     "test_origin_killer_mutations_are_rejected",
@@ -32,7 +35,7 @@
   "required_fixtures": [
     {
       "path": "tests/fixtures/origins.lua",
-      "sha256": "31e9b64596dc75e6057de8e59b8bec60cb8a22c1751ee7598bf49b3a0c4f49e3"
+      "sha256": "cf18f2d0007b9b01f6dca448b6a70fb61fb0f8391f8e79511f474ee8201e89ec"
     },
     {
       "path": "tests/fixtures/precompiled/lua51_lnum32/hello.luac",

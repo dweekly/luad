@@ -531,6 +531,27 @@ pub fn render_capabilities(
         manifest.diagnostic_catalog.formats.join(", ")
     )?;
     writeln!(writer)?;
+    writeln!(writer, "{}", "Export Capability:".bold())?;
+    writeln!(
+        writer,
+        "  {} (schema: {}, formats: {})",
+        manifest.export.command,
+        manifest.export.schema,
+        manifest.export.formats.join(", ")
+    )?;
+    writeln!(
+        writer,
+        "  fact families: {}",
+        manifest.export.fact_families.join(", ")
+    )?;
+    if !manifest.export.link_conventions.is_empty() {
+        writeln!(
+            writer,
+            "  link conventions: {}",
+            manifest.export.link_conventions.join(", ")
+        )?;
+    }
+    writeln!(writer)?;
     writeln!(writer, "{}", "Dialect Matrix:".bold())?;
     for d in &manifest.dialects {
         let features_str = d.features.join(", ");
@@ -752,6 +773,9 @@ fn format_origin_expression(expression: &luad_analysis::OriginExpression) -> Str
         OriginExpressionKind::Upvalue { owner, index, .. } => {
             format!("proto:{owner}:upvalue:{index}")
         }
+        OriginExpressionKind::Prototype { prototype } => {
+            format!("prototype {prototype}")
+        }
         OriginExpressionKind::Global { name } => format!("global({})", name.display),
         OriginExpressionKind::Field { base, key, .. } => {
             format!(
@@ -780,6 +804,28 @@ fn format_origin_expression(expression: &luad_analysis::OriginExpression) -> Str
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
+        OriginExpressionKind::TableLiteral { fields, incomplete } => {
+            let rendered_fields = fields
+                .iter()
+                .map(|field| {
+                    format!(
+                        "{}: {}",
+                        literal(&field.key),
+                        format_origin_expression(&field.value)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            if *incomplete {
+                if fields.is_empty() {
+                    "table-literal(incomplete)".to_string()
+                } else {
+                    format!("table-literal({{{rendered_fields}}}, incomplete)")
+                }
+            } else {
+                format!("table-literal({{{rendered_fields}}})")
+            }
+        }
         OriginExpressionKind::Unary { operator, operand } => {
             format!("{operator}({})", format_origin_expression(operand))
         }
@@ -792,6 +838,14 @@ fn format_origin_expression(expression: &luad_analysis::OriginExpression) -> Str
             format_origin_expression(left),
             format_origin_expression(right)
         ),
+        OriginExpressionKind::Alternatives { options } => {
+            let rendered = options
+                .iter()
+                .map(format_origin_expression)
+                .collect::<Vec<_>>()
+                .join(" | ");
+            format!("alternatives({rendered})")
+        }
         OriginExpressionKind::Unknown { reason } => format!("unknown:{reason:?}"),
     }
 }

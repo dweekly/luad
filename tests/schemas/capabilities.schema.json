@@ -8,6 +8,7 @@
     "dialects",
     "evidence",
     "experimental_dialects",
+    "export",
     "planned_dialects",
     "schema_version",
     "supported_dialects",
@@ -43,6 +44,14 @@
       "items": {
         "type": "string"
       }
+    },
+    "export": {
+      "description": "Public batch-export discovery entry point.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/ExportCapability"
+        }
+      ]
     },
     "planned_dialects": {
       "description": "List of dialect identifiers currently in `planned` tier.",
@@ -163,6 +172,48 @@
               "$ref": "#/definitions/SupportTier"
             }
           ]
+        }
+      }
+    },
+    "ExportCapability": {
+      "description": "Machine-discoverable entry point for the export interface.",
+      "type": "object",
+      "required": [
+        "command",
+        "fact_families",
+        "formats",
+        "link_conventions",
+        "schema"
+      ],
+      "properties": {
+        "command": {
+          "description": "CLI command that runs batch export.",
+          "type": "string"
+        },
+        "fact_families": {
+          "description": "Selectable counted fact families supported by `--facts`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "formats": {
+          "description": "Output formats supported by the command.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "link_conventions": {
+          "description": "Optional linking conventions supported by `--link-convention`.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "schema": {
+          "description": "Schema name accepted by `luad schema`.",
+          "type": "string"
         }
       }
     },

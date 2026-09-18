@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "gate_id": "gate-cross-chunk-link",
+  "command_argv": [
+    "cargo",
+    "test",
+    "-p",
+    "luad-oracle",
+    "--test",
+    "test_cross_chunk_linking",
+    "--",
+    "--nocapture"
+  ],
+  "expected_tests": [
+    "test_cli_export_unknown_link_convention_fails_closed",
+    "test_cli_export_with_link_convention",
+    "test_cross_chunk_link_schema_validation",
+    "test_cross_chunk_linking_absent",
+    "test_cross_chunk_linking_duplicate_conflict",
+    "test_cross_chunk_linking_dynamic_declaration",
+    "test_cross_chunk_linking_input_order_invariance",
+    "test_cross_chunk_linking_resolved",
+    "test_cross_chunk_linking_unsupported_dialect",
+    "test_negative_mutation_control"
+  ],
+  "required_compiler_version": null,
+  "required_compiler_sha256": null,
+  "required_fixtures": [],
+  "required_profile": null,
+  "prerequisite_gates": [
+    "gate-proof-harness"
+  ],
+  "allowed_capability_mutations": []
+}

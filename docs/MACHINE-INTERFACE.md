@@ -37,6 +37,7 @@ luad schema callees
 luad schema callgraph
 luad schema origins
 luad schema export
+luad schema link
 ```
 
 Available schema names are:
@@ -58,6 +59,7 @@ Available schema names are:
 - `capabilities`
 - `manifest`
 - `export`
+- `link`
 
 Each schema family advances independently. Enveloped command JSON and the other
 major-1 JSON families remain at major 1; capabilities JSON and streaming JSONL/export
@@ -396,13 +398,20 @@ argument window contains exactly one owner-qualified, evidence-linked expression
 each argument register. A top-dependent argument window is represented explicitly and
 never guessed.
 
-Expressions preserve typed literals, parameters, safe closure captures, global and
-constant-key field lookups, fixed call results, eager concatenations, table-construction
-inputs, and Lua unary and binary operations. `MOD` remains an opcode fact with both
-operands; callers may recognize a string-format convention without `luad` asserting
-runtime formatting semantics. Conflicting control-flow definitions, dynamic keys,
-mutable or ambiguous captures, varargs, aliasing boundaries, unreachable code, and
-analysis limits remain distinct machine-visible reasons.
+Expressions preserve typed literals, parameters, safe closure captures, child
+prototypes, global and constant-key field lookups, fixed call results, eager
+concatenations, constant-key table literals, table-construction inputs, control-flow
+alternatives across bounded definitions, and Lua unary and binary operations. `MOD`
+remains an opcode fact with both operands; callers may recognize a string-format
+convention without `luad` asserting runtime formatting semantics. Constant-key table
+literals emit deterministically ordered fields and retain partial reconstruction with
+`incomplete: true`. When bounded definitions reach a control-flow join, `alternatives`
+emits a deduplicated, deterministically ordered list of candidate origin expressions
+with reaching evidence. Structurally equal options are deduplicated with their evidence
+unioned. Conflicting control-flow definitions with unresolved predecessors or exceeding
+the option budget (`MAX_ALTERNATIVES = 8`), dynamic keys, mutable or ambiguous captures,
+varargs, aliasing boundaries, unreachable code, and analysis limits remain distinct
+machine-visible reasons.
 
 Operands are captured before the writing instruction changes its destination, so an
 operation such as `CONCAT A A C` cannot recurse into its own result. JSON uses the
@@ -441,10 +450,21 @@ truncation metadata.
 
 `--facts FAMILY,...` selects a non-empty subset of those nine counted families. Names
 are exact and may appear only once; an unknown, duplicate, or empty name is a usage
-error with empty stdout. Control records and diagnostics are always emitted. Omitting
+error with empty stdout, and unknown names list the sorted valid families. Discover the
+valid set at runtime via `luad capabilities --format json` under `export.fact_families`
+or `luad export --help`. Control records and diagnostics are always emitted. Omitting
 the option preserves the default all-family stream. When selection is explicit,
 `export_start.fact_families` records the canonical family order regardless of argument
 order; the field is absent from an unfiltered export.
+
+`--link-convention CONVENTION` explicitly enables corpus-wide module indexing and
+inter-artifact resolution under a named convention. Discover supported conventions at
+runtime via `luad capabilities --format json` under `export.link_conventions` or
+`luad export --help` (currently `luci-module-setglobal`). When enabled, batch export
+emits auditable `cross_chunk_link` records connecting call-sites to their defining
+artifacts and prototypes with explicit statuses (`resolved`, `absent`, `duplicate`,
+`dynamic`, or `unsupported`). Linking is order-invariant and bounds corpus indexing.
+Records conform to `luad schema link`.
 
 Every data record has a required `context` object. Successful facts carry
 `input_identity` and `interpretation`; parse-failure diagnostics carry identity with a
@@ -465,6 +485,35 @@ Default process status is zero when at least one input succeeds. `--strict` exit
 nonzero when any input is skipped or failed, after emitting the complete framed stream.
 Zero successful inputs are always nonzero. Stderr ends with a deterministic summary in
 the form `N exported, N skipped, N failed`; stdout remains JSONL only.
+
+### Batch query (`query --input-list`)
+
+`query --input-list <file|-> --where <expression>` runs an exact query across an explicit
+artifact list in streaming JSONL format (`--format jsonl` is the default and only valid format
+for batch mode).
+
+Stream framing uses:
+- `query_start`: emits `record_type: "query_start"`, `schema_version: 2`, `tool_version`,
+  `total_files`, `where: Option<String>`, and `limit: usize`.
+- `file_start`: records per-file identity (`path`, `sha256`, `byte_length`, `interpretation`).
+- Data records: `query_match` records with full per-file `context` identical to single-file JSONL query,
+  along with `diagnostic` records emitted during parsing or analysis.
+- `file_end`: terminal per-file outcome (`status: "succeeded" | "skipped" | "failed"`, `error`,
+  `instruction_count: 0`, `diagnostic_count`, `is_truncated`, `emitted_fact_count`, `available_fact_count`).
+- `query_end`: terminal stream marker reporting `files_processed`, `files_succeeded`,
+  `files_skipped`, `files_failed`, and `total_matches`.
+
+Input files are processed in order and duplicate paths are preserved. Uncompiled Lua source
+text, corrupted bytecode, or unsupported dialects produce explicit `skipped` outcomes with
+diagnostics. Unreadable or missing files produce `failed` outcomes. No skipped or failed
+file becomes an apparently clean zero-match result.
+
+Predicate syntax errors fail closed immediately with exit code 2 (`UsageError`) and empty stdout
+before processing any input artifacts.
+
+Default process exit status is 0 when at least one input succeeds. `--strict` exits with
+exit code 1 (`InvalidInput`) when any input is skipped or failed. Zero successful inputs
+always return exit code 1. Stderr concludes with `N queried, N skipped, N failed (N matches)`.
 
 ## Pagination and truncation
 

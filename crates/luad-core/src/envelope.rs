@@ -193,3 +193,26 @@ pub struct FileEndRecord {
     pub emitted_fact_count: usize,
     pub available_fact_count: usize,
 }
+
+/// JSONL batch query start record.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct QueryStartRecord {
+    pub record_type: String,
+    pub schema_version: u32,
+    pub tool_version: String,
+    pub total_files: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#where: Option<String>,
+    pub limit: usize,
+}
+
+/// JSONL batch query end record.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct QueryEndRecord {
+    pub record_type: String,
+    pub files_processed: usize,
+    pub files_succeeded: usize,
+    pub files_skipped: usize,
+    pub files_failed: usize,
+    pub total_matches: usize,
+}

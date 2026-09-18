@@ -61,6 +61,20 @@ impl DiagnosticDescriptor {
 /// Static authority table of all production-emittable diagnostic codes in bytewise ascending order.
 pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
     StaticDiagnosticDescriptor {
+        code: "ANA-LIMIT-001",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Analysis,
+        semantics: "Corpus module export indexing safety limit exceeded; cross-chunk linking is incomplete.",
+        suggested_action: "Increase max indexed exports limit or reduce corpus size; unindexed exports cannot prove symbol absence.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "ANA-LIMIT-002",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Analysis,
+        semantics: "Cross-chunk link facts safety limit exceeded; linking fact generation terminated early.",
+        suggested_action: "Increase max link facts limit or export chunks individually.",
+    },
+    StaticDiagnosticDescriptor {
         code: "ANA-PRECOND-001",
         severity: Severity::Error,
         category: DiagnosticCategory::Analysis,

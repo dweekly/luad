@@ -289,6 +289,28 @@
           "$ref": "#/definitions/JsonlRecordContext"
         },
         "data": {
+          "$ref": "#/definitions/CrossChunkLinkFact"
+        },
+        "record_type": {
+          "type": "string",
+          "enum": [
+            "cross_chunk_link"
+          ]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "context",
+        "data",
+        "record_type"
+      ],
+      "properties": {
+        "context": {
+          "$ref": "#/definitions/JsonlRecordContext"
+        },
+        "data": {
           "$ref": "#/definitions/Diagnostic"
         },
         "record_type": {
@@ -1038,6 +1060,91 @@
         }
       ]
     },
+    "CrossChunkLinkFact": {
+      "description": "An auditable cross-chunk link fact connecting a call-site to its defining artifact and prototype.",
+      "type": "object",
+      "required": [
+        "call_id",
+        "call_pc",
+        "caller_path",
+        "caller_proto",
+        "evidence",
+        "label_segments",
+        "status"
+      ],
+      "properties": {
+        "call_id": {
+          "description": "Stable identifier of the calling instruction.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        },
+        "call_pc": {
+          "description": "Physical instruction PC within the calling prototype.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "caller_path": {
+          "description": "File path of the calling artifact.",
+          "type": "string"
+        },
+        "caller_proto": {
+          "description": "Prototype path within the calling artifact.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ProtoPath"
+            }
+          ]
+        },
+        "evidence": {
+          "description": "Evidence IDs from both defining export and calling site.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StableId"
+          }
+        },
+        "label_segments": {
+          "description": "Symbolic path segments (e.g. `[\"luci\", \"sys\", \"exec\"]`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "description": "Outcome status of the link.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/LinkStatus"
+            }
+          ]
+        },
+        "target_artifact": {
+          "description": "Defining artifact identity when resolved.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/InputIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_proto": {
+          "description": "Defining prototype path within target artifact when resolved.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ProtoPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
     "Diagnostic": {
       "description": "Structured diagnostic item.",
       "type": "object",
@@ -1550,6 +1657,53 @@
         }
       }
     },
+    "LinkStatus": {
+      "description": "Status of cross-chunk linking for a specific call-site.",
+      "oneOf": [
+        {
+          "description": "Exactly one unique matching module export was proved in the corpus.",
+          "type": "string",
+          "enum": [
+            "resolved"
+          ]
+        },
+        {
+          "description": "The target label belongs to the module namespace, but no defining export exists in the corpus.",
+          "type": "string",
+          "enum": [
+            "absent"
+          ]
+        },
+        {
+          "description": "Multiple conflicting definitions exist in the corpus for this export label.",
+          "type": "string",
+          "enum": [
+            "duplicate"
+          ]
+        },
+        {
+          "description": "Target or module declaration involves dynamic expressions and cannot be statically resolved.",
+          "type": "string",
+          "enum": [
+            "dynamic"
+          ]
+        },
+        {
+          "description": "Dialect or input format is unsupported for the chosen linking convention.",
+          "type": "string",
+          "enum": [
+            "unsupported"
+          ]
+        },
+        {
+          "description": "Linking could not be completed because a resource safety limit was exceeded.",
+          "type": "string",
+          "enum": [
+            "limit_exceeded"
+          ]
+        }
+      ]
+    },
     "LuaString": {
       "description": "A lossless Lua string retaining exact byte contents along with escaped display representation.",
       "type": "object",
@@ -1777,6 +1931,24 @@
           "type": "object",
           "required": [
             "kind",
+            "prototype"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "prototype"
+              ]
+            },
+            "prototype": {
+              "$ref": "#/definitions/ProtoPath"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
             "name"
           ],
           "properties": {
@@ -1892,6 +2064,31 @@
         {
           "type": "object",
           "required": [
+            "fields",
+            "incomplete",
+            "kind"
+          ],
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/TableLiteralField"
+              }
+            },
+            "incomplete": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "table-literal"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
             "kind",
             "operand",
             "operator"
@@ -1934,6 +2131,27 @@
             },
             "right": {
               "$ref": "#/definitions/OriginExpression"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "options"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "alternatives"
+              ]
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/OriginExpression"
+              }
             }
           }
         },
@@ -2435,6 +2653,39 @@
           ]
         }
       ]
+    },
+    "TableLiteralField": {
+      "description": "One constant-key field in a reconstructed table literal expression.",
+      "type": "object",
+      "required": [
+        "evidence",
+        "key",
+        "value"
+      ],
+      "properties": {
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StableId"
+          }
+        },
+        "key": {
+          "$ref": "#/definitions/OriginLiteral"
+        },
+        "key_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "$ref": "#/definitions/OriginExpression"
+        }
+      }
     },
     "UpvalueDesc": {
       "description": "Upvalue descriptor within a prototype.",

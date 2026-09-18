@@ -9,13 +9,31 @@ is promoted to a supported tier and no interface carries a compatibility promise
   Publish measured Linux line coverage from the workspace suite and instrumented CLI
   subprocesses through a separate coverage workflow.
 
-- Delimit negative process-group IDs with `--` when the contributor tripwire invokes
-  `kill`. Linux procps-ng could misparse the previous command and signal unrelated
-  processes, including the CI runner. A signal-0 regression checks the target group
-  without sending a terminating group signal. This affects the test harness, not the
-  shipped `luad` CLI.
-- Align the project website with 0.2.0 and document release downloads, checksum
-  verification, and exact-revision build provenance in the website and README.
+## 0.3.0 — 2026-09-18
+
+- Emit closed `prototype` expressions with child prototype paths and physical PC
+  evidence for proven `CLOSURE` call-argument definitions in Lua 5.1 origin analysis
+  (R-1c).
+- Reconstruct constant-key table-literal origin expressions (`TableLiteral`) with
+  deterministically sorted fields, write evidence, and visible partial cutoffs
+  (`incomplete: true`) for request-shaped objects in Lua 5.1 origin analysis (R-1a).
+- Emit closed `alternatives` expressions containing deduplicated, deterministically
+  sorted candidate origins with reaching evidence when bounded definitions reach a
+  control-flow join in Lua 5.1 origin analysis (R-1b).
+- Add corpus-wide `query --input-list <file|-> --where <expression>` supporting streaming
+  JSONL batch queries across file lists or stdin with per-input identity, stream framing,
+  failure/skip retention, limit truncation, and strict-mode exit semantics (R-4).
+- Fix query expression tokenizer hang on invalid expressions containing single '=' or '!'
+  characters.
+- Add export fact-family discovery and canonical registry (`ExportFactFamily`,
+  `EXPORT_FACT_FAMILIES`) exposing `export: ExportCapability` in `CapabilityManifest` and
+  `luad capabilities`, documenting valid families in `export --help`, and reporting sorted
+  valid families on unknown `--facts` arguments (R-5).
+- Add convention-gated cross-chunk linking (`--link-convention luci-module-setglobal`)
+  enabling corpus-wide module indexing and inter-artifact call-site resolution in batch
+  export, emitting auditable `cross_chunk_link` facts with explicit statuses (`resolved`,
+  `absent`, `duplicate`, `dynamic`, `unsupported`, `limit_exceeded`), order-invariant
+  indexing, fail-closed corpus and fact limits, and `link.schema.json` (R-2).
 
 ## 0.2.0 — 2026-09-17
 

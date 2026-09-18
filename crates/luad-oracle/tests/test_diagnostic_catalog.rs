@@ -6,7 +6,9 @@ use std::process::{Command, Output};
 
 use serde_json::{json, Value};
 
-const PINNED_CODES: [&str; 158] = [
+const PINNED_CODES: [&str; 160] = [
+    "ANA-LIMIT-001",
+    "ANA-LIMIT-002",
     "ANA-PRECOND-001",
     "CORE-LIMIT-001",
     "CORE-LIMIT-002",
@@ -167,8 +169,9 @@ const PINNED_CODES: [&str; 158] = [
     "PARSE-UNKNOWN-001",
 ];
 
-const CONTRIBUTOR_FILES: [&str; 20] = [
+const CONTRIBUTOR_FILES: [&str; 21] = [
     "crates/luad-analysis/src/lib.rs",
+    "crates/luad-analysis/src/linking.rs",
     "crates/luad-cli/src/main.rs",
     "crates/luad-core/src/reader.rs",
     "crates/luad-dialect-lua51/src/chunk.rs",
@@ -213,7 +216,12 @@ const CONTROL_FLOW_CODES: [&str; 6] = [
     "L55-JMP-001",
 ];
 
-const ANALYSIS_CODES: [&str; 2] = ["ANA-PRECOND-001", "INTERNAL-IDENTITY-001"];
+const ANALYSIS_CODES: [&str; 4] = [
+    "ANA-LIMIT-001",
+    "ANA-LIMIT-002",
+    "ANA-PRECOND-001",
+    "INTERNAL-IDENTITY-001",
+];
 
 const STRUCTURE_CODES: [&str; 47] = [
     "IO-001",
@@ -952,7 +960,8 @@ fn test_public_text_list_and_lookup_golden() {
     assert!(list.status.success());
     assert!(list.stderr.is_empty());
     let text = String::from_utf8(list.stdout).unwrap();
-    assert!(text.starts_with("ANA-PRECOND-001 ["));
+    assert!(text.starts_with("ANA-LIMIT-001 ["));
+    assert!(text.contains("\nANA-PRECOND-001 ["));
     assert!(text.contains("\nPARSE-SOURCE-001 ["));
     assert!(text.contains("\nPARSE-UNKNOWN-001 ["));
     assert_eq!(text.matches("\n  Semantics: ").count(), PINNED_CODES.len());

@@ -71,6 +71,14 @@ luad query firmware/main.luac --where "mnemonic == 'GETGLOBAL' or mnemonic == 'C
   jq '.data.matches[] | {id, kind, summary}'
 ```
 
+Or across an entire corpus using `query --input-list`:
+
+```bash
+luad query --input-list firmware-files.txt --where "mnemonic == 'GETGLOBAL' or mnemonic == 'CALL'" | \
+  jq -c 'select(.record_type == "query_match") |
+    {file: .context.input_identity.path, id: .data.id, kind: .data.kind, summary: .data.summary}'
+```
+
 Or from a batch JSONL export:
 
 ```bash
@@ -151,6 +159,9 @@ luad origins firmware/controller.lua --format json | jq -c '
 ```
 
 `CONCAT` and `table` nodes retain their contributing expressions recursively.
+`prototype` nodes identify callback closures passed as arguments (`{"kind": "prototype", "prototype": "0/1"}`).
+`table-literal` nodes retain constant-key field reconstructions and partial cutoffs (`incomplete: true`).
+`alternatives` nodes retain deduplicated reaching definitions across bounded CFG paths (not path feasibility).
 `unknown` nodes retain the reason analysis stopped or refused to invent a merge.
 
 Group fixed arguments by their top-level origin shape:
@@ -186,7 +197,33 @@ global store. It does not claim the global cannot be replaced by code outside th
 
 ---
 
-## 7. Reconstructing a Multi-Hop Upvalue Binding Chain
+## 7. Convention-Gated Cross-Chunk Linking (`export --link-convention`)
+
+Connect symbolic call sites across a firmware corpus to their defining LuCI module prototypes using `--link-convention`:
+
+```bash
+luad export firmware/*.lua --format jsonl --link-convention luci-module-setglobal | jq -c '
+  select(.record_type == "cross_chunk_link") |
+  {caller: .data.caller_path,
+   call_id: .data.call_id,
+   symbol: .data.label_segments | join("."),
+   status: .data.status,
+   target_artifact: .data.target_artifact.path?,
+   target_proto: .data.target_proto?}'
+```
+
+Every emitted link fact carries an explicit auditable status:
+- `resolved`: exactly one matching module export exists in the corpus.
+- `absent`: no matching module export found in the corpus.
+- `duplicate`: conflicting definitions exist across multiple artifacts.
+- `dynamic`: dynamic module declaration in the corpus prevents proving absence.
+- `unsupported`: non-Lua-5.1 chunk or invalid bytecode where convention analysis cannot apply.
+
+Corpus indexing is bounded and order-invariant. Linking is opt-in and does not assert universal reachability or whole-program control flow.
+
+---
+
+## 8. Reconstructing a Multi-Hop Upvalue Binding Chain
 
 Trace the capture of local variables and parent upvalues into nested closure upvalues across prototype boundaries:
 
@@ -213,7 +250,7 @@ luad xrefs closures.luac --from 'proto:0:pc:18' --format json | jq -c \
 
 ---
 
-## 8. Indexing Batch Exports in an External Database (e.g. SQLite)
+## 9. Indexing Batch Exports in an External Database (e.g. SQLite)
 
 Stream fact records directly into an SQLite database for SQL-based graph queries:
 
@@ -237,7 +274,7 @@ luad export firmware/*.luac --format jsonl | jq -r '
 
 ---
 
-## 9. Joining Prototype Content Across Firmware Trees
+## 10. Joining Prototype Content Across Firmware Trees
 
 Create sorted content-identity inventories and join them with ordinary command-line
 tools. The path beside each digest is artifact-local evidence, not part of the digest:
@@ -273,7 +310,7 @@ luad export firmware/*.lua --format jsonl | jq -r '
 
 ---
 
-## 10. Pagination with Context-Bound Cursors
+## 11. Pagination with Context-Bound Cursors
 
 Run paginated queries and fetch consecutive chunks:
 
@@ -297,7 +334,7 @@ fi
 
 ---
 
-## 11. Validating Live Output Against Schemas
+## 12. Validating Live Output Against Schemas
 
 Validate live output against canonical JSON Schemas using standard validation tooling:
 
@@ -318,11 +355,18 @@ luad schema export > export.schema.json
 luad export sample.luac --format jsonl | while read -r record; do
   printf '%s\n' "$record" | jsonschema -i - export.schema.json
 done
+
+luad schema link > link.schema.json
+luad export sample.luac --format jsonl --link-convention luci-module-setglobal | while read -r record; do
+  if printf '%s\n' "$record" | grep -q '"record_type":"cross_chunk_link"'; then
+    printf '%s\n' "$record" | jsonschema -i - link.schema.json
+  fi
+done
 ```
 
 ---
 
-## 12. Reproducible Firmware Investigation Walkthrough
+## 13. Reproducible Firmware Investigation Walkthrough
 
 This recipe uses a public firmware-shaped fixture tree at `tests/fixtures/firmware_tree/` to demonstrate investigating mixed, non-standard, or corrupted Lua artifacts. It is not a redistributed firmware image. Fixture hashes and authority references are in `MANIFEST.json`:
 
