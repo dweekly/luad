@@ -54,13 +54,19 @@ fn load_fixture(rel_path: &str) -> (Vec<u8>, Chunk, LuacDump) {
 
     let luac54 = require_luac54();
     let output = Command::new(&luac54)
-        .args(["-l", "-l", abs_path.to_str().unwrap()])
+        .args(["-l", "-l", "-p", abs_path.to_str().unwrap()])
         .output()
         .unwrap_or_else(|e| panic!("Failed to run luac -l -l on {:?}: {e}", abs_path));
 
     let dump_str = String::from_utf8_lossy(&output.stdout);
     let luac_dump = parse_luac_dump(&dump_str)
         .unwrap_or_else(|e| panic!("Failed to parse luac dump for {:?}: {:?}", abs_path, e));
+
+    assert!(
+        !root.join("crates/luad-oracle/luac.out").exists()
+            && !std::path::Path::new("luac.out").exists(),
+        "luac must not drop luac.out into cwd"
+    );
 
     (raw_bytes, chunk, luac_dump)
 }

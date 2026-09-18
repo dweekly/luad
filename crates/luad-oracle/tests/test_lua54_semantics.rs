@@ -24,11 +24,15 @@ fn run_luac_listing(source: &str) -> String {
 
     // Run luac -l -l
     let output = Command::new(&luac_path)
-        .arg("-l")
-        .arg("-l")
+        .args(["-l", "-l", "-p"])
         .arg(out_file.path())
         .output()
         .unwrap();
+
+    assert!(
+        !std::path::Path::new("luac.out").exists(),
+        "luac must not drop luac.out into cwd"
+    );
 
     String::from_utf8_lossy(&output.stdout).to_string()
 }

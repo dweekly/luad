@@ -49,8 +49,7 @@ fn test_all_10_fixtures_lua54_against_differential_oracle() {
             .unwrap_or_else(|e| panic!("Failed to decode {fixture_path}: {e:?}"));
 
         let output = std::process::Command::new(&luac_path)
-            .arg("-l")
-            .arg("-l")
+            .args(["-l", "-l", "-p"])
             .arg(&full_path)
             .output()
             .unwrap_or_else(|e| panic!("Failed to execute luac on {fixture_path}: {e}"));
@@ -63,6 +62,10 @@ fn test_all_10_fixtures_lua54_against_differential_oracle() {
 
         luad_oracle::assert_chunk_matches_luac(&chunk, &luac_dump);
     }
+    assert!(
+        !std::path::Path::new("luac.out").exists(),
+        "luac must not drop luac.out into cwd during differential oracle runs"
+    );
 }
 
 #[test]
@@ -393,8 +396,7 @@ fn test_unpatched_pre_gate2_decoder_fails_oracle_on_all_fixtures() {
             .unwrap_or_else(|e| panic!("Failed to read {fixture_path}: {e}"));
 
         let output = std::process::Command::new(&luac_path)
-            .arg("-l")
-            .arg("-l")
+            .args(["-l", "-l", "-p"])
             .arg(&full_path)
             .output()
             .unwrap_or_else(|e| panic!("Failed to execute luac on {fixture_path}: {e}"));
@@ -442,6 +444,50 @@ fn test_unpatched_pre_gate2_decoder_fails_oracle_on_all_fixtures() {
             "Pre-Gate 2 buggy decoder MUST fail the oracle on maintained fixture '{fixture_path}'"
         );
     }
+    assert!(
+        !std::path::Path::new("luac.out").exists(),
+        "luac must not drop luac.out into cwd during negative control runs"
+    );
+}
+
+#[test]
+fn test_negative_control_luac_output_flag_prevents_cwd_artifacts() {
+    let luac_path = require_luac54();
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let fixture_path = std::path::Path::new(manifest_dir)
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("tests/fixtures/precompiled/lua54/hello.luac");
+
+    // Negative control: running without -p or -o in a directory generates luac.out
+    let neg_output = std::process::Command::new(&luac_path)
+        .args(["-l", "-l"])
+        .arg(&fixture_path)
+        .current_dir(temp_dir.path())
+        .output()
+        .expect("luac listing");
+    assert!(neg_output.status.success());
+    assert!(
+        temp_dir.path().join("luac.out").exists(),
+        "Negative control failure: luac without -p MUST generate luac.out"
+    );
+
+    // Positive control: running WITH -p does NOT generate luac.out
+    let pos_dir = tempfile::tempdir().expect("pos tempdir");
+    let pos_output = std::process::Command::new(&luac_path)
+        .args(["-l", "-l", "-p"])
+        .arg(&fixture_path)
+        .current_dir(pos_dir.path())
+        .output()
+        .expect("luac listing with -p");
+    assert!(pos_output.status.success());
+    assert!(
+        !pos_dir.path().join("luac.out").exists(),
+        "luac with -p must NOT generate luac.out"
+    );
 }
 
 #[test]
