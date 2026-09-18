@@ -5,13 +5,9 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
-- Delimit negative process-group IDs with `--` when the contributor tripwire invokes
-  `kill`. Linux procps-ng could misparse the previous command and signal unrelated
-  processes, including the CI runner. A signal-0 regression checks the target group
-  without sending a terminating group signal. This affects the test harness, not the
-  shipped `luad` CLI.
-- Align the project website with 0.2.0 and document release downloads, checksum
-  verification, and exact-revision build provenance in the website and README.
+- Emit closed `prototype` expressions with child prototype paths and physical PC
+  evidence for proven `CLOSURE` call-argument definitions in Lua 5.1 origin analysis
+  (R-1c).
 
 ## 0.2.0 — 2026-09-17
 
