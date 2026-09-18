@@ -23,6 +23,11 @@ is promoted to a supported tier and no interface carries a compatibility promise
   `EXPORT_FACT_FAMILIES`) exposing `export: ExportCapability` in `CapabilityManifest` and
   `luad capabilities`, documenting valid families in `export --help`, and reporting sorted
   valid families on unknown `--facts` arguments (R-5).
+- Add convention-gated cross-chunk linking (`--link-convention luci-module-setglobal`)
+  enabling corpus-wide module indexing and inter-artifact call-site resolution in batch
+  export, emitting auditable `cross_chunk_link` facts with explicit statuses (`resolved`,
+  `absent`, `duplicate`, `dynamic`, `unsupported`), order-invariant indexing, and
+  `link.schema.json` (R-2).
 
 ## 0.2.0 — 2026-09-17
 

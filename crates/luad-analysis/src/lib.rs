@@ -5,6 +5,7 @@ pub mod callgraph;
 pub mod capture_mutation;
 pub mod cfg;
 pub mod diff;
+pub mod linking;
 pub mod origins;
 pub mod prototype_identity;
 pub mod query;
@@ -21,6 +22,11 @@ pub use callgraph::{
 };
 pub use cfg::{BasicBlock, CfgEdge, CfgEdgeKind, ControlFlowGraph};
 pub use diff::{diff_chunks, ChunkDiff, InstructionDiff, ProtoDiff};
+pub use linking::{
+    analyze_corpus_links, build_module_export_index, index_chunk_module_exports,
+    resolve_chunk_links, CrossChunkLinkFact, ExportDefinition, LinkConvention, LinkStatus,
+    ModuleExportIndex,
+};
 pub use origins::{
     analyze_chunk_origins, CallArgumentWindow, CallOriginFact, ChunkOriginAnalysis,
     FixedArgumentOrigin, OriginAnalysis, OriginExpression, OriginExpressionKind, OriginLiteral,

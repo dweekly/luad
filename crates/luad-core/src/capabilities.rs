@@ -233,6 +233,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 .iter()
                 .map(|&name| name.to_string())
                 .collect(),
+            link_conventions: vec!["luci-module-setglobal".to_string()],
         },
         evidence,
     }

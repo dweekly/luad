@@ -141,6 +141,9 @@
       "prototype_identity",
       "upvalue",
       "xref"
+    ],
+    "link_conventions": [
+      "luci-module-setglobal"
     ]
   },
   "evidence": []

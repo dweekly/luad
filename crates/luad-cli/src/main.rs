@@ -1102,9 +1102,17 @@ fn handle_schema(args: SchemaArgs, writer: &mut impl io::Write) -> io::Result<Ex
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
             )?;
         }
+        "link" => {
+            let schema = schema_for!(JsonlDataRecord<luad_analysis::CrossChunkLinkFact>);
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            )?;
+        }
         other => {
             eprintln!(
-                "{}: Unknown schema '{other}'. Supported: chunk, disasm, validate, diagnostic, diagnostics, instruction, cfg, callees, callgraph, origins, xrefs, query, analysis, diff, capabilities, manifest, export",
+                "{}: Unknown schema '{other}'. Supported: chunk, disasm, validate, diagnostic, diagnostics, instruction, cfg, callees, callgraph, origins, xrefs, query, analysis, diff, capabilities, manifest, export, link",
                 "error".red()
             );
             return Ok(ExitCode::UsageError);
@@ -2493,6 +2501,10 @@ enum ExportRecord {
         context: JsonlRecordContext,
         data: luad_analysis::CallOriginFact,
     },
+    CrossChunkLink {
+        context: JsonlRecordContext,
+        data: luad_analysis::CrossChunkLinkFact,
+    },
     Diagnostic {
         context: JsonlRecordContext,
         data: luad_core::Diagnostic,
@@ -2695,6 +2707,21 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
         }
     };
 
+    let link_convention = match args.link_convention.as_deref() {
+        Some(s) => match luad_analysis::LinkConvention::parse(s) {
+            Some(conv) => Some(conv),
+            None => {
+                eprintln!(
+                    "{}: unknown link convention '{s}'. Supported conventions: {}",
+                    "error".red(),
+                    luad_analysis::LinkConvention::all_names().join(", ")
+                );
+                return Ok(ExitCode::UsageError);
+            }
+        },
+        None => None,
+    };
+
     let mut file_paths = args.files;
 
     if let Some(list_file) = &args.input_list {
@@ -2710,6 +2737,28 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
     if file_paths.is_empty() {
         eprintln!("{}: No input files provided for export", "error".red());
         return Ok(ExitCode::UsageError);
+    }
+
+    let mut module_export_index = luad_analysis::ModuleExportIndex::default();
+    if let Some(convention) = link_convention {
+        for path_str in &file_paths {
+            if let Ok(bytes) = read_input_bytes_with_reporting(path_str, false) {
+                if let Ok((chunk, identity, _config, _interp)) = parse_chunk_detailed(
+                    path_str,
+                    &bytes,
+                    args.strict,
+                    args.dialect.as_deref(),
+                    false,
+                ) {
+                    luad_analysis::index_chunk_module_exports(
+                        &identity,
+                        &chunk,
+                        convention,
+                        &mut module_export_index,
+                    );
+                }
+            }
+        }
     }
 
     let mut succeeded_count = 0;
@@ -3018,6 +3067,12 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
                     .sum::<usize>()
             })
             .unwrap_or(0);
+        let link_facts = if let Some(convention) = link_convention {
+            luad_analysis::resolve_chunk_links(&identity, &chunk, &module_export_index, convention)
+        } else {
+            Vec::new()
+        };
+        let available_link_count = link_facts.len();
         let available_fact_count =
             count_available_facts_proto_tree(&chunk.main_proto, &fact_selection)
                 + xref_index
@@ -3027,6 +3082,7 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
                 + available_callee_count
                 + available_origin_count
                 + available_call_relation_count
+                + available_link_count
                 + prototype_identities.len();
 
         let context = JsonlRecordContext::successful(identity.clone(), interp);
@@ -3075,6 +3131,14 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
                     if !emitter.emit_fact("call_relation", fact)? {
                         break 'call_relations;
                     }
+                }
+            }
+        }
+
+        if !link_facts.is_empty() {
+            'links: for link in &link_facts {
+                if !emitter.emit_fact("cross_chunk_link", link)? {
+                    break 'links;
                 }
             }
         }

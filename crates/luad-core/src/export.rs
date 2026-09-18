@@ -109,6 +109,8 @@ pub struct ExportCapability {
     pub formats: Vec<String>,
     /// Selectable counted fact families supported by `--facts`.
     pub fact_families: Vec<String>,
+    /// Optional linking conventions supported by `--link-convention`.
+    pub link_conventions: Vec<String>,
 }
 
 #[cfg(test)]

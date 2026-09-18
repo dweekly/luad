@@ -544,6 +544,13 @@ pub fn render_capabilities(
         "  fact families: {}",
         manifest.export.fact_families.join(", ")
     )?;
+    if !manifest.export.link_conventions.is_empty() {
+        writeln!(
+            writer,
+            "  link conventions: {}",
+            manifest.export.link_conventions.join(", ")
+        )?;
+    }
     writeln!(writer)?;
     writeln!(writer, "{}", "Dialect Matrix:".bold())?;
     for d in &manifest.dialects {

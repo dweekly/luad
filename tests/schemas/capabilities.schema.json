@@ -182,6 +182,7 @@
         "command",
         "fact_families",
         "formats",
+        "link_conventions",
         "schema"
       ],
       "properties": {
@@ -198,6 +199,13 @@
         },
         "formats": {
           "description": "Output formats supported by the command.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "link_conventions": {
+          "description": "Optional linking conventions supported by `--link-convention`.",
           "type": "array",
           "items": {
             "type": "string"

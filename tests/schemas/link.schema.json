@@ -1,0 +1,296 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JsonlDataRecord_for_CrossChunkLinkFact",
+  "description": "JSONL streaming typed item record.",
+  "type": "object",
+  "required": [
+    "context",
+    "data",
+    "record_type"
+  ],
+  "properties": {
+    "context": {
+      "description": "Context identifying the input and interpretation for this record.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/JsonlRecordContext"
+        }
+      ]
+    },
+    "data": {
+      "description": "Item payload.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/CrossChunkLinkFact"
+        }
+      ]
+    },
+    "record_type": {
+      "description": "Discriminator (e.g. \"instruction\", \"prototype\", \"xref\", \"diagnostic\").",
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "CrossChunkLinkFact": {
+      "description": "An auditable cross-chunk link fact connecting a call-site to its defining artifact and prototype.",
+      "type": "object",
+      "required": [
+        "call_id",
+        "call_pc",
+        "caller_path",
+        "caller_proto",
+        "evidence",
+        "label_segments",
+        "status"
+      ],
+      "properties": {
+        "call_id": {
+          "description": "Stable identifier of the calling instruction.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        },
+        "call_pc": {
+          "description": "Physical instruction PC within the calling prototype.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "caller_path": {
+          "description": "File path of the calling artifact.",
+          "type": "string"
+        },
+        "caller_proto": {
+          "description": "Prototype path within the calling artifact.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ProtoPath"
+            }
+          ]
+        },
+        "evidence": {
+          "description": "Evidence IDs from both defining export and calling site.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StableId"
+          }
+        },
+        "label_segments": {
+          "description": "Symbolic path segments (e.g. `[\"luci\", \"sys\", \"exec\"]`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "status": {
+          "description": "Outcome status of the link.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/LinkStatus"
+            }
+          ]
+        },
+        "target_artifact": {
+          "description": "Defining artifact identity when resolved.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/InputIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_proto": {
+          "description": "Defining prototype path within target artifact when resolved.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ProtoPath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "InputIdentity": {
+      "description": "Identity and provenance metadata for an analyzed input artifact.",
+      "type": "object",
+      "required": [
+        "byte_length",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "byte_length": {
+          "description": "Total byte length of the input.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "path": {
+          "description": "File path or source identifier (e.g. \"hello.luac\" or \"`<stdin>`\").",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 hash of the complete input byte stream.",
+          "type": "string"
+        }
+      }
+    },
+    "JsonlRecordContext": {
+      "description": "Context capturing provenance and interpretation for a streamed JSONL record.",
+      "type": "object",
+      "properties": {
+        "input_identity": {
+          "description": "Provenance identity of the analyzed input, if available.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/InputIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "interpretation": {
+          "description": "Resolved interpretation, if available.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ResolvedInterpretation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "LinkStatus": {
+      "description": "Status of cross-chunk linking for a specific call-site.",
+      "oneOf": [
+        {
+          "description": "Exactly one unique matching module export was proved in the corpus.",
+          "type": "string",
+          "enum": [
+            "resolved"
+          ]
+        },
+        {
+          "description": "The target label belongs to the module namespace, but no defining export exists in the corpus.",
+          "type": "string",
+          "enum": [
+            "absent"
+          ]
+        },
+        {
+          "description": "Multiple conflicting definitions exist in the corpus for this export label.",
+          "type": "string",
+          "enum": [
+            "duplicate"
+          ]
+        },
+        {
+          "description": "Target or module declaration involves dynamic expressions and cannot be statically resolved.",
+          "type": "string",
+          "enum": [
+            "dynamic"
+          ]
+        },
+        {
+          "description": "Dialect or input format is unsupported for the chosen linking convention.",
+          "type": "string",
+          "enum": [
+            "unsupported"
+          ]
+        }
+      ]
+    },
+    "ProtoPath": {
+      "type": "string"
+    },
+    "ResolvedInterpretation": {
+      "description": "Resolved interpretation record capturing base dialect, vendor profile, layout, and selection evidence.",
+      "type": "object",
+      "required": [
+        "base_dialect",
+        "detection_evidence",
+        "parse_mode",
+        "profile",
+        "selection_mode"
+      ],
+      "properties": {
+        "base_dialect": {
+          "description": "Base Lua language dialect (e.g. \"lua5.1\", \"lua5.4\").",
+          "type": "string"
+        },
+        "detection_evidence": {
+          "description": "Human-readable evidence explaining why this dialect/profile was resolved.",
+          "type": "string"
+        },
+        "parse_mode": {
+          "description": "Parse mode (\"strict\" or \"permissive\").",
+          "type": "string"
+        },
+        "patch_or_oracle_version": {
+          "description": "Patch or vendor variant if applicable (e.g. \"lnum32\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "description": "Exact resolved profile identifier (e.g. \"lua5.1\", \"lua5.1-lnum32\").",
+          "type": "string"
+        },
+        "profile_version_or_hash": {
+          "description": "Specific profile version or cryptographic specification hash if known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selection_mode": {
+          "description": "How the profile was selected.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SelectionMode"
+            }
+          ]
+        },
+        "validated_layout": {
+          "description": "Summary of validated architectural layout widths and byte order.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "SelectionMode": {
+      "description": "Selection mode for dialect and profile resolution.",
+      "oneOf": [
+        {
+          "description": "Dialect / profile was automatically detected from bytecode header.",
+          "type": "string",
+          "enum": [
+            "detected"
+          ]
+        },
+        {
+          "description": "Dialect / profile was explicitly selected via CLI option or API.",
+          "type": "string",
+          "enum": [
+            "explicit"
+          ]
+        }
+      ]
+    },
+    "StableId": {
+      "type": "string"
+    }
+  }
+}

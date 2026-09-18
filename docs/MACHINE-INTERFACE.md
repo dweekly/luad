@@ -37,6 +37,7 @@ luad schema callees
 luad schema callgraph
 luad schema origins
 luad schema export
+luad schema link
 ```
 
 Available schema names are:
@@ -58,6 +59,7 @@ Available schema names are:
 - `capabilities`
 - `manifest`
 - `export`
+- `link`
 
 Each schema family advances independently. Enveloped command JSON and the other
 major-1 JSON families remain at major 1; capabilities JSON and streaming JSONL/export
@@ -454,6 +456,15 @@ or `luad export --help`. Control records and diagnostics are always emitted. Omi
 the option preserves the default all-family stream. When selection is explicit,
 `export_start.fact_families` records the canonical family order regardless of argument
 order; the field is absent from an unfiltered export.
+
+`--link-convention CONVENTION` explicitly enables corpus-wide module indexing and
+inter-artifact resolution under a named convention. Discover supported conventions at
+runtime via `luad capabilities --format json` under `export.link_conventions` or
+`luad export --help` (currently `luci-module-setglobal`). When enabled, batch export
+emits auditable `cross_chunk_link` records connecting call-sites to their defining
+artifacts and prototypes with explicit statuses (`resolved`, `absent`, `duplicate`,
+`dynamic`, or `unsupported`). Linking is order-invariant and bounds corpus indexing.
+Records conform to `luad schema link`.
 
 Every data record has a required `context` object. Successful facts carry
 `input_identity` and `interpretation`; parse-failure diagnostics carry identity with a

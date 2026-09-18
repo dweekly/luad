@@ -332,6 +332,10 @@ pub struct ExportArgs {
     /// Strict fail-fast parsing mode.
     #[arg(long)]
     pub strict: bool,
+
+    /// Optional cross-chunk linking convention (e.g. 'luci-module-setglobal').
+    #[arg(long)]
+    pub link_convention: Option<String>,
 }
 
 #[derive(Args, Debug)]
