@@ -18,6 +18,7 @@ usage() {
   cat >&2 <<'EOF'
 usage:
   scripts/release-publication.sh rehearse <40-digit-source-revision> <ci-run-id>
+  scripts/release-publication.sh publish <40-digit-source-revision> <ci-run-id>
   scripts/release-publication.sh withdraw <publication-rehearsal-tag> <40-digit-source-revision>
 EOF
   exit 2
@@ -350,6 +351,7 @@ verify_source_archive_root() {
   local kind="$2"
   local tag="$3"
   local expected="luad-${tag}/"
+  local expected_alt="luad-${tag#v}/"
   local members="${TEMP_ROOT}/source-members-${kind}.txt"
 
   [[ -s "${archive}" ]] || die "${kind} source archive is empty"
@@ -368,7 +370,7 @@ verify_source_archive_root() {
   bounded_bytes "${members}" "${kind} source archive member list" \
     "${MAX_SOURCE_MEMBER_LIST_BYTES}"
   [[ -s "${members}" ]] || die "${kind} source archive contains no members"
-  awk -v root="${expected}" 'index($0, root) != 1 { exit 1 }' "${members}" || \
+  awk -v root="${expected}" -v alt="${expected_alt}" 'index($0, root) != 1 && index($0, alt) != 1 { exit 1 }' "${members}" || \
     die "${kind} source archive is not rooted at ${expected}"
 }
 
@@ -419,6 +421,7 @@ verify_release_metadata() {
   local notes="$3"
   local revision="$4"
   local version="$5"
+  local is_prerelease="${6:-true}"
   local metadata="${TEMP_ROOT}/release-${tag}.json"
   local body="${TEMP_ROOT}/release-${tag}.body"
   local expected="${TEMP_ROOT}/release-${tag}.assets.expected"
@@ -426,9 +429,10 @@ verify_release_metadata() {
 
   api_json "${metadata}" "repos/${REPOSITORY}/releases/tags/${tag}"
   jq -e --arg tag "${tag}" --arg title "${title}" --arg revision "${revision}" \
+    --argjson prerelease "${is_prerelease}" \
     --arg url "${REPOSITORY_URL}/releases/tag/${tag}" \
     '.tag_name == $tag and .name == $title and .target_commitish == $revision and
-     .draft == false and .prerelease == true and .html_url == $url' \
+     .draft == false and .prerelease == $prerelease and .html_url == $url' \
     "${metadata}" >/dev/null || die "release metadata mismatch for ${tag}"
   jq -rj '.body' "${metadata}" >"${body}"
   cmp "${notes}" "${body}" >/dev/null || die "release notes mismatch for ${tag}"
@@ -451,10 +455,11 @@ verify_published_release() {
   local accepted="$4"
   local version="$5"
   local revision="$6"
+  local is_prerelease="${7:-true}"
   local download="${TEMP_ROOT}/download-${tag}"
   local source="${TEMP_ROOT}/source-${tag}"
 
-  verify_release_metadata "${tag}" "${title}" "${notes}" "${revision}" "${version}"
+  verify_release_metadata "${tag}" "${title}" "${notes}" "${revision}" "${version}" "${is_prerelease}"
   verify_tag_target "${tag}" "${revision}"
   download_release_assets "${tag}" "${download}"
   verify_downloaded_bytes "${accepted}" "${download}" "${version}" "${revision}" || \
@@ -600,6 +605,112 @@ rehearse() {
   printf '%s\n' "${REPOSITORY_URL}/releases/tag/${retained_tag}"
 }
 
+verify_archive_attestation() {
+  local archive="$1"
+  local revision="$2"
+  local expected_sha256="$3"
+  local attestation_json="${TEMP_ROOT}/attestation-$(basename "${archive}").json"
+
+  gh attestation verify "${archive}" --repo "${REPOSITORY}" --format json >"${attestation_json}"
+  bounded_file "${attestation_json}" "archive attestation response"
+
+  jq -e --arg sha "${expected_sha256}" --arg rev "${revision}" \
+    'if type == "array" then .[0] else . end |
+     ((.statement.subject[]? | select(.digest.sha256 == $sha)) or (.verificationResult != null)) and
+     (.. | select(. == $rev) | true) and
+     (.. | select((type == "string") and (endswith(".github/workflows/ci.yml") or contains("ci.yml"))) | true)' \
+    "${attestation_json}" >/dev/null || die "attestation verification assertion failed for ${archive}"
+}
+
+write_production_notes() {
+  local output="$1"
+  local version="$2"
+  local revision="$3"
+  local run_id="$4"
+  local accepted="$5"
+  {
+    printf '# luad %s\n\n' "${version}"
+    printf 'Release `%s` built from accepted revision `%s`.\n\n' "${version}" "${revision}"
+    printf 'Accepted CI run: %s/actions/runs/%s\n\n' "${REPOSITORY_URL}" "${run_id}"
+    printf '### Checksums\n\n```text\n'
+    cat "${accepted}/SHA256SUMS"
+    printf '```\n\n'
+    printf '### Build Provenance\n\n'
+    printf 'Artifact attestations can be verified with:\n```console\n'
+    printf 'gh attestation verify luad-%s-<platform>.tar.gz --repo %s\n' "${version}" "${REPOSITORY}"
+    printf '```\n'
+  } >"${output}"
+}
+
+publish() {
+  local revision="$1"
+  local run_id="$2"
+  local version tag title accepted notes download source
+  local linux_archive macos_archive linux_sha macos_sha
+
+  validate_revision "${revision}"
+  validate_run_id "${run_id}"
+  REVISION="${revision}"
+  preflight_repository "${revision}"
+  verify_ci_run "${revision}" "${run_id}"
+  version="$(workspace_version)"
+  tag="v${version}"
+  title="luad ${version}"
+  accepted="${TEMP_ROOT}/accepted-release-bundle"
+  notes="${TEMP_ROOT}/production-notes.md"
+  download="${TEMP_ROOT}/download-${tag}"
+  source="${TEMP_ROOT}/source-${tag}"
+
+  mkdir -p "${accepted}"
+  gh run download "${run_id}" --repo "${REPOSITORY}" --name release-bundle --dir "${accepted}"
+  verify_bundle_directory "${accepted}" "${version}" "${revision}" || \
+    die "accepted release-bundle artifact failed verification"
+  write_production_notes "${notes}" "${version}" "${revision}" "${run_id}" "${accepted}"
+
+  linux_archive="luad-${version}-linux-x86_64.tar.gz"
+  macos_archive="luad-${version}-macos-aarch64.tar.gz"
+  linux_sha="$(awk -v a="${linux_archive}" '$2 == a { print $1 }' "${accepted}/SHA256SUMS")"
+  macos_sha="$(awk -v a="${macos_archive}" '$2 == a { print $1 }' "${accepted}/SHA256SUMS")"
+  [[ -n "${linux_sha}" && -n "${macos_sha}" ]] || die "could not resolve archive checksums"
+
+  if tag_exists "${tag}"; then
+    local tag_json="${TEMP_ROOT}/tag-${tag}.json"
+    api_json "${tag_json}" "repos/${REPOSITORY}/git/ref/tags/${tag}"
+    local target_sha
+    target_sha="$(jq -r '.object.sha' "${tag_json}")"
+    if [[ "${target_sha}" != "${revision}" ]]; then
+      die "tag ${tag} already exists pointing to commit ${target_sha}, not ${revision}; version tags cannot be moved"
+    fi
+    release_exists "${tag}" || die "tag ${tag} exists without its release"
+
+    verify_published_release "${tag}" "${title}" "${notes}" \
+      "${accepted}" "${version}" "${revision}" false
+    verify_archive_attestation "${download}/${linux_archive}" "${revision}" "${linux_sha}"
+    verify_archive_attestation "${download}/${macos_archive}" "${revision}" "${macos_sha}"
+    [[ "$(latest_identity)" == "${tag}" ]] || \
+      die "existing release is not the latest release"
+    printf '%s\n' "${REPOSITORY_URL}/releases/tag/${tag}"
+    return
+  fi
+
+  assert_identity_absent "${tag}"
+
+  create_release "${tag}" "${title}" "${notes}" \
+    "${accepted}" "${version}" --latest=false
+
+  verify_published_release "${tag}" "${title}" "${notes}" \
+    "${accepted}" "${version}" "${revision}" false
+
+  verify_archive_attestation "${download}/${linux_archive}" "${revision}" "${linux_sha}"
+  verify_archive_attestation "${download}/${macos_archive}" "${revision}" "${macos_sha}"
+
+  gh release edit "${tag}" --repo "${REPOSITORY}" --latest >/dev/null
+  [[ "$(latest_identity)" == "${tag}" ]] || \
+    die "failed to promote ${tag} to latest release"
+
+  printf '%s\n' "${REPOSITORY_URL}/releases/tag/${tag}"
+}
+
 withdraw() {
   local tag="$1"
   local revision="$2"
@@ -641,6 +752,10 @@ main() {
     rehearse)
       (( $# == 3 )) || usage
       rehearse "$2" "$3"
+      ;;
+    publish)
+      (( $# == 3 )) || usage
+      publish "$2" "$3"
       ;;
     withdraw)
       (( $# == 3 )) || usage
