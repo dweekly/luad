@@ -74,6 +74,20 @@ fn test_analysis_eligibility_negative_for_unqualified_dialects() {
     assert!(res_unk.is_err());
     let diags_unk = res_unk.unwrap_err();
     assert!(diags_unk.iter().any(|d| d.code == "ANA-PRECOND-001"));
+
+    // Unknown Lua 5.1 variant/vendor dialect
+    let raw_51 = get_fixture_bytes("lua5.1", "hello", false).expect("5.1 fixture");
+    let mut reader_51 = SafeReader::new(&raw_51);
+    let mut chunk_51_unknown =
+        luad_dialect_lua51::decode_chunk_lua51(&mut reader_51).expect("clean decode");
+    chunk_51_unknown.dialect = "lua5.1-unknown-vendor".to_string();
+    let res_51_unk = validate_for_analysis(&chunk_51_unknown);
+    assert!(
+        res_51_unk.is_err(),
+        "Lua 5.1 unknown vendor dialect must refuse analysis preconditions"
+    );
+    let diags_51_unk = res_51_unk.unwrap_err();
+    assert!(diags_51_unk.iter().any(|d| d.code == "ANA-PRECOND-001"));
 }
 
 #[test]
@@ -179,6 +193,30 @@ fn test_cli_analysis_refused_with_exit_code_4_on_unqualified_dialects() {
     assert!(
         stderr_55.contains("ANA-PRECOND-001"),
         "stderr must contain ANA-PRECOND-001: {stderr_55}"
+    );
+
+    // Unsupported dialect variant on CLI
+    let fixture_51 = root.join("tests/fixtures/precompiled/lua51/hello.luac");
+    let unk_dialect = Command::new(&bin)
+        .args([
+            "cfg",
+            fixture_51.to_str().unwrap(),
+            "--proto",
+            "proto:0",
+            "--dialect",
+            "lua5.1-unknown-vendor",
+        ])
+        .output()
+        .expect("run cfg with unapproved dialect variant");
+    assert_eq!(
+        unk_dialect.status.code(),
+        Some(4),
+        "cfg with unapproved dialect variant must exit with code 4"
+    );
+    let stderr_unk = String::from_utf8_lossy(&unk_dialect.stderr);
+    assert!(
+        stderr_unk.contains("not yet supported"),
+        "stderr must explain dialect is unsupported: {stderr_unk}"
     );
 }
 

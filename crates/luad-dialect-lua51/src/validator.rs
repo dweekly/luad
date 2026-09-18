@@ -11,13 +11,25 @@ const MAX_DIAGNOSTICS: usize = 10_000;
 /// Validate Lua 5.1 chunk invariants.
 pub fn validate_chunk_lua51(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
     let mut diagnostics = chunk.diagnostics.clone();
-    validate_proto(&chunk.main_proto, &mut diagnostics);
+    let mut limit_reached = diagnostics.len() >= MAX_DIAGNOSTICS;
+    if !limit_reached {
+        validate_proto(&chunk.main_proto, &mut diagnostics, &mut limit_reached);
+    }
 
-    let mut deduped = Vec::with_capacity(diagnostics.len().min(MAX_DIAGNOSTICS));
+    if limit_reached {
+        diagnostics.push(Diagnostic::error(
+            "CORE-LIMIT-003",
+            DiagnosticCategory::Parse,
+            chunk.main_proto.id.clone(),
+            format!("Diagnostic collection limit ({MAX_DIAGNOSTICS}) exceeded; validation terminated early and is incomplete"),
+        ));
+    }
+
+    let mut deduped = Vec::with_capacity(diagnostics.len().min(MAX_DIAGNOSTICS + 1));
     let mut seen = std::collections::HashSet::new();
     for diag in diagnostics {
-        if deduped.len() >= MAX_DIAGNOSTICS {
-            break;
+        if deduped.len() >= MAX_DIAGNOSTICS && diag.code != "CORE-LIMIT-003" {
+            continue;
         }
         if seen.insert(diag.clone()) {
             deduped.push(diag);
@@ -25,7 +37,9 @@ pub fn validate_chunk_lua51(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
     }
     let diagnostics = deduped;
 
-    let verdict = if diagnostics.iter().any(|d| d.severity == Severity::Error) {
+    let verdict = if limit_reached {
+        Verdict::Incomplete
+    } else if diagnostics.iter().any(|d| d.severity == Severity::Error) {
         Verdict::Invalid
     } else {
         Verdict::ValidForParser
@@ -34,8 +48,9 @@ pub fn validate_chunk_lua51(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
     (verdict, diagnostics)
 }
 
-fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
-    if diags.len() >= MAX_DIAGNOSTICS {
+fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>, limit_reached: &mut bool) {
+    if *limit_reached || diags.len() >= MAX_DIAGNOSTICS {
+        *limit_reached = true;
         return;
     }
     let num_insts = proto.instructions.len();
@@ -44,6 +59,7 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
     // Report role map faults (truncated companion ranges)
     for fault in &role_map.faults {
         if diags.len() >= MAX_DIAGNOSTICS {
+            *limit_reached = true;
             return;
         }
         match fault {
@@ -89,6 +105,7 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
     // 2. Validate instructions
     for (pc, inst) in proto.instructions.iter().enumerate() {
         if diags.len() >= MAX_DIAGNOSTICS {
+            *limit_reached = true;
             return;
         }
         if !role_map.is_executable(pc) {
@@ -415,10 +432,11 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
     }
 
     for child in &proto.protos {
-        if diags.len() >= MAX_DIAGNOSTICS {
+        if *limit_reached || diags.len() >= MAX_DIAGNOSTICS {
+            *limit_reached = true;
             return;
         }
-        validate_proto(child, diags);
+        validate_proto(child, diags, limit_reached);
     }
 }
 

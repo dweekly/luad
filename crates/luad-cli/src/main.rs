@@ -137,8 +137,15 @@ pub fn classify_diagnostic(diag: &Diagnostic) -> ExitCode {
     if diag.code.starts_with("IO-") {
         return ExitCode::IoError;
     }
-    if diag.code == "CORE-LIMIT-001"
-        || diag.code == "CORE-LIMIT-002"
+    if diag.code.starts_with("CORE-LIMIT-")
+        || diag.code == "CORE-OVERFLOW-001"
+        || diag.code == "CORE-DEPTH-001"
+        || diag.code == "CORE-COUNT-001"
+        || diag.code.ends_with("-STR-001")
+        || diag.code.ends_with("-INST-001")
+        || diag.code.ends_with("-CONST-001")
+        || diag.code.ends_with("-PROTO-001")
+        || diag.code.ends_with("-UPVAL-001")
         || diag.code.contains("LIMIT")
         || diag.message.contains("exceeds safety limit")
         || diag.message.contains("exceeds configured limit")
@@ -151,12 +158,63 @@ pub fn classify_diagnostic(diag: &Diagnostic) -> ExitCode {
         || diag.code == "PARSE-SOURCE-001"
         || diag.code == "PARSE-UNKNOWN-001"
         || diag.code == "L51-CONST-002"
-        || diag.code.ends_with("-HEADER-001")
-        || diag.code.ends_with("-HEADER-002")
+        || is_unsupported_format_or_layout_code(&diag.code)
     {
         return ExitCode::UnsupportedFormat;
     }
     ExitCode::InvalidInput
+}
+
+/// Typed classification of diagnostic codes representing unsupported bytecode formats,
+/// vendor dialects, version mismatches, or unsupported target architecture layouts.
+fn is_unsupported_format_or_layout_code(code: &str) -> bool {
+    matches!(
+        code,
+        "L51-HEADER-001"
+            | "L51-HEADER-002"
+            | "L51-HEADER-003"
+            | "L52-HEADER-001"
+            | "L52-HEADER-002"
+            | "L52-HEADER-003"
+            | "L52-HEADER-004"
+            | "L52-HEADER-005"
+            | "L52-HEADER-006"
+            | "L52-HEADER-007"
+            | "L52-HEADER-008"
+            | "L52-HEADER-009"
+            | "L53-HEADER-001"
+            | "L53-HEADER-002"
+            | "L53-HEADER-003"
+            | "L53-HEADER-005"
+            | "L53-HEADER-006"
+            | "L53-HEADER-007"
+            | "L53-HEADER-008"
+            | "L53-HEADER-009"
+            | "L53-HEADER-010"
+            | "L53-HEADER-011"
+            | "L54-HEADER-001"
+            | "L54-HEADER-002"
+            | "L54-HEADER-003"
+            | "L54-HEADER-005"
+            | "L54-HEADER-006"
+            | "L54-HEADER-007"
+            | "L54-HEADER-008"
+            | "L54-HEADER-009"
+            | "L54-VAL-HEADER-001"
+            | "L54-VAL-HEADER-002"
+            | "L54-VAL-HEADER-003"
+            | "L55-HEADER-001"
+            | "L55-HEADER-002"
+            | "L55-HEADER-003"
+            | "L55-HEADER-005"
+            | "L55-HEADER-006"
+            | "L55-HEADER-007"
+            | "L55-HEADER-008"
+            | "L55-HEADER-009"
+            | "L55-HEADER-010"
+            | "L55-HEADER-011"
+            | "L55-HEADER-012"
+    )
 }
 
 type ParsedChunkTuple = (
@@ -518,9 +576,10 @@ fn handle_inspect(args: InspectArgs, writer: &mut impl io::Write) -> io::Result<
 }
 
 fn get_disasm_proto(dialect: &str, proto: &luad_core::model::Prototype) -> DisassembledPrototype {
+    const LUA51_PROFILES: &[&str] = &["lua5.1", "lua5.1-lnum32", "lua5.1-stock32"];
     if dialect == "lua5.4" {
         luad_dialect_lua54::disassemble_proto_lua54(proto)
-    } else if dialect.starts_with("lua5.1") {
+    } else if LUA51_PROFILES.contains(&dialect) {
         luad_dialect_lua51::disassemble_proto_lua51(proto)
     } else {
         let lifted = luad_analysis::lift_proto_for_dialect(dialect, proto);
@@ -706,11 +765,18 @@ fn handle_validate(args: ValidateArgs, writer: &mut impl io::Write) -> io::Resul
         "lua5.4" => luad_dialect_lua54::validate_chunk_lua54(&chunk),
         "lua5.3" => luad_dialect_lua53::validate_chunk_lua53(&chunk),
         "lua5.2" => luad_dialect_lua52::validate_chunk_lua52(&chunk),
-        d if d.starts_with("lua5.1") => luad_dialect_lua51::validate_chunk_lua51(&chunk),
+        "lua5.1" | "lua5.1-lnum32" | "lua5.1-stock32" => {
+            luad_dialect_lua51::validate_chunk_lua51(&chunk)
+        }
         _ => (chunk.verdict, chunk.diagnostics.clone()),
     };
 
+    let is_limit = verdict == Verdict::Incomplete
+        || diagnostics
+            .iter()
+            .any(|d| classify_diagnostic(d) == ExitCode::LimitExceeded);
     let is_invalid = verdict == Verdict::Invalid
+        || is_limit
         || (args.strict
             && (diagnostics
                 .iter()
@@ -733,7 +799,9 @@ fn handle_validate(args: ValidateArgs, writer: &mut impl io::Write) -> io::Resul
         }
     }
 
-    if is_invalid {
+    if is_limit {
+        Ok(ExitCode::LimitExceeded)
+    } else if is_invalid {
         Ok(ExitCode::InvalidInput)
     } else {
         Ok(ExitCode::Success)
@@ -1037,15 +1105,21 @@ fn handle_analysis_validation_failure(
         "error".red()
     );
     let mut is_unsupported_format = false;
+    let mut is_limit_exceeded = false;
     for d in diags {
         if d.severity == Severity::Error {
             eprintln!("  - [{}] {}", d.code, d.message);
             if d.code == "ANA-PRECOND-001" {
                 is_unsupported_format = true;
             }
+            if classify_diagnostic(d) == ExitCode::LimitExceeded {
+                is_limit_exceeded = true;
+            }
         }
     }
-    if is_unsupported_format {
+    if is_limit_exceeded {
+        ExitCode::LimitExceeded
+    } else if is_unsupported_format {
         ExitCode::UnsupportedFormat
     } else {
         ExitCode::InvalidInput
@@ -1159,7 +1233,8 @@ fn handle_callees(args: CalleesArgs, writer: &mut impl io::Write) -> io::Result<
             Ok(parsed) => parsed,
             Err(code) => return Ok(code),
         };
-    if !chunk.dialect.starts_with("lua5.1") {
+    const LUA51_PROFILES: &[&str] = &["lua5.1", "lua5.1-lnum32", "lua5.1-stock32"];
+    if !LUA51_PROFILES.contains(&chunk.dialect.as_str()) {
         eprintln!(
             "{}: Symbolic callee analysis currently requires a Lua 5.1 profile",
             "error".red()
@@ -1249,7 +1324,8 @@ fn handle_callgraph(args: CallgraphArgs, writer: &mut impl io::Write) -> io::Res
             Ok(parsed) => parsed,
             Err(code) => return Ok(code),
         };
-    if !chunk.dialect.starts_with("lua5.1") {
+    const LUA51_PROFILES: &[&str] = &["lua5.1", "lua5.1-lnum32", "lua5.1-stock32"];
+    if !LUA51_PROFILES.contains(&chunk.dialect.as_str()) {
         eprintln!(
             "{}: Call-relation analysis currently requires a Lua 5.1 profile",
             "error".red()
@@ -1339,7 +1415,8 @@ fn handle_origins(args: OriginsArgs, writer: &mut impl io::Write) -> io::Result<
             Ok(parsed) => parsed,
             Err(code) => return Ok(code),
         };
-    if !chunk.dialect.starts_with("lua5.1") {
+    const LUA51_PROFILES: &[&str] = &["lua5.1", "lua5.1-lnum32", "lua5.1-stock32"];
+    if !LUA51_PROFILES.contains(&chunk.dialect.as_str()) {
         eprintln!(
             "{}: Call-argument origin analysis currently requires a Lua 5.1 profile",
             "error".red()
@@ -2366,54 +2443,54 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
         let disasm = fact_selection
             .includes(ExportFactFamily::Instruction)
             .then(|| get_disasm_proto(&chunk.dialect, &chunk.main_proto));
-        let prototype_identity_analysis = if fact_selection
-            .includes(ExportFactFamily::PrototypeIdentity)
-            && chunk.dialect.starts_with("lua5.1")
-        {
-            match luad_analysis::analyze_chunk_prototype_identities(&chunk) {
-                Ok(analysis) => Some(analysis),
-                Err(error) => {
-                    failed_count += 1;
-                    let diagnostic = Diagnostic::error(
-                        "INTERNAL-IDENTITY-001",
-                        DiagnosticCategory::Analysis,
-                        StableId::Chunk,
-                        error.to_string(),
-                    );
-                    let context = JsonlRecordContext::successful(identity.clone(), interp);
-                    writeln!(
-                        writer,
-                        "{}",
-                        serde_json::to_string(&JsonlDataRecord {
-                            record_type: "diagnostic".to_string(),
-                            context,
-                            data: diagnostic,
-                        })
-                        .unwrap_or_default()
-                    )?;
-                    writeln!(
-                        writer,
-                        "{}",
-                        serde_json::to_string(&FileEndRecord {
-                            record_type: "file_end".to_string(),
-                            path: identity.path.clone(),
-                            status: "failed".to_string(),
-                            error: Some(error.to_string()),
-                            instruction_count: 0,
-                            diagnostic_count: 1,
-                            is_truncated: false,
-                            emitted_fact_count: 0,
-                            available_fact_count: 0,
-                        })
-                        .unwrap_or_default()
-                    )?;
-                    eprintln!("error: {path_str}: prototype identity analysis failed");
-                    continue;
+        const LUA51_PROFILES: &[&str] = &["lua5.1", "lua5.1-lnum32", "lua5.1-stock32"];
+        let is_lua51_profile = LUA51_PROFILES.contains(&chunk.dialect.as_str());
+        let prototype_identity_analysis =
+            if fact_selection.includes(ExportFactFamily::PrototypeIdentity) && is_lua51_profile {
+                match luad_analysis::analyze_chunk_prototype_identities(&chunk) {
+                    Ok(analysis) => Some(analysis),
+                    Err(error) => {
+                        failed_count += 1;
+                        let diagnostic = Diagnostic::error(
+                            "INTERNAL-IDENTITY-001",
+                            DiagnosticCategory::Analysis,
+                            StableId::Chunk,
+                            error.to_string(),
+                        );
+                        let context = JsonlRecordContext::successful(identity.clone(), interp);
+                        writeln!(
+                            writer,
+                            "{}",
+                            serde_json::to_string(&JsonlDataRecord {
+                                record_type: "diagnostic".to_string(),
+                                context,
+                                data: diagnostic,
+                            })
+                            .unwrap_or_default()
+                        )?;
+                        writeln!(
+                            writer,
+                            "{}",
+                            serde_json::to_string(&FileEndRecord {
+                                record_type: "file_end".to_string(),
+                                path: identity.path.clone(),
+                                status: "failed".to_string(),
+                                error: Some(error.to_string()),
+                                instruction_count: 0,
+                                diagnostic_count: 1,
+                                is_truncated: false,
+                                emitted_fact_count: 0,
+                                available_fact_count: 0,
+                            })
+                            .unwrap_or_default()
+                        )?;
+                        eprintln!("error: {path_str}: prototype identity analysis failed");
+                        continue;
+                    }
                 }
-            }
-        } else {
-            None
-        };
+            } else {
+                None
+            };
         let prototype_identities = prototype_identity_analysis
             .as_ref()
             .map(|analysis| {
@@ -2429,8 +2506,8 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
             .includes(ExportFactFamily::Xref)
             .then(|| XrefIndex::build(&chunk));
         let callee_analysis = (fact_selection.includes(ExportFactFamily::Callee)
-            && chunk.dialect.starts_with("lua5.1"))
-        .then(|| luad_analysis::analyze_chunk_callees(&chunk));
+            && is_lua51_profile)
+            .then(|| luad_analysis::analyze_chunk_callees(&chunk));
         let available_callee_count = callee_analysis
             .as_ref()
             .map(|analysis| {
@@ -2442,8 +2519,8 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
             })
             .unwrap_or(0);
         let origin_analysis = (fact_selection.includes(ExportFactFamily::Origin)
-            && chunk.dialect.starts_with("lua5.1"))
-        .then(|| luad_analysis::analyze_chunk_origins(&chunk));
+            && is_lua51_profile)
+            .then(|| luad_analysis::analyze_chunk_origins(&chunk));
         let available_origin_count = origin_analysis
             .as_ref()
             .map(|analysis| {
@@ -2455,8 +2532,8 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
             })
             .unwrap_or(0);
         let call_relation_analysis = (fact_selection.includes(ExportFactFamily::CallRelation)
-            && chunk.dialect.starts_with("lua5.1"))
-        .then(|| luad_analysis::analyze_chunk_call_relations(&chunk));
+            && is_lua51_profile)
+            .then(|| luad_analysis::analyze_chunk_call_relations(&chunk));
         let available_call_relation_count = call_relation_analysis
             .as_ref()
             .map(|analysis| {

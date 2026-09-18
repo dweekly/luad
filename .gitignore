@@ -5,6 +5,7 @@ fuzz/artifacts/
 **/*.rs.bk
 *.luac
 !tests/fixtures/precompiled/**
+!tests/fixtures/firmware_tree/**
 *.out
 .DS_Store
 __pycache__/

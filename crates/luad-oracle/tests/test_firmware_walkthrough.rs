@@ -298,7 +298,7 @@ fn test_firmware_walkthrough_phase2_inspection_and_layout() {
         "stderr must identify failure offset 10: {stderr}"
     );
 
-    // 5. mips_be_legacy.luac: Big-endian unsupported layout -> must exit 1 (InvalidInput) with offset 6
+    // 5. mips_be_legacy.luac: Big-endian unsupported layout -> must exit 4 (UnsupportedFormat) with offset 6
     let output = Command::new(&luad)
         .args([
             "inspect",
@@ -310,8 +310,8 @@ fn test_firmware_walkthrough_phase2_inspection_and_layout() {
         .expect("inspect mips_be_legacy.luac");
     assert_eq!(
         output.status.code(),
-        Some(1),
-        "mips_be_legacy.luac must exit 1 (InvalidInput)"
+        Some(4),
+        "mips_be_legacy.luac must exit 4 (UnsupportedFormat)"
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -474,6 +474,22 @@ fn test_firmware_walkthrough_phase4_decompiler_handoff_boundary() {
     assert!(layout_str.contains("sizet=8"));
     assert!(layout_str.contains("integral_flag=0"));
 
+    // Verify stock inspection under explicit stock dialect succeeds with exit 0
+    let stock_verify = Command::new(&luad)
+        .args([
+            "inspect",
+            fdir.join("system_service.luac").to_str().unwrap(),
+            "--dialect",
+            "lua5.1",
+        ])
+        .output()
+        .expect("inspect under explicit lua5.1");
+    assert_eq!(
+        stock_verify.status.code(),
+        Some(0),
+        "Stock candidate must validate cleanly under explicit stock dialect"
+    );
+
     // 2. Embedded candidate (dispatcher.lua):
     // Non-stock OpenWrt layout: 32-bit size_t (4), integral flag 4.
     // Standard decompilers will reject or corrupt this chunk because of the non-stock integral flag.
@@ -492,9 +508,64 @@ fn test_firmware_walkthrough_phase4_decompiler_handoff_boundary() {
     assert!(layout_str.contains("sizet=4"));
     assert!(layout_str.contains("integral_flag=4"));
 
-    // Verify that validating dispatcher.lua under strict stock expectations reports the layout divergence
+    // Verify that attempting to interpret dispatcher.lua as stock Lua 5.1 is explicitly rejected
+    let stock_reject = Command::new(&luad)
+        .args([
+            "inspect",
+            fdir.join("dispatcher.lua").to_str().unwrap(),
+            "--dialect",
+            "lua5.1",
+        ])
+        .output()
+        .expect("inspect dispatcher under stock");
+    assert_ne!(
+        stock_reject.status.code(),
+        Some(0),
+        "Embedded candidate must NOT validate cleanly under stock dialect"
+    );
+    let stderr = String::from_utf8_lossy(&stock_reject.stderr);
+    assert!(
+        stderr.contains("integral flag 4") || stderr.contains("LNUM32"),
+        "stderr must explain non-stock integral flag: {stderr}"
+    );
+
+    // 3. If an external decompiler is installed or configured, execute it:
+    let external_decompiler = std::env::var("UNLUAC_BIN").ok().or_else(|| {
+        let which_unluac = Command::new("which").arg("unluac").output();
+        if let Ok(out) = which_unluac {
+            if out.status.success() {
+                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !s.is_empty() {
+                    return Some(s);
+                }
+            }
+        }
+        None
+    });
+
+    if let Some(decompiler_path) = external_decompiler {
+        let stock_decomp = Command::new(&decompiler_path)
+            .arg(fdir.join("system_service.luac"))
+            .output();
+        if let Ok(out) = stock_decomp {
+            assert!(
+                out.status.success(),
+                "Stock candidate should decompile cleanly with {decompiler_path}"
+            );
+        }
+        let lnum_decomp = Command::new(&decompiler_path)
+            .arg(fdir.join("dispatcher.lua"))
+            .output();
+        if let Ok(out) = lnum_decomp {
+            assert!(
+                !out.status.success(),
+                "Non-stock candidate must be rejected by stock decompiler {decompiler_path}"
+            );
+        }
+    }
+
+    // Verify raw header bytes
     let lnum_bytes = fs::read(fdir.join("dispatcher.lua")).expect("read dispatcher.lua");
-    // Header format byte 0, but size_t is 4 (offset 8) and integral_flag is 4 (offset 11)
     assert_eq!(lnum_bytes[8], 4, "size_t is 4 in lnum32");
     assert_eq!(lnum_bytes[11], 4, "integral_flag is 4 in lnum32");
 
@@ -510,7 +581,6 @@ fn test_firmware_walkthrough_phase4_decompiler_handoff_boundary() {
 #[test]
 fn test_firmware_walkthrough_negative_controls() {
     let fdir = fixture_dir();
-    let root = luad_oracle::find_workspace_root();
 
     // 1. Fixture Tampering Negative Control:
     // Any mutation to fixture bytes must cause manifest hash check to fail
@@ -535,20 +605,29 @@ fn test_firmware_walkthrough_negative_controls() {
         "tampered fixture must fail manifest hash verification"
     );
 
-    // 2. Stream Truncation Negative Control:
-    // A downstream consumer requiring `export_end` must reject an incomplete JSONL stream
+    // 2. Multi-File Stream Completion Verification & Negative Controls:
+    // For a multi-file batch, downstream consumers must verify:
+    //   a. Every expected input file has a corresponding `file_end` record.
+    //   b. The terminal record is `export_end`.
+    //   c. In `export_end`, `files_processed == files_succeeded + files_skipped + files_failed`.
+    //   d. `files_processed == expected_paths.len()`.
     let luad = get_luad_bin();
-    let output = Command::new(&luad)
-        .args([
-            "export",
-            root.join("tests/fixtures/firmware_tree/dispatcher.lua")
-                .to_str()
-                .unwrap(),
-            "--format",
-            "jsonl",
-        ])
-        .output()
-        .expect("export single");
+    let batch_files = vec![
+        fdir.join("dispatcher.lua"),
+        fdir.join("network_setup.lua"),
+        fdir.join("system_service.luac"),
+        fdir.join("corrupted_module.luac"),
+        fdir.join("mips_be_legacy.luac"),
+    ];
+
+    let mut export_cmd = Command::new(&luad);
+    export_cmd.arg("export");
+    for path in &batch_files {
+        export_cmd.arg(path.to_str().unwrap());
+    }
+    export_cmd.args(["--format", "jsonl"]);
+
+    let output = export_cmd.output().expect("batch export");
     assert_eq!(output.status.code(), Some(0));
 
     let full_lines: Vec<&str> = std::str::from_utf8(&output.stdout)
@@ -556,27 +635,112 @@ fn test_firmware_walkthrough_negative_controls() {
         .lines()
         .filter(|l| !l.trim().is_empty())
         .collect();
-    assert!(full_lines.len() > 1);
+    assert!(full_lines.len() > 5);
 
-    // Function simulating consumer completion check
-    fn verify_export_stream_complete(lines: &[&str]) -> Result<u64, &'static str> {
-        let last = lines.last().ok_or("empty stream")?;
-        let rec: serde_json::Value =
-            serde_json::from_str(last).map_err(|_| "malformed JSON line")?;
-        if rec["record_type"] == "export_end" {
-            Ok(rec["files_processed"].as_u64().unwrap_or(0))
-        } else {
-            Err("stream truncated: missing terminal export_end record")
+    // Function simulating downstream consumer completion verification
+    fn verify_export_stream_complete(
+        lines: &[&str],
+        expected_paths: &[PathBuf],
+    ) -> Result<u64, String> {
+        let last = lines.last().ok_or_else(|| "empty stream".to_string())?;
+        let export_end_rec: serde_json::Value = serde_json::from_str(last)
+            .map_err(|e| format!("malformed export_end JSON line: {e}"))?;
+        if export_end_rec["record_type"] != "export_end" {
+            return Err("stream truncated: missing terminal export_end record".to_string());
         }
+
+        let files_processed = export_end_rec["files_processed"]
+            .as_u64()
+            .ok_or_else(|| "missing files_processed".to_string())?;
+        let files_succeeded = export_end_rec["files_succeeded"]
+            .as_u64()
+            .ok_or_else(|| "missing files_succeeded".to_string())?;
+        let files_skipped = export_end_rec["files_skipped"]
+            .as_u64()
+            .ok_or_else(|| "missing files_skipped".to_string())?;
+        let files_failed = export_end_rec["files_failed"]
+            .as_u64()
+            .ok_or_else(|| "missing files_failed".to_string())?;
+
+        // Closure equation: files_processed must equal sum of outcomes
+        if files_processed != files_succeeded + files_skipped + files_failed {
+            return Err(format!(
+                "inconsistent export summary: files_processed ({files_processed}) != succeeded ({files_succeeded}) + skipped ({files_skipped}) + failed ({files_failed})"
+            ));
+        }
+
+        // Must match expected count
+        if files_processed != expected_paths.len() as u64 {
+            return Err(format!(
+                "processed file count mismatch: expected {}, got {files_processed}",
+                expected_paths.len()
+            ));
+        }
+
+        // Find all file_end records
+        let mut ended_paths = std::collections::HashSet::new();
+        for line in &lines[..lines.len() - 1] {
+            if let Ok(rec) = serde_json::from_str::<serde_json::Value>(line) {
+                if rec["record_type"] == "file_end" {
+                    if let Some(path_str) = rec["path"].as_str() {
+                        ended_paths.insert(PathBuf::from(path_str));
+                    }
+                }
+            }
+        }
+
+        // Verify each expected file has a file_end record
+        for exp in expected_paths {
+            if !ended_paths.contains(exp) {
+                return Err(format!(
+                    "stream missing file_end record for expected file: {}",
+                    exp.display()
+                ));
+            }
+        }
+
+        Ok(files_processed)
     }
 
     // Complete stream passes
-    assert!(verify_export_stream_complete(&full_lines).is_ok());
+    let verified_count = verify_export_stream_complete(&full_lines, &batch_files)
+        .expect("complete stream must verify");
+    assert_eq!(verified_count, batch_files.len() as u64);
 
-    // Truncated stream (omitting last line) fails
+    // Negative Control 1: Truncated stream (omitting export_end)
     let truncated_lines = &full_lines[..full_lines.len() - 1];
-    let err = verify_export_stream_complete(truncated_lines).unwrap_err();
-    assert_eq!(err, "stream truncated: missing terminal export_end record");
+    let err = verify_export_stream_complete(truncated_lines, &batch_files).unwrap_err();
+    assert!(err.contains("missing terminal export_end record"));
+
+    // Negative Control 2: Missing file_end record (dropped in transit)
+    let missing_file_end_lines: Vec<&str> = full_lines
+        .iter()
+        .copied()
+        .filter(|line| {
+            if let Ok(rec) = serde_json::from_str::<serde_json::Value>(line) {
+                if rec["record_type"] == "file_end"
+                    && rec["path"].as_str() == Some(batch_files[0].to_str().unwrap())
+                {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect();
+    let err = verify_export_stream_complete(&missing_file_end_lines, &batch_files).unwrap_err();
+    assert!(err.contains("stream missing file_end record for expected file"));
+
+    // Negative Control 3: Inconsistent summary counts in export_end (files_processed != sum of parts)
+    let bad_summary = r#"{"record_type":"export_end","files_processed":5,"files_succeeded":1,"files_skipped":1,"files_failed":0,"total_instructions":102}"#;
+    let mut bad_summary_lines = full_lines.clone();
+    bad_summary_lines.pop();
+    bad_summary_lines.push(bad_summary);
+    let err = verify_export_stream_complete(&bad_summary_lines, &batch_files).unwrap_err();
+    assert!(err.contains("inconsistent export summary"));
+
+    // Negative Control 4: Count mismatch against caller expectations
+    let err = verify_export_stream_complete(&full_lines, &batch_files[..3]).unwrap_err();
+    assert!(err.contains("processed file count mismatch"));
 
     // 3. Strict Mode Negative Control:
     // Verify that --strict turns batch export on mixed tree into exit code 1

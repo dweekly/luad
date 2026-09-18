@@ -7,6 +7,8 @@ use luad_core::id::StableId;
 use luad_core::ir::EffectTarget;
 use luad_core::model::{Chunk, Prototype};
 
+const LUA51_PROFILES: &[&str] = &["lua5.1", "lua5.1-lnum32", "lua5.1-stock32"];
+
 /// Semantic nature of a reference.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
@@ -66,7 +68,7 @@ impl XrefIndex {
     pub fn build(chunk: &Chunk) -> Self {
         let mut index = Self::default();
         index.index_proto(&chunk.dialect, &chunk.main_proto);
-        if chunk.dialect.starts_with("lua5.1") {
+        if LUA51_PROFILES.contains(&chunk.dialect.as_str()) {
             let call_relations = crate::analyze_chunk_call_relations(chunk);
             for fact in call_relations
                 .prototypes
@@ -145,7 +147,7 @@ impl XrefIndex {
                         });
 
                         if let Some(child_proto) = proto.protos.get(*child_idx) {
-                            if dialect.starts_with("lua5.1") {
+                            if LUA51_PROFILES.contains(&dialect) {
                                 for upval_idx in 0..child_proto.upvalues.len() {
                                     let child_upval_id =
                                         StableId::upvalue(child_proto.path.clone(), upval_idx);

@@ -275,10 +275,10 @@ fn test_tripwire_5_repeated_invalid_operands_bounded() {
     let metrics = run_with_tripwire(&luad, &["validate", path_str], None, &budget)
         .expect("Repeated invalid operands validation must finish within tripwire budget");
 
-    assert_eq!(
-        metrics.status.code(),
-        Some(1),
-        "Validation with errors must exit 1"
+    assert!(
+        metrics.status.code() == Some(1) || metrics.status.code() == Some(5),
+        "Validation with diagnostic exhaustion must exit with failure (1 or 5), got: {:?}",
+        metrics.status.code()
     );
 }
 

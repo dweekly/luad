@@ -162,8 +162,8 @@ fn test_cli_rejection_of_corrupted_headers_with_exact_offset_and_code() {
 
         assert_eq!(
             out_detected.status.code(),
-            Some(1),
-            "Corrupted chunk must fail with exit code 1"
+            Some(4),
+            "Unsupported format/layout chunk must fail with exit code 4 (UnsupportedFormat)"
         );
         let stderr = String::from_utf8_lossy(&out_detected.stderr);
         assert!(
@@ -183,8 +183,8 @@ fn test_cli_rejection_of_corrupted_headers_with_exact_offset_and_code() {
 
         assert_eq!(
             out_explicit.status.code(),
-            Some(1),
-            "Corrupted chunk in explicit mode must fail with exit code 1"
+            Some(4),
+            "Unsupported format/layout chunk in explicit mode must fail with exit code 4 (UnsupportedFormat)"
         );
         let stderr_exp = String::from_utf8_lossy(&out_explicit.stderr);
         assert!(
@@ -196,4 +196,25 @@ fn test_cli_rejection_of_corrupted_headers_with_exact_offset_and_code() {
             "Explicit stderr must report '{expected_snippet}' for {dialect} byte {byte_idx}: {stderr_exp}"
         );
     }
+
+    // Negative control: Genuine corruption (e.g. corrupted LUAC_TAIL marker) must fail with exit code 1 (InvalidInput), NOT code 4
+    let mut raw_tail = get_fixture_bytes("lua5.2", "hello", false).unwrap();
+    raw_tail[12] ^= 0xff;
+    let corrupted_tail_file = temp_dir.path().join("lua52_corrupted_tail.luac");
+    fs::write(&corrupted_tail_file, &raw_tail).unwrap();
+
+    let out_tail = Command::new(&luad)
+        .args([
+            "inspect",
+            corrupted_tail_file.to_str().unwrap(),
+            "-d",
+            "lua5.2",
+        ])
+        .output()
+        .expect("run luad on corrupted tail");
+    assert_eq!(
+        out_tail.status.code(),
+        Some(1),
+        "Corrupted LUAC_TAIL marker must fail with exit code 1 (InvalidInput), not 4"
+    );
 }

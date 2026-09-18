@@ -82,6 +82,13 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         suggested_action: "Increase max total prototypes limit or inspect chunk for excessive prototype definitions.",
     },
     StaticDiagnosticDescriptor {
+        code: "CORE-LIMIT-003",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Diagnostic collection safety limit exceeded; validation terminated early and is incomplete.",
+        suggested_action: "Examine earlier diagnostics; validation halted due to safety limit and subsequent structures were not verified.",
+    },
+    StaticDiagnosticDescriptor {
         code: "CORE-OVERFLOW-001",
         severity: Severity::Error,
         category: DiagnosticCategory::Parse,

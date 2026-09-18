@@ -40,13 +40,25 @@ pub fn validate_chunk_lua54(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
     }
 
     // 2. Prototype validation
-    validate_proto_lua54(&chunk.main_proto, &mut diagnostics);
+    let mut limit_reached = diagnostics.len() >= MAX_DIAGNOSTICS;
+    if !limit_reached {
+        validate_proto_lua54(&chunk.main_proto, &mut diagnostics, &mut limit_reached);
+    }
 
-    let mut deduped = Vec::with_capacity(diagnostics.len().min(MAX_DIAGNOSTICS));
+    if limit_reached {
+        diagnostics.push(Diagnostic::error(
+            "CORE-LIMIT-003",
+            DiagnosticCategory::Parse,
+            chunk.main_proto.id.clone(),
+            format!("Diagnostic collection limit ({MAX_DIAGNOSTICS}) exceeded; validation terminated early and is incomplete"),
+        ));
+    }
+
+    let mut deduped = Vec::with_capacity(diagnostics.len().min(MAX_DIAGNOSTICS + 1));
     let mut seen = std::collections::HashSet::new();
     for diag in diagnostics {
-        if deduped.len() >= MAX_DIAGNOSTICS {
-            break;
+        if deduped.len() >= MAX_DIAGNOSTICS && diag.code != "CORE-LIMIT-003" {
+            continue;
         }
         if seen.insert(diag.clone()) {
             deduped.push(diag);
@@ -55,7 +67,9 @@ pub fn validate_chunk_lua54(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
     let diagnostics = deduped;
 
     let has_errors = diagnostics.iter().any(|d| d.severity == Severity::Error);
-    let verdict = if has_errors {
+    let verdict = if limit_reached {
+        Verdict::Incomplete
+    } else if has_errors {
         Verdict::Invalid
     } else {
         Verdict::ValidForAnalysis
@@ -75,8 +89,13 @@ fn uses_register_a(op: Opcode54) -> bool {
     )
 }
 
-fn validate_proto_lua54(proto: &Prototype, diagnostics: &mut Vec<Diagnostic>) {
-    if diagnostics.len() >= MAX_DIAGNOSTICS {
+fn validate_proto_lua54(
+    proto: &Prototype,
+    diagnostics: &mut Vec<Diagnostic>,
+    limit_reached: &mut bool,
+) {
+    if *limit_reached || diagnostics.len() >= MAX_DIAGNOSTICS {
+        *limit_reached = true;
         return;
     }
     let _proto_id = proto.id.clone();
@@ -88,6 +107,7 @@ fn validate_proto_lua54(proto: &Prototype, diagnostics: &mut Vec<Diagnostic>) {
     // Validate instructions
     for inst in &proto.instructions {
         if diagnostics.len() >= MAX_DIAGNOSTICS {
+            *limit_reached = true;
             return;
         }
         let raw = RawInstruction54::decode(inst.raw_word);
@@ -201,9 +221,10 @@ fn validate_proto_lua54(proto: &Prototype, diagnostics: &mut Vec<Diagnostic>) {
 
     // Recursively validate child prototypes
     for child in &proto.protos {
-        if diagnostics.len() >= MAX_DIAGNOSTICS {
+        if *limit_reached || diagnostics.len() >= MAX_DIAGNOSTICS {
+            *limit_reached = true;
             return;
         }
-        validate_proto_lua54(child, diagnostics);
+        validate_proto_lua54(child, diagnostics, limit_reached);
     }
 }

@@ -8,9 +8,11 @@
 //!
 //! Provides negative controls to prove that the monitor detects over-budget executions.
 
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Command, ExitStatus, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
@@ -213,6 +215,12 @@ pub fn run_with_tripwire(
         cmd.stdin(Stdio::null());
     }
 
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+
     let start = Instant::now();
     let mut child = cmd.spawn()?;
 
@@ -222,16 +230,139 @@ pub fn run_with_tripwire(
         }
     }
 
-    let output = child.wait_with_output()?;
-    let wall_time = start.elapsed();
+    let child_stdout = child.stdout.take();
+    let child_stderr = child.stderr.take();
 
-    let (cleaned_stderr, peak_rss_bytes) = if use_macos_time {
-        parse_macos_time_trailer(&output.stderr)
-    } else if use_gnu_time {
-        parse_gnu_time_trailer(&output.stderr)
-    } else {
-        (output.stderr, None)
+    let stdout_limit = budget.max_stdout_bytes;
+    let stderr_limit = budget.max_stderr_bytes;
+
+    let stdout_exceeded = Arc::new(AtomicBool::new(false));
+    let stdout_len = Arc::new(AtomicUsize::new(0));
+    let stdout_buf = Arc::new(Mutex::new(Vec::new()));
+
+    let stdout_handle = {
+        let stdout_exceeded = Arc::clone(&stdout_exceeded);
+        let stdout_len = Arc::clone(&stdout_len);
+        let stdout_buf = Arc::clone(&stdout_buf);
+        std::thread::spawn(move || {
+            if let Some(mut reader) = child_stdout {
+                let mut chunk = [0u8; 8192];
+                let mut total = 0;
+                while let Ok(n) = reader.read(&mut chunk) {
+                    if n == 0 {
+                        break;
+                    }
+                    total += n;
+                    stdout_len.store(total, Ordering::SeqCst);
+                    let mut lock = stdout_buf.lock().unwrap();
+                    if lock.len() <= stdout_limit + 8192 {
+                        lock.extend_from_slice(&chunk[..n]);
+                    }
+                    if total > stdout_limit {
+                        stdout_exceeded.store(true, Ordering::SeqCst);
+                        break;
+                    }
+                }
+            }
+        })
     };
+
+    let stderr_exceeded = Arc::new(AtomicBool::new(false));
+    let stderr_len = Arc::new(AtomicUsize::new(0));
+    let stderr_buf = Arc::new(Mutex::new(Vec::new()));
+
+    let stderr_handle = {
+        let stderr_exceeded = Arc::clone(&stderr_exceeded);
+        let stderr_len = Arc::clone(&stderr_len);
+        let stderr_buf = Arc::clone(&stderr_buf);
+        std::thread::spawn(move || {
+            if let Some(mut reader) = child_stderr {
+                let mut chunk = [0u8; 8192];
+                let mut total = 0;
+                while let Ok(n) = reader.read(&mut chunk) {
+                    if n == 0 {
+                        break;
+                    }
+                    total += n;
+                    stderr_len.store(total, Ordering::SeqCst);
+                    let mut lock = stderr_buf.lock().unwrap();
+                    if lock.len() <= stderr_limit + 8192 {
+                        lock.extend_from_slice(&chunk[..n]);
+                    }
+                    if total > stderr_limit {
+                        stderr_exceeded.store(true, Ordering::SeqCst);
+                        break;
+                    }
+                }
+            }
+        })
+    };
+
+    let kill_child_tree = |child: &mut std::process::Child| {
+        let pid = child.id();
+        #[cfg(unix)]
+        {
+            let kill_bin = if Path::new("/bin/kill").exists() {
+                "/bin/kill"
+            } else {
+                "kill"
+            };
+            let _ = Command::new(kill_bin)
+                .args(["-9", &format!("-{}", pid)])
+                .output();
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    };
+
+    let poll_interval = Duration::from_millis(5);
+    let exit_status;
+
+    loop {
+        if let Some(status) = child.try_wait()? {
+            exit_status = status;
+            break;
+        }
+
+        let elapsed = start.elapsed();
+        if elapsed > budget.max_wall_time {
+            kill_child_tree(&mut child);
+            let _ = stdout_handle.join();
+            let _ = stderr_handle.join();
+            return Err(TripwireError::WallTimeCeilingExceeded {
+                elapsed,
+                ceiling: budget.max_wall_time,
+            });
+        }
+
+        if stdout_exceeded.load(Ordering::SeqCst) {
+            kill_child_tree(&mut child);
+            let _ = stdout_handle.join();
+            let _ = stderr_handle.join();
+            let len = stdout_len.load(Ordering::SeqCst);
+            return Err(TripwireError::StdoutCeilingExceeded {
+                length: len,
+                ceiling: budget.max_stdout_bytes,
+            });
+        }
+
+        if stderr_exceeded.load(Ordering::SeqCst) {
+            kill_child_tree(&mut child);
+            let _ = stdout_handle.join();
+            let _ = stderr_handle.join();
+            let len = stderr_len.load(Ordering::SeqCst);
+            return Err(TripwireError::StderrCeilingExceeded {
+                length: len,
+                ceiling: budget.max_stderr_bytes,
+            });
+        }
+
+        std::thread::sleep(poll_interval);
+    }
+
+    let _ = stdout_handle.join();
+    let _ = stderr_handle.join();
+    let wall_time = start.elapsed();
 
     // 1. Verify wall time ceiling
     if wall_time > budget.max_wall_time {
@@ -242,17 +373,30 @@ pub fn run_with_tripwire(
     }
 
     // 2. Verify stdout length ceiling
-    if output.stdout.len() > budget.max_stdout_bytes {
+    let total_stdout = stdout_len.load(Ordering::SeqCst);
+    if stdout_exceeded.load(Ordering::SeqCst) || total_stdout > budget.max_stdout_bytes {
         return Err(TripwireError::StdoutCeilingExceeded {
-            length: output.stdout.len(),
+            length: total_stdout,
             ceiling: budget.max_stdout_bytes,
         });
     }
 
+    let raw_stdout = stdout_buf.lock().unwrap().clone();
+    let raw_stderr = stderr_buf.lock().unwrap().clone();
+
+    let (cleaned_stderr, peak_rss_bytes) = if use_macos_time {
+        parse_macos_time_trailer(&raw_stderr)
+    } else if use_gnu_time {
+        parse_gnu_time_trailer(&raw_stderr)
+    } else {
+        (raw_stderr, None)
+    };
+
     // 3. Verify stderr length ceiling
-    if cleaned_stderr.len() > budget.max_stderr_bytes {
+    let total_stderr = stderr_len.load(Ordering::SeqCst);
+    if stderr_exceeded.load(Ordering::SeqCst) || cleaned_stderr.len() > budget.max_stderr_bytes {
         return Err(TripwireError::StderrCeilingExceeded {
-            length: cleaned_stderr.len(),
+            length: cleaned_stderr.len().max(total_stderr),
             ceiling: budget.max_stderr_bytes,
         });
     }
@@ -268,8 +412,8 @@ pub fn run_with_tripwire(
     }
 
     Ok(TripwireMetrics {
-        status: output.status,
-        stdout: output.stdout,
+        status: exit_status,
+        stdout: raw_stdout,
         stderr: cleaned_stderr,
         wall_time,
         peak_rss_bytes,
@@ -297,5 +441,74 @@ mod tests {
         let (cleaned, rss) = parse_gnu_time_trailer(raw);
         assert_eq!(String::from_utf8_lossy(&cleaned), "actual error line\n");
         assert_eq!(rss, Some(4096 * 1024));
+    }
+
+    #[test]
+    fn test_tripwire_kills_sleeper_promptly_without_waiting() {
+        let sh = Path::new("/bin/sh");
+        if !sh.exists() {
+            return;
+        }
+
+        let budget = TripwireBudget {
+            max_wall_time: Duration::from_millis(15),
+            max_peak_rss_bytes: 1024 * 1024 * 1024,
+            max_stdout_bytes: 1024 * 1024,
+            max_stderr_bytes: 1024 * 1024,
+        };
+
+        let start = Instant::now();
+        let res = run_with_tripwire(sh, &["-c", "sleep 0.3"], None, &budget);
+        let elapsed = start.elapsed();
+
+        match res {
+            Err(TripwireError::WallTimeCeilingExceeded { ceiling, .. }) => {
+                assert_eq!(ceiling, Duration::from_millis(15));
+                assert!(
+                    elapsed < Duration::from_millis(200),
+                    "Tripwire must kill child actively (took {elapsed:?}), not wait for 300ms sleeper to finish"
+                );
+            }
+            other => panic!("Expected WallTimeCeilingExceeded, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_tripwire_kills_infinite_output_producer_promptly() {
+        let sh = Path::new("/bin/sh");
+        if !sh.exists() {
+            return;
+        }
+
+        let budget = TripwireBudget {
+            max_wall_time: Duration::from_secs(5),
+            max_peak_rss_bytes: 1024 * 1024 * 1024,
+            max_stdout_bytes: 50,
+            max_stderr_bytes: 1024 * 1024,
+        };
+
+        let start = Instant::now();
+        let res = run_with_tripwire(
+            sh,
+            &[
+                "-c",
+                "while true; do echo 'tripwire output limit exceed test line'; done",
+            ],
+            None,
+            &budget,
+        );
+        let elapsed = start.elapsed();
+
+        match res {
+            Err(TripwireError::StdoutCeilingExceeded { ceiling, length }) => {
+                assert_eq!(ceiling, 50);
+                assert!(length >= 50);
+                assert!(
+                    elapsed < Duration::from_millis(500),
+                    "Tripwire must kill streaming child actively (took {elapsed:?})"
+                );
+            }
+            other => panic!("Expected StdoutCeilingExceeded, got {other:?}"),
+        }
     }
 }

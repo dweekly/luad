@@ -337,13 +337,13 @@ This end-to-end recipe demonstrates investigating an extracted embedded firmware
 Triage the mixed directory in a single streaming pass using `luad export`:
 
 ```bash
-luad export tests/fixtures/firmware_tree/* --format jsonl
+luad export tests/fixtures/firmware_tree/*.lua tests/fixtures/firmware_tree/*.luac --format jsonl
 ```
 
 Filter for file completion records and summary statistics:
 
 ```bash
-luad export tests/fixtures/firmware_tree/* --format jsonl | jq -c '
+luad export tests/fixtures/firmware_tree/*.lua tests/fixtures/firmware_tree/*.luac --format jsonl | jq -c '
   if .record_type == "file_end" then
     {file: .path, status: .status, emitted: .emitted_fact_count}
   elif .record_type == "export_end" then
@@ -366,7 +366,7 @@ The terminal `export_end` record verifies complete traversal: `processed == succ
 For automated CI/gate scripts where any invalid or skipped input should stop execution, add `--strict` to exit with status code 1:
 
 ```bash
-luad export tests/fixtures/firmware_tree/* --format jsonl --strict
+luad export tests/fixtures/firmware_tree/*.lua tests/fixtures/firmware_tree/*.luac --format jsonl --strict
 ```
 
 ### Phase 2: Per-File Inspection and Layout Authority
@@ -387,7 +387,7 @@ luad inspect tests/fixtures/firmware_tree/network_setup.lua
 luad inspect tests/fixtures/firmware_tree/corrupted_module.luac
 # error: Parsing failed at offset 10: Unexpected EOF: requested 1 bytes at offset 10, only 0 available
 
-# 5. Unsupported endianness: refused honestly at offset 6 rather than silently misreading operands (exits with code 1)
+# 5. Unsupported endianness: refused honestly at offset 6 rather than silently misreading operands (exits with code 4)
 luad inspect tests/fixtures/firmware_tree/mips_be_legacy.luac
 # error: Parsing failed at offset 6: Chunk layout validation failed: Unsupported endianness 0: only Little-Endian (1) is currently supported
 ```
