@@ -125,17 +125,22 @@ fn load_string_51(
 ) -> Result<Option<LuaString>, Diagnostic> {
     // Lua 5.1 encodes a string's payload plus terminator in the header-declared size_t
     // width. The terminator is serialized data and is not part of the Lua string.
+    let size_pos = reader.position();
+    let size_cursor = reader.cursor_offset();
     let size = if sizeof_sizet == 4 {
         reader.read_u32_le()? as usize
     } else {
         reader.read_u64_le()? as usize
     };
+    let size_raw = reader.slice_from_cursor(size_cursor)?;
+    let size_loc = SourceLocation::new(size_pos, size_raw);
     if size == 0 {
         Ok(None)
     } else {
         let content_len = size.saturating_sub(1);
         reader.check_string_limit(content_len as u64, |target, message| {
             Diagnostic::error("L51-STR-001", DiagnosticCategory::Parse, target, message)
+                .with_source(size_loc)
         })?;
         let bytes_with_null = reader.read_exact(size)?;
         let content = &bytes_with_null[..content_len];
@@ -166,14 +171,19 @@ fn load_proto_51(
     let maxstacksize = reader.read_u8()?;
 
     // 3. Instructions
+    let sizecode_pos = reader.position();
+    let sizecode_cursor = reader.cursor_offset();
     let sizecode = reader.read_i32_le()? as usize;
+    let sizecode_raw = reader.slice_from_cursor(sizecode_cursor)?;
+    let sizecode_loc = SourceLocation::new(sizecode_pos, sizecode_raw);
     if sizecode > reader.limits().max_instructions_per_proto {
         let diag = Diagnostic::error(
             "L51-CODE-001",
             DiagnosticCategory::Parse,
             StableId::proto(path.clone()),
             format!("Instruction count {sizecode} exceeds safety limit"),
-        );
+        )
+        .with_source(sizecode_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -194,14 +204,19 @@ fn load_proto_51(
     }
 
     // 4. Constants
+    let sizek_pos = reader.position();
+    let sizek_cursor = reader.cursor_offset();
     let sizek = reader.read_i32_le()? as usize;
+    let sizek_raw = reader.slice_from_cursor(sizek_cursor)?;
+    let sizek_loc = SourceLocation::new(sizek_pos, sizek_raw);
     if sizek > reader.limits().max_constants_per_proto {
         let diag = Diagnostic::error(
             "L51-CONST-001",
             DiagnosticCategory::Parse,
             StableId::proto(path.clone()),
             format!("Constant count {sizek} exceeds safety limit"),
-        );
+        )
+        .with_source(sizek_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -280,7 +295,8 @@ fn load_proto_51(
                         DiagnosticCategory::Parse,
                         StableId::constant(path.clone(), idx),
                         "Invalid constant tag 9: tag 9 is an LNUM extension; use profile 'lua5.1-lnum32' to decode",
-                    );
+                    )
+                    .with_source(SourceLocation::new(const_pos, &[tag]));
                     reader.record_diagnostic(diag.clone())?;
                     return Err(diag);
                 }
@@ -291,7 +307,8 @@ fn load_proto_51(
                     DiagnosticCategory::Parse,
                     StableId::constant(path.clone(), idx),
                     format!("Invalid constant tag {other}"),
-                );
+                )
+                .with_source(SourceLocation::new(const_pos, &[other]));
                 reader.record_diagnostic(diag.clone())?;
                 return Err(diag);
             }
@@ -307,14 +324,19 @@ fn load_proto_51(
     }
 
     // 5. Child Prototypes
+    let sizep_pos = reader.position();
+    let sizep_cursor = reader.cursor_offset();
     let sizep = reader.read_i32_le()? as usize;
+    let sizep_raw = reader.slice_from_cursor(sizep_cursor)?;
+    let sizep_loc = SourceLocation::new(sizep_pos, sizep_raw);
     if sizep > reader.limits().max_total_prototypes {
         let diag = Diagnostic::error(
             "L51-PROTO-001",
             DiagnosticCategory::Parse,
             StableId::proto(path.clone()),
             format!("Prototype count {sizep} exceeds safety limit"),
-        );
+        )
+        .with_source(sizep_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }

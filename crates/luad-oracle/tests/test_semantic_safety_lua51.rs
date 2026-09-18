@@ -14,7 +14,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::process::{Command, Output};
-use std::sync::OnceLock;
 
 use luad_analysis::{
     analyze_chunk_call_relations, analyze_chunk_callees,
@@ -727,25 +726,7 @@ fn workspace_root() -> PathBuf {
 // ---------------------------------------------------------------------------
 
 fn luad_bin() -> PathBuf {
-    static LUAD: OnceLock<PathBuf> = OnceLock::new();
-    LUAD.get_or_init(|| {
-        if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
-            return path.into();
-        }
-        let root = workspace_root();
-        let output = Command::new("cargo")
-            .args(["build", "-p", "luad-cli", "--bin", "luad"])
-            .current_dir(&root)
-            .output()
-            .expect("build luad CLI");
-        assert!(
-            output.status.success(),
-            "luad build failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        root.join("target/debug/luad")
-    })
-    .clone()
+    luad_oracle::luad_binary_path()
 }
 
 fn run_luad(args: &[&str]) -> Output {

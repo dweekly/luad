@@ -86,14 +86,20 @@ Machine consumers should use JSON or JSONL. Human diagnostics are written to std
 
 Output ordering is intended to be deterministic for identical input bytes, options, tool version, and parse interpretation. Treat any nondeterminism as a defect.
 
+### Stream lifecycle and early termination
+
+Output writes to stdout are checked across all CLI output formats (incremental text, JSON, streaming JSONL, Graphviz DOT, schema dumps, diagnostic catalogs, and shell completions). When downstream consumers close the receiving pipe early (e.g. `head -n 1`, `grep -q`, or an early-exiting subscriber process), `luad` handles `io::ErrorKind::BrokenPipe` (`EPIPE`) by terminating quietly with exit code 0 (`ExitCode::Success`) without printing backtraces or diagnostics to stderr. Non-pipe output write errors (such as disk full or permission errors) return exit code 3 (`ExitCode::IoError`).
+
+Callers consuming streaming JSONL output (e.g. `luad export --format jsonl`) must note that an early-closed or abandoned stream will lack its terminal completion records (`file_end` and/or `export_end`), even though the process terminated cleanly with exit code 0. Consumers that require complete batch verification must assert the presence of terminal records in the stream.
+
 ## Exit codes
 
 | Code | Meaning |
 |---:|---|
-| 0 | Command completed successfully |
+| 0 | Command completed successfully, or downstream consumer closed output pipe early |
 | 1 | Input was parsed but failed the requested validity condition |
 | 2 | Usage, selector, schema, or option error |
-| 3 | Input/output failure |
+| 3 | Input/output failure (file read failure, storage write failure, permission, etc.; non-pipe I/O) |
 | 4 | Unsupported or ambiguous format |
 | 5 | Configured resource limit reached |
 | 6 | Internal error |
@@ -108,6 +114,7 @@ The following outcome rules apply at the process boundary:
 | Outcome | Exit | Stdout |
 |---|---:|---|
 | Successful command, including a query with zero matches | 0 | Complete output in the requested format |
+| Downstream closed output pipe early (`BrokenPipe`) | 0 | Truncated output up to pipe close point; no stderr commentary |
 | Parsed input with validation findings | 1 | Complete validation result |
 | Parse failure after a format has been recognized, such as a truncated chunk body | 1 | Empty for single-input analysis commands |
 | Invalid predicate, selector, option, schema major, or command | 2 | Empty |

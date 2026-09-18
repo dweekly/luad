@@ -3,11 +3,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::sync::OnceLock;
 
 use serde_json::{json, Value};
 
-const PINNED_CODES: [&str; 116] = [
+const PINNED_CODES: [&str; 157] = [
+    "ANA-PRECOND-001",
     "CORE-LIMIT-001",
     "CORE-LIMIT-002",
     "CORE-OVERFLOW-001",
@@ -45,20 +45,37 @@ const PINNED_CODES: [&str; 116] = [
     "L51-UPVAL-001",
     "L52-CHUNK-001",
     "L52-CODE-001",
+    "L52-COMPANION-001",
     "L52-CONST-001",
+    "L52-CONST-002",
     "L52-HEADER-001",
     "L52-HEADER-002",
     "L52-HEADER-003",
+    "L52-HEADER-004",
+    "L52-HEADER-005",
+    "L52-HEADER-006",
+    "L52-HEADER-007",
+    "L52-HEADER-008",
+    "L52-HEADER-009",
+    "L52-HEADER-010",
     "L52-JMP-001",
     "L52-OP-001",
     "L52-PROTO-001",
+    "L52-PROTO-002",
+    "L52-REG-001",
+    "L52-REG-002",
+    "L52-REG-003",
+    "L52-REG-SPAN-001",
     "L52-STACK-001",
     "L52-STR-001",
     "L52-UPVAL-001",
+    "L52-UPVAL-002",
     "L53-CHUNK-001",
     "L53-CODE-001",
+    "L53-COMPANION-001",
     "L53-CONST-001",
     "L53-CONST-002",
+    "L53-CONST-003",
     "L53-HEADER-001",
     "L53-HEADER-002",
     "L53-HEADER-003",
@@ -69,12 +86,19 @@ const PINNED_CODES: [&str; 116] = [
     "L53-HEADER-008",
     "L53-HEADER-009",
     "L53-HEADER-010",
+    "L53-HEADER-011",
     "L53-JMP-001",
     "L53-OP-001",
     "L53-PROTO-001",
+    "L53-PROTO-002",
+    "L53-REG-001",
+    "L53-REG-002",
+    "L53-REG-003",
+    "L53-REG-SPAN-001",
     "L53-STACK-001",
     "L53-STR-001",
     "L53-UPVAL-001",
+    "L53-UPVAL-002",
     "L54-CHUNK-001",
     "L54-CODE-001",
     "L54-CONST-001",
@@ -108,25 +132,42 @@ const PINNED_CODES: [&str; 116] = [
     "L54-VARINT-001",
     "L55-CHUNK-001",
     "L55-CODE-001",
+    "L55-COMPANION-001",
     "L55-CONST-001",
+    "L55-CONST-002",
     "L55-HEADER-001",
     "L55-HEADER-002",
     "L55-HEADER-003",
     "L55-HEADER-004",
+    "L55-HEADER-005",
+    "L55-HEADER-006",
+    "L55-HEADER-007",
+    "L55-HEADER-008",
+    "L55-HEADER-009",
+    "L55-HEADER-010",
+    "L55-HEADER-011",
+    "L55-HEADER-012",
     "L55-JMP-001",
     "L55-OP-001",
     "L55-PROTO-001",
+    "L55-PROTO-002",
+    "L55-REG-001",
+    "L55-REG-002",
+    "L55-REG-003",
+    "L55-REG-SPAN-001",
     "L55-STACK-001",
     "L55-STR-001",
     "L55-STR-002",
     "L55-UPVAL-001",
+    "L55-UPVAL-002",
     "L55-VARINT-001",
     "PARSE-001",
     "PARSE-SOURCE-001",
     "PARSE-UNKNOWN-001",
 ];
 
-const CONTRIBUTOR_FILES: [&str; 19] = [
+const CONTRIBUTOR_FILES: [&str; 20] = [
+    "crates/luad-analysis/src/lib.rs",
     "crates/luad-cli/src/main.rs",
     "crates/luad-core/src/reader.rs",
     "crates/luad-dialect-lua51/src/chunk.rs",
@@ -148,20 +189,17 @@ const CONTRIBUTOR_FILES: [&str; 19] = [
     "crates/luad-dialect-lua55/src/validator.rs",
 ];
 
-const WARNING_CODES: [&str; 14] = [
+const WARNING_CODES: [&str; 11] = [
     "L51-CHUNK-001",
     "L51-STACK-001",
     "L52-CHUNK-001",
     "L52-STACK-001",
     "L53-CHUNK-001",
-    "L53-HEADER-003",
-    "L53-HEADER-010",
     "L53-STACK-001",
     "L54-CHUNK-001",
     "L54-HEADER-003",
     "L54-VAL-REG-001",
     "L55-CHUNK-001",
-    "L55-HEADER-003",
     "L55-STACK-001",
 ];
 
@@ -174,14 +212,21 @@ const CONTROL_FLOW_CODES: [&str; 6] = [
     "L55-JMP-001",
 ];
 
-const ANALYSIS_CODES: [&str; 1] = ["INTERNAL-IDENTITY-001"];
+const ANALYSIS_CODES: [&str; 2] = ["ANA-PRECOND-001", "INTERNAL-IDENTITY-001"];
 
-const STRUCTURE_CODES: [&str; 31] = [
+const STRUCTURE_CODES: [&str; 47] = [
     "IO-001",
     "L51-CHUNK-001",
     "L51-STACK-001",
     "L52-CHUNK-001",
     "L52-HEADER-003",
+    "L52-HEADER-004",
+    "L52-HEADER-005",
+    "L52-HEADER-006",
+    "L52-HEADER-007",
+    "L52-HEADER-008",
+    "L52-HEADER-009",
+    "L52-HEADER-010",
     "L52-STACK-001",
     "L53-CHUNK-001",
     "L53-HEADER-003",
@@ -192,6 +237,7 @@ const STRUCTURE_CODES: [&str; 31] = [
     "L53-HEADER-008",
     "L53-HEADER-009",
     "L53-HEADER-010",
+    "L53-HEADER-011",
     "L53-STACK-001",
     "L54-CHUNK-001",
     "L54-HEADER-003",
@@ -207,10 +253,18 @@ const STRUCTURE_CODES: [&str; 31] = [
     "L55-CHUNK-001",
     "L55-HEADER-003",
     "L55-HEADER-004",
+    "L55-HEADER-005",
+    "L55-HEADER-006",
+    "L55-HEADER-007",
+    "L55-HEADER-008",
+    "L55-HEADER-009",
+    "L55-HEADER-010",
+    "L55-HEADER-011",
+    "L55-HEADER-012",
     "L55-STACK-001",
 ];
 
-const INSTRUCTION_CODES: [&str; 28] = [
+const INSTRUCTION_CODES: [&str; 52] = [
     "L51-BOOL-001",
     "L51-CLOSURE-001",
     "L51-CLOSURE-002",
@@ -227,8 +281,24 @@ const INSTRUCTION_CODES: [&str; 28] = [
     "L51-REG-SPAN-001",
     "L51-SETLIST-001",
     "L51-UPVAL-001",
+    "L52-COMPANION-001",
+    "L52-CONST-002",
     "L52-OP-001",
+    "L52-PROTO-002",
+    "L52-REG-001",
+    "L52-REG-002",
+    "L52-REG-003",
+    "L52-REG-SPAN-001",
+    "L52-UPVAL-002",
+    "L53-COMPANION-001",
+    "L53-CONST-003",
     "L53-OP-001",
+    "L53-PROTO-002",
+    "L53-REG-001",
+    "L53-REG-002",
+    "L53-REG-003",
+    "L53-REG-SPAN-001",
+    "L53-UPVAL-002",
     "L54-INVALID-OPCODE",
     "L54-OOB-CONSTANT",
     "L54-OOB-PROTO",
@@ -238,7 +308,15 @@ const INSTRUCTION_CODES: [&str; 28] = [
     "L54-VAL-REG-001",
     "L54-VAL-UPVAL-001",
     "L54-VAL-UPVAL-002",
+    "L55-COMPANION-001",
+    "L55-CONST-002",
     "L55-OP-001",
+    "L55-PROTO-002",
+    "L55-REG-001",
+    "L55-REG-002",
+    "L55-REG-003",
+    "L55-REG-SPAN-001",
+    "L55-UPVAL-002",
 ];
 
 const CORE_TRUNC_SEMANTICS: &str = "Input ended before the requested byte range could be read.";
@@ -259,20 +337,7 @@ fn workspace() -> PathBuf {
 }
 
 fn luad_bin() -> PathBuf {
-    static LUAD: OnceLock<PathBuf> = OnceLock::new();
-    LUAD.get_or_init(|| {
-        if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
-            return path.into();
-        }
-        let output = Command::new("cargo")
-            .args(["build", "-p", "luad-cli", "--bin", "luad"])
-            .current_dir(workspace())
-            .output()
-            .expect("build luad CLI");
-        assert!(output.status.success(), "luad build failed");
-        workspace().join("target/debug/luad")
-    })
-    .clone()
+    luad_oracle::luad_binary_path()
 }
 
 fn run(args: &[&str]) -> Output {
@@ -399,6 +464,7 @@ fn quoted_after(source: &str, start: usize) -> Option<String> {
 
 fn is_code(value: &str) -> bool {
     [
+        "ANA-",
         "CORE-",
         "INTERNAL-",
         "IO-",
@@ -885,7 +951,7 @@ fn test_public_text_list_and_lookup_golden() {
     assert!(list.status.success());
     assert!(list.stderr.is_empty());
     let text = String::from_utf8(list.stdout).unwrap();
-    assert!(text.starts_with("CORE-LIMIT-001 ["));
+    assert!(text.starts_with("ANA-PRECOND-001 ["));
     assert!(text.contains("\nPARSE-SOURCE-001 ["));
     assert!(text.contains("\nPARSE-UNKNOWN-001 ["));
     assert_eq!(text.matches("\n  Semantics: ").count(), PINNED_CODES.len());

@@ -355,7 +355,7 @@ impl<'a> SafeReader<'a> {
     pub fn read_string_lua54(&mut self) -> Result<(Option<Vec<u8>>, SourceLocation), Diagnostic> {
         let start_pos = self.position();
         let start_cursor = self.cursor;
-        let (size, _) = self.read_size_lua54()?;
+        let (size, size_loc) = self.read_size_lua54()?;
 
         if size == 0 {
             // In Lua 5.4, size 0 denotes a NULL string.
@@ -366,6 +366,7 @@ impl<'a> SafeReader<'a> {
         let content_len = size.saturating_sub(1);
         self.check_string_limit(content_len as u64, |target, message| {
             Diagnostic::error("L54-STR-001", DiagnosticCategory::Parse, target, message)
+                .with_source(size_loc)
         })?;
 
         let content = self.read_exact(content_len)?;
@@ -383,6 +384,7 @@ impl<'a> SafeReader<'a> {
     ) -> Result<ProtoPathGuard<'a, '_>, Diagnostic> {
         let child_path = self.current_proto_path.child(child_index);
         let depth = child_path.depth();
+        let current_pos = self.position();
 
         if depth > self.limits.max_nesting_depth {
             let diag = Diagnostic::error(
@@ -393,7 +395,8 @@ impl<'a> SafeReader<'a> {
                     "Prototype nesting depth {depth} exceeds configured limit of {}",
                     self.limits.max_nesting_depth
                 ),
-            );
+            )
+            .with_source(SourceLocation::new(current_pos, &[]));
             self.record_diagnostic(diag.clone())?;
             return Err(diag);
         }
@@ -408,7 +411,8 @@ impl<'a> SafeReader<'a> {
                     "Total prototype count {} exceeds configured limit of {}",
                     self.total_prototypes, self.limits.max_total_prototypes
                 ),
-            );
+            )
+            .with_source(SourceLocation::new(current_pos, &[]));
             self.record_diagnostic(diag.clone())?;
             return Err(diag);
         }

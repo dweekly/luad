@@ -8,7 +8,7 @@ use crate::provenance::SourceLocation;
 
 /// Diagnostic severity level.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
 #[serde(rename_all = "kebab-case")]
 pub enum Severity {
@@ -21,7 +21,7 @@ pub enum Severity {
 }
 
 /// Category of diagnostic check.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum DiagnosticCategory {
     /// Raw binary parsing, truncation, or format-envelope error.
@@ -39,7 +39,7 @@ pub enum DiagnosticCategory {
 }
 
 /// Structured diagnostic item.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct Diagnostic {
     /// Stable diagnostic error code (e.g. "L54-HEADER-001", "L54-JUMP-003").
     pub code: String,

@@ -154,21 +154,7 @@ fn sha256(bytes: &[u8]) -> String {
 }
 
 fn luad_bin() -> PathBuf {
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
-        return path.into();
-    }
-    let workspace = root();
-    let output = Command::new("cargo")
-        .args(["build", "-p", "luad-cli", "--bin", "luad"])
-        .current_dir(&workspace)
-        .output()
-        .expect("build luad CLI");
-    assert!(
-        output.status.success(),
-        "luad build failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    workspace.join("target/debug/luad")
+    luad_oracle::luad_binary_path()
 }
 
 /// How the boundary is told which dialect a chunk is written in.

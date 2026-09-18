@@ -63,7 +63,10 @@ pub fn decode_chunk_lua52(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
         patch_or_oracle_version: Some("5.2.4".to_string()),
         profile: "lua5.2".to_string(),
         profile_version_or_hash: None,
-        validated_layout: Some("int=4,sizet=8,inst=4,num=8,endian=1".to_string()),
+        validated_layout: Some(format!(
+            "int=4,sizet={},inst=4,num=8,endian=1,integral_flag=0",
+            header.sizeof_sizet
+        )),
         parse_mode: match reader.mode() {
             luad_core::limits::ParseMode::Strict => "strict".to_string(),
             luad_core::limits::ParseMode::Permissive => "permissive".to_string(),
@@ -95,17 +98,22 @@ fn load_string_52(
     reader: &mut SafeReader,
     sizeof_sizet: u8,
 ) -> Result<Option<LuaString>, Diagnostic> {
+    let size_pos = reader.position();
+    let size_cursor = reader.cursor_offset();
     let size = if sizeof_sizet == 4 {
         reader.read_u32_le()? as usize
     } else {
         reader.read_u64_le()? as usize
     };
+    let size_raw = reader.slice_from_cursor(size_cursor)?;
+    let size_loc = SourceLocation::new(size_pos, size_raw);
     if size == 0 {
         Ok(None)
     } else {
         let content_len = size.saturating_sub(1);
         reader.check_string_limit(content_len as u64, |target, message| {
             Diagnostic::error("L52-STR-001", DiagnosticCategory::Parse, target, message)
+                .with_source(size_loc)
         })?;
         let bytes_with_null = reader.read_exact(size)?;
         let content = &bytes_with_null[..content_len];
@@ -130,14 +138,19 @@ fn load_proto_52(
     let maxstacksize = reader.read_u8()?;
 
     // 2. Instructions
+    let sizecode_pos = reader.position();
+    let sizecode_cursor = reader.cursor_offset();
     let sizecode = reader.read_i32_le()? as usize;
+    let sizecode_raw = reader.slice_from_cursor(sizecode_cursor)?;
+    let sizecode_loc = SourceLocation::new(sizecode_pos, sizecode_raw);
     if sizecode > reader.limits().max_instructions_per_proto {
         let diag = Diagnostic::error(
             "L52-CODE-001",
             DiagnosticCategory::Parse,
             StableId::proto(path.clone()),
             format!("Instruction count {sizecode} exceeds safety limit"),
-        );
+        )
+        .with_source(sizecode_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -158,14 +171,19 @@ fn load_proto_52(
     }
 
     // 3. Constants
+    let sizek_pos = reader.position();
+    let sizek_cursor = reader.cursor_offset();
     let sizek = reader.read_i32_le()? as usize;
+    let sizek_raw = reader.slice_from_cursor(sizek_cursor)?;
+    let sizek_loc = SourceLocation::new(sizek_pos, sizek_raw);
     if sizek > reader.limits().max_constants_per_proto {
         let diag = Diagnostic::error(
             "L52-CONST-001",
             DiagnosticCategory::Parse,
             StableId::proto(path.clone()),
             format!("Constant count {sizek} exceeds safety limit"),
-        );
+        )
+        .with_source(sizek_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -202,7 +220,8 @@ fn load_proto_52(
                     DiagnosticCategory::Parse,
                     StableId::constant(path.clone(), idx),
                     format!("Invalid constant tag {other}"),
-                );
+                )
+                .with_source(SourceLocation::new(const_pos, &[other]));
                 reader.record_diagnostic(diag.clone())?;
                 return Err(diag);
             }
@@ -218,14 +237,19 @@ fn load_proto_52(
     }
 
     // 4. Child Prototypes
+    let sizep_pos = reader.position();
+    let sizep_cursor = reader.cursor_offset();
     let sizep = reader.read_i32_le()? as usize;
+    let sizep_raw = reader.slice_from_cursor(sizep_cursor)?;
+    let sizep_loc = SourceLocation::new(sizep_pos, sizep_raw);
     if sizep > reader.limits().max_total_prototypes {
         let diag = Diagnostic::error(
             "L52-PROTO-001",
             DiagnosticCategory::Parse,
             StableId::proto(path.clone()),
             format!("Prototype count {sizep} exceeds safety limit"),
-        );
+        )
+        .with_source(sizep_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -239,14 +263,19 @@ fn load_proto_52(
     }
 
     // 5. Upvalues
+    let sizeupvalues_pos = reader.position();
+    let sizeupvalues_cursor = reader.cursor_offset();
     let sizeupvalues = reader.read_i32_le()? as usize;
+    let sizeupvalues_raw = reader.slice_from_cursor(sizeupvalues_cursor)?;
+    let sizeupvalues_loc = SourceLocation::new(sizeupvalues_pos, sizeupvalues_raw);
     if sizeupvalues > reader.limits().max_upvalues_per_proto {
         let diag = Diagnostic::error(
             "L52-UPVAL-001",
             DiagnosticCategory::Parse,
             StableId::proto(path.clone()),
             format!("Upvalue count {sizeupvalues} exceeds safety limit"),
-        );
+        )
+        .with_source(sizeupvalues_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }

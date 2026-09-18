@@ -1,7 +1,7 @@
 //! `luad` command-line interface entry point.
 
 use std::fs;
-use std::io::{self, BufRead, Read};
+use std::io::{self, BufRead, Read, Write};
 use std::path::Path;
 
 use clap::{CommandFactory, Parser};
@@ -96,7 +96,19 @@ fn read_input_bytes_with_reporting(
             }
             return Err(ExitCode::LimitExceeded);
         }
-        fs::read(path).map_err(|e| {
+        let file = fs::File::open(path).map_err(|e| {
+            if report_errors {
+                eprintln!(
+                    "{}: Failed to open file '{}': {e}",
+                    "error".red().bold(),
+                    file_path
+                );
+            }
+            ExitCode::IoError
+        })?;
+        let mut buffer = Vec::new();
+        let mut reader = io::BufReader::new(file).take((max_bytes + 1) as u64);
+        reader.read_to_end(&mut buffer).map_err(|e| {
             if report_errors {
                 eprintln!(
                     "{}: Failed to read file '{}': {e}",
@@ -105,24 +117,62 @@ fn read_input_bytes_with_reporting(
                 );
             }
             ExitCode::IoError
-        })
+        })?;
+        if buffer.len() > max_bytes {
+            if report_errors {
+                eprintln!(
+                    "{}: File '{}' size ({} bytes) exceeds safety limit of {max_bytes} bytes",
+                    "error".red().bold(),
+                    file_path,
+                    buffer.len()
+                );
+            }
+            return Err(ExitCode::LimitExceeded);
+        }
+        Ok(buffer)
     }
 }
+
+pub fn classify_diagnostic(diag: &Diagnostic) -> ExitCode {
+    if diag.code.starts_with("IO-") {
+        return ExitCode::IoError;
+    }
+    if diag.code == "CORE-LIMIT-001"
+        || diag.code == "CORE-LIMIT-002"
+        || diag.code.contains("LIMIT")
+        || diag.message.contains("exceeds safety limit")
+        || diag.message.contains("exceeds configured limit")
+        || diag.message.contains("exceeds limit")
+        || diag.message.contains("exceeds host pointer width")
+    {
+        return ExitCode::LimitExceeded;
+    }
+    if diag.code == "ANA-PRECOND-001"
+        || diag.code == "PARSE-SOURCE-001"
+        || diag.code == "PARSE-UNKNOWN-001"
+        || diag.code == "L51-CONST-002"
+        || diag.code.ends_with("-HEADER-001")
+        || diag.code.ends_with("-HEADER-002")
+    {
+        return ExitCode::UnsupportedFormat;
+    }
+    ExitCode::InvalidInput
+}
+
+type ParsedChunkTuple = (
+    Chunk,
+    InputIdentity,
+    AnalysisConfiguration,
+    ResolvedInterpretation,
+);
+type ParseDetailedResult = Result<ParsedChunkTuple, (ExitCode, Option<Box<Diagnostic>>)>;
 
 fn parse_chunk(
     file_path: &str,
     bytes: &[u8],
     strict: bool,
     dialect_override: Option<&str>,
-) -> Result<
-    (
-        Chunk,
-        InputIdentity,
-        AnalysisConfiguration,
-        ResolvedInterpretation,
-    ),
-    ExitCode,
-> {
+) -> Result<ParsedChunkTuple, ExitCode> {
     parse_chunk_with_reporting(file_path, bytes, strict, dialect_override, true)
 }
 
@@ -132,15 +182,18 @@ fn parse_chunk_with_reporting(
     strict: bool,
     dialect_override: Option<&str>,
     report_errors: bool,
-) -> Result<
-    (
-        Chunk,
-        InputIdentity,
-        AnalysisConfiguration,
-        ResolvedInterpretation,
-    ),
-    ExitCode,
-> {
+) -> Result<ParsedChunkTuple, ExitCode> {
+    parse_chunk_detailed(file_path, bytes, strict, dialect_override, report_errors)
+        .map_err(|(code, _)| code)
+}
+
+fn parse_chunk_detailed(
+    file_path: &str,
+    bytes: &[u8],
+    strict: bool,
+    dialect_override: Option<&str>,
+    report_errors: bool,
+) -> ParseDetailedResult {
     let mode = if strict {
         ParseMode::Strict
     } else {
@@ -157,7 +210,7 @@ fn parse_chunk_with_reporting(
                 limits.max_input_bytes
             );
         }
-        return Err(ExitCode::LimitExceeded);
+        return Err((ExitCode::LimitExceeded, None));
     }
 
     let sha256 = hex::encode(Sha256::digest(bytes));
@@ -203,7 +256,7 @@ fn parse_chunk_with_reporting(
                         "error".red().bold()
                     );
                 }
-                return Err(ExitCode::UsageError);
+                return Err((ExitCode::UsageError, None));
             }
             other => {
                 if report_errors {
@@ -212,7 +265,7 @@ fn parse_chunk_with_reporting(
                         "error".red().bold()
                     );
                 }
-                return Err(ExitCode::UnsupportedFormat);
+                return Err((ExitCode::UnsupportedFormat, None));
             }
         };
         (dialect, SelectionMode::Explicit)
@@ -235,7 +288,7 @@ fn parse_chunk_with_reporting(
                 "error".red().bold()
             );
         }
-        return Err(ExitCode::UnsupportedFormat);
+        return Err((ExitCode::UnsupportedFormat, None));
     };
 
     let mut reader = SafeReader::with_options(bytes, 0, limits, mode);
@@ -264,15 +317,20 @@ fn parse_chunk_with_reporting(
             Ok((chunk, input_identity, analysis_config, interpretation))
         }
         Err(diag) => {
+            let exit_code = classify_diagnostic(&diag);
             if report_errors {
-                eprintln!(
-                    "{}: Parsing failed at offset {}: {}",
-                    "error".red().bold(),
-                    diag.source.as_ref().map(|s| s.byte_offset).unwrap_or(0),
-                    diag.message
-                );
+                if let Some(loc) = &diag.source {
+                    eprintln!(
+                        "{}: Parsing failed at offset {}: {}",
+                        "error".red().bold(),
+                        loc.byte_offset,
+                        diag.message
+                    );
+                } else {
+                    eprintln!("{}: Parsing failed: {}", "error".red().bold(), diag.message);
+                }
             }
-            Err(ExitCode::InvalidInput)
+            Err((exit_code, Some(Box::new(diag))))
         }
     }
 }
@@ -295,43 +353,114 @@ fn wrap_document<T>(
     }
 }
 
-fn main() {
-    let cli = Cli::parse();
+struct TrackedWriter<'a, W: io::Write> {
+    inner: &'a mut W,
+    error: Option<io::Error>,
+}
 
-    match cli.command {
-        Commands::Inspect(args) => handle_inspect(args),
-        Commands::Disasm(args) => handle_disasm(args),
-        Commands::Validate(args) => handle_validate(args),
-        Commands::Capabilities(args) => handle_capabilities(args),
-        Commands::Diagnostics(args) => handle_diagnostics(args),
-        Commands::Schema(args) => handle_schema(args),
-        Commands::Completions(args) => handle_completions(args),
-        Commands::Cfg(args) => handle_cfg(args),
-        Commands::Callees(args) => handle_callees(args),
-        Commands::Callgraph(args) => handle_callgraph(args),
-        Commands::Origins(args) => handle_origins(args),
-        Commands::Xrefs(args) => handle_xrefs(args),
-        Commands::Explain(args) => handle_explain(args),
-        Commands::Query(args) => handle_query(args),
-        Commands::Diff(args) => handle_diff(args),
-        Commands::Export(args) => handle_export(args),
+impl<'a, W: io::Write> TrackedWriter<'a, W> {
+    fn new(inner: &'a mut W) -> Self {
+        Self { inner, error: None }
+    }
+
+    fn check_error(self) -> io::Result<()> {
+        if let Some(err) = self.error {
+            Err(err)
+        } else {
+            Ok(())
+        }
     }
 }
 
-fn handle_inspect(args: InspectArgs) {
+impl<'a, W: io::Write> io::Write for TrackedWriter<'a, W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self.inner.write(buf) {
+            Ok(n) => Ok(n),
+            Err(e) => {
+                let kind = e.kind();
+                let err_msg = e.to_string();
+                if self.error.is_none() {
+                    self.error = Some(io::Error::new(kind, err_msg));
+                }
+                Err(e)
+            }
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self.inner.flush() {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                let kind = e.kind();
+                let err_msg = e.to_string();
+                if self.error.is_none() {
+                    self.error = Some(io::Error::new(kind, err_msg));
+                }
+                Err(e)
+            }
+        }
+    }
+}
+
+fn handle_write_error(err: &io::Error) -> ! {
+    if err.kind() == io::ErrorKind::BrokenPipe {
+        std::process::exit(0);
+    }
+    eprintln!("error: output I/O error: {err}");
+    ExitCode::IoError.exit();
+}
+
+fn main() {
+    let cli = Cli::parse();
+    let stdout = io::stdout();
+    let mut writer = io::BufWriter::new(stdout.lock());
+
+    let result = match cli.command {
+        Commands::Inspect(args) => handle_inspect(args, &mut writer),
+        Commands::Disasm(args) => handle_disasm(args, &mut writer),
+        Commands::Validate(args) => handle_validate(args, &mut writer),
+        Commands::Capabilities(args) => handle_capabilities(args, &mut writer),
+        Commands::Diagnostics(args) => handle_diagnostics(args, &mut writer),
+        Commands::Schema(args) => handle_schema(args, &mut writer),
+        Commands::Completions(args) => handle_completions(args, &mut writer),
+        Commands::Cfg(args) => handle_cfg(args, &mut writer),
+        Commands::Callees(args) => handle_callees(args, &mut writer),
+        Commands::Callgraph(args) => handle_callgraph(args, &mut writer),
+        Commands::Origins(args) => handle_origins(args, &mut writer),
+        Commands::Xrefs(args) => handle_xrefs(args, &mut writer),
+        Commands::Explain(args) => handle_explain(args, &mut writer),
+        Commands::Query(args) => handle_query(args, &mut writer),
+        Commands::Diff(args) => handle_diff(args, &mut writer),
+        Commands::Export(args) => handle_export(args, &mut writer),
+    };
+
+    match result {
+        Ok(code) => {
+            if let Err(err) = writer.flush() {
+                handle_write_error(&err);
+            }
+            code.exit();
+        }
+        Err(err) => {
+            handle_write_error(&err);
+        }
+    }
+}
+
+fn handle_inspect(args: InspectArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let bytes = match read_input_bytes(&args.file) {
         Ok(b) => b,
-        Err(code) => code.exit(),
+        Err(code) => return Ok(code),
     };
 
     let (chunk, identity, config, interp) =
         match parse_chunk(&args.file, &bytes, args.strict, args.dialect.as_deref()) {
             Ok(c) => c,
-            Err(code) => code.exit(),
+            Err(code) => return Ok(code),
         };
 
     match args.format {
-        OutputFormat::Text => render::render_inspect(&chunk, args.summary),
+        OutputFormat::Text => render::render_inspect(&chunk, args.summary, writer)?,
         OutputFormat::Json => {
             let doc = wrap_document(
                 identity,
@@ -340,7 +469,7 @@ fn handle_inspect(args: InspectArgs) {
                 chunk.clone(),
                 chunk.diagnostics.clone(),
             );
-            render::print_json(&doc);
+            render::print_json(&doc, writer)?;
         }
         OutputFormat::Jsonl => {
             let meta = JsonlMetadataRecord {
@@ -351,29 +480,41 @@ fn handle_inspect(args: InspectArgs) {
                 interpretation: interp.clone(),
                 analysis_configuration: config,
             };
-            println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&meta).unwrap_or_default()
+            )?;
             let context = JsonlRecordContext::successful(identity, interp);
             let data_rec = JsonlDataRecord {
                 record_type: "chunk".to_string(),
                 context,
                 data: chunk.clone(),
             };
-            println!("{}", serde_json::to_string(&data_rec).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&data_rec).unwrap_or_default()
+            )?;
             let summary = JsonlSummaryRecord {
                 record_type: "summary".to_string(),
                 total_records: 1,
                 diagnostic_count: chunk.diagnostics.len(),
                 is_truncated: false,
             };
-            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&summary).unwrap_or_default()
+            )?;
         }
         OutputFormat::Dot => {
             eprintln!("{}: DOT format not supported for inspect", "error".red());
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     }
 
-    ExitCode::Success.exit();
+    Ok(ExitCode::Success)
 }
 
 fn get_disasm_proto(dialect: &str, proto: &luad_core::model::Prototype) -> DisassembledPrototype {
@@ -421,16 +562,16 @@ fn get_disasm_proto(dialect: &str, proto: &luad_core::model::Prototype) -> Disas
     }
 }
 
-fn handle_disasm(args: DisasmArgs) {
+fn handle_disasm(args: DisasmArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let bytes = match read_input_bytes(&args.file) {
         Ok(b) => b,
-        Err(code) => code.exit(),
+        Err(code) => return Ok(code),
     };
 
     let (chunk, identity, config, interp) =
         match parse_chunk(&args.file, &bytes, args.strict, args.dialect.as_deref()) {
             Ok(c) => c,
-            Err(code) => code.exit(),
+            Err(code) => return Ok(code),
         };
 
     let target_proto = if let Some(path_str) = &args.proto {
@@ -441,12 +582,12 @@ fn handle_disasm(args: DisasmArgs) {
                     "{}: Invalid prototype selector '{path_str}': {e}",
                     "error".red()
                 );
-                ExitCode::UsageError.exit();
+                return Ok(ExitCode::UsageError);
             }
         };
         let Some(proto) = find_proto_by_stable_id(&chunk.main_proto, &path) else {
             eprintln!("{}: Prototype '{path}' not found in chunk", "error".red());
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         };
         proto
     } else {
@@ -469,7 +610,8 @@ fn handle_disasm(args: DisasmArgs) {
                 args.raw,
                 args.debug_info,
                 args.effects,
-            );
+                writer,
+            )?;
         }
         OutputFormat::Json => {
             let doc = wrap_document(
@@ -479,7 +621,7 @@ fn handle_disasm(args: DisasmArgs) {
                 disasm_proto.clone(),
                 disasm_proto.diagnostics.clone(),
             );
-            render::print_json(&doc);
+            render::print_json(&doc, writer)?;
         }
         OutputFormat::Jsonl => {
             let meta = JsonlMetadataRecord {
@@ -490,7 +632,11 @@ fn handle_disasm(args: DisasmArgs) {
                 interpretation: interp.clone(),
                 analysis_configuration: config,
             };
-            println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&meta).unwrap_or_default()
+            )?;
             let context = JsonlRecordContext::successful(identity, interp);
             for inst in &disasm_proto.instructions {
                 let rec = JsonlDataRecord {
@@ -498,7 +644,11 @@ fn handle_disasm(args: DisasmArgs) {
                     context: context.clone(),
                     data: inst.clone(),
                 };
-                println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&rec).unwrap_or_default()
+                )?;
             }
             let summary = JsonlSummaryRecord {
                 record_type: "summary".to_string(),
@@ -506,18 +656,22 @@ fn handle_disasm(args: DisasmArgs) {
                 diagnostic_count: disasm_proto.diagnostics.len(),
                 is_truncated: false,
             };
-            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&summary).unwrap_or_default()
+            )?;
         }
         OutputFormat::Dot => {
             eprintln!(
                 "{}: Use 'luad cfg --format dot' for graphviz output",
                 "error".red()
             );
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     }
 
-    ExitCode::Success.exit();
+    Ok(ExitCode::Success)
 }
 
 fn find_proto_by_stable_id<'a>(
@@ -535,16 +689,16 @@ fn find_proto_by_stable_id<'a>(
     None
 }
 
-fn handle_validate(args: ValidateArgs) {
+fn handle_validate(args: ValidateArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let bytes = match read_input_bytes(&args.file) {
         Ok(b) => b,
-        Err(code) => code.exit(),
+        Err(code) => return Ok(code),
     };
 
     let (chunk, identity, config, interp) =
         match parse_chunk(&args.file, &bytes, args.strict, args.dialect.as_deref()) {
             Ok(c) => c,
-            Err(code) => code.exit(),
+            Err(code) => return Ok(code),
         };
 
     let (verdict, diagnostics) = match chunk.dialect.as_str() {
@@ -563,7 +717,7 @@ fn handle_validate(args: ValidateArgs) {
                 .any(|d| d.severity == Severity::Error || d.severity == Severity::Warning)));
 
     match args.format {
-        OutputFormat::Text => render::render_validate(verdict, &diagnostics),
+        OutputFormat::Text => render::render_validate(verdict, &diagnostics, writer)?,
         OutputFormat::Json => {
             let val_resp = ValidationResponse {
                 verdict,
@@ -571,22 +725,25 @@ fn handle_validate(args: ValidateArgs) {
                 diagnostics: diagnostics.clone(),
             };
             let doc = wrap_document(identity, interp, config, val_resp, diagnostics);
-            render::print_json(&doc);
+            render::print_json(&doc, writer)?;
         }
         _ => {
             eprintln!("{}: Format not supported for validate", "error".red());
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     }
 
     if is_invalid {
-        ExitCode::InvalidInput.exit();
+        Ok(ExitCode::InvalidInput)
     } else {
-        ExitCode::Success.exit();
+        Ok(ExitCode::Success)
     }
 }
 
-fn handle_capabilities(args: CapabilitiesArgs) {
+fn handle_capabilities(
+    args: CapabilitiesArgs,
+    writer: &mut impl io::Write,
+) -> io::Result<ExitCode> {
     let mut manifest = luad_core::get_canonical_capabilities(env!("CARGO_PKG_VERSION"));
     if !args.evidence {
         manifest.evidence.clear();
@@ -596,20 +753,20 @@ fn handle_capabilities(args: CapabilitiesArgs) {
     }
 
     match args.format {
-        OutputFormat::Text => render::render_capabilities(&manifest, args.evidence),
+        OutputFormat::Text => render::render_capabilities(&manifest, args.evidence, writer)?,
         OutputFormat::Json => {
-            render::print_json(&manifest);
+            render::print_json(&manifest, writer)?;
         }
         _ => {
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     }
-    ExitCode::Success.exit();
+    Ok(ExitCode::Success)
 }
 
-fn handle_diagnostics(args: DiagnosticsArgs) {
+fn handle_diagnostics(args: DiagnosticsArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     if matches!(args.format, OutputFormat::Jsonl | OutputFormat::Dot) {
-        ExitCode::UsageError.exit();
+        return Ok(ExitCode::UsageError);
     }
 
     let descriptors = match args.code {
@@ -617,7 +774,7 @@ fn handle_diagnostics(args: DiagnosticsArgs) {
             Some(desc) => vec![desc],
             None => {
                 eprintln!("error: Unknown diagnostic code '{code}'");
-                ExitCode::UsageError.exit();
+                return Ok(ExitCode::UsageError);
             }
         },
         None => luad_core::list_diagnostics(),
@@ -625,21 +782,21 @@ fn handle_diagnostics(args: DiagnosticsArgs) {
 
     match args.format {
         OutputFormat::Text => {
-            render::render_diagnostic_descriptors(&descriptors);
+            render::render_diagnostic_descriptors(&descriptors, writer)?;
         }
         OutputFormat::Json => {
             let response = luad_core::build_catalog_response(descriptors);
-            render::print_json(&response);
+            render::print_json(&response, writer)?;
         }
         _ => {
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     }
 
-    ExitCode::Success.exit();
+    Ok(ExitCode::Success)
 }
 
-fn handle_schema(args: SchemaArgs) {
+fn handle_schema(args: SchemaArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let current_version = match args.name.as_str() {
         "capabilities" | "manifest" | "export" => 2,
         _ => 1,
@@ -654,142 +811,159 @@ fn handle_schema(args: SchemaArgs) {
             args.name,
             current_version
         );
-        ExitCode::UsageError.exit();
+        return Ok(ExitCode::UsageError);
     }
 
     match args.name.as_str() {
         "chunk" => {
             let schema = schema_for!(MachineDocument<Chunk>);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         "diagnostic" => {
             let schema = schema_for!(Diagnostic);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         "diagnostics" => {
             let schema = schema_for!(luad_core::DiagnosticCatalogResponse);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         "instruction" => {
             let schema = schema_for!(luad_core::SemanticInstruction);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         "cfg" => {
             let schema = schema_for!(MachineDocument<ControlFlowGraph>);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         "callees" => {
             let schema = schema_for!(MachineDocument<luad_analysis::ChunkCalleeAnalysis>);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         "callgraph" => {
             let schema = schema_for!(MachineDocument<luad_analysis::ChunkCallRelationAnalysis>);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         "origins" => {
             let schema = schema_for!(MachineDocument<luad_analysis::ChunkOriginAnalysis>);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         "xrefs" => {
             let schema = schema_for!(MachineDocument<XrefResponse>);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         "query" | "analysis" => {
             let schema = schema_for!(MachineDocument<QueryResponse>);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         "diff" => {
             let schema = schema_for!(MachineDocument<luad_analysis::ChunkDiff>);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         "capabilities" | "manifest" => {
             let schema = schema_for!(luad_core::CapabilityManifest);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         "disasm" => {
             let schema = schema_for!(MachineDocument<DisassembledPrototype>);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         "validate" => {
             let schema = schema_for!(MachineDocument<ValidationResponse>);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         "export" => {
             let schema = schema_for!(ExportRecord);
-            println!(
+            writeln!(
+                writer,
                 "{}",
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
-            );
+            )?;
         }
         other => {
             eprintln!(
                 "{}: Unknown schema '{other}'. Supported: chunk, disasm, validate, diagnostic, diagnostics, instruction, cfg, callees, callgraph, origins, xrefs, query, analysis, diff, capabilities, manifest, export",
                 "error".red()
             );
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     }
 
-    ExitCode::Success.exit();
+    Ok(ExitCode::Success)
 }
 
-fn handle_completions(args: CompletionsArgs) {
+fn handle_completions(args: CompletionsArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let mut cmd = Cli::command();
-    clap_complete::generate(args.shell, &mut cmd, "luad", &mut io::stdout());
-    ExitCode::Success.exit();
+    let mut tracked = TrackedWriter::new(writer);
+    clap_complete::generate(args.shell, &mut cmd, "luad", &mut tracked);
+    tracked.check_error()?;
+    Ok(ExitCode::Success)
 }
 
-fn handle_explain(args: ExplainArgs) {
+fn handle_explain(args: ExplainArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let bytes = match read_input_bytes(&args.file) {
         Ok(b) => b,
-        Err(code) => code.exit(),
+        Err(code) => return Ok(code),
     };
 
     let (chunk, _, _, _) = match parse_chunk(&args.file, &bytes, false, args.dialect.as_deref()) {
         Ok(c) => c,
-        Err(code) => code.exit(),
+        Err(code) => return Ok(code),
     };
 
     let target_id: StableId = match args.target.parse() {
@@ -800,7 +974,7 @@ fn handle_explain(args: ExplainArgs) {
                 "error".red(),
                 args.target
             );
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     };
 
@@ -813,7 +987,7 @@ fn handle_explain(args: ExplainArgs) {
                     "error".red(),
                     proto_id
                 );
-                ExitCode::UsageError.exit();
+                return Ok(ExitCode::UsageError);
             };
 
             let disasm_proto = get_disasm_proto(&chunk.dialect, target_proto);
@@ -828,16 +1002,18 @@ fn handle_explain(args: ExplainArgs) {
                     proto_id,
                     lifted.len()
                 );
-                ExitCode::UsageError.exit();
+                return Ok(ExitCode::UsageError);
             };
 
             match args.format {
-                OutputFormat::Text => render::render_explain_instruction(sem_inst, disasm_inst),
-                OutputFormat::Json => render::print_json(sem_inst),
-                OutputFormat::Jsonl => render::print_jsonl(&[sem_inst]),
+                OutputFormat::Text => {
+                    render::render_explain_instruction(sem_inst, disasm_inst, writer)?
+                }
+                OutputFormat::Json => render::print_json(sem_inst, writer)?,
+                OutputFormat::Jsonl => render::print_jsonl(&[sem_inst], writer)?,
                 OutputFormat::Dot => {
                     eprintln!("{}: DOT format not applicable to explain", "error".red());
-                    ExitCode::UsageError.exit();
+                    return Ok(ExitCode::UsageError);
                 }
             }
         }
@@ -849,32 +1025,47 @@ fn handle_explain(args: ExplainArgs) {
         }
     }
 
-    ExitCode::Success.exit();
+    Ok(ExitCode::Success)
 }
 
-fn handle_cfg(args: CfgArgs) {
+fn handle_analysis_validation_failure(
+    prefix: &str,
+    diags: &[luad_core::diagnostic::Diagnostic],
+) -> ExitCode {
+    eprintln!(
+        "{}: Analysis refused: {prefix} failed validation checks",
+        "error".red()
+    );
+    let mut is_unsupported_format = false;
+    for d in diags {
+        if d.severity == Severity::Error {
+            eprintln!("  - [{}] {}", d.code, d.message);
+            if d.code == "ANA-PRECOND-001" {
+                is_unsupported_format = true;
+            }
+        }
+    }
+    if is_unsupported_format {
+        ExitCode::UnsupportedFormat
+    } else {
+        ExitCode::InvalidInput
+    }
+}
+
+fn handle_cfg(args: CfgArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let bytes = match read_input_bytes(&args.file) {
         Ok(b) => b,
-        Err(code) => code.exit(),
+        Err(code) => return Ok(code),
     };
 
     let (chunk, identity, config, interp) =
         match parse_chunk(&args.file, &bytes, false, args.dialect.as_deref()) {
             Ok(c) => c,
-            Err(code) => code.exit(),
+            Err(code) => return Ok(code),
         };
 
     if let Err(diags) = validate_for_analysis(&chunk) {
-        eprintln!(
-            "{}: Analysis refused: chunk failed validation checks",
-            "error".red()
-        );
-        for d in diags {
-            if d.severity == Severity::Error {
-                eprintln!("  - [{}] {}", d.code, d.message);
-            }
-        }
-        ExitCode::InvalidInput.exit();
+        return Ok(handle_analysis_validation_failure("chunk", &diags));
     }
 
     let target_id: StableId = match args.proto.parse() {
@@ -885,7 +1076,7 @@ fn handle_cfg(args: CfgArgs) {
                 "error".red(),
                 args.proto
             );
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     };
 
@@ -895,14 +1086,14 @@ fn handle_cfg(args: CfgArgs) {
             "error".red(),
             target_id
         );
-        ExitCode::UsageError.exit();
+        return Ok(ExitCode::UsageError);
     };
 
     let lifted = luad_analysis::lift_proto_for_dialect(&chunk.dialect, target_proto);
     let cfg = ControlFlowGraph::build(target_proto, &lifted);
 
     match args.format {
-        OutputFormat::Text => render::render_cfg(&cfg),
+        OutputFormat::Text => render::render_cfg(&cfg, writer)?,
         OutputFormat::Json => {
             let doc = wrap_document(
                 identity,
@@ -911,7 +1102,7 @@ fn handle_cfg(args: CfgArgs) {
                 cfg.clone(),
                 chunk.diagnostics.clone(),
             );
-            render::print_json(&doc);
+            render::print_json(&doc, writer)?;
         }
         OutputFormat::Jsonl => {
             let meta = JsonlMetadataRecord {
@@ -922,7 +1113,11 @@ fn handle_cfg(args: CfgArgs) {
                 interpretation: interp.clone(),
                 analysis_configuration: config,
             };
-            println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&meta).unwrap_or_default()
+            )?;
             let context = JsonlRecordContext::successful(identity, interp);
             for block in &cfg.blocks {
                 let rec = JsonlDataRecord {
@@ -930,7 +1125,11 @@ fn handle_cfg(args: CfgArgs) {
                     context: context.clone(),
                     data: block.clone(),
                 };
-                println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&rec).unwrap_or_default()
+                )?;
             }
             let summary = JsonlSummaryRecord {
                 record_type: "summary".to_string(),
@@ -938,42 +1137,37 @@ fn handle_cfg(args: CfgArgs) {
                 diagnostic_count: chunk.diagnostics.len(),
                 is_truncated: false,
             };
-            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&summary).unwrap_or_default()
+            )?;
         }
-        OutputFormat::Dot => print!("{}", cfg.to_dot()),
+        OutputFormat::Dot => write!(writer, "{}", cfg.to_dot())?,
     }
 
-    ExitCode::Success.exit();
+    Ok(ExitCode::Success)
 }
 
-fn handle_callees(args: CalleesArgs) {
+fn handle_callees(args: CalleesArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let bytes = match read_input_bytes(&args.file) {
         Ok(bytes) => bytes,
-        Err(code) => code.exit(),
+        Err(code) => return Ok(code),
     };
     let (chunk, identity, config, interp) =
         match parse_chunk(&args.file, &bytes, false, args.dialect.as_deref()) {
             Ok(parsed) => parsed,
-            Err(code) => code.exit(),
+            Err(code) => return Ok(code),
         };
     if !chunk.dialect.starts_with("lua5.1") {
         eprintln!(
             "{}: Symbolic callee analysis currently requires a Lua 5.1 profile",
             "error".red()
         );
-        ExitCode::UnsupportedFormat.exit();
+        return Ok(ExitCode::UnsupportedFormat);
     }
     if let Err(diags) = validate_for_analysis(&chunk) {
-        eprintln!(
-            "{}: Analysis refused: chunk failed validation checks",
-            "error".red()
-        );
-        for diagnostic in diags {
-            if diagnostic.severity == Severity::Error {
-                eprintln!("  - [{}] {}", diagnostic.code, diagnostic.message);
-            }
-        }
-        ExitCode::InvalidInput.exit();
+        return Ok(handle_analysis_validation_failure("chunk", &diags));
     }
 
     let analysis = luad_analysis::analyze_chunk_callees(&chunk);
@@ -983,14 +1177,17 @@ fn handle_callees(args: CalleesArgs) {
         .map(|prototype| prototype.calls.len())
         .sum();
     match args.format {
-        OutputFormat::Text => render::render_callees(&analysis),
-        OutputFormat::Json => render::print_json(&wrap_document(
-            identity,
-            interp,
-            config,
-            analysis,
-            chunk.diagnostics.clone(),
-        )),
+        OutputFormat::Text => render::render_callees(&analysis, writer)?,
+        OutputFormat::Json => render::print_json(
+            &wrap_document(
+                identity,
+                interp,
+                config,
+                analysis,
+                chunk.diagnostics.clone(),
+            ),
+            writer,
+        )?,
         OutputFormat::Jsonl => {
             let metadata = JsonlMetadataRecord {
                 record_type: "metadata".to_string(),
@@ -1000,7 +1197,11 @@ fn handle_callees(args: CalleesArgs) {
                 interpretation: interp.clone(),
                 analysis_configuration: config,
             };
-            println!("{}", serde_json::to_string(&metadata).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&metadata).unwrap_or_default()
+            )?;
             let context = JsonlRecordContext::successful(identity, interp);
             for fact in analysis
                 .prototypes
@@ -1012,7 +1213,11 @@ fn handle_callees(args: CalleesArgs) {
                     context: context.clone(),
                     data: fact,
                 };
-                println!("{}", serde_json::to_string(&record).unwrap_or_default());
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&record).unwrap_or_default()
+                )?;
             }
             let summary = JsonlSummaryRecord {
                 record_type: "summary".to_string(),
@@ -1020,44 +1225,39 @@ fn handle_callees(args: CalleesArgs) {
                 diagnostic_count: chunk.diagnostics.len(),
                 is_truncated: false,
             };
-            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&summary).unwrap_or_default()
+            )?;
         }
         OutputFormat::Dot => {
             eprintln!("{}: DOT format not applicable to callees", "error".red());
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     }
-    ExitCode::Success.exit();
+    Ok(ExitCode::Success)
 }
 
-fn handle_callgraph(args: CallgraphArgs) {
+fn handle_callgraph(args: CallgraphArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let bytes = match read_input_bytes(&args.file) {
         Ok(bytes) => bytes,
-        Err(code) => code.exit(),
+        Err(code) => return Ok(code),
     };
     let (chunk, identity, config, interpretation) =
         match parse_chunk(&args.file, &bytes, false, args.dialect.as_deref()) {
             Ok(parsed) => parsed,
-            Err(code) => code.exit(),
+            Err(code) => return Ok(code),
         };
     if !chunk.dialect.starts_with("lua5.1") {
         eprintln!(
             "{}: Call-relation analysis currently requires a Lua 5.1 profile",
             "error".red()
         );
-        ExitCode::UnsupportedFormat.exit();
+        return Ok(ExitCode::UnsupportedFormat);
     }
     if let Err(diagnostics) = validate_for_analysis(&chunk) {
-        eprintln!(
-            "{}: Analysis refused: chunk failed validation checks",
-            "error".red()
-        );
-        for diagnostic in diagnostics {
-            if diagnostic.severity == Severity::Error {
-                eprintln!("  - [{}] {}", diagnostic.code, diagnostic.message);
-            }
-        }
-        ExitCode::InvalidInput.exit();
+        return Ok(handle_analysis_validation_failure("chunk", &diagnostics));
     }
 
     let analysis = luad_analysis::analyze_chunk_call_relations(&chunk);
@@ -1067,14 +1267,17 @@ fn handle_callgraph(args: CallgraphArgs) {
         .map(|prototype| prototype.calls.len())
         .sum();
     match args.format {
-        OutputFormat::Text => render::render_callgraph(&analysis),
-        OutputFormat::Json => render::print_json(&wrap_document(
-            identity,
-            interpretation,
-            config,
-            analysis,
-            chunk.diagnostics.clone(),
-        )),
+        OutputFormat::Text => render::render_callgraph(&analysis, writer)?,
+        OutputFormat::Json => render::print_json(
+            &wrap_document(
+                identity,
+                interpretation,
+                config,
+                analysis,
+                chunk.diagnostics.clone(),
+            ),
+            writer,
+        )?,
         OutputFormat::Jsonl => {
             let metadata = JsonlMetadataRecord {
                 record_type: "metadata".to_string(),
@@ -1084,7 +1287,11 @@ fn handle_callgraph(args: CallgraphArgs) {
                 interpretation: interpretation.clone(),
                 analysis_configuration: config,
             };
-            println!("{}", serde_json::to_string(&metadata).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&metadata).unwrap_or_default()
+            )?;
             let context = JsonlRecordContext::successful(identity, interpretation);
             for fact in analysis
                 .prototypes
@@ -1096,7 +1303,11 @@ fn handle_callgraph(args: CallgraphArgs) {
                     context: context.clone(),
                     data: fact,
                 };
-                println!("{}", serde_json::to_string(&record).unwrap_or_default());
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&record).unwrap_or_default()
+                )?;
             }
             let summary = JsonlSummaryRecord {
                 record_type: "summary".to_string(),
@@ -1104,44 +1315,39 @@ fn handle_callgraph(args: CallgraphArgs) {
                 diagnostic_count: chunk.diagnostics.len(),
                 is_truncated: false,
             };
-            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&summary).unwrap_or_default()
+            )?;
         }
         OutputFormat::Dot => {
             eprintln!("{}: DOT format not applicable to callgraph", "error".red());
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     }
-    ExitCode::Success.exit();
+    Ok(ExitCode::Success)
 }
 
-fn handle_origins(args: OriginsArgs) {
+fn handle_origins(args: OriginsArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let bytes = match read_input_bytes(&args.file) {
         Ok(bytes) => bytes,
-        Err(code) => code.exit(),
+        Err(code) => return Ok(code),
     };
     let (chunk, identity, config, interpretation) =
         match parse_chunk(&args.file, &bytes, false, args.dialect.as_deref()) {
             Ok(parsed) => parsed,
-            Err(code) => code.exit(),
+            Err(code) => return Ok(code),
         };
     if !chunk.dialect.starts_with("lua5.1") {
         eprintln!(
             "{}: Call-argument origin analysis currently requires a Lua 5.1 profile",
             "error".red()
         );
-        ExitCode::UnsupportedFormat.exit();
+        return Ok(ExitCode::UnsupportedFormat);
     }
     if let Err(diagnostics) = validate_for_analysis(&chunk) {
-        eprintln!(
-            "{}: Analysis refused: chunk failed validation checks",
-            "error".red()
-        );
-        for diagnostic in diagnostics {
-            if diagnostic.severity == Severity::Error {
-                eprintln!("  - [{}] {}", diagnostic.code, diagnostic.message);
-            }
-        }
-        ExitCode::InvalidInput.exit();
+        return Ok(handle_analysis_validation_failure("chunk", &diagnostics));
     }
 
     let analysis = luad_analysis::analyze_chunk_origins(&chunk);
@@ -1151,14 +1357,17 @@ fn handle_origins(args: OriginsArgs) {
         .map(|prototype| prototype.calls.len())
         .sum();
     match args.format {
-        OutputFormat::Text => render::render_origins(&analysis),
-        OutputFormat::Json => render::print_json(&wrap_document(
-            identity,
-            interpretation,
-            config,
-            analysis,
-            chunk.diagnostics.clone(),
-        )),
+        OutputFormat::Text => render::render_origins(&analysis, writer)?,
+        OutputFormat::Json => render::print_json(
+            &wrap_document(
+                identity,
+                interpretation,
+                config,
+                analysis,
+                chunk.diagnostics.clone(),
+            ),
+            writer,
+        )?,
         OutputFormat::Jsonl => {
             let metadata = JsonlMetadataRecord {
                 record_type: "metadata".to_string(),
@@ -1168,7 +1377,11 @@ fn handle_origins(args: OriginsArgs) {
                 interpretation: interpretation.clone(),
                 analysis_configuration: config,
             };
-            println!("{}", serde_json::to_string(&metadata).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&metadata).unwrap_or_default()
+            )?;
             let context = JsonlRecordContext::successful(identity, interpretation);
             for fact in analysis
                 .prototypes
@@ -1180,7 +1393,11 @@ fn handle_origins(args: OriginsArgs) {
                     context: context.clone(),
                     data: fact,
                 };
-                println!("{}", serde_json::to_string(&record).unwrap_or_default());
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&record).unwrap_or_default()
+                )?;
             }
             let summary = JsonlSummaryRecord {
                 record_type: "summary".to_string(),
@@ -1188,39 +1405,34 @@ fn handle_origins(args: OriginsArgs) {
                 diagnostic_count: chunk.diagnostics.len(),
                 is_truncated: false,
             };
-            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&summary).unwrap_or_default()
+            )?;
         }
         OutputFormat::Dot => {
             eprintln!("{}: DOT format not applicable to origins", "error".red());
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     }
-    ExitCode::Success.exit();
+    Ok(ExitCode::Success)
 }
 
-fn handle_xrefs(args: XrefsArgs) {
+fn handle_xrefs(args: XrefsArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let bytes = match read_input_bytes(&args.file) {
         Ok(b) => b,
-        Err(code) => code.exit(),
+        Err(code) => return Ok(code),
     };
 
     let (chunk, identity, config, interp) =
         match parse_chunk(&args.file, &bytes, false, args.dialect.as_deref()) {
             Ok(c) => c,
-            Err(code) => code.exit(),
+            Err(code) => return Ok(code),
         };
 
     if let Err(diags) = validate_for_analysis(&chunk) {
-        eprintln!(
-            "{}: Analysis refused: chunk failed validation checks",
-            "error".red()
-        );
-        for d in diags {
-            if d.severity == Severity::Error {
-                eprintln!("  - [{}] {}", d.code, d.message);
-            }
-        }
-        ExitCode::InvalidInput.exit();
+        return Ok(handle_analysis_validation_failure("chunk", &diags));
     }
 
     let index = XrefIndex::build(&chunk);
@@ -1230,7 +1442,7 @@ fn handle_xrefs(args: XrefsArgs) {
             Ok(id) => id,
             Err(e) => {
                 eprintln!("{}: Invalid target ID '{to_str}': {e}", "error".red());
-                ExitCode::UsageError.exit();
+                return Ok(ExitCode::UsageError);
             }
         };
         if !validate_target(&chunk, &to_id) {
@@ -1239,7 +1451,7 @@ fn handle_xrefs(args: XrefsArgs) {
                 "error".red(),
                 to_id
             );
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
         Some(to_id)
     } else {
@@ -1251,7 +1463,7 @@ fn handle_xrefs(args: XrefsArgs) {
             Ok(id) => id,
             Err(e) => {
                 eprintln!("{}: Invalid source ID '{from_str}': {e}", "error".red());
-                ExitCode::UsageError.exit();
+                return Ok(ExitCode::UsageError);
             }
         };
         if !validate_target(&chunk, &from_id) {
@@ -1260,7 +1472,7 @@ fn handle_xrefs(args: XrefsArgs) {
                 "error".red(),
                 from_id
             );
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
         Some(from_id)
     } else {
@@ -1284,7 +1496,9 @@ fn handle_xrefs(args: XrefsArgs) {
     };
 
     match args.format {
-        OutputFormat::Text => render::render_xrefs(&matching_refs.iter().collect::<Vec<_>>()),
+        OutputFormat::Text => {
+            render::render_xrefs(&matching_refs.iter().collect::<Vec<_>>(), writer)?
+        }
         OutputFormat::Json => {
             let doc = wrap_document(
                 identity,
@@ -1293,7 +1507,7 @@ fn handle_xrefs(args: XrefsArgs) {
                 xref_response,
                 chunk.diagnostics.clone(),
             );
-            render::print_json(&doc);
+            render::print_json(&doc, writer)?;
         }
         OutputFormat::Jsonl => {
             let meta = JsonlMetadataRecord {
@@ -1304,7 +1518,11 @@ fn handle_xrefs(args: XrefsArgs) {
                 interpretation: interp.clone(),
                 analysis_configuration: config,
             };
-            println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&meta).unwrap_or_default()
+            )?;
             let context = JsonlRecordContext::successful(identity, interp);
             for entry in &matching_refs {
                 let rec = JsonlDataRecord {
@@ -1312,7 +1530,11 @@ fn handle_xrefs(args: XrefsArgs) {
                     context: context.clone(),
                     data: entry.clone(),
                 };
-                println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&rec).unwrap_or_default()
+                )?;
             }
             let summary = JsonlSummaryRecord {
                 record_type: "summary".to_string(),
@@ -1320,40 +1542,35 @@ fn handle_xrefs(args: XrefsArgs) {
                 diagnostic_count: chunk.diagnostics.len(),
                 is_truncated: false,
             };
-            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&summary).unwrap_or_default()
+            )?;
         }
         OutputFormat::Dot => {
             eprintln!("{}: DOT format not applicable to xrefs", "error".red());
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     }
 
-    ExitCode::Success.exit();
+    Ok(ExitCode::Success)
 }
 
-fn handle_query(args: QueryArgs) {
+fn handle_query(args: QueryArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let bytes = match read_input_bytes(&args.file) {
         Ok(b) => b,
-        Err(code) => code.exit(),
+        Err(code) => return Ok(code),
     };
 
     let (chunk, identity, config, interp) =
         match parse_chunk(&args.file, &bytes, false, args.dialect.as_deref()) {
             Ok(c) => c,
-            Err(code) => code.exit(),
+            Err(code) => return Ok(code),
         };
 
     if let Err(diags) = validate_for_analysis(&chunk) {
-        eprintln!(
-            "{}: Analysis refused: chunk failed validation checks",
-            "error".red()
-        );
-        for d in diags {
-            if d.severity == Severity::Error {
-                eprintln!("  - [{}] {}", d.code, d.message);
-            }
-        }
-        ExitCode::InvalidInput.exit();
+        return Ok(handle_analysis_validation_failure("chunk", &diags));
     }
 
     let response = match execute_query(
@@ -1365,12 +1582,12 @@ fn handle_query(args: QueryArgs) {
         Ok(res) => res,
         Err(e) => {
             eprintln!("{}: Query error: {e}", "error".red());
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     };
 
     match args.format {
-        OutputFormat::Text => render::render_query(&response),
+        OutputFormat::Text => render::render_query(&response, writer)?,
         OutputFormat::Json => {
             let doc = wrap_document(
                 identity,
@@ -1379,7 +1596,7 @@ fn handle_query(args: QueryArgs) {
                 response.clone(),
                 chunk.diagnostics.clone(),
             );
-            render::print_json(&doc);
+            render::print_json(&doc, writer)?;
         }
         OutputFormat::Jsonl => {
             let meta = JsonlMetadataRecord {
@@ -1390,7 +1607,11 @@ fn handle_query(args: QueryArgs) {
                 interpretation: interp.clone(),
                 analysis_configuration: config,
             };
-            println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&meta).unwrap_or_default()
+            )?;
             let context = JsonlRecordContext::successful(identity, interp);
             for m in &response.matches {
                 let rec = JsonlDataRecord {
@@ -1398,7 +1619,11 @@ fn handle_query(args: QueryArgs) {
                     context: context.clone(),
                     data: m.clone(),
                 };
-                println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&rec).unwrap_or_default()
+                )?;
             }
             let summary = JsonlSummaryRecord {
                 record_type: "summary".to_string(),
@@ -1406,61 +1631,47 @@ fn handle_query(args: QueryArgs) {
                 diagnostic_count: chunk.diagnostics.len(),
                 is_truncated: response.is_truncated,
             };
-            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&summary).unwrap_or_default()
+            )?;
         }
         OutputFormat::Dot => {
             eprintln!("{}: DOT format not applicable to query", "error".red());
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     }
 
-    ExitCode::Success.exit();
+    Ok(ExitCode::Success)
 }
 
-fn handle_diff(args: DiffArgs) {
+fn handle_diff(args: DiffArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let old_bytes = match read_input_bytes(&args.old_file) {
         Ok(b) => b,
-        Err(code) => code.exit(),
+        Err(code) => return Ok(code),
     };
     let new_bytes = match read_input_bytes(&args.new_file) {
         Ok(b) => b,
-        Err(code) => code.exit(),
+        Err(code) => return Ok(code),
     };
 
     let (old_chunk, identity, config, interp) =
         match parse_chunk(&args.old_file, &old_bytes, false, None) {
             Ok(c) => c,
-            Err(code) => code.exit(),
+            Err(code) => return Ok(code),
         };
     let (new_chunk, _, _, _) = match parse_chunk(&args.new_file, &new_bytes, false, None) {
         Ok(c) => c,
-        Err(code) => code.exit(),
+        Err(code) => return Ok(code),
     };
 
     if let Err(diags) = validate_for_analysis(&old_chunk) {
-        eprintln!(
-            "{}: Analysis refused: old chunk failed validation checks",
-            "error".red()
-        );
-        for d in diags {
-            if d.severity == Severity::Error {
-                eprintln!("  - [{}] {}", d.code, d.message);
-            }
-        }
-        ExitCode::InvalidInput.exit();
+        return Ok(handle_analysis_validation_failure("old chunk", &diags));
     }
 
     if let Err(diags) = validate_for_analysis(&new_chunk) {
-        eprintln!(
-            "{}: Analysis refused: new chunk failed validation checks",
-            "error".red()
-        );
-        for d in diags {
-            if d.severity == Severity::Error {
-                eprintln!("  - [{}] {}", d.code, d.message);
-            }
-        }
-        ExitCode::InvalidInput.exit();
+        return Ok(handle_analysis_validation_failure("new chunk", &diags));
     }
 
     if old_chunk.dialect != new_chunk.dialect && !args.semantic {
@@ -1470,17 +1681,17 @@ fn handle_diff(args: DiffArgs) {
             old_chunk.dialect,
             new_chunk.dialect
         );
-        ExitCode::UsageError.exit();
+        return Ok(ExitCode::UsageError);
     }
 
     let ignore_debug = args.ignore.as_deref() == Some("debug");
     let diff = luad_analysis::diff_chunks(&old_chunk, &new_chunk, args.semantic, ignore_debug);
 
     match args.format {
-        OutputFormat::Text => render::render_diff(&diff),
+        OutputFormat::Text => render::render_diff(&diff, writer)?,
         OutputFormat::Json => {
             let doc = wrap_document(identity, interp, config, diff.clone(), vec![]);
-            render::print_json(&doc);
+            render::print_json(&doc, writer)?;
         }
         OutputFormat::Jsonl => {
             let meta = JsonlMetadataRecord {
@@ -1491,7 +1702,11 @@ fn handle_diff(args: DiffArgs) {
                 interpretation: interp.clone(),
                 analysis_configuration: config,
             };
-            println!("{}", serde_json::to_string(&meta).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&meta).unwrap_or_default()
+            )?;
             let context = JsonlRecordContext::successful(identity, interp);
             let mut record_count = 0;
             for proto_diff in &diff.proto_diffs {
@@ -1500,7 +1715,11 @@ fn handle_diff(args: DiffArgs) {
                     context: context.clone(),
                     data: proto_diff.clone(),
                 };
-                println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&rec).unwrap_or_default()
+                )?;
                 record_count += 1;
             }
             let summary = JsonlSummaryRecord {
@@ -1509,15 +1728,19 @@ fn handle_diff(args: DiffArgs) {
                 diagnostic_count: 0,
                 is_truncated: false,
             };
-            println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&summary).unwrap_or_default()
+            )?;
         }
         OutputFormat::Dot => {
             eprintln!("{}: DOT format not applicable to diff", "error".red());
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     }
 
-    ExitCode::Success.exit();
+    Ok(ExitCode::Success)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -1723,16 +1946,18 @@ enum ExportRecord {
     },
 }
 
-struct FactEmitter {
+struct FactEmitter<'a, W: io::Write> {
+    writer: &'a mut W,
     context: JsonlRecordContext,
     max_facts: Option<usize>,
     emitted_count: usize,
     instruction_count: usize,
 }
 
-impl FactEmitter {
-    fn new(context: JsonlRecordContext, max_facts: Option<usize>) -> Self {
+impl<'a, W: io::Write> FactEmitter<'a, W> {
+    fn new(writer: &'a mut W, context: JsonlRecordContext, max_facts: Option<usize>) -> Self {
         Self {
+            writer,
             context,
             max_facts,
             emitted_count: 0,
@@ -1747,33 +1972,41 @@ impl FactEmitter {
         }
     }
 
-    fn emit_fact<T: serde::Serialize>(&mut self, record_type: &str, data: &T) -> bool {
+    fn emit_fact<T: serde::Serialize>(&mut self, record_type: &str, data: &T) -> io::Result<bool> {
         if !self.should_emit() {
-            return false;
+            return Ok(false);
         }
         let rec = JsonlDataRecord {
             record_type: record_type.to_string(),
             context: self.context.clone(),
             data,
         };
-        println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+        writeln!(
+            self.writer,
+            "{}",
+            serde_json::to_string(&rec).unwrap_or_default()
+        )?;
         self.emitted_count += 1;
-        true
+        Ok(true)
     }
 
-    fn emit_instruction(&mut self, inst: &luad_core::DisassembledInstruction) -> bool {
+    fn emit_instruction(&mut self, inst: &luad_core::DisassembledInstruction) -> io::Result<bool> {
         if !self.should_emit() {
-            return false;
+            return Ok(false);
         }
         let rec = JsonlDataRecord {
             record_type: "instruction".to_string(),
             context: self.context.clone(),
             data: inst,
         };
-        println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+        writeln!(
+            self.writer,
+            "{}",
+            serde_json::to_string(&rec).unwrap_or_default()
+        )?;
         self.emitted_count += 1;
         self.instruction_count += 1;
-        true
+        Ok(true)
     }
 }
 
@@ -1797,15 +2030,15 @@ fn count_available_facts_proto_tree(proto: &Prototype, selection: &ExportFactSel
     count
 }
 
-fn emit_export_proto_tree(
+fn emit_export_proto_tree<W: io::Write>(
     proto: &Prototype,
     disasm: Option<&DisassembledPrototype>,
     identities: &std::collections::BTreeMap<StableId, luad_analysis::PrototypeIdentityFact>,
     selection: &ExportFactSelection,
-    emitter: &mut FactEmitter,
-) {
+    emitter: &mut FactEmitter<'_, W>,
+) -> io::Result<()> {
     if !emitter.should_emit() {
-        return;
+        return Ok(());
     }
 
     if selection.includes(ExportFactFamily::Prototype) {
@@ -1823,15 +2056,15 @@ fn emit_export_proto_tree(
             upvalues_count: proto.upvalues.len(),
             protos_count: proto.protos.len(),
         };
-        if !emitter.emit_fact("prototype", &proto_meta) {
-            return;
+        if !emitter.emit_fact("prototype", &proto_meta)? {
+            return Ok(());
         }
     }
 
     if selection.includes(ExportFactFamily::PrototypeIdentity) {
         if let Some(identity) = identities.get(&proto.id) {
-            if !emitter.emit_fact("prototype_identity", identity) {
-                return;
+            if !emitter.emit_fact("prototype_identity", identity)? {
+                return Ok(());
             }
         }
     }
@@ -1841,51 +2074,53 @@ fn emit_export_proto_tree(
             .expect("selected instruction facts require disassembly")
             .instructions
         {
-            if !emitter.emit_instruction(inst) {
-                return;
+            if !emitter.emit_instruction(inst)? {
+                return Ok(());
             }
         }
     }
 
     if selection.includes(ExportFactFamily::Constant) {
         for c in &proto.constants {
-            if !emitter.emit_fact("constant", c) {
-                return;
+            if !emitter.emit_fact("constant", c)? {
+                return Ok(());
             }
         }
     }
 
     if selection.includes(ExportFactFamily::Upvalue) {
         for u in &proto.upvalues {
-            if !emitter.emit_fact("upvalue", u) {
-                return;
+            if !emitter.emit_fact("upvalue", u)? {
+                return Ok(());
             }
         }
     }
 
     for (index, child) in proto.protos.iter().enumerate() {
         if !emitter.should_emit() {
-            return;
+            return Ok(());
         }
         let child_disasm = disasm.map(|parent| &parent.child_protos[index]);
-        emit_export_proto_tree(child, child_disasm, identities, selection, emitter);
+        emit_export_proto_tree(child, child_disasm, identities, selection, emitter)?;
     }
+
+    Ok(())
 }
 
-fn handle_export(args: ExportArgs) {
+fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     if args.format != OutputFormat::Jsonl {
         eprintln!(
             "{}: Export command requires JSONL format (--format jsonl)",
             "error".red()
         );
-        ExitCode::UsageError.exit();
+        return Ok(ExitCode::UsageError);
     }
 
     let fact_selection = match ExportFactSelection::parse(args.facts.as_deref()) {
         Ok(selection) => selection,
         Err(error) => {
             eprintln!("{}: {error}", "error".red());
-            ExitCode::UsageError.exit();
+            return Ok(ExitCode::UsageError);
         }
     };
 
@@ -1909,7 +2144,7 @@ fn handle_export(args: ExportArgs) {
                         "error".red(),
                         list_file
                     );
-                    ExitCode::IoError.exit();
+                    return Ok(ExitCode::IoError);
                 }
             };
             for line in content.lines() {
@@ -1923,7 +2158,7 @@ fn handle_export(args: ExportArgs) {
 
     if file_paths.is_empty() {
         eprintln!("{}: No input files provided for export", "error".red());
-        ExitCode::UsageError.exit();
+        return Ok(ExitCode::UsageError);
     }
 
     let mut succeeded_count = 0;
@@ -1931,7 +2166,8 @@ fn handle_export(args: ExportArgs) {
     let mut failed_count = 0;
     let mut total_instructions = 0;
 
-    println!(
+    writeln!(
+        writer,
         "{}",
         serde_json::to_string(&ExportStartRecord {
             record_type: "export_start".to_string(),
@@ -1941,7 +2177,7 @@ fn handle_export(args: ExportArgs) {
             fact_families: fact_selection.explicit_names(),
         })
         .unwrap_or_default()
-    );
+    )?;
 
     for path_str in &file_paths {
         let bytes = match read_input_bytes_with_reporting(path_str, false) {
@@ -1955,7 +2191,11 @@ fn handle_export(args: ExportArgs) {
                     byte_length: 0,
                     interpretation: None,
                 };
-                println!("{}", serde_json::to_string(&start_rec).unwrap_or_default());
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&start_rec).unwrap_or_default()
+                )?;
                 let diag = Diagnostic::error(
                     "IO-001",
                     DiagnosticCategory::Structure,
@@ -1967,7 +2207,11 @@ fn handle_export(args: ExportArgs) {
                     context: JsonlRecordContext::failed_read(),
                     data: diag,
                 };
-                println!("{}", serde_json::to_string(&diag_rec).unwrap_or_default());
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&diag_rec).unwrap_or_default()
+                )?;
                 let end_rec = FileEndRecord {
                     record_type: "file_end".to_string(),
                     path: path_str.clone(),
@@ -1979,13 +2223,17 @@ fn handle_export(args: ExportArgs) {
                     emitted_fact_count: 0,
                     available_fact_count: 0,
                 };
-                println!("{}", serde_json::to_string(&end_rec).unwrap_or_default());
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&end_rec).unwrap_or_default()
+                )?;
                 eprintln!("error: {path_str}: failed to read input file");
                 continue;
             }
         };
 
-        let parse_res = parse_chunk_with_reporting(
+        let parse_res = parse_chunk_detailed(
             path_str,
             &bytes,
             args.strict,
@@ -1994,7 +2242,7 @@ fn handle_export(args: ExportArgs) {
         );
         let (chunk, identity, _config, interp) = match parse_res {
             Ok(c) => c,
-            Err(parse_code) => {
+            Err((parse_code, parse_diag)) => {
                 skipped_count += 1;
                 let sha256 = hex::encode(sha2::Sha256::digest(&bytes));
                 let start_rec = FileStartRecord {
@@ -2004,7 +2252,11 @@ fn handle_export(args: ExportArgs) {
                     byte_length: bytes.len(),
                     interpretation: None,
                 };
-                println!("{}", serde_json::to_string(&start_rec).unwrap_or_default());
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&start_rec).unwrap_or_default()
+                )?;
                 let is_source = !bytes.starts_with(b"\x1bLua")
                     && (bytes.starts_with(b"--")
                         || bytes
@@ -2022,21 +2274,35 @@ fn handle_export(args: ExportArgs) {
                     (diag, msg)
                 } else if parse_code == ExitCode::UnsupportedFormat {
                     let msg = format!("Unknown or unsupported bytecode format: '{path_str}'");
-                    let diag = Diagnostic::error(
+                    let mut diag = Diagnostic::error(
                         "PARSE-UNKNOWN-001",
                         DiagnosticCategory::Parse,
                         StableId::Chunk,
                         msg.clone(),
                     );
+                    if let Some(underlying) = &parse_diag {
+                        if let Some(loc) = &underlying.source {
+                            diag = diag.with_source(loc.clone());
+                        }
+                        diag.evidence =
+                            Some(format!("{}: {}", underlying.code, underlying.message));
+                    }
                     (diag, msg)
                 } else {
                     let msg = format!("Failed to parse Lua bytecode chunk '{path_str}'");
-                    let diag = Diagnostic::error(
+                    let mut diag = Diagnostic::error(
                         "PARSE-001",
                         DiagnosticCategory::Parse,
                         StableId::Chunk,
                         msg.clone(),
                     );
+                    if let Some(underlying) = &parse_diag {
+                        if let Some(loc) = &underlying.source {
+                            diag = diag.with_source(loc.clone());
+                        }
+                        diag.evidence =
+                            Some(format!("{}: {}", underlying.code, underlying.message));
+                    }
                     (diag, msg)
                 };
                 let stderr_reason = match diag.code.as_str() {
@@ -2054,25 +2320,38 @@ fn handle_export(args: ExportArgs) {
                     context: JsonlRecordContext::failed_parse(parse_identity),
                     data: diag,
                 };
-                println!("{}", serde_json::to_string(&diag_rec).unwrap_or_default());
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&diag_rec).unwrap_or_default()
+                )?;
                 let end_rec = FileEndRecord {
                     record_type: "file_end".to_string(),
                     path: path_str.clone(),
                     status: "skipped".to_string(),
-                    error: Some(msg.clone()),
+                    error: Some(if let Some(underlying) = &parse_diag {
+                        format!("{msg}: {}", underlying.message)
+                    } else {
+                        msg.clone()
+                    }),
                     instruction_count: 0,
                     diagnostic_count: 1,
                     is_truncated: false,
                     emitted_fact_count: 0,
                     available_fact_count: 0,
                 };
-                println!("{}", serde_json::to_string(&end_rec).unwrap_or_default());
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&end_rec).unwrap_or_default()
+                )?;
                 eprintln!("error: {path_str}: {stderr_reason}");
                 continue;
             }
         };
 
-        println!(
+        writeln!(
+            writer,
             "{}",
             serde_json::to_string(&FileStartRecord {
                 record_type: "file_start".to_string(),
@@ -2082,7 +2361,7 @@ fn handle_export(args: ExportArgs) {
                 interpretation: Some(interp.clone()),
             })
             .unwrap_or_default()
-        );
+        )?;
 
         let disasm = fact_selection
             .includes(ExportFactFamily::Instruction)
@@ -2102,7 +2381,8 @@ fn handle_export(args: ExportArgs) {
                         error.to_string(),
                     );
                     let context = JsonlRecordContext::successful(identity.clone(), interp);
-                    println!(
+                    writeln!(
+                        writer,
                         "{}",
                         serde_json::to_string(&JsonlDataRecord {
                             record_type: "diagnostic".to_string(),
@@ -2110,8 +2390,9 @@ fn handle_export(args: ExportArgs) {
                             data: diagnostic,
                         })
                         .unwrap_or_default()
-                    );
-                    println!(
+                    )?;
+                    writeln!(
+                        writer,
                         "{}",
                         serde_json::to_string(&FileEndRecord {
                             record_type: "file_end".to_string(),
@@ -2125,7 +2406,7 @@ fn handle_export(args: ExportArgs) {
                             available_fact_count: 0,
                         })
                         .unwrap_or_default()
-                    );
+                    )?;
                     eprintln!("error: {path_str}: prototype identity analysis failed");
                     continue;
                 }
@@ -2198,7 +2479,7 @@ fn handle_export(args: ExportArgs) {
                 + prototype_identities.len();
 
         let context = JsonlRecordContext::successful(identity.clone(), interp);
-        let mut emitter = FactEmitter::new(context.clone(), args.max_facts_per_file);
+        let mut emitter = FactEmitter::new(writer, context.clone(), args.max_facts_per_file);
         if fact_selection.includes_proto_tree_family() {
             emit_export_proto_tree(
                 &chunk.main_proto,
@@ -2206,12 +2487,12 @@ fn handle_export(args: ExportArgs) {
                 &prototype_identities,
                 &fact_selection,
                 &mut emitter,
-            );
+            )?;
         }
 
         if let Some(index) = &xref_index {
             for entry in &index.entries {
-                if !emitter.emit_fact("xref", entry) {
+                if !emitter.emit_fact("xref", entry)? {
                     break;
                 }
             }
@@ -2220,7 +2501,7 @@ fn handle_export(args: ExportArgs) {
         if let Some(analysis) = &callee_analysis {
             'callees: for prototype in &analysis.prototypes {
                 for fact in &prototype.calls {
-                    if !emitter.emit_fact("callee", fact) {
+                    if !emitter.emit_fact("callee", fact)? {
                         break 'callees;
                     }
                 }
@@ -2230,7 +2511,7 @@ fn handle_export(args: ExportArgs) {
         if let Some(analysis) = &origin_analysis {
             'origins: for prototype in &analysis.prototypes {
                 for fact in &prototype.calls {
-                    if !emitter.emit_fact("origin", fact) {
+                    if !emitter.emit_fact("origin", fact)? {
                         break 'origins;
                     }
                 }
@@ -2240,12 +2521,16 @@ fn handle_export(args: ExportArgs) {
         if let Some(analysis) = &call_relation_analysis {
             'call_relations: for prototype in &analysis.prototypes {
                 for fact in &prototype.calls {
-                    if !emitter.emit_fact("call_relation", fact) {
+                    if !emitter.emit_fact("call_relation", fact)? {
                         break 'call_relations;
                     }
                 }
             }
         }
+
+        let emitted_count = emitter.emitted_count;
+        let instruction_count = emitter.instruction_count;
+        drop(emitter);
 
         for diag in &chunk.diagnostics {
             let rec = JsonlDataRecord {
@@ -2253,28 +2538,37 @@ fn handle_export(args: ExportArgs) {
                 context: context.clone(),
                 data: diag.clone(),
             };
-            println!("{}", serde_json::to_string(&rec).unwrap_or_default());
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&rec).unwrap_or_default()
+            )?;
         }
 
         succeeded_count += 1;
-        total_instructions += emitter.instruction_count;
+        total_instructions += instruction_count;
 
-        let is_truncated = emitter.emitted_count < available_fact_count;
+        let is_truncated = emitted_count < available_fact_count;
         let end_rec = FileEndRecord {
             record_type: "file_end".to_string(),
             path: identity.path.clone(),
             status: "succeeded".to_string(),
             error: None,
-            instruction_count: emitter.instruction_count,
+            instruction_count,
             diagnostic_count: chunk.diagnostics.len(),
             is_truncated,
-            emitted_fact_count: emitter.emitted_count,
+            emitted_fact_count: emitted_count,
             available_fact_count,
         };
-        println!("{}", serde_json::to_string(&end_rec).unwrap_or_default());
+        writeln!(
+            writer,
+            "{}",
+            serde_json::to_string(&end_rec).unwrap_or_default()
+        )?;
     }
 
-    println!(
+    writeln!(
+        writer,
         "{}",
         serde_json::to_string(&ExportEndRecord {
             record_type: "export_end".to_string(),
@@ -2285,14 +2579,14 @@ fn handle_export(args: ExportArgs) {
             total_instructions,
         })
         .unwrap_or_default()
-    );
+    )?;
 
     eprintln!("{succeeded_count} exported, {skipped_count} skipped, {failed_count} failed");
 
     if succeeded_count == 0 || (args.strict && (skipped_count > 0 || failed_count > 0)) {
-        ExitCode::InvalidInput.exit();
+        Ok(ExitCode::InvalidInput)
     } else {
-        ExitCode::Success.exit();
+        Ok(ExitCode::Success)
     }
 }
 
@@ -2307,12 +2601,13 @@ mod tests {
             sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
             byte_length: 32,
         });
-        let mut emitter = FactEmitter::new(context, Some(2));
+        let mut buf = Vec::new();
+        let mut emitter = FactEmitter::new(&mut buf, context, Some(2));
         assert!(emitter.should_emit());
         assert_eq!(emitter.emitted_count, 0);
         assert_eq!(emitter.instruction_count, 0);
 
-        assert!(emitter.emit_fact("prototype", &"proto_data"));
+        assert!(emitter.emit_fact("prototype", &"proto_data").unwrap());
         assert_eq!(emitter.emitted_count, 1);
         assert_eq!(emitter.instruction_count, 0);
 
@@ -2340,23 +2635,24 @@ mod tests {
             diagnostics: vec![],
         };
 
-        assert!(emitter.emit_instruction(&dummy_inst));
+        assert!(emitter.emit_instruction(&dummy_inst).unwrap());
         assert_eq!(emitter.emitted_count, 2);
         assert_eq!(emitter.instruction_count, 1);
 
         assert!(!emitter.should_emit());
-        assert!(!emitter.emit_fact("constant", &"const_data"));
+        assert!(!emitter.emit_fact("constant", &"const_data").unwrap());
         assert_eq!(emitter.emitted_count, 2);
     }
 
     #[test]
     fn test_fact_emitter_unbounded() {
         let context = JsonlRecordContext::failed_read();
-        let mut emitter = FactEmitter::new(context, None);
+        let mut buf = Vec::new();
+        let mut emitter = FactEmitter::new(&mut buf, context, None);
         assert!(emitter.should_emit());
-        assert!(emitter.emit_fact("prototype", &"proto_data"));
-        assert!(emitter.emit_fact("constant", &"const_data"));
-        assert!(emitter.emit_fact("upvalue", &"upvalue_data"));
+        assert!(emitter.emit_fact("prototype", &"proto_data").unwrap());
+        assert!(emitter.emit_fact("constant", &"const_data").unwrap());
+        assert!(emitter.emit_fact("upvalue", &"upvalue_data").unwrap());
         assert_eq!(emitter.emitted_count, 3);
     }
 

@@ -87,7 +87,7 @@ pub fn decode_chunk_lua55(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
         patch_or_oracle_version: Some("5.5.1".to_string()),
         profile: "lua5.5".to_string(),
         profile_version_or_hash: None,
-        validated_layout: Some("int=8,sizet=8,inst=4,num=8,endian=1".to_string()),
+        validated_layout: Some("int=4,inst=4,lua_int=8,num=8,endian=1".to_string()),
         parse_mode: match reader.mode() {
             luad_core::limits::ParseMode::Strict => "strict".to_string(),
             luad_core::limits::ParseMode::Permissive => "permissive".to_string(),
@@ -119,7 +119,7 @@ fn load_string_55(
     reader: &mut SafeReader,
     table: &mut StringReuseTable,
 ) -> Result<Option<LuaString>, Diagnostic> {
-    let (size, _) = reader.read_varint_lua55()?;
+    let (size, size_loc) = reader.read_varint_lua55()?;
     if size == 0 {
         let (idx, _) = reader.read_varint_lua55()?;
         if idx == 0 {
@@ -143,6 +143,7 @@ fn load_string_55(
         let content_len = size - 1;
         reader.check_string_limit(content_len, |target, message| {
             Diagnostic::error("L55-STR-002", DiagnosticCategory::Parse, target, message)
+                .with_source(size_loc)
         })?;
         let payload_len = usize::try_from(size).map_err(|_| {
             Diagnostic::error(
@@ -177,7 +178,7 @@ fn load_proto_55(
     let maxstacksize = reader.read_u8()?;
 
     // 2. Instructions
-    let (sizecode, _) = reader.read_varint_lua55()?;
+    let (sizecode, sizecode_loc) = reader.read_varint_lua55()?;
     let code_len = sizecode as usize;
     if code_len > reader.limits().max_instructions_per_proto {
         let diag = Diagnostic::error(
@@ -185,7 +186,8 @@ fn load_proto_55(
             DiagnosticCategory::Parse,
             StableId::proto(path.clone()),
             format!("Instruction count {code_len} exceeds safety limit"),
-        );
+        )
+        .with_source(sizecode_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -208,7 +210,7 @@ fn load_proto_55(
     }
 
     // 3. Constants
-    let (sizek, _) = reader.read_varint_lua55()?;
+    let (sizek, sizek_loc) = reader.read_varint_lua55()?;
     let k_len = sizek as usize;
     if k_len > reader.limits().max_constants_per_proto {
         let diag = Diagnostic::error(
@@ -216,7 +218,8 @@ fn load_proto_55(
             DiagnosticCategory::Parse,
             StableId::proto(path.clone()),
             format!("Constant count {k_len} exceeds safety limit"),
-        );
+        )
+        .with_source(sizek_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -270,7 +273,8 @@ fn load_proto_55(
                     DiagnosticCategory::Parse,
                     StableId::constant(path.clone(), idx),
                     format!("Invalid constant tag {other}"),
-                );
+                )
+                .with_source(SourceLocation::new(const_pos, &[other]));
                 reader.record_diagnostic(diag.clone())?;
                 return Err(diag);
             }
@@ -286,7 +290,7 @@ fn load_proto_55(
     }
 
     // 4. Upvalues
-    let (sizeupvalues, _) = reader.read_varint_lua55()?;
+    let (sizeupvalues, sizeupvalues_loc) = reader.read_varint_lua55()?;
     let u_len = sizeupvalues as usize;
     if u_len > reader.limits().max_upvalues_per_proto {
         let diag = Diagnostic::error(
@@ -294,7 +298,8 @@ fn load_proto_55(
             DiagnosticCategory::Parse,
             StableId::proto(path.clone()),
             format!("Upvalue count {u_len} exceeds safety limit"),
-        );
+        )
+        .with_source(sizeupvalues_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -319,7 +324,7 @@ fn load_proto_55(
     }
 
     // 5. Child Prototypes
-    let (sizep, _) = reader.read_varint_lua55()?;
+    let (sizep, sizep_loc) = reader.read_varint_lua55()?;
     let p_len = sizep as usize;
     if p_len > reader.limits().max_total_prototypes {
         let diag = Diagnostic::error(
@@ -327,7 +332,8 @@ fn load_proto_55(
             DiagnosticCategory::Parse,
             StableId::proto(path.clone()),
             format!("Prototype count {p_len} exceeds safety limit"),
-        );
+        )
+        .with_source(sizep_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
