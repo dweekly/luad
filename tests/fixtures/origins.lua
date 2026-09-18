@@ -70,6 +70,8 @@ local function matrix(parameter, number, ...)
   local table_alias = table_value
   table_value[1] = "changed"
   sink(table_alias)
+
+  sink(function() end)
 end
 
 local function deep_expression(parameter)

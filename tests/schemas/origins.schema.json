@@ -501,6 +501,24 @@
           "type": "object",
           "required": [
             "kind",
+            "prototype"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "prototype"
+              ]
+            },
+            "prototype": {
+              "$ref": "#/definitions/ProtoPath"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
             "name"
           ],
           "properties": {

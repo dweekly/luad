@@ -90,6 +90,9 @@ pub enum OriginExpressionKind {
         #[serde(skip_serializing_if = "Option::is_none")]
         name: Option<String>,
     },
+    Prototype {
+        prototype: ProtoPath,
+    },
     Global {
         name: LuaString,
     },
@@ -518,6 +521,26 @@ fn transfer(
                         [instruction.id.clone()],
                     )),
                 );
+            }
+        }
+        "CLOSURE" => {
+            if let (Some(destination), Some(child_path)) = (
+                register_operand(instruction, 0),
+                instruction
+                    .operands
+                    .iter()
+                    .find_map(|operand| match operand {
+                        TypedOperand::Prototype { path, .. } => Some(path.clone()),
+                        _ => None,
+                    }),
+            ) {
+                let result = bounded_expression(
+                    OriginExpressionKind::Prototype {
+                        prototype: child_path,
+                    },
+                    [instruction.id.clone()],
+                );
+                set_register(state, destination, FlowValue::Origin(result));
             }
         }
         "SETLIST" => transfer_setlist(instruction, &before, state),
@@ -1853,5 +1876,29 @@ mod tests {
                 reason: OriginUnknownReason::ExpressionDepthLimit
             }
         ));
+    }
+
+    #[test]
+    fn closure_origin_equal_join_unions_evidence() {
+        let left = bounded_expression(
+            OriginExpressionKind::Prototype {
+                prototype: ProtoPath::root().child(1),
+            },
+            [StableId::instruction(ProtoPath::root(), 5)],
+        );
+        let right = bounded_expression(
+            OriginExpressionKind::Prototype {
+                prototype: ProtoPath::root().child(1),
+            },
+            [StableId::instruction(ProtoPath::root(), 10)],
+        );
+        let merged = merge_equal(&left, &right).expect("same prototype must merge");
+        assert_eq!(merged.evidence.len(), 2);
+        assert_eq!(
+            merged.kind,
+            OriginExpressionKind::Prototype {
+                prototype: ProtoPath::root().child(1),
+            }
+        );
     }
 }

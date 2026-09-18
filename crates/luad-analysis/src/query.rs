@@ -800,6 +800,7 @@ fn origin_kind_str(k: &OriginExpressionKind) -> &'static str {
         OriginExpressionKind::Literal { .. } => "literal",
         OriginExpressionKind::Parameter { .. } => "parameter",
         OriginExpressionKind::Upvalue { .. } => "upvalue",
+        OriginExpressionKind::Prototype { .. } => "prototype",
         OriginExpressionKind::Global { .. } => "global",
         OriginExpressionKind::Field { .. } => "field",
         OriginExpressionKind::CallResult { .. } => "call-result",

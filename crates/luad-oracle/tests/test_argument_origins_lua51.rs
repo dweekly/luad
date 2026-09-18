@@ -58,6 +58,7 @@ fn root_kind(expression: &OriginExpression) -> &'static str {
         OriginExpressionKind::Literal { .. } => "literal",
         OriginExpressionKind::Parameter { .. } => "parameter",
         OriginExpressionKind::Upvalue { .. } => "upvalue",
+        OriginExpressionKind::Prototype { .. } => "prototype",
         OriginExpressionKind::Global { .. } => "global",
         OriginExpressionKind::Field { .. } => "field",
         OriginExpressionKind::CallResult { .. } => "call-result",
@@ -109,7 +110,7 @@ fn assert_evidence_tree(expression: &OriginExpression) {
 fn test_origin_matrix_histogram_and_cardinality_are_pinned() {
     let analysis = analyze_chunk_origins(&fixture_chunk());
     let facts = all_facts(&analysis);
-    assert_eq!(facts.len(), 23);
+    assert_eq!(facts.len(), 24);
     assert_eq!(
         facts
             .iter()
@@ -118,7 +119,7 @@ fn test_origin_matrix_histogram_and_cardinality_are_pinned() {
         1
     );
     let origins = fixed_origins(&analysis);
-    assert_eq!(origins.len(), 40);
+    assert_eq!(origins.len(), 41);
     let mut histogram = BTreeMap::new();
     for origin in origins {
         *histogram.entry(root_kind(origin)).or_insert(0usize) += 1;
@@ -133,6 +134,7 @@ fn test_origin_matrix_histogram_and_cardinality_are_pinned() {
             ("field", 2),
             ("literal", 13),
             ("parameter", 6),
+            ("prototype", 1),
             ("unary", 3),
             ("unknown", 6),
         ])
@@ -198,6 +200,18 @@ fn test_origins_preserve_concat_mod_captures_and_explicit_stops() {
         })
         .collect();
     assert_eq!(owners, ["0/2", "0/2/0", "0/2/0/0"]);
+
+    let proto_origin = origins
+        .iter()
+        .find(|origin| matches!(origin.kind, OriginExpressionKind::Prototype { .. }))
+        .expect("prototype origin");
+    assert_eq!(
+        proto_origin.kind,
+        OriginExpressionKind::Prototype {
+            prototype: "0/3/0".parse().expect("child proto path")
+        }
+    );
+    assert!(!proto_origin.evidence.is_empty());
 
     for reason in [
         OriginUnknownReason::DynamicKey,
@@ -374,6 +388,23 @@ fn test_origin_killer_mutations_are_rejected() {
         reason: OriginUnknownReason::Overwritten,
     };
     reject(&expected, erased_cutoff);
+
+    let mut mutated_prototype_origin = expected.clone();
+    fixed_origin_mut(&mut mutated_prototype_origin, |origin| {
+        matches!(origin.kind, OriginExpressionKind::Prototype { .. })
+    })
+    .kind = OriginExpressionKind::Prototype {
+        prototype: "0/999".parse::<ProtoPath>().expect("path"),
+    };
+    reject(&expected, mutated_prototype_origin);
+
+    let mut mutated_prototype_evidence = expected.clone();
+    fixed_origin_mut(&mut mutated_prototype_evidence, |origin| {
+        matches!(origin.kind, OriginExpressionKind::Prototype { .. })
+    })
+    .evidence
+    .clear();
+    reject(&expected, mutated_prototype_evidence);
 }
 
 fn fixed_origin_mut(
@@ -448,6 +479,7 @@ fn test_public_origins_json_jsonl_and_text_agree() {
     assert!(text.contains("CONCAT(\"prefix:\""));
     assert!(text.contains("MOD(\"value=%s\", table(proto:0/3:parameter[0]))"));
     assert!(text.contains("unknown:ExpressionDepthLimit"));
+    assert!(text.contains("prototype 0/3/0"));
     assert!(!text.contains("taint"));
     assert!(!text.contains("safe"));
 }
@@ -524,4 +556,41 @@ fn test_origins_schema_capability_and_lnum_profile_are_public() {
     let document: MachineDocument<ChunkOriginAnalysis> =
         serde_json::from_slice(&output.stdout).expect("lnum document");
     assert_eq!(document.interpretation.profile, "lua5.1-lnum32");
+}
+
+#[test]
+fn test_closure_argument_origin_emits_prototype_expression() {
+    let source = r#"
+local sink = function(...) return ... end
+sink(function() end)
+"#;
+    let chunk = luad_oracle::compile_and_parse_lua51(source, false)
+        .expect("compile closure callback fixture");
+    let analysis = analyze_chunk_origins(&chunk);
+    let facts = all_facts(&analysis);
+    assert_eq!(facts.len(), 1);
+    let fact = facts[0];
+    let CallArgumentWindow::Fixed { arguments } = &fact.argument_window else {
+        panic!("expected fixed argument window");
+    };
+    assert_eq!(arguments.len(), 1);
+    let arg = &arguments[0];
+    assert_eq!(arg.argument_index, 0);
+    assert_eq!(arg.register, 2);
+    assert_eq!(
+        arg.origin.kind,
+        OriginExpressionKind::Prototype {
+            prototype: "0/1".parse().expect("child proto path")
+        }
+    );
+    assert_eq!(arg.origin.evidence.len(), 1);
+    assert_eq!(
+        arg.origin.evidence[0],
+        luad_core::StableId::instruction("0".parse().unwrap(), 2)
+    );
+
+    let val = serde_json::to_value(&arg.origin).expect("json");
+    assert_eq!(val["kind"], "prototype");
+    assert_eq!(val["prototype"], "0/1");
+    assert_eq!(val["evidence"], serde_json::json!(["proto:0:pc:2"]));
 }

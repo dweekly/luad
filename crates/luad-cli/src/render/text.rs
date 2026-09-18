@@ -752,6 +752,9 @@ fn format_origin_expression(expression: &luad_analysis::OriginExpression) -> Str
         OriginExpressionKind::Upvalue { owner, index, .. } => {
             format!("proto:{owner}:upvalue:{index}")
         }
+        OriginExpressionKind::Prototype { prototype } => {
+            format!("prototype {prototype}")
+        }
         OriginExpressionKind::Global { name } => format!("global({})", name.display),
         OriginExpressionKind::Field { base, key, .. } => {
             format!(

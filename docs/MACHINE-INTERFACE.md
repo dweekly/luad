@@ -396,9 +396,9 @@ argument window contains exactly one owner-qualified, evidence-linked expression
 each argument register. A top-dependent argument window is represented explicitly and
 never guessed.
 
-Expressions preserve typed literals, parameters, safe closure captures, global and
-constant-key field lookups, fixed call results, eager concatenations, table-construction
-inputs, and Lua unary and binary operations. `MOD` remains an opcode fact with both
+Expressions preserve typed literals, parameters, safe closure captures, child
+prototypes, global and constant-key field lookups, fixed call results, eager
+concatenations, table-construction inputs, and Lua unary and binary operations. `MOD` remains an opcode fact with both
 operands; callers may recognize a string-format convention without `luad` asserting
 runtime formatting semantics. Conflicting control-flow definitions, dynamic keys,
 mutable or ambiguous captures, varargs, aliasing boundaries, unreachable code, and
