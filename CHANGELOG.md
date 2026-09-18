@@ -3,7 +3,7 @@
 All notable changes are documented here. `luad` is a 0.x experimental tool: no dialect
 is promoted to a supported tier and no interface carries a compatibility promise yet.
 
-## Unreleased
+## 0.3.0 — 2026-09-18
 
 - Emit closed `prototype` expressions with child prototype paths and physical PC
   evidence for proven `CLOSURE` call-argument definitions in Lua 5.1 origin analysis
@@ -26,8 +26,8 @@ is promoted to a supported tier and no interface carries a compatibility promise
 - Add convention-gated cross-chunk linking (`--link-convention luci-module-setglobal`)
   enabling corpus-wide module indexing and inter-artifact call-site resolution in batch
   export, emitting auditable `cross_chunk_link` facts with explicit statuses (`resolved`,
-  `absent`, `duplicate`, `dynamic`, `unsupported`), order-invariant indexing, and
-  `link.schema.json` (R-2).
+  `absent`, `duplicate`, `dynamic`, `unsupported`, `limit_exceeded`), order-invariant
+  indexing, fail-closed corpus and fact limits, and `link.schema.json` (R-2).
 
 ## 0.2.0 — 2026-09-17
 

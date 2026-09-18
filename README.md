@@ -9,7 +9,7 @@ non-standard ones that turn up inside extracted router and embedded firmware.
 It does not decompile. When you want source back, `luad` tells you exactly which profile
 the chunk uses so you can hand it to a decompiler that reads that profile.
 
-## Status: 0.2.0, experimental
+## Status: 0.3.0, experimental
 
 This is an early release of a tool built for fun. It works, and it gives real answers on
 real firmware, but no dialect is promoted to a supported tier and nothing here is
@@ -159,7 +159,7 @@ required to build or test luad; the walkthrough verifies luad facts and refusal 
 
 ## Limitations
 
-Current scope in 0.2.0:
+Current scope in 0.3.0:
 
 | Dialect | Opcodes | Tier | State |
 |---|---:|---|---|
@@ -179,8 +179,8 @@ answers, not that its correctness has been qualified.
 Lua 5.2, 5.3, and 5.5 are limited to structural facts and validation. Derived analysis
 commands refuse these dialects rather than presenting unqualified semantic results.
 Layout, operand, analysis-eligibility, and malformed-input regressions cover the fixes
-in 0.2.0; they do not establish complete semantic correctness or support for every
-vendor layout. See [the changelog](CHANGELOG.md#020--2026-09-17) for release details.
+in 0.3.0; they do not establish complete semantic correctness or support for every
+vendor layout. See [the changelog](CHANGELOG.md#030--2026-09-18) for release details.
 
 `luad` also does not do firmware extraction, decompilation, source reconstruction,
 exploitability judgment, or persistent research state. Those belong in other tools, and
@@ -202,7 +202,7 @@ luad schema chunk
 
 Consumers should read [docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md) for exit
 codes, stable-ID scope, truncation behavior, and the stdout/stderr contract. Schemas are
-versioned, but at 0.2.0 nothing carries a compatibility promise yet.
+versioned, but at 0.3.0 nothing carries a compatibility promise yet.
 
 [docs/examples/RECIPES.md](docs/examples/RECIPES.md) has practical composition recipes.
 
@@ -213,7 +213,7 @@ runnable Lua bytecode tool against chunks that stock desktop Lua never produces,
 starting with EdgeTX radio firmware (32-bit Lua 5.3, 4-byte floats, a header slot that
 does not describe the body). The honest summary as of 2026-09-02: tools built on the
 stock loader (official `luac`, luadec, rizin, ChunkSpy) refuse those chunks by name; the
-two unluac lineages read them correctly. luad 0.2.0 refuses unsupported numeric layouts
+two unluac lineages read them correctly. luad 0.3.0 refuses unsupported numeric layouts
 at the header; it does not provide an EdgeTX profile.
 
 This dated comparison informs the work. No goal here requires other tools to remain
@@ -228,10 +228,10 @@ delete the document in the same change and update this index.
 
 | Document | Purpose | Fresh as of | Revalidate or delete when |
 |---|---|---:|---|
-| [`README.md`](README.md) | What `luad` is, install, first commands, honest limitations, and the documentation index. | 2026-09-17 | Public scope, support status, setup, primary commands, or the documentation set changes. |
+| [`README.md`](README.md) | What `luad` is, install, first commands, honest limitations, and the documentation index. | 2026-09-18 | Public scope, support status, setup, primary commands, or the documentation set changes. |
 | [`AGENTS.md`](AGENTS.md) | Binding repository instructions, product-batch boundaries, and safety constraints for coding agents. | 2026-08-27 | Development workflow, proof policy, current priority, or repository invariants change. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-27 | Crates, ownership boundaries, core representations, or evidence layers change. |
-| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of released and unreleased user-visible changes. | 2026-09-17 | Every user-visible change or release; never use it as a forward plan. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of released user-visible changes. | 2026-09-18 | Every user-visible change or release; never use it as a forward plan. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor verification commands, test taxonomy, fixture provenance, and definition of done. | 2026-09-17 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
 | [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-09-06 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
 | [`ROADMAP.md`](ROADMAP.md) | Release completion boundary, future researcher outcomes, sequencing, and target support boundaries. | 2026-09-17 | Release scope, dependencies, parallel ownership, acceptance criteria, support boundaries, or exclusions change. |
@@ -239,8 +239,8 @@ delete the document in the same change and update this index.
 | [`docs/ROADMAP-1.0.md`](docs/ROADMAP-1.0.md) | The full qualification program a future 1.0 would need: milestones, evidence gates, target promotion, and release acceptance. | 2026-09-16 | The 1.0 destination, milestone order, release acceptance, or the qualification lifecycle changes. |
 | [`docs/BRINGUP.md`](docs/BRINGUP.md) | Setup for a developer machine, a self-hosted Actions runner, and a release builder, with the owning file for every tool pin. | 2026-09-02 | A tool pin, its owning file, the doctor's checks, runner labels or security boundary, or the release dry-run and rehearsal entry points change. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, separate product and qualification CI lanes, proportional evidence, process budgets, and agent orchestration. | 2026-08-27 | Planning artifacts, CI lanes, customer cadence, agent roles, evidence policy, process budgets, provider interfaces, or sprint-advance mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Active sprint contract: Convention-gated cross-chunk linking (R-2). | 2026-09-18 | The sprint completes, is accepted or rejected, or its scope or evidence boundary changes. |
-| [`docs/FEATURE-REQUEST-PLAN.md`](docs/FEATURE-REQUEST-PLAN.md) | Proposed sequencing, boundaries, and evidence for the remaining Deco-derived VM-fact requests. | 2026-09-18 | The active sprint selects, rejects, or materially rescopes a listed outcome; a public fact boundary, evidence gate, or feature-request priority changes. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | No-feature-work checkpoint; select the next contract separately. | 2026-09-18 | A stage replaces it with its contract: a qualification stage through a dedicated planning change, any other stage in the first commit of its own pull request. |
+| [`docs/FEATURE-REQUEST-PLAN.md`](docs/FEATURE-REQUEST-PLAN.md) | Proposed boundaries and evidence for the remaining Deco-derived VM-fact requests. | 2026-09-18 | The active sprint selects, rejects, or materially rescopes a listed outcome; a public fact boundary, evidence gate, or feature-request priority changes. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-27 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/PRIOR-ART-AND-CORPORA.md`](docs/PRIOR-ART-AND-CORPORA.md) | External tools, datasets, and bytecode-emitting ecosystems evaluated against the product scope, candidate fixture sources with license and provenance constraints, and the fidelity gaps they expose. | 2026-09-06 | A listed project changes license or status, a candidate corpus or vendor profile is adopted or rejected, or the PRD prior-art table is revised. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-09-18 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
