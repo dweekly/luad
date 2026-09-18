@@ -153,7 +153,7 @@ luad disasm tests/fixtures/firmware_tree/dispatcher.lua --raw --effects
 # Choose a decompiler that accepts the exact profile; compatibility is tool-specific.
 ```
 
-See [docs/examples/RECIPES.md](docs/examples/RECIPES.md#12-reproducible-firmware-investigation-walkthrough)
+See [docs/examples/RECIPES.md](docs/examples/RECIPES.md#13-reproducible-firmware-investigation-walkthrough)
 for the complete recipe and optional decompiler experiment. No external decompiler is
 required to build or test luad; the walkthrough verifies luad facts and refusal behavior.
 
