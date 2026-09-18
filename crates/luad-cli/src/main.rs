@@ -209,6 +209,7 @@ pub fn classify_diagnostic(diag: &Diagnostic) -> ExitCode {
     }
     if is_resource_limit_code(&diag.code)
         || diag.code.starts_with("CORE-LIMIT-")
+        || diag.code.starts_with("ANA-LIMIT-")
         || diag.message.contains("exceeds configured safety limit")
         || diag.message.contains("exceeds safety limit of")
     {
@@ -235,6 +236,8 @@ fn is_resource_limit_code(code: &str) -> bool {
             | "CORE-OVERFLOW-001"
             | "CORE-DEPTH-001"
             | "CORE-COUNT-001"
+            | "ANA-LIMIT-001"
+            | "ANA-LIMIT-002"
             | "L51-CODE-001"
             | "L51-CONST-001"
             | "L51-PROTO-001"
@@ -2740,6 +2743,7 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
     }
 
     let mut module_export_index = luad_analysis::ModuleExportIndex::default();
+    let mut any_limit_exceeded = false;
     if let Some(convention) = link_convention {
         for path_str in &file_paths {
             if let Ok(bytes) = read_input_bytes_with_reporting(path_str, false) {
@@ -2758,6 +2762,9 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
                     );
                 }
             }
+        }
+        if module_export_index.export_limit_exceeded {
+            any_limit_exceeded = true;
         }
     }
 
@@ -3067,11 +3074,13 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
                     .sum::<usize>()
             })
             .unwrap_or(0);
-        let link_facts = if let Some(convention) = link_convention {
+        let link_result = if let Some(convention) = link_convention {
             luad_analysis::resolve_chunk_links(&identity, &chunk, &module_export_index, convention)
         } else {
-            Vec::new()
+            luad_analysis::ChunkLinkResult::default()
         };
+        let link_facts = link_result.facts;
+        let link_diagnostics = link_result.diagnostics;
         let available_link_count = link_facts.len();
         let available_fact_count =
             count_available_facts_proto_tree(&chunk.main_proto, &fact_selection)
@@ -3147,7 +3156,17 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
         let instruction_count = emitter.instruction_count;
         drop(emitter);
 
-        for diag in &chunk.diagnostics {
+        let mut file_diagnostics = chunk.diagnostics.clone();
+        for diag in link_diagnostics {
+            if !file_diagnostics.iter().any(|d| d.code == diag.code) {
+                file_diagnostics.push(diag);
+            }
+        }
+
+        for diag in &file_diagnostics {
+            if classify_diagnostic(diag) == ExitCode::LimitExceeded {
+                any_limit_exceeded = true;
+            }
             let rec = JsonlDataRecord {
                 record_type: "diagnostic".to_string(),
                 context: context.clone(),
@@ -3170,7 +3189,7 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
             status: "succeeded".to_string(),
             error: None,
             instruction_count,
-            diagnostic_count: chunk.diagnostics.len(),
+            diagnostic_count: file_diagnostics.len(),
             is_truncated,
             emitted_fact_count: emitted_count,
             available_fact_count,
@@ -3198,7 +3217,9 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
 
     eprintln!("{succeeded_count} exported, {skipped_count} skipped, {failed_count} failed");
 
-    if succeeded_count == 0 || (args.strict && (skipped_count > 0 || failed_count > 0)) {
+    if any_limit_exceeded {
+        Ok(ExitCode::LimitExceeded)
+    } else if succeeded_count == 0 || (args.strict && (skipped_count > 0 || failed_count > 0)) {
         Ok(ExitCode::InvalidInput)
     } else {
         Ok(ExitCode::Success)
@@ -3329,6 +3350,14 @@ mod tests {
         );
         assert_eq!(
             classify_diagnostic(&make_item("CORE-LIMIT-003")),
+            ExitCode::LimitExceeded
+        );
+        assert_eq!(
+            classify_diagnostic(&make_item("ANA-LIMIT-001")),
+            ExitCode::LimitExceeded
+        );
+        assert_eq!(
+            classify_diagnostic(&make_item("ANA-LIMIT-002")),
             ExitCode::LimitExceeded
         );
 

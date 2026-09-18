@@ -23,9 +23,11 @@ pub use callgraph::{
 pub use cfg::{BasicBlock, CfgEdge, CfgEdgeKind, ControlFlowGraph};
 pub use diff::{diff_chunks, ChunkDiff, InstructionDiff, ProtoDiff};
 pub use linking::{
-    analyze_corpus_links, build_module_export_index, index_chunk_module_exports,
-    resolve_chunk_links, CrossChunkLinkFact, ExportDefinition, LinkConvention, LinkStatus,
-    ModuleExportIndex,
+    analyze_corpus_links, analyze_corpus_links_detailed, build_module_export_index,
+    build_module_export_index_bounded, index_chunk_module_exports,
+    index_chunk_module_exports_bounded, resolve_chunk_links, resolve_chunk_links_bounded,
+    ChunkLinkResult, CrossChunkLinkFact, ExportDefinition, LinkConvention, LinkStatus,
+    ModuleExportIndex, MAX_INDEXED_EXPORTS, MAX_LINK_FACTS,
 };
 pub use origins::{
     analyze_chunk_origins, CallArgumentWindow, CallOriginFact, ChunkOriginAnalysis,

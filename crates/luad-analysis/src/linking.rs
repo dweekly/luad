@@ -9,6 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use luad_core::diagnostic::{Diagnostic, DiagnosticCategory};
 use luad_core::envelope::InputIdentity;
 use luad_core::id::{ProtoPath, StableId};
 use luad_core::model::{Chunk, ConstantValue};
@@ -70,6 +71,8 @@ pub enum LinkStatus {
     Dynamic,
     /// Dialect or input format is unsupported for the chosen linking convention.
     Unsupported,
+    /// Linking could not be completed because a resource safety limit was exceeded.
+    LimitExceeded,
 }
 
 impl std::fmt::Display for LinkStatus {
@@ -80,6 +83,7 @@ impl std::fmt::Display for LinkStatus {
             Self::Duplicate => write!(f, "duplicate"),
             Self::Dynamic => write!(f, "dynamic"),
             Self::Unsupported => write!(f, "unsupported"),
+            Self::LimitExceeded => write!(f, "limit_exceeded"),
         }
     }
 }
@@ -127,10 +131,14 @@ pub struct ModuleExportIndex {
     pub dynamic_artifacts: BTreeSet<String>,
     /// Evidence of dynamic module declarations in the corpus.
     pub dynamic_evidence: Vec<StableId>,
+    /// Whether indexing was capped by the safety limit.
+    pub export_limit_exceeded: bool,
+    /// Diagnostics accumulated during indexing.
+    pub diagnostics: Vec<Diagnostic>,
 }
 
-const MAX_INDEXED_EXPORTS: usize = 10_000;
-const MAX_LINK_FACTS: usize = 100_000;
+pub const MAX_INDEXED_EXPORTS: usize = 10_000;
+pub const MAX_LINK_FACTS: usize = 100_000;
 
 /// Result of scanning a chunk for `module("...")` declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -255,6 +263,17 @@ pub fn index_chunk_module_exports(
     convention: LinkConvention,
     index: &mut ModuleExportIndex,
 ) {
+    index_chunk_module_exports_bounded(identity, chunk, convention, index, MAX_INDEXED_EXPORTS);
+}
+
+/// Index module exports from one chunk with an explicit capacity limit.
+pub fn index_chunk_module_exports_bounded(
+    identity: &InputIdentity,
+    chunk: &Chunk,
+    convention: LinkConvention,
+    index: &mut ModuleExportIndex,
+    max_exports: usize,
+) {
     if convention != LinkConvention::LuciModuleSetglobal {
         return;
     }
@@ -270,7 +289,18 @@ pub fn index_chunk_module_exports(
         }) => {
             let global_stores = analyze_chunk_global_stores(chunk);
             for store in global_stores {
-                if index.exports.len() >= MAX_INDEXED_EXPORTS {
+                if index.exports.len() >= max_exports {
+                    index.export_limit_exceeded = true;
+                    if !index.diagnostics.iter().any(|d| d.code == "ANA-LIMIT-001") {
+                        index.diagnostics.push(Diagnostic::error(
+                            "ANA-LIMIT-001",
+                            DiagnosticCategory::Analysis,
+                            StableId::Chunk,
+                            format!(
+                                "Corpus module export indexing safety limit ({max_exports}) exceeded; cross-chunk linking is incomplete"
+                            ),
+                        ));
+                    }
                     break;
                 }
 
@@ -318,11 +348,43 @@ pub fn build_module_export_index<'a>(
     chunks: impl IntoIterator<Item = (&'a InputIdentity, &'a Chunk)>,
     convention: LinkConvention,
 ) -> ModuleExportIndex {
+    build_module_export_index_bounded(chunks, convention, MAX_INDEXED_EXPORTS)
+}
+
+/// Build the corpus-wide module export index with an explicit capacity limit.
+#[must_use]
+pub fn build_module_export_index_bounded<'a>(
+    chunks: impl IntoIterator<Item = (&'a InputIdentity, &'a Chunk)>,
+    convention: LinkConvention,
+    max_exports: usize,
+) -> ModuleExportIndex {
     let mut index = ModuleExportIndex::default();
     for (identity, chunk) in chunks {
-        index_chunk_module_exports(identity, chunk, convention, &mut index);
+        index_chunk_module_exports_bounded(identity, chunk, convention, &mut index, max_exports);
     }
     index
+}
+
+/// Result of resolving cross-chunk links for one chunk, including any emitted diagnostics.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ChunkLinkResult {
+    pub facts: Vec<CrossChunkLinkFact>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+impl std::ops::Deref for ChunkLinkResult {
+    type Target = [CrossChunkLinkFact];
+    fn deref(&self) -> &Self::Target {
+        &self.facts
+    }
+}
+
+impl IntoIterator for ChunkLinkResult {
+    type Item = CrossChunkLinkFact;
+    type IntoIter = std::vec::IntoIter<CrossChunkLinkFact>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.facts.into_iter()
+    }
 }
 
 /// Resolve cross-chunk links for one chunk against the corpus module export index.
@@ -332,34 +394,55 @@ pub fn resolve_chunk_links(
     chunk: &Chunk,
     index: &ModuleExportIndex,
     convention: LinkConvention,
-) -> Vec<CrossChunkLinkFact> {
+) -> ChunkLinkResult {
+    resolve_chunk_links_bounded(identity, chunk, index, convention, MAX_LINK_FACTS)
+}
+
+/// Resolve cross-chunk links for one chunk with an explicit maximum link facts limit.
+#[must_use]
+pub fn resolve_chunk_links_bounded(
+    identity: &InputIdentity,
+    chunk: &Chunk,
+    index: &ModuleExportIndex,
+    convention: LinkConvention,
+    max_links: usize,
+) -> ChunkLinkResult {
     if convention != LinkConvention::LuciModuleSetglobal {
-        return Vec::new();
+        return ChunkLinkResult::default();
     }
 
     if !chunk.dialect.starts_with("lua5.1") {
-        return vec![CrossChunkLinkFact {
-            call_id: StableId::Chunk,
-            caller_path: identity.path.clone(),
-            caller_proto: ProtoPath::root(),
-            call_pc: 0,
-            label_segments: Vec::new(),
-            status: LinkStatus::Unsupported,
-            target_artifact: None,
-            target_proto: None,
-            evidence: Vec::new(),
-        }];
+        return ChunkLinkResult {
+            facts: vec![CrossChunkLinkFact {
+                call_id: StableId::Chunk,
+                caller_path: identity.path.clone(),
+                caller_proto: ProtoPath::root(),
+                call_pc: 0,
+                label_segments: Vec::new(),
+                status: LinkStatus::Unsupported,
+                target_artifact: None,
+                target_proto: None,
+                evidence: Vec::new(),
+            }],
+            diagnostics: Vec::new(),
+        };
     }
 
     let callee_analysis = analyze_chunk_callees(chunk);
     let mut links = Vec::new();
+    let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
-    for proto_callees in &callee_analysis.prototypes {
-        for call in &proto_callees.calls {
-            if links.len() >= MAX_LINK_FACTS {
-                break;
+    // Propagate index diagnostics if the export indexing limit was breached
+    if index.export_limit_exceeded {
+        for diag in &index.diagnostics {
+            if !diagnostics.iter().any(|d| d.code == diag.code) {
+                diagnostics.push(diag.clone());
             }
+        }
+    }
 
+    'outer: for proto_callees in &callee_analysis.prototypes {
+        for call in &proto_callees.calls {
             match &call.resolution {
                 CalleeResolution::ResolvedPath {
                     segments, evidence, ..
@@ -368,6 +451,32 @@ pub fn resolve_chunk_links(
                     if segments.first().is_some_and(|s| s == "luci")
                         || index.exports.contains_key(segments)
                     {
+                        if links.len() >= max_links {
+                            diagnostics.push(Diagnostic::error(
+                                "ANA-LIMIT-002",
+                                DiagnosticCategory::Analysis,
+                                call.call_id.clone(),
+                                format!(
+                                    "Cross-chunk link facts safety limit ({max_links}) exceeded; linking fact generation terminated early"
+                                ),
+                            ));
+                            let mut sorted_evidence = evidence.clone();
+                            sorted_evidence.sort();
+                            sorted_evidence.dedup();
+                            links.push(CrossChunkLinkFact {
+                                call_id: call.call_id.clone(),
+                                caller_path: identity.path.clone(),
+                                caller_proto: call.proto_path.clone(),
+                                call_pc: call.pc,
+                                label_segments: segments.clone(),
+                                status: LinkStatus::LimitExceeded,
+                                target_artifact: None,
+                                target_proto: None,
+                                evidence: sorted_evidence,
+                            });
+                            break 'outer;
+                        }
+
                         let link = match index.exports.get(segments) {
                             Some(candidates) if candidates.len() == 1 => {
                                 let candidate = &candidates[0];
@@ -426,6 +535,23 @@ pub fn resolve_chunk_links(
                                         target_proto: None,
                                         evidence: combined_evidence,
                                     }
+                                } else if index.export_limit_exceeded {
+                                    // When the export index cap was exceeded, unindexed exports cannot prove absence.
+                                    let mut sorted_evidence = evidence.clone();
+                                    sorted_evidence.sort();
+                                    sorted_evidence.dedup();
+
+                                    CrossChunkLinkFact {
+                                        call_id: call.call_id.clone(),
+                                        caller_path: identity.path.clone(),
+                                        caller_proto: call.proto_path.clone(),
+                                        call_pc: call.pc,
+                                        label_segments: segments.clone(),
+                                        status: LinkStatus::LimitExceeded,
+                                        target_artifact: None,
+                                        target_proto: None,
+                                        evidence: sorted_evidence,
+                                    }
                                 } else {
                                     let mut sorted_evidence = evidence.clone();
                                     sorted_evidence.sort();
@@ -457,6 +583,32 @@ pub fn resolve_chunk_links(
                     if let Some(name) = as_str_constant(key) {
                         let segments = vec![name];
                         if index.exports.contains_key(&segments) {
+                            if links.len() >= max_links {
+                                diagnostics.push(Diagnostic::error(
+                                    "ANA-LIMIT-002",
+                                    DiagnosticCategory::Analysis,
+                                    call.call_id.clone(),
+                                    format!(
+                                        "Cross-chunk link facts safety limit ({max_links}) exceeded; linking fact generation terminated early"
+                                    ),
+                                ));
+                                let mut sorted_evidence = evidence.clone();
+                                sorted_evidence.sort();
+                                sorted_evidence.dedup();
+                                links.push(CrossChunkLinkFact {
+                                    call_id: call.call_id.clone(),
+                                    caller_path: identity.path.clone(),
+                                    caller_proto: call.proto_path.clone(),
+                                    call_pc: call.pc,
+                                    label_segments: segments,
+                                    status: LinkStatus::LimitExceeded,
+                                    target_artifact: None,
+                                    target_proto: None,
+                                    evidence: sorted_evidence,
+                                });
+                                break 'outer;
+                            }
+
                             let candidates = &index.exports[&segments];
                             if candidates.len() == 1 {
                                 let candidate = &candidates[0];
@@ -514,7 +666,10 @@ pub fn resolve_chunk_links(
             .then_with(|| a.call_id.cmp(&b.call_id))
     });
 
-    links
+    ChunkLinkResult {
+        facts: links,
+        diagnostics,
+    }
 }
 
 /// Analyze cross-chunk links across an entire batch corpus.
@@ -523,12 +678,28 @@ pub fn analyze_corpus_links(
     chunks: &[(InputIdentity, Chunk)],
     convention: LinkConvention,
 ) -> Vec<CrossChunkLinkFact> {
+    let (links, _) = analyze_corpus_links_detailed(chunks, convention);
+    links
+}
+
+/// Analyze cross-chunk links across an entire batch corpus and return accumulated diagnostics.
+#[must_use]
+pub fn analyze_corpus_links_detailed(
+    chunks: &[(InputIdentity, Chunk)],
+    convention: LinkConvention,
+) -> (Vec<CrossChunkLinkFact>, Vec<Diagnostic>) {
     let index = build_module_export_index(chunks.iter().map(|(id, c)| (id, c)), convention);
     let mut all_links = Vec::new();
+    let mut all_diagnostics = index.diagnostics.clone();
 
     for (identity, chunk) in chunks {
-        let links = resolve_chunk_links(identity, chunk, &index, convention);
-        all_links.extend(links);
+        let result = resolve_chunk_links(identity, chunk, &index, convention);
+        all_links.extend(result.facts);
+        for diag in result.diagnostics {
+            if !all_diagnostics.iter().any(|d| d.code == diag.code) {
+                all_diagnostics.push(diag);
+            }
+        }
     }
 
     // Deterministic sort: caller_path, caller_proto, call_pc, call_id
@@ -540,5 +711,5 @@ pub fn analyze_corpus_links(
             .then_with(|| a.call_id.cmp(&b.call_id))
     });
 
-    all_links
+    (all_links, all_diagnostics)
 }

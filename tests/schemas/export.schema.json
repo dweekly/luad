@@ -1694,6 +1694,13 @@
           "enum": [
             "unsupported"
           ]
+        },
+        {
+          "description": "Linking could not be completed because a resource safety limit was exceeded.",
+          "type": "string",
+          "enum": [
+            "limit_exceeded"
+          ]
         }
       ]
     },

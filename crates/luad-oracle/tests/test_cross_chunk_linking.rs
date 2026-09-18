@@ -5,8 +5,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use luad_analysis::{
-    analyze_corpus_links, resolve_chunk_links, CrossChunkLinkFact, LinkConvention, LinkStatus,
-    ModuleExportIndex,
+    analyze_corpus_links, index_chunk_module_exports, index_chunk_module_exports_bounded,
+    resolve_chunk_links, resolve_chunk_links_bounded, CrossChunkLinkFact, LinkConvention,
+    LinkStatus, ModuleExportIndex,
 };
 use luad_core::envelope::{InputIdentity, JsonlDataRecord};
 use luad_core::id::ProtoPath;
@@ -414,5 +415,191 @@ fn test_cross_chunk_link_schema_validation() {
     assert!(
         validator.is_valid(&rec_val),
         "link record must validate against link.schema.json"
+    );
+}
+
+#[test]
+fn test_cross_chunk_linking_export_cap_fail_closed_and_limit_exceeded() {
+    ensure_fixtures();
+    let dir = fixture_dir();
+    let (mod_sys_id, mod_sys_chunk) = parse_fixture_chunk(&dir.join("mod_sys.luac"));
+    let (caller_missing_id, caller_missing_chunk) =
+        parse_fixture_chunk(&dir.join("caller_missing.luac"));
+
+    // Case 1: Cap is hit during export indexing (max_exports = 0).
+    let mut capped_index = ModuleExportIndex::default();
+    index_chunk_module_exports_bounded(
+        &mod_sys_id,
+        &mod_sys_chunk,
+        LinkConvention::LuciModuleSetglobal,
+        &mut capped_index,
+        0,
+    );
+
+    assert!(
+        capped_index.export_limit_exceeded,
+        "export_limit_exceeded must be set when capacity is exceeded"
+    );
+    assert!(
+        capped_index
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "ANA-LIMIT-001"),
+        "ANA-LIMIT-001 diagnostic must be emitted when export indexing limit is hit"
+    );
+
+    // Resolving a call against the capped index MUST NOT yield LinkStatus::Absent!
+    // Silent truncation leading to false proof of absence is strictly forbidden.
+    let capped_res = resolve_chunk_links(
+        &caller_missing_id,
+        &caller_missing_chunk,
+        &capped_index,
+        LinkConvention::LuciModuleSetglobal,
+    );
+    assert_eq!(capped_res.facts.len(), 1);
+    assert_eq!(
+        capped_res.facts[0].status,
+        LinkStatus::LimitExceeded,
+        "unmatched module symbol must fail closed with LimitExceeded status, NOT Absent"
+    );
+    assert_ne!(
+        capped_res.facts[0].status,
+        LinkStatus::Absent,
+        "capped index must never claim proof of absence"
+    );
+    assert!(
+        capped_res
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "ANA-LIMIT-001"),
+        "ANA-LIMIT-001 must propagate into chunk link result diagnostics"
+    );
+
+    // Negative control:
+    // With normal capacity (max_exports = 100), the missing symbol resolves to Absent
+    // and no ANA-LIMIT-001 is emitted.
+    let mut uncapped_index = ModuleExportIndex::default();
+    index_chunk_module_exports_bounded(
+        &mod_sys_id,
+        &mod_sys_chunk,
+        LinkConvention::LuciModuleSetglobal,
+        &mut uncapped_index,
+        100,
+    );
+    assert!(!uncapped_index.export_limit_exceeded);
+    assert!(uncapped_index.diagnostics.is_empty());
+
+    let uncapped_res = resolve_chunk_links(
+        &caller_missing_id,
+        &caller_missing_chunk,
+        &uncapped_index,
+        LinkConvention::LuciModuleSetglobal,
+    );
+    assert_eq!(uncapped_res.facts.len(), 1);
+    assert_eq!(
+        uncapped_res.facts[0].status,
+        LinkStatus::Absent,
+        "uncapped index correctly reports absent for genuinely unexported symbol"
+    );
+    assert!(uncapped_res.diagnostics.is_empty());
+
+    // Negative assertion proving that corrupting the capped status to Absent fails
+    let mut mutated = capped_res.facts[0].clone();
+    mutated.status = LinkStatus::Absent;
+    assert_ne!(
+        capped_res.facts[0].status, mutated.status,
+        "negative control: capped verdict must never equal Absent"
+    );
+}
+
+#[test]
+fn test_cross_chunk_linking_fact_cap_fail_closed_and_limit_exceeded() {
+    ensure_fixtures();
+    let dir = fixture_dir();
+    let (mod_sys_id, mod_sys_chunk) = parse_fixture_chunk(&dir.join("mod_sys.luac"));
+    let (caller_sys_id, caller_sys_chunk) = parse_fixture_chunk(&dir.join("caller_sys.luac"));
+
+    let mut index = ModuleExportIndex::default();
+    index_chunk_module_exports(
+        &mod_sys_id,
+        &mod_sys_chunk,
+        LinkConvention::LuciModuleSetglobal,
+        &mut index,
+    );
+
+    // Case 1: Cap is hit during link resolution (max_links = 0).
+    let capped_res = resolve_chunk_links_bounded(
+        &caller_sys_id,
+        &caller_sys_chunk,
+        &index,
+        LinkConvention::LuciModuleSetglobal,
+        0,
+    );
+
+    assert_eq!(capped_res.facts.len(), 1);
+    assert_eq!(
+        capped_res.facts[0].status,
+        LinkStatus::LimitExceeded,
+        "hit call must be explicitly marked LimitExceeded"
+    );
+    assert!(
+        capped_res
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "ANA-LIMIT-002"),
+        "ANA-LIMIT-002 must be emitted when link fact limit is reached"
+    );
+
+    // Case 2: Uncapped (max_links = 10) resolves successfully.
+    let uncapped_res = resolve_chunk_links_bounded(
+        &caller_sys_id,
+        &caller_sys_chunk,
+        &index,
+        LinkConvention::LuciModuleSetglobal,
+        10,
+    );
+    assert_eq!(uncapped_res.facts.len(), 1);
+    assert_eq!(uncapped_res.facts[0].status, LinkStatus::Resolved);
+    assert!(uncapped_res.diagnostics.is_empty());
+
+    // Negative control:
+    let mut mutated = capped_res.facts[0].clone();
+    mutated.status = LinkStatus::Resolved;
+    assert_ne!(
+        capped_res.facts[0].status, mutated.status,
+        "negative control: capped verdict must never equal Resolved"
+    );
+}
+
+#[test]
+fn test_cross_chunk_link_limit_exceeded_schema_validation() {
+    let root = workspace_root();
+    let schema_bytes =
+        fs::read(root.join("tests/schemas/link.schema.json")).expect("read link schema");
+    let schema_json: serde_json::Value =
+        serde_json::from_slice(&schema_bytes).expect("parse link schema");
+    let validator = jsonschema::validator_for(&schema_json).expect("compile link schema");
+
+    let fact = CrossChunkLinkFact {
+        call_id: luad_core::id::StableId::Chunk,
+        caller_path: "test/caller.luac".to_string(),
+        caller_proto: ProtoPath::root(),
+        call_pc: 0,
+        label_segments: vec!["luci".to_string(), "sys".to_string(), "exec".to_string()],
+        status: LinkStatus::LimitExceeded,
+        target_artifact: None,
+        target_proto: None,
+        evidence: Vec::new(),
+    };
+
+    let rec = JsonlDataRecord {
+        record_type: "cross_chunk_link".to_string(),
+        context: luad_core::envelope::JsonlRecordContext::failed_read(),
+        data: &fact,
+    };
+    let rec_val = serde_json::to_value(&rec).expect("serialize record");
+    assert!(
+        validator.is_valid(&rec_val),
+        "link record with LimitExceeded status must validate against link.schema.json"
     );
 }
