@@ -8,6 +8,7 @@ pub mod diagnostic_catalog;
 pub mod dialect;
 pub mod disasm;
 pub mod envelope;
+pub mod export;
 pub mod id;
 pub mod ir;
 pub mod limits;
@@ -36,6 +37,10 @@ pub use envelope::{
     AnalysisConfiguration, ExportEndRecord, ExportStartRecord, FileEndRecord, FileStartRecord,
     InputIdentity, JsonlDataRecord, JsonlMetadataRecord, JsonlRecordContext, JsonlSummaryRecord,
     MachineDocument, QueryEndRecord, QueryStartRecord, ValidationResponse, JSONL_SCHEMA_VERSION,
+};
+pub use export::{
+    ExportCapability, ExportFactFamily, EXPORT_FACT_FAMILIES, EXPORT_FACT_FAMILY_NAMES,
+    SORTED_FACT_FAMILY_NAMES,
 };
 pub use id::{ProtoPath, StableId};
 

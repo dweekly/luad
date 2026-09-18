@@ -321,7 +321,7 @@ pub struct ExportArgs {
     #[arg(long)]
     pub max_facts_per_file: Option<usize>,
 
-    /// Comma-separated counted fact families to emit.
+    /// Comma-separated counted fact families to emit (call_relation, callee, constant, instruction, origin, prototype, prototype_identity, upvalue, xref).
     #[arg(long)]
     pub facts: Option<String>,
 

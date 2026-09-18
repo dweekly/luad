@@ -448,7 +448,9 @@ truncation metadata.
 
 `--facts FAMILY,...` selects a non-empty subset of those nine counted families. Names
 are exact and may appear only once; an unknown, duplicate, or empty name is a usage
-error with empty stdout. Control records and diagnostics are always emitted. Omitting
+error with empty stdout, and unknown names list the sorted valid families. Discover the
+valid set at runtime via `luad capabilities --format json` under `export.fact_families`
+or `luad export --help`. Control records and diagnostics are always emitted. Omitting
 the option preserves the default all-family stream. When selection is explicit,
 `export_start.fact_families` records the canonical family order regardless of argument
 order; the field is absent from an unfiltered export.

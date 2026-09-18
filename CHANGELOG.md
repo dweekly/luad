@@ -19,6 +19,10 @@ is promoted to a supported tier and no interface carries a compatibility promise
   failure/skip retention, limit truncation, and strict-mode exit semantics (R-4).
 - Fix query expression tokenizer hang on invalid expressions containing single '=' or '!'
   characters.
+- Add export fact-family discovery and canonical registry (`ExportFactFamily`,
+  `EXPORT_FACT_FAMILIES`) exposing `export: ExportCapability` in `CapabilityManifest` and
+  `luad capabilities`, documenting valid families in `export --help`, and reporting sorted
+  valid families on unknown `--facts` arguments (R-5).
 
 ## 0.2.0 — 2026-09-17
 

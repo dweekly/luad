@@ -3,6 +3,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::export::{ExportCapability, SORTED_FACT_FAMILY_NAMES};
+
 /// Support tier for a dialect or feature.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -76,6 +78,8 @@ pub struct CapabilityManifest {
     pub dialects: Vec<DialectCapability>,
     /// Public diagnostic-catalog discovery entry point.
     pub diagnostic_catalog: DiagnosticCatalogCapability,
+    /// Public batch-export discovery entry point.
+    pub export: ExportCapability,
     /// Verification and evidence claims.
     pub evidence: Vec<String>,
 }
@@ -220,6 +224,15 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
             command: "diagnostics".to_string(),
             schema: "diagnostics".to_string(),
             formats: vec!["json".to_string(), "text".to_string()],
+        },
+        export: ExportCapability {
+            command: "export".to_string(),
+            schema: "export".to_string(),
+            formats: vec!["jsonl".to_string()],
+            fact_families: SORTED_FACT_FAMILY_NAMES
+                .iter()
+                .map(|&name| name.to_string())
+                .collect(),
         },
         evidence,
     }

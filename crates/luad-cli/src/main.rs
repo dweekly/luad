@@ -31,6 +31,7 @@ use luad_core::envelope::{
     InputIdentity, JsonlDataRecord, JsonlMetadataRecord, JsonlRecordContext, JsonlSummaryRecord,
     MachineDocument, QueryEndRecord, QueryStartRecord, ValidationResponse, JSONL_SCHEMA_VERSION,
 };
+use luad_core::export::{ExportFactFamily, EXPORT_FACT_FAMILIES, SORTED_FACT_FAMILY_NAMES};
 use luad_core::id::{ProtoPath, StableId};
 use luad_core::limits::{ParseMode, ResourceLimits};
 use luad_core::model::{Chunk, Prototype};
@@ -2319,54 +2320,6 @@ fn handle_diff(args: DiffArgs, writer: &mut impl io::Write) -> io::Result<ExitCo
     Ok(ExitCode::Success)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum ExportFactFamily {
-    Prototype,
-    PrototypeIdentity,
-    Instruction,
-    Constant,
-    Upvalue,
-    Xref,
-    Callee,
-    Origin,
-    CallRelation,
-}
-
-const EXPORT_FACT_FAMILIES: [ExportFactFamily; 9] = [
-    ExportFactFamily::Prototype,
-    ExportFactFamily::PrototypeIdentity,
-    ExportFactFamily::Instruction,
-    ExportFactFamily::Constant,
-    ExportFactFamily::Upvalue,
-    ExportFactFamily::Xref,
-    ExportFactFamily::Callee,
-    ExportFactFamily::Origin,
-    ExportFactFamily::CallRelation,
-];
-
-impl ExportFactFamily {
-    const fn as_str(self) -> &'static str {
-        match self {
-            Self::Prototype => "prototype",
-            Self::PrototypeIdentity => "prototype_identity",
-            Self::Instruction => "instruction",
-            Self::Constant => "constant",
-            Self::Upvalue => "upvalue",
-            Self::Xref => "xref",
-            Self::Callee => "callee",
-            Self::Origin => "origin",
-            Self::CallRelation => "call_relation",
-        }
-    }
-
-    fn parse(value: &str) -> Option<Self> {
-        EXPORT_FACT_FAMILIES
-            .iter()
-            .copied()
-            .find(|family| family.as_str() == value)
-    }
-}
-
 #[derive(Debug, Clone)]
 struct ExportFactSelection {
     families: std::collections::BTreeSet<ExportFactFamily>,
@@ -2389,7 +2342,10 @@ impl ExportFactSelection {
         let mut families = std::collections::BTreeSet::new();
         for name in value.split(',') {
             let Some(family) = ExportFactFamily::parse(name) else {
-                return Err(format!("unknown export fact family '{name}'"));
+                return Err(format!(
+                    "unknown export fact family '{name}'. Valid families: {}",
+                    SORTED_FACT_FAMILY_NAMES.join(", ")
+                ));
             };
             if !families.insert(family) {
                 return Err(format!("duplicate export fact family '{name}'"));

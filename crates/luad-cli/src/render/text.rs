@@ -531,6 +531,20 @@ pub fn render_capabilities(
         manifest.diagnostic_catalog.formats.join(", ")
     )?;
     writeln!(writer)?;
+    writeln!(writer, "{}", "Export Capability:".bold())?;
+    writeln!(
+        writer,
+        "  {} (schema: {}, formats: {})",
+        manifest.export.command,
+        manifest.export.schema,
+        manifest.export.formats.join(", ")
+    )?;
+    writeln!(
+        writer,
+        "  fact families: {}",
+        manifest.export.fact_families.join(", ")
+    )?;
+    writeln!(writer)?;
     writeln!(writer, "{}", "Dialect Matrix:".bold())?;
     for d in &manifest.dialects {
         let features_str = d.features.join(", ");
