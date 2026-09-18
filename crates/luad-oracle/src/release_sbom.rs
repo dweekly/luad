@@ -420,6 +420,28 @@ fn stable_workspace_ref(key: &PackageKey) -> String {
     format!("urn:luad:workspace:{}@{}", key.name, key.version)
 }
 
+pub fn deterministic_serial_number(version: &str, source_revision: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(b"luad-release-sbom:");
+    hasher.update(version.as_bytes());
+    hasher.update(b":");
+    hasher.update(source_revision.as_bytes());
+    let digest = hasher.finalize();
+    let mut bytes = [0u8; 16];
+    bytes.copy_from_slice(&digest[0..16]);
+    bytes[6] = (bytes[6] & 0x0f) | 0x50;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    format!(
+        "urn:uuid:{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        bytes[0], bytes[1], bytes[2], bytes[3],
+        bytes[4], bytes[5],
+        bytes[6], bytes[7],
+        bytes[8], bytes[9],
+        bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]
+    )
+}
+
 fn expected_component_ref(package: &CargoPackage) -> String {
     match &package.source {
         None => stable_workspace_ref(&package.key),
@@ -584,8 +606,11 @@ fn verify_document(
     {
         return Err("SBOM must be CycloneDX 1.5 document version 1".to_string());
     }
-    if value.get("serialNumber").is_some() {
-        return Err("SBOM must not contain a random serialNumber".to_string());
+    let expected_serial = deterministic_serial_number(&expected.root.key.version, source_revision);
+    if value.get("serialNumber").and_then(Value::as_str) != Some(&expected_serial) {
+        return Err(format!(
+            "SBOM serialNumber must match deterministic value {expected_serial}"
+        ));
     }
     if value.pointer("/metadata/timestamp").and_then(Value::as_str) != Some(CANONICAL_TIMESTAMP) {
         return Err("SBOM timestamp is not the canonical SOURCE_DATE_EPOCH=0 value".to_string());
@@ -850,6 +875,10 @@ fn canonicalize_generated(
         "name": SOURCE_REVISION_PROPERTY,
         "value": source_revision,
     }));
+
+    let deterministic_serial =
+        deterministic_serial_number(&expected.root.key.version, source_revision);
+    value["serialNumber"] = serde_json::Value::String(deterministic_serial);
 
     sort_document(&mut value)?;
     let verified = verify_document(&value, &expected, source_revision, lock_sha256)?;

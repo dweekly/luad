@@ -206,7 +206,7 @@ if args[0] == "api":
 
 if args[0] == "release" and len(args) >= 3 and args[1] == "create":
     tag = args[2]
-    if tag in state["releases"] or tag in state["tags"]:
+    if tag in state["releases"]:
         print("release identity exists", file=sys.stderr)
         sys.exit(1)
     positional = []
@@ -215,7 +215,7 @@ if args[0] == "release" and len(args) >= 3 and args[1] == "create":
             break
         positional.append(arg)
     asset_root = root / "assets" / tag
-    asset_root.mkdir(parents=True, exist_ok=False)
+    asset_root.mkdir(parents=True, exist_ok=True)
     assets = []
     for value in positional:
         source = pathlib.Path(value)
@@ -296,6 +296,9 @@ if args[0] == "release" and len(args) >= 3 and args[1] == "delete":
                 save()
                 reference_does_not_exist()
             del state["tags"][tag]
+        asset_root = root / "assets" / tag
+        if asset_root.exists():
+            shutil.rmtree(asset_root)
         save()
     sys.exit(0)
 
@@ -311,8 +314,24 @@ if args[0] == "attestation" and len(args) >= 3 and args[1] == "verify":
     if mode == "corrupted_archive":
         print("gh: attestation verification failed: digest mismatch", file=sys.stderr)
         sys.exit(1)
-    att_revision = ("f" * 40) if mode == "attestation_wrong_revision" else revision
-    att_workflow = ".github/workflows/other.yml" if mode == "attestation_wrong_workflow" else ".github/workflows/ci.yml"
+
+    expected_workflow = "dweekly/luad/.github/workflows/ci.yml"
+    signer_workflow = option("--signer-workflow")
+    if signer_workflow is not None and signer_workflow != expected_workflow:
+        print(f"gh: attestation verification failed: signer workflow mismatch: {signer_workflow} != {expected_workflow}", file=sys.stderr)
+        sys.exit(1)
+    if mode in ("attestation_wrong_workflow", "lookalike_workflow"):
+        print("gh: attestation verification failed: signer workflow mismatch", file=sys.stderr)
+        sys.exit(1)
+
+    source_digest = option("--source-digest")
+    if source_digest is not None and source_digest != revision:
+        print(f"gh: attestation verification failed: source digest mismatch: {source_digest} != {revision}", file=sys.stderr)
+        sys.exit(1)
+    if mode == "attestation_wrong_revision":
+        print("gh: attestation verification failed: source digest mismatch", file=sys.stderr)
+        sys.exit(1)
+
     statement = {
         "_type": "https://in-toto.io/Statement/v1",
         "subject": [
@@ -329,7 +348,7 @@ if args[0] == "attestation" and len(args) >= 3 and args[1] == "verify":
                 "buildType": "https://actions.github.com/buildtypes/runner/v1",
                 "externalParameters": {
                     "workflow": {
-                        "path": att_workflow,
+                        "path": ".github/workflows/ci.yml",
                         "repository": "https://github.com/dweekly/luad",
                         "ref": "refs/heads/main"
                     }
@@ -337,13 +356,28 @@ if args[0] == "attestation" and len(args) >= 3 and args[1] == "verify":
                 "internalParameters": {
                     "github": {
                         "event_name": "push",
-                        "sha": att_revision
+                        "sha": revision
                     }
                 }
             }
         }
     }
-    print(json.dumps([{"statement": statement}], separators=(",", ":")))
+    envelope = {
+        "attestation": {
+            "bundle": "dummy"
+        },
+        "verificationResult": {
+            "statement": statement,
+            "signature": {
+                "certificate": {
+                    "sourceRepository": "https://github.com/dweekly/luad",
+                    "signerWorkflow": expected_workflow
+                }
+            },
+            "verifiedTimestamps": []
+        }
+    }
+    print(json.dumps([envelope], separators=(",", ":")))
     sys.exit(0)
 
 if args[0] == "release" and len(args) >= 3 and args[1] == "edit":
@@ -589,6 +623,13 @@ impl Fixture {
             .args(["publish", &self.revision, RUN_ID])
             .output()
             .expect("run publication")
+    }
+
+    fn withdraw(&self, mode: &str, tag: &str) -> Output {
+        self.command(mode)
+            .args(["withdraw", tag, &self.revision])
+            .output()
+            .expect("run publication withdrawal")
     }
 
     fn state(&self) -> Value {
@@ -1132,6 +1173,83 @@ fn test_release_publication_rejects_corrupted_archive_attestation() {
     let fixture = Fixture::new();
     let res = fixture.publish("corrupted_archive");
     assert_failure(&res, "corrupted archive attestation");
+    let state = fixture.state();
+    assert_eq!(state["latest"], "v0.0.1");
+}
+
+#[test]
+fn test_release_publication_resumes_after_attestation_failure_and_promotes() {
+    let fixture = Fixture::new();
+    let tag = format!("v{VERSION}");
+
+    let first = fixture.publish("attestation_fail");
+    assert_failure(&first, "initial attestation failure");
+    let initial_state = fixture.state();
+    assert_eq!(initial_state["latest"], "v0.0.1");
+    assert!(initial_state["releases"]
+        .as_object()
+        .unwrap()
+        .contains_key(&tag));
+    assert!(initial_state["tags"]
+        .as_object()
+        .unwrap()
+        .contains_key(&tag));
+
+    let second = fixture.publish("ok");
+    assert_success(&second);
+    let state = fixture.state();
+    assert_eq!(state["latest"], tag);
+    assert_eq!(
+        String::from_utf8(second.stdout).unwrap().trim(),
+        format!("https://github.com/dweekly/luad/releases/tag/{tag}")
+    );
+}
+
+#[test]
+fn test_release_publication_withdraw_unpromoted_release_preserves_version_tag() {
+    let fixture = Fixture::new();
+    let tag = format!("v{VERSION}");
+
+    let first = fixture.publish("attestation_fail");
+    assert_failure(&first, "initial attestation failure");
+
+    let withdrawn = fixture.withdraw("ok", &tag);
+    assert_success(&withdrawn);
+    let state = fixture.state();
+    assert!(!state["releases"].as_object().unwrap().contains_key(&tag));
+    assert!(state["tags"].as_object().unwrap().contains_key(&tag));
+    assert_eq!(state["tags"][&tag], fixture.revision);
+
+    let second = fixture.publish("ok");
+    assert_success(&second);
+    let final_state = fixture.state();
+    assert_eq!(final_state["latest"], tag);
+    assert!(final_state["releases"]
+        .as_object()
+        .unwrap()
+        .contains_key(&tag));
+    assert_eq!(final_state["tags"][&tag], fixture.revision);
+}
+
+#[test]
+fn test_release_publication_cannot_withdraw_active_latest_release() {
+    let fixture = Fixture::new();
+    let tag = format!("v{VERSION}");
+
+    let published = fixture.publish("ok");
+    assert_success(&published);
+
+    let res = fixture.withdraw("ok", &tag);
+    assert_failure(&res, "cannot withdraw latest release");
+    let stderr = String::from_utf8_lossy(&res.stderr);
+    assert!(stderr.contains("cannot withdraw release"));
+}
+
+#[test]
+fn test_release_publication_rejects_lookalike_workflow_probe() {
+    let fixture = Fixture::new();
+    let res = fixture.publish("lookalike_workflow");
+    assert_failure(&res, "lookalike workflow probe");
     let state = fixture.state();
     assert_eq!(state["latest"], "v0.0.1");
 }

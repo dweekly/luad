@@ -19,7 +19,7 @@ usage() {
 usage:
   scripts/release-publication.sh rehearse <40-digit-source-revision> <ci-run-id>
   scripts/release-publication.sh publish <40-digit-source-revision> <ci-run-id>
-  scripts/release-publication.sh withdraw <publication-rehearsal-tag> <40-digit-source-revision>
+  scripts/release-publication.sh withdraw <rehearsal-or-version-tag> <40-digit-source-revision>
 EOF
   exit 2
 }
@@ -611,14 +611,16 @@ verify_archive_attestation() {
   local expected_sha256="$3"
   local attestation_json="${TEMP_ROOT}/attestation-$(basename "${archive}").json"
 
-  gh attestation verify "${archive}" --repo "${REPOSITORY}" --format json >"${attestation_json}"
+  gh attestation verify "${archive}" \
+    --repo "${REPOSITORY}" \
+    --signer-workflow "${REPOSITORY}/.github/workflows/ci.yml" \
+    --source-digest "${revision}" \
+    --format json >"${attestation_json}"
   bounded_file "${attestation_json}" "archive attestation response"
 
-  jq -e --arg sha "${expected_sha256}" --arg rev "${revision}" \
+  jq -e --arg sha "${expected_sha256}" \
     'if type == "array" then .[0] else . end |
-     ((.statement.subject[]? | select(.digest.sha256 == $sha)) or (.verificationResult != null)) and
-     (.. | select(. == $rev) | true) and
-     (.. | select((type == "string") and (endswith(".github/workflows/ci.yml") or contains("ci.yml"))) | true)' \
+     ((.verificationResult.statement // .statement).subject[]? | select(.digest.sha256 == $sha))' \
     "${attestation_json}" >/dev/null || die "attestation verification assertion failed for ${archive}"
 }
 
@@ -681,14 +683,30 @@ publish() {
     if [[ "${target_sha}" != "${revision}" ]]; then
       die "tag ${tag} already exists pointing to commit ${target_sha}, not ${revision}; version tags cannot be moved"
     fi
-    release_exists "${tag}" || die "tag ${tag} exists without its release"
 
+    if release_exists "${tag}"; then
+      verify_published_release "${tag}" "${title}" "${notes}" \
+        "${accepted}" "${version}" "${revision}" false
+      verify_archive_attestation "${download}/${linux_archive}" "${revision}" "${linux_sha}"
+      verify_archive_attestation "${download}/${macos_archive}" "${revision}" "${macos_sha}"
+      if [[ "$(latest_identity)" != "${tag}" ]]; then
+        gh release edit "${tag}" --repo "${REPOSITORY}" --latest >/dev/null
+        [[ "$(latest_identity)" == "${tag}" ]] || \
+          die "failed to promote ${tag} to latest release"
+      fi
+      printf '%s\n' "${REPOSITORY_URL}/releases/tag/${tag}"
+      return
+    fi
+
+    create_release "${tag}" "${title}" "${notes}" \
+      "${accepted}" "${version}" --latest=false
     verify_published_release "${tag}" "${title}" "${notes}" \
       "${accepted}" "${version}" "${revision}" false
     verify_archive_attestation "${download}/${linux_archive}" "${revision}" "${linux_sha}"
     verify_archive_attestation "${download}/${macos_archive}" "${revision}" "${macos_sha}"
+    gh release edit "${tag}" --repo "${REPOSITORY}" --latest >/dev/null
     [[ "$(latest_identity)" == "${tag}" ]] || \
-      die "existing release is not the latest release"
+      die "failed to promote ${tag} to latest release"
     printf '%s\n' "${REPOSITORY_URL}/releases/tag/${tag}"
     return
   fi
@@ -721,6 +739,18 @@ withdraw() {
   current_revision="$(git rev-parse HEAD)"
   validate_revision "${current_revision}"
   preflight_repository "${current_revision}"
+
+  if [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    release_exists "${tag}" || die "version release ${tag} is absent"
+    verify_tag_target "${tag}" "${revision}"
+    [[ "$(latest_identity)" != "${tag}" ]] || \
+      die "cannot withdraw release ${tag} because it is the active latest release"
+    gh release delete "${tag}" --repo "${REPOSITORY}" --yes >/dev/null
+    expect_api_absent "repos/${REPOSITORY}/releases/tags/${tag}" "release ${tag}"
+    verify_tag_target "${tag}" "${revision}"
+    return
+  fi
+
   [[ "${tag}" =~ ^publication-rehearsal-[0-9]+\.[0-9]+\.[0-9]+-${revision:0:12}$ ]] || \
     die "withdrawal tag does not match the named rehearsal revision"
   release_exists "${tag}" || die "retained rehearsal release is absent"

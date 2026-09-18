@@ -498,6 +498,12 @@ fn test_release_sbom_mutations_and_bad_tools_are_rejected() {
             "serial-number",
             Box::new(|value| value["serialNumber"] = json!("urn:uuid:random")),
         ),
+        (
+            "missing-serial-number",
+            Box::new(|value| {
+                value.as_object_mut().unwrap().remove("serialNumber");
+            }),
+        ),
     ]);
 
     for (name, mutate) in cases {

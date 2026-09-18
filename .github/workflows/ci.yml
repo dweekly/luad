@@ -404,6 +404,7 @@ jobs:
 
         mkdir -p artifacts/release-bundle
         cp "${first}/"* artifacts/release-bundle/
+        echo "LUAD_VERSION=${version}" >> "${GITHUB_ENV}"
 
     - name: Attest Release Archive Build Provenance
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -417,8 +418,8 @@ jobs:
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: actions/attest-sbom@v2
       with:
-        subject-path: artifacts/release-bundle/luad-*.cdx.json
-        sbom-path: artifacts/release-bundle/luad-*.cdx.json
+        subject-path: artifacts/release-bundle/luad-${{ env.LUAD_VERSION }}.cdx.json
+        sbom-path: artifacts/release-bundle/luad-${{ env.LUAD_VERSION }}.cdx.json
 
     - name: Upload Diagnostic Release Bundle
       uses: actions/upload-artifact@v4
