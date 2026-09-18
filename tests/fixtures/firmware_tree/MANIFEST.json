@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "purpose": "Public redistributable firmware-shaped input corpus for the 0.2 reproducible firmware investigation walkthrough.",
+  "provenance": {
+    "openwrt_authority": "tests/fixtures/authority/lua51-openwrt-lnum32/AUTHORITY.json",
+    "stock_authority": "tests/fixtures/precompiled/MANIFEST.json"
+  },
+  "cases": [
+    {
+      "path": "tests/fixtures/firmware_tree/dispatcher.lua",
+      "sha256": "21b751768c37a930607c8a04e803206554887ef9b8a6f9c415a8cba6a8be4a3c",
+      "byte_length": 1901,
+      "role": "valid_openwrt_bytecode_named_lua",
+      "license": "Apache-2.0",
+      "profile": "lua5.1-lnum32",
+      "layout": "int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4",
+      "expected_outcome": "success",
+      "expected_exit_code": 0,
+      "expected_instructions": 75
+    },
+    {
+      "path": "tests/fixtures/firmware_tree/system_service.luac",
+      "sha256": "d7e98a66c1ec34cde480a49c20aa5f070d2113294dd60b81100a1cf6d15ebe40",
+      "byte_length": 507,
+      "role": "valid_stock_bytecode_decompiler_handoff",
+      "license": "MIT",
+      "profile": "lua5.1",
+      "layout": "int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0",
+      "expected_outcome": "success",
+      "expected_exit_code": 0,
+      "expected_instructions": 27
+    },
+    {
+      "path": "tests/fixtures/firmware_tree/network_setup.lua",
+      "sha256": "b8901e9bca66fe67c9880d770e4c74276d6022ceab1f0f6c5932a43e15f0d5f2",
+      "byte_length": 335,
+      "role": "uncompiled_lua_source",
+      "license": "MIT",
+      "expected_outcome": "unsupported_source_text",
+      "expected_exit_code": 4,
+      "expected_diagnostic_code": "PARSE-SOURCE-001"
+    },
+    {
+      "path": "tests/fixtures/firmware_tree/corrupted_module.luac",
+      "sha256": "ec2d5b1f607ca9922fc415c220db0aa74bedd20875eeb0027bc0d3e92f90f2d0",
+      "byte_length": 10,
+      "role": "truncated_bytecode_header",
+      "license": "MIT",
+      "expected_outcome": "invalid_input",
+      "expected_exit_code": 1,
+      "expected_diagnostic_code": "PARSE-001",
+      "expected_error_offset": 10
+    },
+    {
+      "path": "tests/fixtures/firmware_tree/mips_be_legacy.luac",
+      "sha256": "ce6ea60fb7b3537b64ec0849af7afef681f7e34b0940c25aba324ebfeca9fd30",
+      "byte_length": 253,
+      "role": "unsupported_big_endian_layout",
+      "license": "MIT",
+      "expected_outcome": "unsupported_layout",
+      "expected_exit_code": 1,
+      "expected_diagnostic_code": "PARSE-001",
+      "expected_error_offset": 6
+    }
+  ]
+}

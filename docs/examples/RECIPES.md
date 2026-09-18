@@ -319,3 +319,104 @@ luad export sample.luac --format jsonl | while read -r record; do
   printf '%s\n' "$record" | jsonschema -i - export.schema.json
 done
 ```
+
+---
+
+## 12. Reproducible Firmware Investigation Walkthrough
+
+This end-to-end recipe demonstrates investigating an extracted embedded firmware directory containing mixed, non-standard, or corrupted Lua artifacts using the public reference corpus at `tests/fixtures/firmware_tree/`:
+
+- `dispatcher.lua`: Precompiled OpenWrt bytecode using a non-standard 32-bit `size_t` and `lnum32` integer representation, named `.lua` as typical in router images.
+- `system_service.luac`: Stock desktop Lua 5.1 64-bit bytecode suitable for standard decompiler handoff.
+- `network_setup.lua`: Plain uncompiled Lua source text.
+- `corrupted_module.luac`: Bytecode with a truncated 10-byte header.
+- `mips_be_legacy.luac`: Big-endian MIPS bytecode whose layout is currently unsupported.
+
+### Phase 1: Directory Triage & Streaming Inventory
+
+Triage the mixed directory in a single streaming pass using `luad export`:
+
+```bash
+luad export tests/fixtures/firmware_tree/* --format jsonl
+```
+
+Filter for file completion records and summary statistics:
+
+```bash
+luad export tests/fixtures/firmware_tree/* --format jsonl | jq -c '
+  if .record_type == "file_end" then
+    {file: .path, status: .status, emitted: .emitted_fact_count}
+  elif .record_type == "export_end" then
+    {processed: .files_processed, succeeded: .files_succeeded, skipped: .files_skipped, failed: .files_failed, total_instructions: .total_instructions}
+  else empty end'
+```
+
+Output:
+```json
+{"file":"tests/fixtures/firmware_tree/corrupted_module.luac","status":"skipped","emitted":0}
+{"file":"tests/fixtures/firmware_tree/dispatcher.lua","status":"succeeded","emitted":99}
+{"file":"tests/fixtures/firmware_tree/mips_be_legacy.luac","status":"skipped","emitted":0}
+{"file":"tests/fixtures/firmware_tree/network_setup.lua","status":"skipped","emitted":0}
+{"file":"tests/fixtures/firmware_tree/system_service.luac","status":"succeeded","emitted":33}
+{"processed":5,"succeeded":2,"skipped":3,"failed":0,"total_instructions":102}
+```
+
+The terminal `export_end` record verifies complete traversal: `processed == succeeded + skipped + failed`.
+
+For automated CI/gate scripts where any invalid or skipped input should stop execution, add `--strict` to exit with status code 1:
+
+```bash
+luad export tests/fixtures/firmware_tree/* --format jsonl --strict
+```
+
+### Phase 2: Per-File Inspection and Layout Authority
+
+Inspect individual artifacts to detect their exact runtime dialect, layout declarations, or refusal reasons:
+
+```bash
+# 1. OpenWrt embedded bytecode: correctly identified as lua5.1-lnum32 with 32-bit size_t and integral flag 4
+luad inspect tests/fixtures/firmware_tree/dispatcher.lua
+
+# 2. Stock desktop Lua 5.1 bytecode: 64-bit size_t, standard float representation
+luad inspect tests/fixtures/firmware_tree/system_service.luac
+
+# 3. Plain text source: rejected by name without crashing or misinterpreting as bytecode (exits with code 4)
+luad inspect tests/fixtures/firmware_tree/network_setup.lua
+
+# 4. Truncated header: fails with exact offset anchor (exits with code 1)
+luad inspect tests/fixtures/firmware_tree/corrupted_module.luac
+# error: Parsing failed at offset 10: Unexpected EOF: requested 1 bytes at offset 10, only 0 available
+
+# 5. Unsupported endianness: refused honestly at offset 6 rather than silently misreading operands (exits with code 1)
+luad inspect tests/fixtures/firmware_tree/mips_be_legacy.luac
+# error: Parsing failed at offset 6: Chunk layout validation failed: Unsupported endianness 0: only Little-Endian (1) is currently supported
+```
+
+### Phase 3: Targeted Fact Extraction and Static Auditing
+
+Extract sensitive constants, query global function accesses, and inspect raw instruction words and semantic register effects:
+
+```bash
+# 1. Audit string constants across valid chunks:
+luad export tests/fixtures/firmware_tree/dispatcher.lua --format jsonl --facts constant | \
+  jq -r 'select(.record_type == "constant" and .data.value.value.display?) | .data.value.value.display'
+
+# 2. Locate global variable resolutions:
+luad query tests/fixtures/firmware_tree/dispatcher.lua --where "mnemonic == 'GETGLOBAL'" --format json | \
+  jq -c '.data.matches[] | {pc: .id, summary: .summary}'
+
+# 3. Disassemble with exact 32-bit instruction words and register read/write effects:
+luad disasm tests/fixtures/firmware_tree/dispatcher.lua --raw --effects
+
+# 4. Audit call sites, unresolved targets, and argument origins:
+luad callees tests/fixtures/firmware_tree/dispatcher.lua --format json | jq '.data.prototypes[].calls[]'
+luad origins tests/fixtures/firmware_tree/dispatcher.lua --format json | jq '.data.prototypes[].calls[].argument_window'
+```
+
+### Phase 4: Honest Decompiler Handoff Boundary
+
+`luad` is a factual bytecode analyzer, not a decompiler. It enables informed decompiler handoff:
+
+- `system_service.luac` has `validated_layout: "int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0"` (stock Lua 5.1 64-bit). It can be handed directly to stock decompilers (e.g. `unluac`, `luadec`).
+- `dispatcher.lua` has `validated_layout: "int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4"` (OpenWrt LNUM32). Standard decompilers will refuse this chunk or produce wrong constants/opcodes because of the non-standard numeric encoding and 32-bit pointers. `luad`'s truthful layout reporting informs the reverse engineer to use an LNUM-aware decompiler branch or work from `luad`'s faithful disassembly and factual analysis.
+
