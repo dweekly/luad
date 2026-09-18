@@ -275,7 +275,10 @@ fn test_locked_source_install_works_without_registry() {
     let version = Command::new(&binary).arg("--version").output().unwrap();
     assert!(version.status.success());
     assert!(version.stderr.is_empty());
-    assert_eq!(version.stdout, b"luad 0.1.0\n");
+    assert_eq!(
+        version.stdout,
+        format!("luad {}\n", env!("CARGO_PKG_VERSION")).as_bytes()
+    );
 
     let capabilities = Command::new(&binary)
         .args(["capabilities", "--format", "json"])
@@ -285,6 +288,6 @@ fn test_locked_source_install_works_without_registry() {
     assert!(capabilities.stderr.is_empty());
     let document: Value = serde_json::from_slice(&capabilities.stdout).unwrap();
     assert_eq!(document["tool_name"], "luad");
-    assert_eq!(document["tool_version"], "0.1.0");
+    assert_eq!(document["tool_version"], env!("CARGO_PKG_VERSION"));
     assert_eq!(document["supported_dialects"], Value::Array(vec![]));
 }

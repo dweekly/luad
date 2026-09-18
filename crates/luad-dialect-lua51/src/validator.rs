@@ -1,39 +1,62 @@
 //! Structural and VM invariant validator for Lua 5.1 bytecode chunks.
 
-use luad_core::diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
+use luad_core::diagnostic::{
+    truncate_and_dedup_diagnostics, Diagnostic, DiagnosticCategory, Severity, Verdict,
+};
 use luad_core::model::{Chunk, Prototype};
 
 use crate::opcodes::{OpMode51, Opcode51, RawInstruction51};
 use crate::roles::{discover_roles_lua51, Lua51RoleFault};
 
+const MAX_DIAGNOSTICS: usize = 10_000;
+
 /// Validate Lua 5.1 chunk invariants.
 pub fn validate_chunk_lua51(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
     let mut diagnostics = chunk.diagnostics.clone();
-    validate_proto(&chunk.main_proto, &mut diagnostics);
-
-    let mut deduped = Vec::with_capacity(diagnostics.len());
-    for diag in diagnostics {
-        if !deduped.contains(&diag) {
-            deduped.push(diag);
-        }
+    let mut limit_reached = diagnostics.len() >= MAX_DIAGNOSTICS;
+    if !limit_reached {
+        validate_proto(&chunk.main_proto, &mut diagnostics, &mut limit_reached);
     }
-    let diagnostics = deduped;
+    limit_reached = limit_reached || diagnostics.len() > MAX_DIAGNOSTICS;
 
-    let verdict = if diagnostics.iter().any(|d| d.severity == Severity::Error) {
+    // Determine failure and completeness BEFORE truncating diagnostics
+    let has_errors = diagnostics.iter().any(|d| d.severity == Severity::Error);
+    let verdict = if has_errors {
         Verdict::Invalid
+    } else if limit_reached {
+        Verdict::Incomplete
     } else {
         Verdict::ValidForParser
     };
 
+    if limit_reached {
+        diagnostics.push(Diagnostic::error(
+            "CORE-LIMIT-003",
+            DiagnosticCategory::Parse,
+            chunk.main_proto.id.clone(),
+            format!("Diagnostic collection limit ({MAX_DIAGNOSTICS}) exceeded; validation terminated early and is incomplete"),
+        ));
+    }
+
+    let diagnostics = truncate_and_dedup_diagnostics(diagnostics, MAX_DIAGNOSTICS);
+
     (verdict, diagnostics)
 }
 
-fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
+fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>, limit_reached: &mut bool) {
+    if *limit_reached || diags.len() >= MAX_DIAGNOSTICS {
+        *limit_reached = true;
+        return;
+    }
     let num_insts = proto.instructions.len();
     let role_map = discover_roles_lua51(proto);
 
     // Report role map faults (truncated companion ranges)
     for fault in &role_map.faults {
+        if diags.len() >= MAX_DIAGNOSTICS {
+            *limit_reached = true;
+            return;
+        }
         match fault {
             Lua51RoleFault::TruncatedClosure { owner_pc, .. } => {
                 let inst = &proto.instructions[*owner_pc];
@@ -76,6 +99,10 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
 
     // 2. Validate instructions
     for (pc, inst) in proto.instructions.iter().enumerate() {
+        if diags.len() >= MAX_DIAGNOSTICS {
+            *limit_reached = true;
+            return;
+        }
         if !role_map.is_executable(pc) {
             continue;
         }
@@ -400,7 +427,11 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
     }
 
     for child in &proto.protos {
-        validate_proto(child, diags);
+        if *limit_reached || diags.len() >= MAX_DIAGNOSTICS {
+            *limit_reached = true;
+            return;
+        }
+        validate_proto(child, diags, limit_reached);
     }
 }
 

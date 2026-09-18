@@ -25,7 +25,7 @@ pub enum Confidence {
 }
 
 /// Source byte location and raw byte representation of a field or instruction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct SourceLocation {
     /// Absolute byte offset in the input chunk.
     pub byte_offset: usize,

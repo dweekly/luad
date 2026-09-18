@@ -227,8 +227,14 @@ pub enum BinaryResolutionError {
 /// Shared test-binary resolver.
 ///
 /// When `LUAD_CANDIDATE_BIN` is present—even empty—it is authoritative and errors for empty,
-/// missing, directory, or non-executable values without fallback. When absent, it falls back
-/// to workspace binary detection / build.
+/// missing, directory, or non-executable values without fallback.
+///
+/// When absent, resolution proceeds in order:
+/// 1. `CARGO_BIN_EXE_luad`: Explicit path exported by Cargo or outer build scripts.
+/// 2. `<cargo_target_dir>/debug/luad` or `<cargo_target_dir>/release/luad`.
+///
+/// If no binary is found, fails actionably with instructions to build the binary.
+/// Nested `cargo build` is never invoked.
 pub fn resolve_test_binary() -> Result<PathBuf, BinaryResolutionError> {
     if let Some(val) = std::env::var_os("LUAD_CANDIDATE_BIN") {
         let s = val.to_string_lossy();
@@ -254,9 +260,55 @@ pub fn resolve_test_binary() -> Result<PathBuf, BinaryResolutionError> {
         return Ok(path);
     }
 
-    // One resolver owns the workspace fallback so the target directory, the on-demand
-    // build, and the exported-variable precedence cannot diverge between call sites.
-    crate::try_luad_binary_path().map_err(BinaryResolutionError::WorkspaceFallbackFailed)
+    // 1. CARGO_BIN_EXE_luad precedence
+    if let Some(value) = std::env::var_os("CARGO_BIN_EXE_luad") {
+        if !value.is_empty() {
+            let path = PathBuf::from(value);
+            if path.is_dir() {
+                return Err(BinaryResolutionError::WorkspaceFallbackFailed(format!(
+                    "CARGO_BIN_EXE_luad path is a directory: {:?}",
+                    path
+                )));
+            }
+            if !path.exists() {
+                return Err(BinaryResolutionError::WorkspaceFallbackFailed(format!(
+                    "CARGO_BIN_EXE_luad points to missing path: {:?}",
+                    path
+                )));
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Ok(meta) = fs::metadata(&path) {
+                    if meta.permissions().mode() & 0o111 == 0 {
+                        return Err(BinaryResolutionError::WorkspaceFallbackFailed(format!(
+                            "CARGO_BIN_EXE_luad path is not executable: {:?}",
+                            path
+                        )));
+                    }
+                }
+            }
+            return Ok(path);
+        }
+    }
+
+    // 2. Target directory precedence
+    let target_dir = crate::cargo_target_dir();
+    let bin_name = if cfg!(windows) { "luad.exe" } else { "luad" };
+    let debug_path = target_dir.join("debug").join(bin_name);
+    if debug_path.exists() {
+        return Ok(debug_path);
+    }
+    let release_path = target_dir.join("release").join(bin_name);
+    if release_path.exists() {
+        return Ok(release_path);
+    }
+
+    Err(BinaryResolutionError::WorkspaceFallbackFailed(format!(
+        "luad binary not found in target directory {:?} (checked {:?} and {:?}). \
+        Build it explicitly before running tests: `cargo build -p luad-cli --bin luad` or set CARGO_BIN_EXE_luad",
+        target_dir, debug_path, release_path
+    )))
 }
 
 /// Create a 512-byte POSIX ustar tar header.

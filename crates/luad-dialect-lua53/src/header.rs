@@ -79,14 +79,16 @@ pub fn parse_header_lua53(reader: &mut SafeReader) -> Result<Header, Diagnostic>
     // 3. Format
     let format = reader.read_u8()?;
     if format != LUAC_FORMAT_STOCK {
-        let diag = Diagnostic::warning(
+        let diag = Diagnostic::error(
             "L53-HEADER-003",
             DiagnosticCategory::Structure,
             StableId::Chunk,
             format!("Format mismatch: expected official format 0, found {format}"),
         )
-        .with_source(SourceLocation::new(reader.position() - 1, &[format]));
-        reader.record_diagnostic(diag)?;
+        .with_source(SourceLocation::new(reader.position() - 1, &[format]))
+        .with_suggested_action("Verify whether chunk uses a custom compiler or dialect extension");
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
     }
 
     // 4. LUAC_DATA
@@ -113,7 +115,10 @@ pub fn parse_header_lua53(reader: &mut SafeReader) -> Result<Header, Diagnostic>
             StableId::Chunk,
             format!("Unsupported sizeof(int): expected 4, found {sizeof_int}"),
         )
-        .with_source(SourceLocation::new(reader.position() - 1, &[sizeof_int]));
+        .with_source(SourceLocation::new(reader.position() - 1, &[sizeof_int]))
+        .with_suggested_action(
+            "Ensure the bytecode chunk was built for a target architecture with 4-byte integers",
+        );
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -127,7 +132,10 @@ pub fn parse_header_lua53(reader: &mut SafeReader) -> Result<Header, Diagnostic>
             StableId::Chunk,
             format!("Unsupported sizeof(size_t): expected 4 or 8, found {sizeof_sizet}"),
         )
-        .with_source(SourceLocation::new(reader.position() - 1, &[sizeof_sizet]));
+        .with_source(SourceLocation::new(reader.position() - 1, &[sizeof_sizet]))
+        .with_suggested_action(
+            "Verify that target architecture size_t width is either 32-bit or 64-bit",
+        );
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -144,72 +152,87 @@ pub fn parse_header_lua53(reader: &mut SafeReader) -> Result<Header, Diagnostic>
         .with_source(SourceLocation::new(
             reader.position() - 1,
             &[instruction_size],
-        ));
+        ))
+        .with_suggested_action(
+            "Verify that instruction width is 4 bytes as required by the Lua 5.3 standard",
+        );
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
 
     // 8. sizeof(lua_Integer)
     let lua_integer_size = reader.read_u8()?;
-    if lua_integer_size != 8 && lua_integer_size != 4 {
+    if lua_integer_size != 8 {
         let diag = Diagnostic::error(
             "L53-HEADER-008",
             DiagnosticCategory::Structure,
             StableId::Chunk,
-            format!("Unsupported lua_Integer size: expected 4 or 8, found {lua_integer_size}"),
+            format!("Unsupported lua_Integer size: expected 8, found {lua_integer_size}"),
         )
         .with_source(SourceLocation::new(
             reader.position() - 1,
             &[lua_integer_size],
-        ));
+        ))
+        .with_suggested_action(
+            "64-bit integer Lua 5.3 is supported; 32-bit integer is not supported",
+        );
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
 
     // 9. sizeof(lua_Number)
     let lua_number_size = reader.read_u8()?;
-    if lua_number_size != 8 && lua_number_size != 4 {
+    if lua_number_size != 8 {
         let diag = Diagnostic::error(
             "L53-HEADER-009",
             DiagnosticCategory::Structure,
             StableId::Chunk,
-            format!("Unsupported lua_Number size: expected 4 or 8, found {lua_number_size}"),
+            format!("Unsupported lua_Number size: expected 8, found {lua_number_size}"),
         )
         .with_source(SourceLocation::new(
             reader.position() - 1,
             &[lua_number_size],
-        ));
+        ))
+        .with_suggested_action("Verify that lua_Number width is 8 bytes (double)");
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
 
     // 10. LUAC_INT test value
-    let luac_int = if lua_integer_size == 8 {
-        reader.read_i64_le()?
-    } else {
-        reader.read_i32_le()? as i64
-    };
-    if luac_int != LUAC_INT_53 && lua_integer_size == 8 {
-        let diag = Diagnostic::warning(
+    let luac_int = reader.read_i64_le()?;
+    if luac_int != LUAC_INT_53 {
+        let diag = Diagnostic::error(
             "L53-HEADER-010",
             DiagnosticCategory::Structure,
             StableId::Chunk,
             format!("Endianness mismatch: expected 0x5678, found 0x{luac_int:x}"),
         )
         .with_source(SourceLocation::new(
-            reader.position() - lua_integer_size as usize,
+            reader.position() - 8,
             &luac_int.to_le_bytes(),
-        ));
-        reader.record_diagnostic(diag)?;
+        ))
+        .with_suggested_action("Check chunk byte order; big-endian chunks are not supported");
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
     }
 
     // 11. LUAC_NUM test value
-    let luac_num = if lua_number_size == 8 {
-        reader.read_f64_le()?
-    } else {
-        let b = reader.read_exact(4)?;
-        f32::from_le_bytes(b.try_into().unwrap_or_default()) as f64
-    };
+    let luac_num = reader.read_f64_le()?;
+    if (luac_num - LUAC_NUM_53).abs() > f64::EPSILON {
+        let diag = Diagnostic::error(
+            "L53-HEADER-011",
+            DiagnosticCategory::Structure,
+            StableId::Chunk,
+            format!("Float format mismatch: expected 370.5, found {luac_num}"),
+        )
+        .with_source(SourceLocation::new(
+            reader.position() - 8,
+            &luac_num.to_le_bytes(),
+        ))
+        .with_suggested_action("Verify that float representation matches IEEE-754 double");
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
 
     let header_bytes = reader.slice_from_cursor(start_cursor)?;
     let loc = SourceLocation::new(start_pos, header_bytes);

@@ -3,6 +3,14 @@ name: Release Publication
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: Publication mode (rehearse or publish)
+        required: true
+        default: rehearse
+        type: choice
+        options:
+        - rehearse
+        - publish
       revision:
         description: Full lowercase source revision already accepted by main CI
         required: true
@@ -15,14 +23,15 @@ on:
 permissions:
   actions: read
   contents: write
+  attestations: read
 
 concurrency:
   group: release-publication
   cancel-in-progress: false
 
 jobs:
-  rehearse:
-    name: Rehearse Release Publication
+  publication:
+    name: Release Publication (${{ inputs.mode }})
     if: github.ref == 'refs/heads/main'
     runs-on: [self-hosted, Linux, X64, luad-linux]
     timeout-minutes: 30
@@ -43,8 +52,61 @@ jobs:
       with:
         toolchain: 1.97.1
 
-    - name: Publish, Verify, and Withdraw Rehearsal Probes
+    - name: Execute Publication Workflow
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-      run: ./scripts/release-publication.sh rehearse '${{ inputs.revision }}' '${{ inputs.ci_run_id }}'
+        MODE: ${{ inputs.mode }}
+        SOURCE_REVISION: ${{ inputs.revision }}
+        CI_RUN_ID: ${{ inputs.ci_run_id }}
+      run: ./scripts/release-publication.sh "$MODE" "$SOURCE_REVISION" "$CI_RUN_ID"
+
+  verify-download:
+    name: Verify Published Download (${{ matrix.platform }})
+    needs: publication
+    if: inputs.mode == 'publish'
+    permissions:
+      contents: read
+      attestations: read
+    runs-on: [self-hosted, "${{ matrix.os }}", "${{ matrix.arch }}", "${{ matrix.label }}"]
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - platform: linux-x86_64
+          os: Linux
+          arch: X64
+          label: luad-linux
+        - platform: macos-aarch64
+          os: macOS
+          arch: ARM64
+          label: luad-macos
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.revision }}
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: 1.97.1
+    - name: Download, Verify, Install, and Replay Walkthrough
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SOURCE_REVISION: ${{ inputs.revision }}
+        PACKAGE_PLATFORM: ${{ matrix.platform }}
+      run: |
+        version="$(sed -n 's/^version = "\([^" ]*\)"/\1/p' Cargo.toml | head -n 1)"
+        download="$(mktemp -d "${RUNNER_TEMP}/luad-download.XXXXXX")"
+        gh release download "v${version}" --repo dweekly/luad --dir "${download}"
+        cargo run --quiet --locked -p luad-oracle --bin luad-release -- \
+          verify-bundle --repository "$PWD" --bundle-dir "${download}"
+        archive="${download}/luad-${version}-${PACKAGE_PLATFORM}.tar.gz"
+        gh attestation verify "${archive}" --repo dweekly/luad \
+          --signer-workflow dweekly/luad/.github/workflows/ci.yml \
+          --source-digest "${SOURCE_REVISION}"
+        tar -xzf "${archive}" -C "${download}"
+        binary="${download}/luad-${version}-${PACKAGE_PLATFORM}/luad"
+        test "$("${binary}" --version)" = "luad ${version}"
+        "${binary}" capabilities --format json | jq -e '.supported_dialects == []'
+        CARGO_BIN_EXE_luad="${binary}" cargo test -p luad-oracle --test test_firmware_walkthrough

@@ -471,7 +471,8 @@ fn validate_expr(expr: &QueryExpr, chunk: &Chunk) -> Result<(), QueryError> {
         }
         QueryExpr::MnemonicDirect(_) => Ok(()),
         QueryExpr::Comparison { field, op, value } => {
-            if !chunk.dialect.starts_with("lua5.1")
+            const LUA51_PROFILES: &[&str] = &["lua5.1", "lua5.1-lnum32", "lua5.1-stock32"];
+            if !LUA51_PROFILES.contains(&chunk.dialect.as_str())
                 && matches!(
                     field,
                     QueryField::CalleeStatus
@@ -913,7 +914,8 @@ pub fn execute_query(
         _ => None,
     };
 
-    let is_lua51 = chunk.dialect.starts_with("lua5.1");
+    const LUA51_PROFILES: &[&str] = &["lua5.1", "lua5.1-lnum32", "lua5.1-stock32"];
+    let is_lua51 = LUA51_PROFILES.contains(&chunk.dialect.as_str());
     let callee_analysis = (is_lua51
         && expr_uses(parsed_ast.as_ref(), |field| {
             matches!(

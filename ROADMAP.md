@@ -1,52 +1,23 @@
 # `luad` roadmap
 
-Status: plan of record.
+Status: future priorities after the experimental 0.2 release candidate.
 
-Fresh as of: 2026-09-16.
+Fresh as of: 2026-09-17.
 
-Stack-ranked. The top item is what happens next. Nothing below is a commitment, and
-nothing here authorizes implementation on its own — a stage places its contract in
-[the active sprint](docs/NEXT-SPRINT.md) first, per
-[the contract lifecycle](docs/DEVELOPMENT-WORKFLOW.md#12-preservation-documentation-and-escalation).
+## Release completion boundary
 
-The full qualification program a 1.0 would need is kept separately in
-[docs/ROADMAP-1.0.md](docs/ROADMAP-1.0.md). It is deliberately not the current plan:
-`luad` is a 0.x tool and should ship useful improvements without paying 1.0's evidence
-cost for each one.
+Publish only a clean, versioned revision with truthful release notes, passing Linux
+x86-64 and macOS ARM64 CI, same-revision archives and source SBOM, and verified build
+attestations. Consume accepted bytes without rebuilding. Require fresh-download checks
+and the public walkthrough on both native platforms before declaring release complete.
+Any failed required check blocks publication; corrected published bytes require a new
+version rather than moving a version tag.
 
-## Next
-
-1. **Layout truth for Lua 5.2 and 5.3.** A declared header width must be honored or
-   refused by name, never silently replaced with the reader's preferred one. This is the
-   only defect class that produces a confident wrong answer instead of an error, so it
-   outranks every feature. Fix 5.2 and 5.3; probe 5.5 the same way.
-2. **Stop panicking on a closed pipe**
-   ([#78](https://github.com/dweekly/luad/issues/78)). `luad disasm … | head` exits 101
-   with a Rust panic instead of terminating quietly, so the first thing a new user does
-   with a long listing looks like a crash, and the exit code falls outside the range the
-   machine-interface contract documents.
-3. **Fix the offset in body-parse diagnostics.** EdgeTX chunks fail inside the body with
-   a diagnostic anchored at offset 0, which sends a reader to the wrong place. Report the
-   deepest failure offset reached.
-4. **One firmware walkthrough in the README.** Take a real extracted tree, inventory it,
-   find a global lookup, inspect the instruction, and hand the chunk to a decompiler.
-   Public inputs, exact commands, expected output.
-5. **Make the integration tests resolve `luad` once.** Each test binary that shells out
-   to the CLI spawns its own nested `cargo build -p luad-cli` when `CARGO_BIN_EXE_luad`
-   is unset, so a workspace run races several cargo invocations against each other and
-   against the outer build. `test_cli_inspect_and_disasm` was observed failing three
-   times on the first run after a rebuild and passing on repeat runs; the mechanism is
-   understood but not deterministically reproduced. Resolve the binary through one
-   helper that does not build.
-6. **Signed provenance and an SBOM on every release.** The release already produces a
-   CycloneDX SBOM and it was attached to 0.1.0 by hand. Make both automatic and
-   verifiable: build provenance attestations for each archive, generated in CI and
-   checkable by a consumer, with the SBOM emitted and attached by the same pipeline
-   rather than by a maintainer remembering. This is the missing production publication
-   mode named in the release procedure, not a new evidence layer.
-7. **Hostile-input bounds.** Runtime and peak-memory tripwires on the exposed paths, and
-   minimized regressions from the fuzz corpus. The fuzz smoke suite already runs in CI;
-   this makes its findings durable.
+The [active sprint or checkpoint](docs/NEXT-SPRINT.md) controls implementation scope.
+Choose the next researcher outcome separately after release verification. Keep all
+dialects experimental until their named evidence gates authorize promotion. The
+[1.0 program](docs/ROADMAP-1.0.md) does not gate an experimental 0.x release.
+Implementation history belongs in [CHANGELOG.md](CHANGELOG.md) and Git history.
 
 ## Later
 
@@ -78,16 +49,10 @@ supported target set is empty today.
 
 ## Sequencing: breadth before integration
 
-The integration ideas are the appealing part and they are not next. Feeding rizin,
-exporting a Kaitai spec, handing facts to an existing decompiler, and proposing a chunk
-verifier upstream all presume `luad` reads the chunks people actually have. Today it does
-not: it is behind two decompiler lineages on the embedded layouts that motivated it, and
-it can still report a corrupt chunk valid.
-
-So the order is layout truth, then a defensible read across the dialects, then the
-targets — and only then integration, where being wrong would now be wrong inside someone
-else's tool. A correctness defect exported into a dependent project costs far more than
-the same defect in a standalone CLI.
+Expand layout and validation coverage using public compiler authority before embedding
+luad facts in another tool. Select vendor profiles by demonstrated researcher need.
+Qualify analysis for an exact dialect before exposing it to dependent integrations.
+A silent incorrect answer takes priority over an adapter or integration feature.
 
 ## Out of scope
 

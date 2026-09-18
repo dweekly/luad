@@ -77,21 +77,7 @@ fn root() -> PathBuf {
 }
 
 fn luad_bin() -> PathBuf {
-    static LUAD: OnceLock<PathBuf> = OnceLock::new();
-    LUAD.get_or_init(|| {
-        if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
-            return path.into();
-        }
-        let workspace = root();
-        let out = Command::new("cargo")
-            .args(["build", "-p", "luad-cli", "--bin", "luad"])
-            .current_dir(&workspace)
-            .output()
-            .expect("build luad CLI");
-        assert!(out.status.success());
-        workspace.join("target/debug/luad")
-    })
-    .clone()
+    luad_oracle::luad_binary_path()
 }
 
 fn schema_validator(command: &str) -> &'static jsonschema::Validator {

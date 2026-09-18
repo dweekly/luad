@@ -9,12 +9,12 @@ non-standard ones that turn up inside extracted router and embedded firmware.
 It does not decompile. When you want source back, `luad` tells you exactly which profile
 the chunk uses so you can hand it to a decompiler that reads that profile.
 
-## Status: 0.1.0, experimental
+## Status: 0.2.0, experimental
 
 This is an early release of a tool built for fun. It works, and it gives real answers on
 real firmware, but no dialect is promoted to a supported tier and nothing here is
-qualified as a basis for security conclusions. Expect wrong answers on Lua 5.2 and 5.3.
-Please file issues.
+qualified as a basis for security conclusions. Lua 5.2, 5.3, and 5.5 provide structural
+facts and validation; derived analysis is refused for these dialects. Please file issues.
 
 See [limitations](#limitations) for what specifically does not work yet.
 
@@ -127,17 +127,47 @@ cargo run -q -p luad-cli -- inspect tests/fixtures/precompiled/lua54/hello.luac
 `luad` analyzes bytecode as data. It never invokes an external compiler and never
 executes the chunk.
 
+## Firmware investigation walkthrough
+
+A reproducible four-phase investigation using the public firmware-shaped fixture
+tree at `tests/fixtures/firmware_tree/`:
+
+```console
+# 1. Inventory and triage mixed artifacts via streaming JSONL export:
+luad export tests/fixtures/firmware_tree/*.lua tests/fixtures/firmware_tree/*.luac --format jsonl | \
+  jq -c 'select(.record_type == "export_end") | {processed: .files_processed, succeeded: .files_succeeded, skipped: .files_skipped, failed: .files_failed}'
+# {"processed":5,"succeeded":2,"skipped":3,"failed":0}
+
+# 2. Inspect layout and dialect authority (OpenWrt LNUM32 vs stock vs unsupported):
+luad inspect tests/fixtures/firmware_tree/dispatcher.lua
+# Dialect: lua5.1-lnum32, Layout: int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4
+
+# 3. Extract constants, search global lookups, and disassemble with effects:
+luad export tests/fixtures/firmware_tree/dispatcher.lua --format jsonl --facts constant
+luad query tests/fixtures/firmware_tree/dispatcher.lua --where "mnemonic == 'GETGLOBAL'"
+luad disasm tests/fixtures/firmware_tree/dispatcher.lua --raw --effects
+
+# 4. Informed decompiler handoff:
+# system_service.luac declares stock Lua 5.1 (sizet=8, integral_flag=0).
+# dispatcher.lua declares LNUM32 (sizet=4, integral_flag=4).
+# Choose a decompiler that accepts the exact profile; compatibility is tool-specific.
+```
+
+See [docs/examples/RECIPES.md](docs/examples/RECIPES.md#12-reproducible-firmware-investigation-walkthrough)
+for the complete recipe and optional decompiler experiment. No external decompiler is
+required to build or test luad; the walkthrough verifies luad facts and refusal behavior.
+
 ## Limitations
 
-Honest current state, as of 0.1.0:
+Current scope in 0.2.0:
 
 | Dialect | Opcodes | Tier | State |
 |---|---:|---|---|
 | `lua5.1` | 38 | Experimental | Best exercised. LNUM32 firmware profile and stock layouts both read. |
-| `lua5.2` | 40 | Experimental | **Known defects.** Declared header widths are not fully honored or refused by name. |
-| `lua5.3` | 47 | Experimental | **Known defects.** Same header-width class as 5.2. EdgeTX chunks fail inside the body. |
+| `lua5.2` | 40 | Experimental | Declared widths validated; implemented layouts decoded, other layouts refused. Derived analysis unavailable. |
+| `lua5.3` | 47 | Experimental | Declared widths and numeric canaries validated. Unsupported numeric layouts refused; no EdgeTX profile or derived analysis. |
 | `lua5.4` | 83 | Experimental | Reads well; exact-disassembly evidence exists for 5.4.8. |
-| `lua5.5` | 85 | Experimental | Present, least exercised. |
+| `lua5.5` | 85 | Experimental | Header/count bounds and operands checked. Derived analysis unavailable. |
 
 LuaJIT and Luau are separate bytecode systems and are out of scope. The capability
 manifest does not list them in any tier.
@@ -146,10 +176,11 @@ No dialect is in the `supported` tier and the supported set is empty, which is w
 `luad capabilities` reports. Experimental means the code is present and gives useful
 answers, not that its correctness has been qualified.
 
-The defect that matters most: on some Lua 5.2 and 5.3 inputs a declared layout width can
-be silently substituted rather than honored or refused by name, which means a confident
-wrong answer rather than an error. This is the first thing being fixed. Until it is,
-treat 5.2 and 5.3 output as a hint, not a fact.
+Lua 5.2, 5.3, and 5.5 are limited to structural facts and validation. Derived analysis
+commands refuse these dialects rather than presenting unqualified semantic results.
+Layout, operand, analysis-eligibility, and malformed-input regressions cover the fixes
+in 0.2.0; they do not establish complete semantic correctness or support for every
+vendor layout. See [the changelog](CHANGELOG.md#020--2026-09-17) for release details.
 
 `luad` also does not do firmware extraction, decompilation, source reconstruction,
 exploitability judgment, or persistent research state. Those belong in other tools, and
@@ -171,7 +202,7 @@ luad schema chunk
 
 Consumers should read [docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md) for exit
 codes, stable-ID scope, truncation behavior, and the stdout/stderr contract. Schemas are
-versioned, but at 0.1.0 nothing carries a compatibility promise yet.
+versioned, but at 0.2.0 nothing carries a compatibility promise yet.
 
 [docs/examples/RECIPES.md](docs/examples/RECIPES.md) has practical composition recipes.
 
@@ -182,8 +213,8 @@ runnable Lua bytecode tool against chunks that stock desktop Lua never produces,
 starting with EdgeTX radio firmware (32-bit Lua 5.3, 4-byte floats, a header slot that
 does not describe the body). The honest summary as of 2026-09-02: tools built on the
 stock loader (official `luac`, luadec, rizin, ChunkSpy) refuse those chunks by name; the
-two unluac lineages read them correctly; `luad` accepts the header and then fails inside
-the body with a diagnostic anchored at the wrong offset.
+two unluac lineages read them correctly. luad 0.2.0 refuses unsupported numeric layouts
+at the header; it does not provide an EdgeTX profile.
 
 This dated comparison informs the work. No goal here requires other tools to remain
 deficient — an upstream project fixing a defect is a good outcome.
@@ -197,24 +228,24 @@ delete the document in the same change and update this index.
 
 | Document | Purpose | Fresh as of | Revalidate or delete when |
 |---|---|---:|---|
-| [`README.md`](README.md) | What `luad` is, install, first commands, honest limitations, and the documentation index. | 2026-09-16 | Public scope, support status, setup, primary commands, or the documentation set changes. |
+| [`README.md`](README.md) | What `luad` is, install, first commands, honest limitations, and the documentation index. | 2026-09-17 | Public scope, support status, setup, primary commands, or the documentation set changes. |
 | [`AGENTS.md`](AGENTS.md) | Binding repository instructions, product-batch boundaries, and safety constraints for coding agents. | 2026-08-27 | Development workflow, proof policy, current priority, or repository invariants change. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-27 | Crates, ownership boundaries, core representations, or evidence layers change. |
-| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of released and unreleased user-visible changes. | 2026-09-16 | Every user-visible change or release; never use it as a forward plan. |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor verification commands, test taxonomy, fixture provenance, and definition of done. | 2026-09-03 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of released and unreleased user-visible changes. | 2026-09-17 | Every user-visible change or release; never use it as a forward plan. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor verification commands, test taxonomy, fixture provenance, and definition of done. | 2026-09-17 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
 | [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-09-06 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
-| [`ROADMAP.md`](ROADMAP.md) | Stack-ranked next steps after 0.1.0, the version-1 support boundary, and the ecosystem tools to reach for. | 2026-09-16 | Product targets, next-step order, the support boundary, or exclusions change. |
+| [`ROADMAP.md`](ROADMAP.md) | Release completion boundary, future researcher outcomes, sequencing, and target support boundaries. | 2026-09-17 | Release scope, dependencies, parallel ownership, acceptance criteria, support boundaries, or exclusions change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, the planned 1.0 target matrix, vulnerability reporting, and hostile-input threat model. | 2026-09-16 | Support policy, the planned target matrix, reporting channel, trust boundary, or threat model changes. |
 | [`docs/ROADMAP-1.0.md`](docs/ROADMAP-1.0.md) | The full qualification program a future 1.0 would need: milestones, evidence gates, target promotion, and release acceptance. | 2026-09-16 | The 1.0 destination, milestone order, release acceptance, or the qualification lifecycle changes. |
 | [`docs/BRINGUP.md`](docs/BRINGUP.md) | Setup for a developer machine, a self-hosted Actions runner, and a release builder, with the owning file for every tool pin. | 2026-09-02 | A tool pin, its owning file, the doctor's checks, runner labels or security boundary, or the release dry-run and rehearsal entry points change. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, separate product and qualification CI lanes, proportional evidence, process budgets, and agent orchestration. | 2026-08-27 | Planning artifacts, CI lanes, customer cadence, agent roles, evidence policy, process budgets, provider interfaces, or sprint-advance mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Neutral checkpoint authorizing no product implementation while the next stage is selected. | 2026-09-16 | A stage replaces it with its contract: a qualification stage through a dedicated planning change, any other stage in the first commit of its own pull request. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | No-feature-work checkpoint; finish authorized release verification before selecting another contract. | 2026-09-17 | A stage replaces it with its contract: a qualification stage through a dedicated planning change, any other stage in the first commit of its own pull request. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-27 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/PRIOR-ART-AND-CORPORA.md`](docs/PRIOR-ART-AND-CORPORA.md) | External tools, datasets, and bytecode-emitting ecosystems evaluated against the product scope, candidate fixture sources with license and provenance constraints, and the fidelity gaps they expose. | 2026-09-06 | A listed project changes license or status, a candidate corpus or vendor profile is adopted or rejected, or the PRD prior-art table is revised. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-27 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
-| [`docs/RELEASING.md`](docs/RELEASING.md) | Release policy for 0.x and 1.0, exact-target order, qualification checklist, packaging, publication, and rollback. | 2026-09-16 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |
+| [`docs/RELEASING.md`](docs/RELEASING.md) | Release policy for 0.x and 1.0, exact-target order, qualification checklist, packaging, publication, and rollback. | 2026-09-17 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |
 | [`docs/LUA51-LNUM32-CANDIDATE.md`](docs/LUA51-LNUM32-CANDIDATE.md) | Archived verification and firmware-handoff guide for the immutable, non-promoting Lua 5.1 LNUM32 RC1 artifact. | 2026-08-27 | RC1 evidence is retired, its retained artifacts become unverifiable, or a new LNUM32 candidate guide replaces it. |
-| [`docs/examples/RECIPES.md`](docs/examples/RECIPES.md) | Practical command-line and composition recipes for consuming machine JSON and JSONL output. | 2026-08-27 | Machine interface envelopes, export records, or CLI subcommands change. |
+| [`docs/examples/RECIPES.md`](docs/examples/RECIPES.md) | Practical command-line and composition recipes for consuming machine JSON and JSONL output. | 2026-09-17 | Machine interface envelopes, export records, CLI subcommands, or external handoff guidance change. |
 | [`docs/reviews/2026-08-25-roadmap-review.md`](docs/reviews/2026-08-25-roadmap-review.md) | Archived point-in-time roadmap and release-readiness critique retained as planning provenance, not current status. | 2026-08-27 | Delete only when its planning provenance is intentionally retired; never revalidate it as current release evidence. |
 
 ## Contributing

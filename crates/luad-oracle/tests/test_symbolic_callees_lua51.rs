@@ -21,21 +21,7 @@ fn fixture_chunk() -> luad_core::Chunk {
 }
 
 fn get_luad_bin() -> String {
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
-        return path;
-    }
-    static LUAD: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    LUAD.get_or_init(|| {
-        let root = luad_oracle::find_workspace_root();
-        let output = Command::new("cargo")
-            .args(["build", "-p", "luad-cli", "--bin", "luad"])
-            .current_dir(&root)
-            .output()
-            .expect("build luad");
-        assert!(output.status.success(), "luad build failed");
-        root.join("target/debug/luad").display().to_string()
-    })
-    .clone()
+    luad_oracle::luad_binary_path().display().to_string()
 }
 
 fn compiled_fixture_file() -> tempfile::NamedTempFile {

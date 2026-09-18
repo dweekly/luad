@@ -4,24 +4,7 @@ use luad_oracle::{compile_source_lua54, find_luac54};
 use std::process::Command;
 
 fn get_luad_bin() -> String {
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
-        return path;
-    }
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let mut path = std::path::PathBuf::from(manifest_dir);
-    path.pop(); // up from crates/luad-oracle
-    path.pop(); // up to repo root
-    let root = path.clone();
-    path.push("target");
-    path.push("debug");
-    path.push("luad");
-
-    let _ = Command::new("cargo")
-        .args(["build", "-p", "luad-cli", "--bin", "luad"])
-        .current_dir(&root)
-        .output();
-
-    path.to_str().unwrap().to_string()
+    luad_oracle::luad_binary_path().display().to_string()
 }
 
 #[test]

@@ -604,7 +604,7 @@ dependencies = [
 
 [[package]]
 name = "luad-analysis"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hex",
  "luad-core",
@@ -621,7 +621,7 @@ dependencies = [
 
 [[package]]
 name = "luad-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "clap_complete",
@@ -642,7 +642,7 @@ dependencies = [
 
 [[package]]
 name = "luad-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hex",
  "schemars",
@@ -654,7 +654,7 @@ dependencies = [
 
 [[package]]
 name = "luad-dialect-lua51"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hex",
  "luad-core",
@@ -666,7 +666,7 @@ dependencies = [
 
 [[package]]
 name = "luad-dialect-lua52"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hex",
  "luad-core",
@@ -678,7 +678,7 @@ dependencies = [
 
 [[package]]
 name = "luad-dialect-lua53"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hex",
  "luad-core",
@@ -690,7 +690,7 @@ dependencies = [
 
 [[package]]
 name = "luad-dialect-lua54"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hex",
  "luad-core",
@@ -702,7 +702,7 @@ dependencies = [
 
 [[package]]
 name = "luad-dialect-lua55"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hex",
  "luad-core",
@@ -714,7 +714,7 @@ dependencies = [
 
 [[package]]
 name = "luad-oracle"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "hex",

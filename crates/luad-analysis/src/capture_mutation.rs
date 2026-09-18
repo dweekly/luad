@@ -32,7 +32,8 @@ pub struct CaptureMutationSummary {
 impl CaptureMutationSummary {
     /// Build a bounded capture-mutation summary for the entire prototype tree of a chunk.
     pub fn build(chunk: &Chunk, budget: usize) -> Self {
-        if !chunk.dialect.starts_with("lua5.1") {
+        const LUA51_PROFILES: &[&str] = &["lua5.1", "lua5.1-lnum32", "lua5.1-stock32"];
+        if !LUA51_PROFILES.contains(&chunk.dialect.as_str()) {
             return Self::default();
         }
 

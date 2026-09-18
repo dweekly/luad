@@ -2,7 +2,7 @@
 
 Status: release policy and operational checklist.
 
-Fresh as of: 2026-09-06.
+Fresh as of: 2026-09-17.
 
 Revalidate or delete when: the release target matrix, qualification lifecycle, package
 platforms, artifact channel, compatibility policy, signing/checksum policy, release
@@ -278,6 +278,31 @@ seven-day upload is diagnostic transport. The assembler does not query GitHub, s
 locally authored prerequisite document or copied index does not authenticate a hosted
 result.
 
+### Experimental production publication
+
+After merging the version and release notes, require successful `main` CI on that
+exact revision. It supplies both platform archives, the source SBOM, checksums, the
+bundle index, and archive build attestations. Publish those accepted bytes with:
+
+```console
+gh workflow run release-publication.yml --ref main -f mode=publish \
+  -f revision=<full-main-revision> -f ci_run_id=<successful-main-ci-run-id>
+```
+
+The script verifies repository, revision, CI prerequisites, bundle identity, downloaded
+bytes, source archives, and each archive's signer workflow and source digest. It then
+sets the latest pointer. The workflow freshly downloads the release on Linux x86-64
+and macOS ARM64 and runs the public walkthrough against each installed archive.
+Release completion requires both jobs to pass.
+
+A retry against an existing release at the same revision reverifies its assets and
+attestations before completing promotion. To remove a failed, unpromoted version
+release, use `scripts/release-publication.sh withdraw v<version> <source-revision>`.
+This removes the release and its assets while preserving the version tag. It refuses
+the active latest release. Republish only the same accepted bytes and revision; never
+move an existing version tag. This command is also capable of withdrawing an older
+non-latest release, so select the failed version explicitly.
+
 ### Non-production publication rehearsal
 
 The manually dispatched `Release Publication` workflow consumes one already successful
@@ -318,8 +343,8 @@ scripts/release-publication.sh withdraw \
 
 Withdrawal deletes the release and tag and requires the release lookup, tag lookup, and
 both tag source-archive endpoints to return absent. Failure to prove cleanup is a hard
-failure requiring maintainer attention. Never reuse the deleted tag name or use this
-command for a `v*` tag.
+failure requiring maintainer attention. Never reuse a deleted rehearsal tag name. Version-tag withdrawal follows the
+separate production procedure above and preserves the tag.
 
 Crates.io is not a version-1.0 distribution channel. Every workspace package is marked
 `publish = false`, and neither `cargo install luad` nor another registry package name is

@@ -9,7 +9,6 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
-use std::sync::OnceLock;
 
 use luad_core::{Prototype, SafeReader};
 use serde_json::Value;
@@ -69,24 +68,7 @@ fn sha256(bytes: &[u8]) -> String {
 }
 
 fn luad_bin() -> PathBuf {
-    static LUAD: OnceLock<PathBuf> = OnceLock::new();
-    LUAD.get_or_init(|| {
-        if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
-            return path.into();
-        }
-        let output = Command::new("cargo")
-            .args(["build", "-p", "luad-cli", "--bin", "luad"])
-            .current_dir(workspace())
-            .output()
-            .expect("build public CLI");
-        assert!(
-            output.status.success(),
-            "luad build failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        workspace().join("target/debug/luad")
-    })
-    .clone()
+    luad_oracle::luad_binary_path()
 }
 
 fn run(args: &[&str]) -> Output {

@@ -3,7 +3,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
 use tempfile::NamedTempFile;
 
 pub mod candidate;
@@ -15,6 +14,7 @@ pub mod listing_parser;
 pub mod release_bundle;
 pub mod release_package;
 pub mod release_sbom;
+pub mod tripwire;
 
 pub use candidate::{
     decompress_gzip, parse_tar, resolve_test_binary, verify_platform_attestation,
@@ -28,6 +28,10 @@ pub use differential_disasm::{
 };
 pub use independent_lua51_oracle::{
     IndependentInstruction51, IndependentOpMode51, IndependentOpcode51,
+};
+pub use tripwire::{
+    parse_gnu_time_trailer, parse_macos_time_trailer, run_with_tripwire, TripwireBudget,
+    TripwireError, TripwireMetrics,
 };
 
 pub use gate_runner::{
@@ -226,72 +230,18 @@ pub fn cargo_target_dir() -> PathBuf {
     root.join("target")
 }
 
-/// Serializes the on-demand `luad` build so parallel test threads issue at most one.
-static LUAD_BUILD_LOCK: Mutex<()> = Mutex::new(());
-
-/// Absolute path of the public `luad` binary for integration tests, built if absent.
+/// Absolute path of the public `luad` binary for integration tests, without nested builds.
 ///
-/// `env!("CARGO_BIN_EXE_luad")` is not available here: Cargo defines `CARGO_BIN_EXE_<name>`
-/// only for binaries declared by the package under test, and `luad` belongs to `luad-cli`.
-/// `scripts/check.sh` exports the variable at runtime. Otherwise the binary is resolved
-/// inside whatever target directory Cargo is using, and built there when it is not
-/// present: `cargo test -p luad-oracle` builds only `luad-oracle`, so a fresh target
-/// directory never contains `luad` until something asks for it.
+/// Precedence:
+/// 1. `LUAD_CANDIDATE_BIN`: Authoritative candidate binary override if set.
+/// 2. `CARGO_BIN_EXE_luad`: Set by outer test scripts or cargo integration tests.
+/// 3. `<cargo_target_dir>/debug/luad` or `<cargo_target_dir>/release/luad`.
 ///
-/// Absence is never reported as success; a failed build returns the command's output.
+/// When the binary is absent, an actionable error is returned instructing the caller
+/// to build `luad` explicitly (`cargo build -p luad-cli --bin luad`).
+/// Nested `cargo build` is never invoked.
 pub fn try_luad_binary_path() -> Result<PathBuf, String> {
-    if let Some(value) = std::env::var_os("CARGO_BIN_EXE_luad") {
-        if !value.is_empty() {
-            let path = PathBuf::from(value);
-            if path.exists() {
-                return Ok(path);
-            }
-        }
-    }
-
-    let target_dir = cargo_target_dir();
-    let path = target_dir.join("debug").join("luad");
-    if path.exists() {
-        return Ok(path);
-    }
-
-    let guard = LUAD_BUILD_LOCK.lock();
-    // A poisoned lock means another thread panicked mid-build; the build itself is
-    // idempotent, so recover the guard and rebuild rather than propagating the panic.
-    let _guard = match guard {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    if path.exists() {
-        return Ok(path);
-    }
-
-    // Cargo exports CARGO for processes it launches; falling back to the name on PATH
-    // keeps this working when a test binary is run directly.
-    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    let root = find_workspace_root();
-    let output = Command::new(cargo)
-        .args(["build", "-p", "luad-cli", "--bin", "luad", "--target-dir"])
-        .arg(&target_dir)
-        .current_dir(&root)
-        .output()
-        .map_err(|error| format!("failed to spawn cargo build -p luad-cli: {error}"))?;
-
-    if !output.status.success() {
-        return Err(format!(
-            "cargo build -p luad-cli --bin luad --target-dir {} failed with status {:?}\nstderr:\n{}",
-            target_dir.display(),
-            output.status.code(),
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-    if !path.exists() {
-        return Err(format!(
-            "cargo build reported success but {} does not exist",
-            path.display()
-        ));
-    }
-    Ok(path)
+    resolve_test_binary().map_err(|error| error.to_string())
 }
 
 /// Absolute path of the public `luad` binary, panicking when it cannot be produced.

@@ -596,24 +596,7 @@ fn sha256(bytes: &[u8]) -> String {
 /// The CLI under test, located once: the many probes below all drive the same binary.
 fn luad_bin() -> &'static Path {
     static BIN: OnceLock<PathBuf> = OnceLock::new();
-    BIN.get_or_init(|| {
-        if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
-            return path.into();
-        }
-        let workspace = luad_oracle::find_workspace_root();
-        let output = Command::new("cargo")
-            .args(["build", "-p", "luad-cli", "--bin", "luad"])
-            .current_dir(&workspace)
-            .output()
-            .expect("build luad CLI");
-        assert!(
-            output.status.success(),
-            "luad build failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        workspace.join("target/debug/luad")
-    })
-    .as_path()
+    BIN.get_or_init(luad_oracle::luad_binary_path).as_path()
 }
 
 /// Runs one public machine boundary over an in-memory chunk under explicit `lua5.1`

@@ -292,6 +292,10 @@ jobs:
       - release-archives
       - test
     runs-on: [self-hosted, Linux, X64, luad-linux]
+    permissions:
+      id-token: write
+      attestations: write
+      contents: read
     steps:
     - uses: actions/checkout@v4
 
@@ -400,6 +404,22 @@ jobs:
 
         mkdir -p artifacts/release-bundle
         cp "${first}/"* artifacts/release-bundle/
+        echo "LUAD_VERSION=${version}" >> "${GITHUB_ENV}"
+
+    - name: Attest Release Archive Build Provenance
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/attest-build-provenance@v2
+      with:
+        subject-path: |
+          artifacts/release-bundle/luad-*-linux-x86_64.tar.gz
+          artifacts/release-bundle/luad-*-macos-aarch64.tar.gz
+
+    - name: Attest Release SBOM
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/attest-sbom@v2
+      with:
+        subject-path: artifacts/release-bundle/luad-${{ env.LUAD_VERSION }}.cdx.json
+        sbom-path: artifacts/release-bundle/luad-${{ env.LUAD_VERSION }}.cdx.json
 
     - name: Upload Diagnostic Release Bundle
       uses: actions/upload-artifact@v4

@@ -21,7 +21,6 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::OnceLock;
 
 use sha2::{Digest, Sha256};
 
@@ -113,34 +112,7 @@ fn workspace_root() -> PathBuf {
 /// Absence of the binary is a hard failure: the acceptance suite must never report a
 /// green or skipped result because the public interface could not be produced.
 fn luad_bin() -> PathBuf {
-    static BINARY: OnceLock<PathBuf> = OnceLock::new();
-    BINARY
-        .get_or_init(|| {
-            let binary = luad_oracle::luad_binary_path();
-            if binary.exists() {
-                return binary;
-            }
-            let root = workspace_root();
-
-            let build = Command::new("cargo")
-                .args(["build", "-p", "luad-cli", "--bin", "luad"])
-                .current_dir(&root)
-                .output()
-                .unwrap_or_else(|error| {
-                    panic!("Failed to spawn `cargo build -p luad-cli`: {error}")
-                });
-
-            assert!(
-                binary.exists(),
-                "Public `luad` binary is required and was not produced at {}. \
-                 cargo build status={:?}\nstderr:\n{}",
-                binary.display(),
-                build.status.code(),
-                String::from_utf8_lossy(&build.stderr)
-            );
-            binary
-        })
-        .clone()
+    luad_oracle::luad_binary_path()
 }
 
 /// Resolve a pinned fixture and enforce its recorded SHA-256.

@@ -8,7 +8,7 @@ use crate::provenance::SourceLocation;
 
 /// Diagnostic severity level.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
 #[serde(rename_all = "kebab-case")]
 pub enum Severity {
@@ -21,7 +21,7 @@ pub enum Severity {
 }
 
 /// Category of diagnostic check.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum DiagnosticCategory {
     /// Raw binary parsing, truncation, or format-envelope error.
@@ -39,7 +39,7 @@ pub enum DiagnosticCategory {
 }
 
 /// Structured diagnostic item.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct Diagnostic {
     /// Stable diagnostic error code (e.g. "L54-HEADER-001", "L54-JUMP-003").
     pub code: String,
@@ -66,6 +66,27 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
+    /// Construct a general diagnostic item.
+    pub fn new(
+        code: impl Into<String>,
+        category: DiagnosticCategory,
+        severity: Severity,
+        target: StableId,
+        message: impl Into<String>,
+    ) -> Self {
+        Self {
+            code: code.into(),
+            category,
+            severity,
+            target,
+            message: message.into(),
+            source: None,
+            evidence: None,
+            suggested_action: None,
+            help_topic: None,
+        }
+    }
+
     /// Construct a diagnostic error.
     pub fn error(
         code: impl Into<String>,
@@ -156,4 +177,100 @@ pub enum Verdict {
     Incomplete,
     /// More than one format interpretation remains plausible.
     Ambiguous,
+}
+
+/// Deduplicate diagnostics preserving order and truncate to `max_count`, ensuring errors are prioritized
+/// over warnings so that truncation never conceals bytecode invalidity, and preserving `CORE-LIMIT-003` at the end.
+pub fn truncate_and_dedup_diagnostics(
+    diagnostics: Vec<Diagnostic>,
+    max_count: usize,
+) -> Vec<Diagnostic> {
+    let mut deduped = Vec::with_capacity(diagnostics.len().min(max_count + 1));
+    let mut seen = std::collections::HashSet::new();
+
+    for diag in diagnostics {
+        if seen.insert(diag.clone()) {
+            deduped.push(diag);
+        }
+    }
+
+    if deduped.len() <= max_count {
+        return deduped;
+    }
+
+    let (errors, warnings): (Vec<Diagnostic>, Vec<Diagnostic>) = deduped
+        .into_iter()
+        .partition(|d| d.severity == Severity::Error);
+
+    let (core_limit, errors): (Vec<Diagnostic>, Vec<Diagnostic>) =
+        errors.into_iter().partition(|d| d.code == "CORE-LIMIT-003");
+
+    let mut result = Vec::with_capacity(max_count);
+    let reserved_for_core_limit = core_limit.len().min(max_count);
+    let budget_for_others = max_count.saturating_sub(reserved_for_core_limit);
+
+    let error_take = errors.len().min(budget_for_others);
+    result.extend(errors.into_iter().take(error_take));
+
+    let remaining_budget = budget_for_others.saturating_sub(result.len());
+    if remaining_budget > 0 {
+        result.extend(warnings.into_iter().take(remaining_budget));
+    }
+
+    result.extend(core_limit.into_iter().take(reserved_for_core_limit));
+
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::id::ProtoPath;
+
+    fn make_test_diag(code: &str, sev: Severity) -> Diagnostic {
+        Diagnostic::new(
+            code,
+            DiagnosticCategory::Parse,
+            sev,
+            StableId::proto(ProtoPath::root()),
+            "msg",
+        )
+    }
+
+    #[test]
+    fn test_truncate_and_dedup_preserves_order_under_cap() {
+        let diags = vec![
+            make_test_diag("W1", Severity::Warning),
+            make_test_diag("W2", Severity::Warning),
+            make_test_diag("W1", Severity::Warning),
+            make_test_diag("E1", Severity::Error),
+        ];
+        let result = truncate_and_dedup_diagnostics(diags, 10);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].code, "W1");
+        assert_eq!(result[1].code, "W2");
+        assert_eq!(result[2].code, "E1");
+    }
+
+    #[test]
+    fn test_truncate_and_dedup_prioritizes_errors_over_warnings() {
+        let mut diags = Vec::new();
+        for i in 0..100 {
+            diags.push(make_test_diag(&format!("W{i}"), Severity::Warning));
+        }
+        diags.push(make_test_diag("E1", Severity::Error));
+        diags.push(make_test_diag("CORE-LIMIT-003", Severity::Error));
+
+        // Cap at 10 items
+        let result = truncate_and_dedup_diagnostics(diags, 10);
+        assert_eq!(result.len(), 10);
+        // First item must be the error E1
+        assert_eq!(result[0].code, "E1");
+        // Last item must be CORE-LIMIT-003
+        assert_eq!(result[9].code, "CORE-LIMIT-003");
+        // Intermediate items are the first warnings W0..W7
+        for i in 0..8 {
+            assert_eq!(result[1 + i].code, format!("W{i}"));
+        }
+    }
 }

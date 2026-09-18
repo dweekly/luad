@@ -125,7 +125,7 @@ pub fn decode_proto_lua54(
     let maxstacksize = reader.read_u8()?;
 
     // 2. Code vector
-    let (code_size_val, _) = reader.read_varint_lua54()?;
+    let (code_size_val, code_size_loc) = reader.read_varint_lua54()?;
     let code_size = code_size_val as usize;
 
     if code_size > reader.limits().max_instructions_per_proto {
@@ -134,7 +134,8 @@ pub fn decode_proto_lua54(
             DiagnosticCategory::Parse,
             id.clone(),
             format!("Instruction count {code_size} exceeds safety limit"),
-        );
+        )
+        .with_source(code_size_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -154,7 +155,7 @@ pub fn decode_proto_lua54(
     }
 
     // 3. Constants vector
-    let (k_size_val, _) = reader.read_varint_lua54()?;
+    let (k_size_val, k_size_loc) = reader.read_varint_lua54()?;
     let k_size = k_size_val as usize;
 
     if k_size > reader.limits().max_constants_per_proto {
@@ -163,7 +164,8 @@ pub fn decode_proto_lua54(
             DiagnosticCategory::Parse,
             id.clone(),
             format!("Constant count {k_size} exceeds safety limit"),
-        );
+        )
+        .with_source(k_size_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -228,7 +230,7 @@ pub fn decode_proto_lua54(
     }
 
     // 4. Upvalues vector
-    let (upvalues_size_val, _) = reader.read_varint_lua54()?;
+    let (upvalues_size_val, upvalues_size_loc) = reader.read_varint_lua54()?;
     let upvalues_size = upvalues_size_val as usize;
 
     if upvalues_size > reader.limits().max_upvalues_per_proto {
@@ -237,7 +239,8 @@ pub fn decode_proto_lua54(
             DiagnosticCategory::Parse,
             id.clone(),
             format!("Upvalue count {upvalues_size} exceeds safety limit"),
-        );
+        )
+        .with_source(upvalues_size_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
@@ -263,7 +266,7 @@ pub fn decode_proto_lua54(
     }
 
     // 5. Nested Prototypes vector
-    let (protos_size_val, _) = reader.read_varint_lua54()?;
+    let (protos_size_val, protos_size_loc) = reader.read_varint_lua54()?;
     let protos_size = protos_size_val as usize;
 
     if protos_size > reader.limits().max_total_prototypes {
@@ -272,7 +275,8 @@ pub fn decode_proto_lua54(
             DiagnosticCategory::Parse,
             id.clone(),
             format!("Prototype count {protos_size} exceeds safety limit"),
-        );
+        )
+        .with_source(protos_size_loc);
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }

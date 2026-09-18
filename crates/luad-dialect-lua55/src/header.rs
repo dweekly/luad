@@ -77,14 +77,16 @@ pub fn parse_header_lua55(reader: &mut SafeReader) -> Result<Header, Diagnostic>
     // 3. Format
     let format = reader.read_u8()?;
     if format != LUAC_FORMAT_STOCK {
-        let diag = Diagnostic::warning(
+        let diag = Diagnostic::error(
             "L55-HEADER-003",
             DiagnosticCategory::Structure,
             StableId::Chunk,
             format!("Format mismatch: expected official format 0, found {format}"),
         )
-        .with_source(SourceLocation::new(reader.position() - 1, &[format]));
-        reader.record_diagnostic(diag)?;
+        .with_source(SourceLocation::new(reader.position() - 1, &[format]))
+        .with_suggested_action("Verify whether chunk uses a custom compiler or dialect extension");
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
     }
 
     // 4. LUAC_DATA
@@ -104,29 +106,132 @@ pub fn parse_header_lua55(reader: &mut SafeReader) -> Result<Header, Diagnostic>
 
     // 5. checknum(int): sizeof(int) (1) + int test value (4)
     let sizeof_int = reader.read_u8()?;
-    let _test_int = reader.read_exact(sizeof_int as usize)?;
+    if sizeof_int != 4 {
+        let diag = Diagnostic::error(
+            "L55-HEADER-005",
+            DiagnosticCategory::Structure,
+            StableId::Chunk,
+            format!("Unsupported sizeof(int): expected 4, found {sizeof_int}"),
+        )
+        .with_source(SourceLocation::new(reader.position() - 1, &[sizeof_int]))
+        .with_suggested_action("Ensure bytecode was compiled with 4-byte integers");
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
+    let test_int = reader.read_i32_le()?;
+    if test_int != -0x5678 {
+        let diag = Diagnostic::error(
+            "L55-HEADER-006",
+            DiagnosticCategory::Structure,
+            StableId::Chunk,
+            format!("Invalid int test integer: expected -0x5678, found {test_int}"),
+        )
+        .with_source(SourceLocation::new(
+            reader.position() - 4,
+            &test_int.to_le_bytes(),
+        ))
+        .with_suggested_action("Check chunk byte order or corruption in int canary");
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
 
     // 6. checknum(Instruction): sizeof(Instruction) (1) + Instruction test value (4)
     let sizeof_inst = reader.read_u8()?;
-    let _test_inst = reader.read_exact(sizeof_inst as usize)?;
+    if sizeof_inst != 4 {
+        let diag = Diagnostic::error(
+            "L55-HEADER-007",
+            DiagnosticCategory::Structure,
+            StableId::Chunk,
+            format!("Unsupported Instruction size: expected 4, found {sizeof_inst}"),
+        )
+        .with_source(SourceLocation::new(reader.position() - 1, &[sizeof_inst]))
+        .with_suggested_action("Verify instruction width is 4 bytes");
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
+    let test_inst = reader.read_u32_le()?;
+    if test_inst != 0x12345678 {
+        let diag = Diagnostic::error(
+            "L55-HEADER-008",
+            DiagnosticCategory::Structure,
+            StableId::Chunk,
+            format!("Invalid Instruction test value: expected 0x12345678, found 0x{test_inst:x}"),
+        )
+        .with_source(SourceLocation::new(
+            reader.position() - 4,
+            &test_inst.to_le_bytes(),
+        ))
+        .with_suggested_action("Check chunk byte order or corruption in instruction canary");
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
 
     // 7. checknum(lua_Integer): sizeof(lua_Integer) (1) + lua_Integer test value (8)
     let sizeof_lua_int = reader.read_u8()?;
-    let luac_int_bytes = reader.read_exact(sizeof_lua_int as usize)?;
-    let luac_int = if sizeof_lua_int == 8 {
-        i64::from_le_bytes(luac_int_bytes.try_into().unwrap_or_default())
-    } else {
-        0
-    };
+    if sizeof_lua_int != 8 {
+        let diag = Diagnostic::error(
+            "L55-HEADER-009",
+            DiagnosticCategory::Structure,
+            StableId::Chunk,
+            format!("Unsupported lua_Integer size: expected 8, found {sizeof_lua_int}"),
+        )
+        .with_source(SourceLocation::new(
+            reader.position() - 1,
+            &[sizeof_lua_int],
+        ))
+        .with_suggested_action(
+            "64-bit integer Lua 5.5 is supported; 32-bit integer is not supported",
+        );
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
+    let luac_int = reader.read_i64_le()?;
+    if luac_int != -0x5678 {
+        let diag = Diagnostic::error(
+            "L55-HEADER-010",
+            DiagnosticCategory::Structure,
+            StableId::Chunk,
+            format!("Invalid lua_Integer test integer: expected -0x5678, found {luac_int}"),
+        )
+        .with_source(SourceLocation::new(
+            reader.position() - 8,
+            &luac_int.to_le_bytes(),
+        ))
+        .with_suggested_action("Check chunk byte order or corruption in lua_Integer canary");
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
 
     // 8. checknum(lua_Number): sizeof(lua_Number) (1) + lua_Number test value (8)
     let sizeof_num = reader.read_u8()?;
-    let luac_num_bytes = reader.read_exact(sizeof_num as usize)?;
-    let luac_num = if sizeof_num == 8 {
-        f64::from_le_bytes(luac_num_bytes.try_into().unwrap_or_default())
-    } else {
-        0.0
-    };
+    if sizeof_num != 8 {
+        let diag = Diagnostic::error(
+            "L55-HEADER-011",
+            DiagnosticCategory::Structure,
+            StableId::Chunk,
+            format!("Unsupported lua_Number size: expected 8, found {sizeof_num}"),
+        )
+        .with_source(SourceLocation::new(reader.position() - 1, &[sizeof_num]))
+        .with_suggested_action("Verify that lua_Number width is 8 bytes (double)");
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
+    let luac_num = reader.read_f64_le()?;
+    if (luac_num - (-370.5)).abs() > f64::EPSILON {
+        let diag = Diagnostic::error(
+            "L55-HEADER-012",
+            DiagnosticCategory::Structure,
+            StableId::Chunk,
+            format!("Invalid lua_Number test float: expected -370.5, found {luac_num}"),
+        )
+        .with_source(SourceLocation::new(
+            reader.position() - 8,
+            &luac_num.to_le_bytes(),
+        ))
+        .with_suggested_action("Verify that float representation matches IEEE-754 double");
+        reader.record_diagnostic(diag.clone())?;
+        return Err(diag);
+    }
 
     let header_bytes = reader.slice_from_cursor(start_cursor)?;
     let loc = SourceLocation::new(start_pos, header_bytes);
@@ -138,7 +243,7 @@ pub fn parse_header_lua55(reader: &mut SafeReader) -> Result<Header, Diagnostic>
         luac_data,
         instruction_size: sizeof_inst,
         lua_integer_size: sizeof_lua_int,
-        sizeof_sizet: 8,
+        sizeof_sizet: 0,
         lua_number_size: sizeof_num,
         luac_int,
         luac_num,

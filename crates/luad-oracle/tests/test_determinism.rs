@@ -4,17 +4,7 @@ use luad_oracle::get_fixture_bytes;
 use std::process::Command;
 
 fn get_luad_bin() -> String {
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_luad") {
-        return path;
-    }
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let mut path = std::path::PathBuf::from(manifest_dir);
-    path.pop();
-    path.pop();
-    path.push("target");
-    path.push("debug");
-    path.push("luad");
-    path.to_str().unwrap().to_string()
+    luad_oracle::luad_binary_path().display().to_string()
 }
 
 #[test]

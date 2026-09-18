@@ -242,3 +242,141 @@ fn test_strict_mode_halts_early_permissive_accumulates_all() {
     assert_eq!(reader_perm.diagnostics().len(), 1);
     assert_eq!(reader_perm.diagnostics()[0].code, "L54-STR-001");
 }
+
+#[test]
+fn test_diagnostic_exhaustion_must_never_authorize_invalid_bytecode() {
+    let mut chunk = create_valid_dummy_chunk();
+    // maxstacksize = 2, so raw.a = 10 produces L54-VAL-REG-001 (Warning)
+    chunk.main_proto.maxstacksize = 2;
+
+    // 1. Exactly 10,000 warnings followed by an invalid opcode:
+    let mut insts = Vec::with_capacity(10_001);
+    let move_op = Opcode54::Move;
+    let raw_warn = RawInstruction54::encode_iabc(move_op, 10, 0, 0, 0);
+
+    for pc in 0..10_000 {
+        insts.push(InstructionWord {
+            id: StableId::instruction(ProtoPath::root(), pc),
+            pc,
+            raw_word: raw_warn,
+            raw_hex: hex::encode(raw_warn.to_le_bytes()),
+            source: SourceLocation::new(0, &raw_warn.to_le_bytes()),
+        });
+    }
+
+    // Invalid opcode at PC 10000:
+    let bad_raw = 0xFE; // opcode 254 (invalid)
+    insts.push(InstructionWord {
+        id: StableId::instruction(ProtoPath::root(), 10_000),
+        pc: 10_000,
+        raw_word: bad_raw,
+        raw_hex: hex::encode(bad_raw.to_le_bytes()),
+        source: SourceLocation::new(0, &bad_raw.to_le_bytes()),
+    });
+
+    chunk.main_proto.instructions = insts;
+
+    // Validation must return Verdict::Incomplete and CORE-LIMIT-003
+    let (verdict, diags) = validate_chunk_lua54(&chunk);
+    assert_eq!(
+        verdict,
+        Verdict::Incomplete,
+        "Diagnostic exhaustion must produce Incomplete, never ValidForAnalysis"
+    );
+    assert!(
+        diags.iter().any(|d| d.code == "CORE-LIMIT-003"),
+        "Must emit CORE-LIMIT-003 on exhaustion"
+    );
+    assert_eq!(
+        diags.last().unwrap().code,
+        "CORE-LIMIT-003",
+        "Terminal diagnostic must be CORE-LIMIT-003"
+    );
+
+    // Analysis qualification MUST fail
+    let ana_res = luad_analysis::validate_for_analysis(&chunk);
+    assert!(
+        ana_res.is_err(),
+        "validate_for_analysis must reject Incomplete verdict"
+    );
+
+    // Negative Control: 9,999 warnings followed by invalid opcode
+    // Validation finishes before limit and catches the invalid opcode as Invalid
+    let mut neg_chunk = chunk.clone();
+    neg_chunk.main_proto.instructions.remove(0); // 9,999 warnings + 1 invalid opcode
+                                                 // Re-index PCs
+    for (i, inst) in neg_chunk.main_proto.instructions.iter_mut().enumerate() {
+        inst.pc = i;
+        inst.id = StableId::instruction(ProtoPath::root(), i);
+    }
+
+    let (neg_verdict, neg_diags) = validate_chunk_lua54(&neg_chunk);
+    assert_eq!(
+        neg_verdict,
+        Verdict::Invalid,
+        "Below exhaustion limit, invalid opcode must be caught as Invalid"
+    );
+    assert!(
+        neg_diags.iter().any(|d| d.code == "L54-VAL-OPCODE-001"),
+        "Must report invalid opcode"
+    );
+    assert!(
+        !neg_diags.iter().any(|d| d.code == "CORE-LIMIT-003"),
+        "Must not report CORE-LIMIT-003 when limit was not reached"
+    );
+}
+
+#[test]
+fn test_diagnostic_truncation_preserves_error_and_rejects() {
+    let mut chunk = create_valid_dummy_chunk();
+    chunk.main_proto.maxstacksize = 2;
+    chunk.main_proto.constants = vec![]; // 0 constants
+
+    // 9,999 warning-producing instructions (R(10) >= maxstacksize 2)
+    let mut insts = Vec::with_capacity(10_000);
+    let raw_warn = RawInstruction54::encode_iabc(Opcode54::Move, 10, 0, 0, 0);
+
+    for pc in 0..9_999 {
+        insts.push(InstructionWord {
+            id: StableId::instruction(ProtoPath::root(), pc),
+            pc,
+            raw_word: raw_warn,
+            raw_hex: hex::encode(raw_warn.to_le_bytes()),
+            source: SourceLocation::new(0, &raw_warn.to_le_bytes()),
+        });
+    }
+
+    // 10,000th instruction produces BOTH a warning (R(10) >= 2) AND an error (LOADK K(999) with 0 constants)
+    let raw_both = RawInstruction54::encode_iabx(Opcode54::Loadk, 10, 999);
+    insts.push(InstructionWord {
+        id: StableId::instruction(ProtoPath::root(), 9_999),
+        pc: 9_999,
+        raw_word: raw_both,
+        raw_hex: hex::encode(raw_both.to_le_bytes()),
+        source: SourceLocation::new(0, &raw_both.to_le_bytes()),
+    });
+
+    chunk.main_proto.instructions = insts;
+
+    let (verdict, diags) = validate_chunk_lua54(&chunk);
+
+    // Must be Verdict::Invalid, never ValidForAnalysis or ValidForParser
+    assert_eq!(
+        verdict,
+        Verdict::Invalid,
+        "Chunk with 9,999 warnings and 1 invalid-constant error must be Invalid, not ValidForAnalysis"
+    );
+
+    // The error L54-VAL-CONST-001 must NOT be discarded by diagnostic truncation!
+    assert!(
+        diags.iter().any(|d| d.code == "L54-VAL-CONST-001"),
+        "Diagnostic truncation must preserve the error L54-VAL-CONST-001"
+    );
+
+    // Analysis qualification MUST fail
+    let ana_res = luad_analysis::validate_for_analysis(&chunk);
+    assert!(
+        ana_res.is_err(),
+        "validate_for_analysis must reject Invalid verdict"
+    );
+}
