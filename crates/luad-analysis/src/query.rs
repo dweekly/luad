@@ -251,6 +251,8 @@ impl std::fmt::Display for Token {
     }
 }
 
+const MAX_QUERY_TOKENS: usize = 10_000;
+
 fn tokenize(input: &str) -> Result<Vec<Token>, QueryError> {
     let mut tokens = Vec::new();
     let chars: Vec<char> = input.chars().collect();
@@ -258,6 +260,11 @@ fn tokenize(input: &str) -> Result<Vec<Token>, QueryError> {
     let mut i = 0;
 
     while i < len {
+        if tokens.len() >= MAX_QUERY_TOKENS {
+            return Err(QueryError::Malformed(
+                "Query expression exceeds token safety limit".to_string(),
+            ));
+        }
         let c = chars[i];
         if c.is_whitespace() {
             i += 1;

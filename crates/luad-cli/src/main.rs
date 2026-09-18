@@ -136,16 +136,49 @@ fn read_input_bytes_with_reporting(
 
 fn parse_input_list(list_file: &str) -> Result<Vec<String>, (String, ExitCode)> {
     let mut file_paths = Vec::new();
+    let max_files = 1_000_000;
+    let max_bytes = ResourceLimits::default().max_input_bytes;
+
     if list_file == "-" {
         let stdin = io::stdin();
+        let mut total_bytes = 0;
         for l in stdin.lock().lines().map_while(Result::ok) {
+            total_bytes += l.len() + 1;
+            if total_bytes > max_bytes {
+                return Err((
+                    format!("stdin input list exceeds safety limit of {max_bytes} bytes"),
+                    ExitCode::LimitExceeded,
+                ));
+            }
             let trimmed = l.trim();
             if !trimmed.is_empty() {
+                if file_paths.len() >= max_files {
+                    return Err((
+                        format!("input list exceeds safety limit of {max_files} files"),
+                        ExitCode::LimitExceeded,
+                    ));
+                }
                 file_paths.push(trimmed.to_string());
             }
         }
     } else {
-        let content = match fs::read_to_string(list_file) {
+        let path = Path::new(list_file);
+        let metadata = fs::metadata(path).map_err(|e| {
+            (
+                format!("Failed to inspect metadata for '{list_file}': {e}"),
+                ExitCode::IoError,
+            )
+        })?;
+        if metadata.len() > max_bytes as u64 {
+            return Err((
+                format!(
+                    "Input list '{list_file}' size ({} bytes) exceeds safety limit of {max_bytes} bytes",
+                    metadata.len()
+                ),
+                ExitCode::LimitExceeded,
+            ));
+        }
+        let content = match fs::read_to_string(path) {
             Ok(c) => c,
             Err(e) => {
                 return Err((
@@ -157,6 +190,12 @@ fn parse_input_list(list_file: &str) -> Result<Vec<String>, (String, ExitCode)> 
         for line in content.lines() {
             let trimmed = line.trim();
             if !trimmed.is_empty() {
+                if file_paths.len() >= max_files {
+                    return Err((
+                        format!("input list exceeds safety limit of {max_files} files"),
+                        ExitCode::LimitExceeded,
+                    ));
+                }
                 file_paths.push(trimmed.to_string());
             }
         }
