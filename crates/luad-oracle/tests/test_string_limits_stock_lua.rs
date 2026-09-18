@@ -239,13 +239,13 @@ impl StockTarget {
             Self::Lua55 => {
                 let mut buf = Vec::new();
                 buf.extend_from_slice(b"\x1bLua\x55\x00\x19\x93\r\n\x1a\n\x04");
-                buf.extend_from_slice(&0x5678i32.to_le_bytes());
+                buf.extend_from_slice(&(-0x5678i32).to_le_bytes());
                 buf.push(0x04);
-                buf.extend_from_slice(&0x5678i32.to_le_bytes());
+                buf.extend_from_slice(&0x12345678u32.to_le_bytes());
                 buf.push(0x08);
-                buf.extend_from_slice(&0x5678i64.to_le_bytes());
+                buf.extend_from_slice(&(-0x5678i64).to_le_bytes());
                 buf.push(0x08);
-                buf.extend_from_slice(&370.5f64.to_le_bytes());
+                buf.extend_from_slice(&(-370.5f64).to_le_bytes());
                 buf.push(0);
                 write_varint_55(&mut buf, 0);
                 write_varint_55(&mut buf, 0);
@@ -585,13 +585,13 @@ fn build_lua55_chunk(
     buf.push(0x00);
     buf.extend_from_slice(b"\x19\x93\r\n\x1a\n");
     buf.push(0x04);
-    buf.extend_from_slice(&0x5678i32.to_le_bytes());
+    buf.extend_from_slice(&(-0x5678i32).to_le_bytes());
     buf.push(0x04);
-    buf.extend_from_slice(&0x5678i32.to_le_bytes());
+    buf.extend_from_slice(&0x12345678u32.to_le_bytes());
     buf.push(0x08);
-    buf.extend_from_slice(&0x5678i64.to_le_bytes());
+    buf.extend_from_slice(&(-0x5678i64).to_le_bytes());
     buf.push(0x08);
-    buf.extend_from_slice(&370.5f64.to_le_bytes());
+    buf.extend_from_slice(&(-370.5f64).to_le_bytes());
 
     buf.push(0);
 
