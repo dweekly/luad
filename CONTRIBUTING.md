@@ -125,6 +125,15 @@ Parser fixtures can run from bundled bytecode, but differential proof requires t
 official compilers that [docs/BRINGUP.md](docs/BRINGUP.md) installs beneath
 `$HOME/.cache/luad/lua-tools/bin`. Canonical gates must verify the exact compiler version and binary/archive hashes they claim. A required compiler missing from CI must fail the gate; it must never cause a silent skip.
 
+### Optional external decompilers
+
+`cargo build`, `cargo test`, and `scripts/check.sh` require no external decompiler.
+The firmware walkthrough tests luad's metadata, facts, and profile refusal behavior;
+it does not certify third-party recovered source. To try a decompiler you already use,
+follow the [optional handoff recipe](docs/examples/RECIPES.md#phase-4-optional-decompiler-handoff).
+There is no required unluac version or automatic decompiler download. Official Lua
+compiler requirements for differential evidence remain as described above.
+
 ## Repository map
 
 | Path | Responsibility |

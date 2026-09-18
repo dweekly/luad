@@ -58,7 +58,7 @@
       "role": "unsupported_big_endian_layout",
       "license": "MIT",
       "expected_outcome": "unsupported_layout",
-      "expected_exit_code": 1,
+      "expected_exit_code": 4,
       "expected_diagnostic_code": "PARSE-001",
       "expected_error_offset": 6
     }

@@ -171,6 +171,21 @@ pub fn parse_gnu_time_trailer(raw_stderr: &[u8]) -> (Vec<u8>, Option<u64>) {
     (cleaned_stderr, peak_rss)
 }
 
+// Cleanup is best effort: an escaped descendant may retain a pipe even after the
+// process group is killed. Never let an unfinished worker turn cleanup into a wait
+// with no deadline. Dropped handles detach; workers release their buffers on exit.
+fn drain_handles(handles: [std::thread::JoinHandle<()>; 3]) {
+    let deadline = Instant::now() + Duration::from_millis(50);
+    while handles.iter().any(|handle| !handle.is_finished()) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    for handle in handles {
+        if handle.is_finished() {
+            let _ = handle.join();
+        }
+    }
+}
+
 /// Execute a subprocess under tripwire resource monitoring.
 pub fn run_with_tripwire(
     program: &Path,
@@ -317,22 +332,6 @@ pub fn run_with_tripwire(
         let _ = child.wait();
     };
 
-    let drain_handles = |stdout_handle: std::thread::JoinHandle<()>,
-                         stderr_handle: std::thread::JoinHandle<()>,
-                         stdin_handle: std::thread::JoinHandle<()>| {
-        let drain_deadline = Instant::now() + Duration::from_millis(50);
-        while (!stdout_handle.is_finished()
-            || !stderr_handle.is_finished()
-            || !stdin_handle.is_finished())
-            && Instant::now() < drain_deadline
-        {
-            std::thread::sleep(Duration::from_millis(1));
-        }
-        let _ = stdout_handle.join();
-        let _ = stderr_handle.join();
-        let _ = stdin_handle.join();
-    };
-
     let poll_interval = Duration::from_millis(2);
     let mut exit_status = None;
 
@@ -343,14 +342,18 @@ pub fn run_with_tripwire(
             }
         }
 
-        if exit_status.is_some() && stdout_handle.is_finished() && stderr_handle.is_finished() {
+        if exit_status.is_some()
+            && stdout_handle.is_finished()
+            && stderr_handle.is_finished()
+            && stdin_handle.is_finished()
+        {
             break;
         }
 
         let elapsed = start.elapsed();
         if elapsed > budget.max_wall_time {
             kill_child_tree(&mut child);
-            drain_handles(stdout_handle, stderr_handle, stdin_handle);
+            drain_handles([stdout_handle, stderr_handle, stdin_handle]);
             return Err(TripwireError::WallTimeCeilingExceeded {
                 elapsed,
                 ceiling: budget.max_wall_time,
@@ -359,7 +362,7 @@ pub fn run_with_tripwire(
 
         if stdout_exceeded.load(Ordering::SeqCst) {
             kill_child_tree(&mut child);
-            drain_handles(stdout_handle, stderr_handle, stdin_handle);
+            drain_handles([stdout_handle, stderr_handle, stdin_handle]);
             let len = stdout_len.load(Ordering::SeqCst);
             return Err(TripwireError::StdoutCeilingExceeded {
                 length: len,
@@ -369,7 +372,7 @@ pub fn run_with_tripwire(
 
         if stderr_exceeded.load(Ordering::SeqCst) {
             kill_child_tree(&mut child);
-            drain_handles(stdout_handle, stderr_handle, stdin_handle);
+            drain_handles([stdout_handle, stderr_handle, stdin_handle]);
             let len = stderr_len.load(Ordering::SeqCst);
             return Err(TripwireError::StderrCeilingExceeded {
                 length: len,
@@ -445,6 +448,67 @@ pub fn run_with_tripwire(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_cleanup_deadline_does_not_join_blocked_workers() {
+        let (release, blocked) = std::sync::mpsc::channel();
+        let (done, completed) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            // The fallback keeps a regressed cleanup from hanging the test suite.
+            let _ = blocked.recv_timeout(Duration::from_secs(2));
+            done.send(()).unwrap();
+        });
+        let start = Instant::now();
+        drain_handles([std::thread::spawn(|| {}), std::thread::spawn(|| {}), worker]);
+        let elapsed = start.elapsed();
+        let _ = release.send(());
+        completed.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(elapsed < Duration::from_secs(1), "cleanup took {elapsed:?}");
+    }
+
+    #[test]
+    fn test_tripwire_preserves_complete_output() {
+        let input = vec![b'x'; 256 * 1024];
+        let result = run_with_tripwire(
+            Path::new("/bin/sh"),
+            &["-c", "cat; printf 'complete\\n' >&2"],
+            Some(&input),
+            &TripwireBudget {
+                max_peak_rss_bytes: 1024 * 1024 * 1024,
+                ..TripwireBudget::default()
+            },
+        )
+        .expect("completed subprocess within budget");
+        assert!(result.status.success());
+        assert_eq!(result.stdout, input);
+        assert_eq!(result.stderr, b"complete\n");
+    }
+
+    #[test]
+    fn test_tripwire_monitors_descendant_holding_only_stdin() {
+        let budget = TripwireBudget {
+            max_wall_time: Duration::from_millis(100),
+            max_peak_rss_bytes: 1024 * 1024 * 1024,
+            ..TripwireBudget::default()
+        };
+        let input = vec![b'x'; 1024 * 1024];
+        let start = Instant::now();
+        let result = run_with_tripwire(
+            Path::new("/bin/sh"),
+            &["-c", "exec 3<&0; sleep 2 <&3 >/dev/null 2>&1 & exit 0"],
+            Some(&input),
+            &budget,
+        );
+        let elapsed = start.elapsed();
+        assert!(matches!(
+            result,
+            Err(TripwireError::WallTimeCeilingExceeded { .. })
+        ));
+        assert!(
+            elapsed < Duration::from_secs(1),
+            "stdin worker must remain subject to the deadline, took {elapsed:?}"
+        );
+    }
 
     #[test]
     fn test_parse_macos_time_trailer() {

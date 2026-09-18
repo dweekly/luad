@@ -5,7 +5,7 @@
 //! - Phase 1: Inventory and batch triage via `luad export` with exact closure assertions.
 //! - Phase 2: Inspection and layout detection/rejection with truthful exit codes (0, 1, 4).
 //! - Phase 3: Auditing facts (constants, global query, disassembly with raw/effects, callees, origins).
-//! - Phase 4: Pinned decompiler handoff boundary and refusal analysis.
+//! - Phase 4: Handoff metadata and explicit profile refusal (no external decompiler).
 //! - Negative controls: Fixture tampering, truncated JSONL stream, and strict batch failure.
 
 use sha2::{Digest, Sha256};
@@ -69,6 +69,16 @@ fn test_firmware_tree_manifest_integrity() {
         assert_eq!(
             actual_hash, expected_sha256,
             "sha256 mismatch for {rel_path}"
+        );
+        let inspected = Command::new(get_luad_bin())
+            .arg("inspect")
+            .arg(&abs_path)
+            .output()
+            .expect("inspect manifest input");
+        assert_eq!(
+            inspected.status.code().map(i64::from),
+            case["expected_exit_code"].as_i64(),
+            "declared inspection outcome for {rel_path}"
         );
     }
 }
@@ -448,17 +458,17 @@ fn test_firmware_walkthrough_phase3_auditing_facts() {
 }
 
 // ---------------------------------------------------------------------------
-// Test 5: Phase 4 — Pinned decompiler handoff boundary
+// Test 5: Phase 4 — Handoff metadata and profile boundary
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_firmware_walkthrough_phase4_decompiler_handoff_boundary() {
+fn test_firmware_walkthrough_phase4_handoff_metadata() {
     let luad = get_luad_bin();
     let fdir = fixture_dir();
 
     // 1. Stock candidate (system_service.luac):
-    // Standard desktop layout: 64-bit size_t (8), integral flag 0.
-    // Stock decompilers (e.g. unluac, ChunkSpy, luadec) can decompile this cleanly.
+    // Declared stock layout: 8-byte size_t, integral flag 0.
+    // These facts do not establish compatibility with any external decompiler.
     let output = Command::new(&luad)
         .args([
             "inspect",
@@ -492,7 +502,6 @@ fn test_firmware_walkthrough_phase4_decompiler_handoff_boundary() {
 
     // 2. Embedded candidate (dispatcher.lua):
     // Non-stock OpenWrt layout: 32-bit size_t (4), integral flag 4.
-    // Standard decompilers will reject or corrupt this chunk because of the non-stock integral flag.
     let output = Command::new(&luad)
         .args([
             "inspect",
@@ -527,72 +536,6 @@ fn test_firmware_walkthrough_phase4_decompiler_handoff_boundary() {
     assert!(
         stderr.contains("integral flag 4") || stderr.contains("LNUM32"),
         "stderr must explain non-stock integral flag: {stderr}"
-    );
-
-    // 3. Pinned decompiler verification and handoff:
-    const PINNED_DECOMPILER_VERSION: &str = "1.2.3.569";
-
-    let decompiler_path: PathBuf = if let Ok(bin) = std::env::var("UNLUAC_BIN") {
-        PathBuf::from(bin)
-    } else {
-        luad_oracle::find_workspace_root()
-            .join("tests")
-            .join("fixtures")
-            .join("tools")
-            .join("unluac")
-    };
-
-    // Verify decompiler version banner matches pinned version
-    let ver_output = Command::new(&decompiler_path)
-        .arg("--version")
-        .output()
-        .unwrap_or_else(|e| {
-            panic!(
-                "failed to execute pinned decompiler '{} --version': {e}",
-                decompiler_path.display()
-            )
-        });
-    assert!(
-        ver_output.status.success(),
-        "Pinned decompiler --version failed with exit status {:?}",
-        ver_output.status
-    );
-    let ver_str = String::from_utf8_lossy(&ver_output.stdout);
-    assert!(
-        ver_str.contains(PINNED_DECOMPILER_VERSION),
-        "Decompiler version mismatch: expected to contain {PINNED_DECOMPILER_VERSION}, got {ver_str}"
-    );
-
-    // Stock candidate must decompile cleanly with exit 0
-    let stock_decomp = Command::new(&decompiler_path)
-        .arg(fdir.join("system_service.luac"))
-        .output()
-        .unwrap_or_else(|e| {
-            panic!(
-                "failed to execute pinned decompiler '{}' on stock candidate: {e}",
-                decompiler_path.display()
-            )
-        });
-    assert!(
-        stock_decomp.status.success(),
-        "Stock candidate system_service.luac must decompile cleanly with exit 0 (status: {:?}, stderr: {})",
-        stock_decomp.status,
-        String::from_utf8_lossy(&stock_decomp.stderr)
-    );
-
-    // Non-stock candidate must be rejected by stock decompiler with non-zero exit
-    let lnum_decomp = Command::new(&decompiler_path)
-        .arg(fdir.join("dispatcher.lua"))
-        .output()
-        .unwrap_or_else(|e| {
-            panic!(
-                "failed to execute pinned decompiler '{}' on non-stock candidate: {e}",
-                decompiler_path.display()
-            )
-        });
-    assert!(
-        !lnum_decomp.status.success(),
-        "Non-stock candidate dispatcher.lua must be rejected with non-zero exit status by stock decompiler"
     );
 
     // Verify raw header bytes
@@ -791,31 +734,4 @@ fn test_firmware_walkthrough_negative_controls() {
         Some(1),
         "--strict must exit with code 1 when any file cannot be exported"
     );
-}
-
-#[test]
-fn test_firmware_walkthrough_decompiler_handoff_fails_when_unluac_bin_invalid() {
-    let invalid_path = "/private/tmp/no-such-decompiler";
-    let res = Command::new(invalid_path).arg("--version").output();
-    assert!(
-        res.is_err(),
-        "Executing non-existent decompiler binary {invalid_path} must fail with an I/O error"
-    );
-}
-
-#[test]
-fn test_firmware_walkthrough_decompiler_handoff_refuses_version_mismatch() {
-    const PINNED_DECOMPILER_VERSION: &str = "1.2.3.569";
-    let sh_path = "/bin/sh";
-    if !Path::new(sh_path).exists() {
-        return;
-    }
-    let ver_output = Command::new(sh_path).arg("--version").output();
-    if let Ok(out) = ver_output {
-        let ver_str = String::from_utf8_lossy(&out.stdout);
-        assert!(
-            !ver_str.contains(PINNED_DECOMPILER_VERSION),
-            "Unpinned binary must not report pinned decompiler version"
-        );
-    }
 }

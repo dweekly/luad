@@ -129,12 +129,12 @@ executes the chunk.
 
 ## Firmware investigation walkthrough
 
-A reproducible 4-phase investigation of an extracted embedded firmware directory
-using the public reference corpus at `tests/fixtures/firmware_tree/`:
+A reproducible four-phase investigation using the public firmware-shaped fixture
+tree at `tests/fixtures/firmware_tree/`:
 
 ```console
 # 1. Inventory and triage mixed artifacts via streaming JSONL export:
-luad export tests/fixtures/firmware_tree/* --format jsonl | \
+luad export tests/fixtures/firmware_tree/*.lua tests/fixtures/firmware_tree/*.luac --format jsonl | \
   jq -c 'select(.record_type == "export_end") | {processed: .files_processed, succeeded: .files_succeeded, skipped: .files_skipped, failed: .files_failed}'
 # {"processed":5,"succeeded":2,"skipped":3,"failed":0}
 
@@ -148,12 +148,14 @@ luad query tests/fixtures/firmware_tree/dispatcher.lua --where "mnemonic == 'GET
 luad disasm tests/fixtures/firmware_tree/dispatcher.lua --raw --effects
 
 # 4. Informed decompiler handoff:
-# system_service.luac is stock (sizet=8, integral_flag=0) and ready for unluac.
-# dispatcher.lua is non-stock LNUM32 (integral_flag=4); stock decompilers refuse it.
+# system_service.luac declares stock Lua 5.1 (sizet=8, integral_flag=0).
+# dispatcher.lua declares LNUM32 (sizet=4, integral_flag=4).
+# Choose a decompiler that accepts the exact profile; compatibility is tool-specific.
 ```
 
 See [docs/examples/RECIPES.md](docs/examples/RECIPES.md#12-reproducible-firmware-investigation-walkthrough)
-for the complete end-to-end recipe and pipeline integration patterns.
+for the complete recipe and optional decompiler experiment. No external decompiler is
+required to build or test luad; the walkthrough verifies luad facts and refusal behavior.
 
 ## Limitations
 
@@ -228,21 +230,21 @@ delete the document in the same change and update this index.
 | [`README.md`](README.md) | What `luad` is, install, first commands, honest limitations, and the documentation index. | 2026-09-17 | Public scope, support status, setup, primary commands, or the documentation set changes. |
 | [`AGENTS.md`](AGENTS.md) | Binding repository instructions, product-batch boundaries, and safety constraints for coding agents. | 2026-08-27 | Development workflow, proof policy, current priority, or repository invariants change. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-27 | Crates, ownership boundaries, core representations, or evidence layers change. |
-| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of released and unreleased user-visible changes. | 2026-09-16 | Every user-visible change or release; never use it as a forward plan. |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor verification commands, test taxonomy, fixture provenance, and definition of done. | 2026-09-03 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of released and unreleased user-visible changes. | 2026-09-17 | Every user-visible change or release; never use it as a forward plan. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor verification commands, test taxonomy, fixture provenance, and definition of done. | 2026-09-17 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
 | [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-09-06 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
 | [`ROADMAP.md`](ROADMAP.md) | Bounded 0.2 outcomes, dependency graph, serial/parallel execution rules, acceptance commands, release blockers, and later support boundaries. | 2026-09-17 | Release scope, dependencies, parallel ownership, acceptance criteria, support boundaries, or exclusions change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, the planned 1.0 target matrix, vulnerability reporting, and hostile-input threat model. | 2026-09-16 | Support policy, the planned target matrix, reporting channel, trust boundary, or threat model changes. |
 | [`docs/ROADMAP-1.0.md`](docs/ROADMAP-1.0.md) | The full qualification program a future 1.0 would need: milestones, evidence gates, target promotion, and release acceptance. | 2026-09-16 | The 1.0 destination, milestone order, release acceptance, or the qualification lifecycle changes. |
 | [`docs/BRINGUP.md`](docs/BRINGUP.md) | Setup for a developer machine, a self-hosted Actions runner, and a release builder, with the owning file for every tool pin. | 2026-09-02 | A tool pin, its owning file, the doctor's checks, runner labels or security boundary, or the release dry-run and rehearsal entry points change. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, separate product and qualification CI lanes, proportional evidence, process budgets, and agent orchestration. | 2026-08-27 | Planning artifacts, CI lanes, customer cadence, agent roles, evidence policy, process budgets, provider interfaces, or sprint-advance mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Sprint contract: firmware walkthrough evidence and subprocess deadline corrections. | 2026-09-17 | A stage replaces it with its contract: a qualification stage through a dedicated planning change, any other stage in the first commit of its own pull request. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | No-work checkpoint pending candidate verification, integration, and a separate next contract. | 2026-09-17 | A stage replaces it with its contract: a qualification stage through a dedicated planning change, any other stage in the first commit of its own pull request. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-27 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/PRIOR-ART-AND-CORPORA.md`](docs/PRIOR-ART-AND-CORPORA.md) | External tools, datasets, and bytecode-emitting ecosystems evaluated against the product scope, candidate fixture sources with license and provenance constraints, and the fidelity gaps they expose. | 2026-09-06 | A listed project changes license or status, a candidate corpus or vendor profile is adopted or rejected, or the PRD prior-art table is revised. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-27 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
 | [`docs/RELEASING.md`](docs/RELEASING.md) | Release policy for 0.x and 1.0, exact-target order, qualification checklist, packaging, publication, and rollback. | 2026-09-16 | Release targets, qualification lifecycle, package platforms, artifact channel, compatibility, signing/checksum policy, ownership, or rollback changes. |
 | [`docs/LUA51-LNUM32-CANDIDATE.md`](docs/LUA51-LNUM32-CANDIDATE.md) | Archived verification and firmware-handoff guide for the immutable, non-promoting Lua 5.1 LNUM32 RC1 artifact. | 2026-08-27 | RC1 evidence is retired, its retained artifacts become unverifiable, or a new LNUM32 candidate guide replaces it. |
-| [`docs/examples/RECIPES.md`](docs/examples/RECIPES.md) | Practical command-line and composition recipes for consuming machine JSON and JSONL output. | 2026-09-17 | Machine interface envelopes, export records, or CLI subcommands change. |
+| [`docs/examples/RECIPES.md`](docs/examples/RECIPES.md) | Practical command-line and composition recipes for consuming machine JSON and JSONL output. | 2026-09-17 | Machine interface envelopes, export records, CLI subcommands, or external handoff guidance change. |
 | [`docs/reviews/2026-08-25-roadmap-review.md`](docs/reviews/2026-08-25-roadmap-review.md) | Archived point-in-time roadmap and release-readiness critique retained as planning provenance, not current status. | 2026-08-27 | Delete only when its planning provenance is intentionally retired; never revalidate it as current release evidence. |
 
 ## Contributing

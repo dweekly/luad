@@ -5,6 +5,14 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Keep stdin workers under the subprocess tripwire deadline, including descendants
+  that hold only stdin open. Cleanup joins only finished workers after its grace period.
+- Remove the simulated unluac oracle and pinned decompiler requirement from the
+  firmware walkthrough. Required tests verify luad facts and refusal behavior;
+  third-party decompilation is an optional, separately validated experiment.
+- Correct the walkthrough's input glob, expected manifest exit status, and completeness
+  guidance; verify every manifest exit status against the CLI.
+
 ## 0.1.0 — 2026-09-16
 
 First public release. `luad` reads compiled Lua bytecode and reports the exact format a
