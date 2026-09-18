@@ -186,6 +186,19 @@ fn drain_handles(handles: [std::thread::JoinHandle<()>; 3]) {
     }
 }
 
+#[cfg(unix)]
+fn process_group_signal_command(pid: u32, signal: u8) -> Command {
+    let kill_bin = if Path::new("/bin/kill").exists() {
+        "/bin/kill"
+    } else {
+        "kill"
+    };
+    let mut command = Command::new(kill_bin);
+    // A negative process-group ID must be an operand, never a signal option.
+    command.args([format!("-{signal}"), "--".into(), format!("-{pid}")]);
+    command
+}
+
 /// Execute a subprocess under tripwire resource monitoring.
 pub fn run_with_tripwire(
     program: &Path,
@@ -319,14 +332,7 @@ pub fn run_with_tripwire(
         let pid = child.id();
         #[cfg(unix)]
         {
-            let kill_bin = if Path::new("/bin/kill").exists() {
-                "/bin/kill"
-            } else {
-                "kill"
-            };
-            let _ = Command::new(kill_bin)
-                .args(["-9", &format!("-{}", pid)])
-                .output();
+            let _ = process_group_signal_command(pid, 9).output();
         }
         let _ = child.kill();
         let _ = child.wait();
@@ -448,6 +454,34 @@ pub fn run_with_tripwire(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_process_group_signal_targets_only_the_child_group() {
+        use std::os::unix::process::CommandExt;
+
+        let mut child = Command::new("/bin/sleep")
+            .arg("10")
+            .process_group(0)
+            .spawn()
+            .expect("spawn an isolated child process group");
+        let pid = child.id();
+        // Signal 0 checks target selection without terminating any process.
+        let present = process_group_signal_command(pid, 0).output();
+        child
+            .kill()
+            .expect("terminate only the child by its positive PID");
+        child
+            .wait()
+            .expect("reap child and remove its process group");
+        let absent = process_group_signal_command(pid, 0).output();
+
+        assert!(present.expect("probe existing group").status.success());
+        assert!(
+            !absent.expect("probe absent group").status.success(),
+            "a reaped process group must not resolve to another signal target"
+        );
+    }
 
     #[test]
     fn test_cleanup_deadline_does_not_join_blocked_workers() {
