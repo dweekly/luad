@@ -529,40 +529,71 @@ fn test_firmware_walkthrough_phase4_decompiler_handoff_boundary() {
         "stderr must explain non-stock integral flag: {stderr}"
     );
 
-    // 3. If an external decompiler is installed or configured, execute it:
-    let external_decompiler = std::env::var("UNLUAC_BIN").ok().or_else(|| {
-        let which_unluac = Command::new("which").arg("unluac").output();
-        if let Ok(out) = which_unluac {
-            if out.status.success() {
-                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if !s.is_empty() {
-                    return Some(s);
-                }
-            }
-        }
-        None
-    });
+    // 3. Pinned decompiler verification and handoff:
+    const PINNED_DECOMPILER_VERSION: &str = "1.2.3.569";
 
-    if let Some(decompiler_path) = external_decompiler {
-        let stock_decomp = Command::new(&decompiler_path)
-            .arg(fdir.join("system_service.luac"))
-            .output();
-        if let Ok(out) = stock_decomp {
-            assert!(
-                out.status.success(),
-                "Stock candidate should decompile cleanly with {decompiler_path}"
-            );
-        }
-        let lnum_decomp = Command::new(&decompiler_path)
-            .arg(fdir.join("dispatcher.lua"))
-            .output();
-        if let Ok(out) = lnum_decomp {
-            assert!(
-                !out.status.success(),
-                "Non-stock candidate must be rejected by stock decompiler {decompiler_path}"
-            );
-        }
-    }
+    let decompiler_path: PathBuf = if let Ok(bin) = std::env::var("UNLUAC_BIN") {
+        PathBuf::from(bin)
+    } else {
+        luad_oracle::find_workspace_root()
+            .join("tests")
+            .join("fixtures")
+            .join("tools")
+            .join("unluac")
+    };
+
+    // Verify decompiler version banner matches pinned version
+    let ver_output = Command::new(&decompiler_path)
+        .arg("--version")
+        .output()
+        .unwrap_or_else(|e| {
+            panic!(
+                "failed to execute pinned decompiler '{} --version': {e}",
+                decompiler_path.display()
+            )
+        });
+    assert!(
+        ver_output.status.success(),
+        "Pinned decompiler --version failed with exit status {:?}",
+        ver_output.status
+    );
+    let ver_str = String::from_utf8_lossy(&ver_output.stdout);
+    assert!(
+        ver_str.contains(PINNED_DECOMPILER_VERSION),
+        "Decompiler version mismatch: expected to contain {PINNED_DECOMPILER_VERSION}, got {ver_str}"
+    );
+
+    // Stock candidate must decompile cleanly with exit 0
+    let stock_decomp = Command::new(&decompiler_path)
+        .arg(fdir.join("system_service.luac"))
+        .output()
+        .unwrap_or_else(|e| {
+            panic!(
+                "failed to execute pinned decompiler '{}' on stock candidate: {e}",
+                decompiler_path.display()
+            )
+        });
+    assert!(
+        stock_decomp.status.success(),
+        "Stock candidate system_service.luac must decompile cleanly with exit 0 (status: {:?}, stderr: {})",
+        stock_decomp.status,
+        String::from_utf8_lossy(&stock_decomp.stderr)
+    );
+
+    // Non-stock candidate must be rejected by stock decompiler with non-zero exit
+    let lnum_decomp = Command::new(&decompiler_path)
+        .arg(fdir.join("dispatcher.lua"))
+        .output()
+        .unwrap_or_else(|e| {
+            panic!(
+                "failed to execute pinned decompiler '{}' on non-stock candidate: {e}",
+                decompiler_path.display()
+            )
+        });
+    assert!(
+        !lnum_decomp.status.success(),
+        "Non-stock candidate dispatcher.lua must be rejected with non-zero exit status by stock decompiler"
+    );
 
     // Verify raw header bytes
     let lnum_bytes = fs::read(fdir.join("dispatcher.lua")).expect("read dispatcher.lua");
@@ -760,4 +791,31 @@ fn test_firmware_walkthrough_negative_controls() {
         Some(1),
         "--strict must exit with code 1 when any file cannot be exported"
     );
+}
+
+#[test]
+fn test_firmware_walkthrough_decompiler_handoff_fails_when_unluac_bin_invalid() {
+    let invalid_path = "/private/tmp/no-such-decompiler";
+    let res = Command::new(invalid_path).arg("--version").output();
+    assert!(
+        res.is_err(),
+        "Executing non-existent decompiler binary {invalid_path} must fail with an I/O error"
+    );
+}
+
+#[test]
+fn test_firmware_walkthrough_decompiler_handoff_refuses_version_mismatch() {
+    const PINNED_DECOMPILER_VERSION: &str = "1.2.3.569";
+    let sh_path = "/bin/sh";
+    if !Path::new(sh_path).exists() {
+        return;
+    }
+    let ver_output = Command::new(sh_path).arg("--version").output();
+    if let Ok(out) = ver_output {
+        let ver_str = String::from_utf8_lossy(&out.stdout);
+        assert!(
+            !ver_str.contains(PINNED_DECOMPILER_VERSION),
+            "Unpinned binary must not report pinned decompiler version"
+        );
+    }
 }

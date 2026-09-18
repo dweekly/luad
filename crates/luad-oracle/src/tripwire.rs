@@ -224,11 +224,13 @@ pub fn run_with_tripwire(
     let start = Instant::now();
     let mut child = cmd.spawn()?;
 
-    if let Some(data) = stdin_data {
-        if let Some(mut stdin) = child.stdin.take() {
-            let _ = stdin.write_all(data);
+    let stdin_payload = stdin_data.map(|d| d.to_vec());
+    let child_stdin = child.stdin.take();
+    let stdin_handle = std::thread::spawn(move || {
+        if let (Some(data), Some(mut stdin)) = (stdin_payload, child_stdin) {
+            let _ = stdin.write_all(&data);
         }
-    }
+    });
 
     let child_stdout = child.stdout.take();
     let child_stderr = child.stderr.take();
@@ -315,20 +317,40 @@ pub fn run_with_tripwire(
         let _ = child.wait();
     };
 
-    let poll_interval = Duration::from_millis(5);
-    let exit_status;
+    let drain_handles = |stdout_handle: std::thread::JoinHandle<()>,
+                         stderr_handle: std::thread::JoinHandle<()>,
+                         stdin_handle: std::thread::JoinHandle<()>| {
+        let drain_deadline = Instant::now() + Duration::from_millis(50);
+        while (!stdout_handle.is_finished()
+            || !stderr_handle.is_finished()
+            || !stdin_handle.is_finished())
+            && Instant::now() < drain_deadline
+        {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let _ = stdout_handle.join();
+        let _ = stderr_handle.join();
+        let _ = stdin_handle.join();
+    };
+
+    let poll_interval = Duration::from_millis(2);
+    let mut exit_status = None;
 
     loop {
-        if let Some(status) = child.try_wait()? {
-            exit_status = status;
+        if exit_status.is_none() {
+            if let Some(status) = child.try_wait()? {
+                exit_status = Some(status);
+            }
+        }
+
+        if exit_status.is_some() && stdout_handle.is_finished() && stderr_handle.is_finished() {
             break;
         }
 
         let elapsed = start.elapsed();
         if elapsed > budget.max_wall_time {
             kill_child_tree(&mut child);
-            let _ = stdout_handle.join();
-            let _ = stderr_handle.join();
+            drain_handles(stdout_handle, stderr_handle, stdin_handle);
             return Err(TripwireError::WallTimeCeilingExceeded {
                 elapsed,
                 ceiling: budget.max_wall_time,
@@ -337,8 +359,7 @@ pub fn run_with_tripwire(
 
         if stdout_exceeded.load(Ordering::SeqCst) {
             kill_child_tree(&mut child);
-            let _ = stdout_handle.join();
-            let _ = stderr_handle.join();
+            drain_handles(stdout_handle, stderr_handle, stdin_handle);
             let len = stdout_len.load(Ordering::SeqCst);
             return Err(TripwireError::StdoutCeilingExceeded {
                 length: len,
@@ -348,8 +369,7 @@ pub fn run_with_tripwire(
 
         if stderr_exceeded.load(Ordering::SeqCst) {
             kill_child_tree(&mut child);
-            let _ = stdout_handle.join();
-            let _ = stderr_handle.join();
+            drain_handles(stdout_handle, stderr_handle, stdin_handle);
             let len = stderr_len.load(Ordering::SeqCst);
             return Err(TripwireError::StderrCeilingExceeded {
                 length: len,
@@ -362,7 +382,9 @@ pub fn run_with_tripwire(
 
     let _ = stdout_handle.join();
     let _ = stderr_handle.join();
+    let _ = stdin_handle.join();
     let wall_time = start.elapsed();
+    let exit_status = exit_status.expect("child exited");
 
     // 1. Verify wall time ceiling
     if wall_time > budget.max_wall_time {
@@ -509,6 +531,70 @@ mod tests {
                 );
             }
             other => panic!("Expected StdoutCeilingExceeded, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_tripwire_kills_stdin_ignoring_sleeper_promptly() {
+        let sh = Path::new("/bin/sh");
+        if !sh.exists() {
+            return;
+        }
+
+        let budget = TripwireBudget {
+            max_wall_time: Duration::from_millis(15),
+            max_peak_rss_bytes: 1024 * 1024 * 1024,
+            max_stdout_bytes: 1024 * 1024,
+            max_stderr_bytes: 1024 * 1024,
+        };
+
+        // 1 MB of stdin data that the child ignores while sleeping
+        let large_stdin = vec![0x41u8; 1024 * 1024];
+
+        let start = Instant::now();
+        let res = run_with_tripwire(sh, &["-c", "sleep 0.3"], Some(&large_stdin), &budget);
+        let elapsed = start.elapsed();
+
+        match res {
+            Err(TripwireError::WallTimeCeilingExceeded { ceiling, .. }) => {
+                assert_eq!(ceiling, Duration::from_millis(15));
+                assert!(
+                    elapsed < Duration::from_millis(150),
+                    "Tripwire must not block on stdin writes before deadline (took {elapsed:?})"
+                );
+            }
+            other => panic!("Expected WallTimeCeilingExceeded, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_tripwire_kills_descendant_holding_pipes_promptly() {
+        let sh = Path::new("/bin/sh");
+        if !sh.exists() {
+            return;
+        }
+
+        let budget = TripwireBudget {
+            max_wall_time: Duration::from_millis(15),
+            max_peak_rss_bytes: 1024 * 1024 * 1024,
+            max_stdout_bytes: 1024 * 1024,
+            max_stderr_bytes: 1024 * 1024,
+        };
+
+        // Child exits immediately but background descendant holds stdout pipe open for 300ms
+        let start = Instant::now();
+        let res = run_with_tripwire(sh, &["-c", "(sleep 0.3) & exit 0"], None, &budget);
+        let elapsed = start.elapsed();
+
+        match res {
+            Err(TripwireError::WallTimeCeilingExceeded { ceiling, .. }) => {
+                assert_eq!(ceiling, Duration::from_millis(15));
+                assert!(
+                    elapsed < Duration::from_millis(150),
+                    "Tripwire must not block indefinitely waiting on descendant-held pipes (took {elapsed:?})"
+                );
+            }
+            other => panic!("Expected WallTimeCeilingExceeded, got {other:?}"),
         }
     }
 }

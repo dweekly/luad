@@ -1,13 +1,14 @@
 //! Structural and VM invariant validator for Lua 5.4 chunks.
 
 use crate::opcodes::{Opcode54, RawInstruction54};
-use luad_core::diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
-use luad_core::id::StableId;
+use luad_core::diagnostic::{
+    truncate_and_dedup_diagnostics, Diagnostic, DiagnosticCategory, Severity, Verdict,
+};
 use luad_core::model::{Chunk, Prototype};
 
 const MAX_DIAGNOSTICS: usize = 10_000;
 
-/// Validate all structural and VM invariants of a parsed Lua 5.4 chunk.
+/// Validate Lua 5.4 chunk invariants.
 pub fn validate_chunk_lua54(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
     let mut diagnostics = chunk.diagnostics.clone();
 
@@ -16,8 +17,11 @@ pub fn validate_chunk_lua54(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
         diagnostics.push(Diagnostic::error(
             "L54-VAL-HEADER-001",
             DiagnosticCategory::Structure,
-            StableId::Chunk,
-            "Instruction size must be 4 bytes",
+            chunk.main_proto.id.clone(),
+            format!(
+                "Invalid instruction size {} (must be 4)",
+                chunk.header.instruction_size
+            ),
         ));
     }
 
@@ -25,8 +29,11 @@ pub fn validate_chunk_lua54(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
         diagnostics.push(Diagnostic::error(
             "L54-VAL-HEADER-002",
             DiagnosticCategory::Structure,
-            StableId::Chunk,
-            "lua_Integer size must be 8 bytes",
+            chunk.main_proto.id.clone(),
+            format!(
+                "Invalid integer size {} (must be 8)",
+                chunk.header.lua_integer_size
+            ),
         ));
     }
 
@@ -34,8 +41,11 @@ pub fn validate_chunk_lua54(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
         diagnostics.push(Diagnostic::error(
             "L54-VAL-HEADER-003",
             DiagnosticCategory::Structure,
-            StableId::Chunk,
-            "lua_Number size must be 8 bytes",
+            chunk.main_proto.id.clone(),
+            format!(
+                "Invalid number size {} (must be 8)",
+                chunk.header.lua_number_size
+            ),
         ));
     }
 
@@ -44,6 +54,17 @@ pub fn validate_chunk_lua54(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
     if !limit_reached {
         validate_proto_lua54(&chunk.main_proto, &mut diagnostics, &mut limit_reached);
     }
+    limit_reached = limit_reached || diagnostics.len() > MAX_DIAGNOSTICS;
+
+    // Determine failure and completeness BEFORE truncating diagnostics
+    let has_errors = diagnostics.iter().any(|d| d.severity == Severity::Error);
+    let verdict = if has_errors {
+        Verdict::Invalid
+    } else if limit_reached {
+        Verdict::Incomplete
+    } else {
+        Verdict::ValidForAnalysis
+    };
 
     if limit_reached {
         diagnostics.push(Diagnostic::error(
@@ -54,26 +75,7 @@ pub fn validate_chunk_lua54(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
         ));
     }
 
-    let mut deduped = Vec::with_capacity(diagnostics.len().min(MAX_DIAGNOSTICS + 1));
-    let mut seen = std::collections::HashSet::new();
-    for diag in diagnostics {
-        if deduped.len() >= MAX_DIAGNOSTICS && diag.code != "CORE-LIMIT-003" {
-            continue;
-        }
-        if seen.insert(diag.clone()) {
-            deduped.push(diag);
-        }
-    }
-    let diagnostics = deduped;
-
-    let has_errors = diagnostics.iter().any(|d| d.severity == Severity::Error);
-    let verdict = if limit_reached {
-        Verdict::Incomplete
-    } else if has_errors {
-        Verdict::Invalid
-    } else {
-        Verdict::ValidForAnalysis
-    };
+    let diagnostics = truncate_and_dedup_diagnostics(diagnostics, MAX_DIAGNOSTICS);
 
     (verdict, diagnostics)
 }

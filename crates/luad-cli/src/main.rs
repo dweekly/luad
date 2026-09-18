@@ -137,20 +137,10 @@ pub fn classify_diagnostic(diag: &Diagnostic) -> ExitCode {
     if diag.code.starts_with("IO-") {
         return ExitCode::IoError;
     }
-    if diag.code.starts_with("CORE-LIMIT-")
-        || diag.code == "CORE-OVERFLOW-001"
-        || diag.code == "CORE-DEPTH-001"
-        || diag.code == "CORE-COUNT-001"
-        || diag.code.ends_with("-STR-001")
-        || diag.code.ends_with("-INST-001")
-        || diag.code.ends_with("-CONST-001")
-        || diag.code.ends_with("-PROTO-001")
-        || diag.code.ends_with("-UPVAL-001")
-        || diag.code.contains("LIMIT")
-        || diag.message.contains("exceeds safety limit")
-        || diag.message.contains("exceeds configured limit")
-        || diag.message.contains("exceeds limit")
-        || diag.message.contains("exceeds host pointer width")
+    if is_resource_limit_code(&diag.code)
+        || diag.code.starts_with("CORE-LIMIT-")
+        || diag.message.contains("exceeds configured safety limit")
+        || diag.message.contains("exceeds safety limit of")
     {
         return ExitCode::LimitExceeded;
     }
@@ -163,6 +153,45 @@ pub fn classify_diagnostic(diag: &Diagnostic) -> ExitCode {
         return ExitCode::UnsupportedFormat;
     }
     ExitCode::InvalidInput
+}
+
+/// Typed classification of diagnostic codes representing resource exhaustion or safety limits.
+fn is_resource_limit_code(code: &str) -> bool {
+    matches!(
+        code,
+        "CORE-LIMIT-001"
+            | "CORE-LIMIT-002"
+            | "CORE-LIMIT-003"
+            | "CORE-OVERFLOW-001"
+            | "CORE-DEPTH-001"
+            | "CORE-COUNT-001"
+            | "L51-CODE-001"
+            | "L51-CONST-001"
+            | "L51-PROTO-001"
+            | "L51-UPVAL-001"
+            | "L51-STR-001"
+            | "L52-CODE-001"
+            | "L52-CONST-001"
+            | "L52-PROTO-001"
+            | "L52-UPVAL-001"
+            | "L52-STR-001"
+            | "L53-CODE-001"
+            | "L53-CONST-001"
+            | "L53-PROTO-001"
+            | "L53-UPVAL-001"
+            | "L53-STR-001"
+            | "L54-CODE-001"
+            | "L54-CONST-001"
+            | "L54-PROTO-001"
+            | "L54-UPVAL-001"
+            | "L54-STR-001"
+            | "L54-SIZE-001"
+            | "L55-CODE-001"
+            | "L55-CONST-001"
+            | "L55-PROTO-001"
+            | "L55-UPVAL-001"
+            | "L55-STR-001"
+    )
 }
 
 /// Typed classification of diagnostic codes representing unsupported bytecode formats,
@@ -2758,6 +2787,46 @@ mod tests {
         assert_eq!(
             reordered.explicit_names(),
             Some(vec!["prototype".to_string(), "instruction".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_classify_diagnostic_operand_vs_limits() {
+        let dummy_id = StableId::proto(luad_core::id::ProtoPath::root());
+        let make_item = |c: &str| {
+            Diagnostic::new(
+                c,
+                DiagnosticCategory::Parse,
+                Severity::Error,
+                dummy_id.clone(),
+                "test",
+            )
+        };
+
+        // Operand bounds check failures must return InvalidInput (exit 1)
+        assert_eq!(
+            classify_diagnostic(&make_item("L54-VAL-CONST-001")),
+            ExitCode::InvalidInput
+        );
+        assert_eq!(
+            classify_diagnostic(&make_item("L54-VAL-UPVAL-001")),
+            ExitCode::InvalidInput
+        );
+
+        // Resource count limits must return LimitExceeded (exit 5)
+        assert_eq!(
+            classify_diagnostic(&make_item("L54-CONST-001")),
+            ExitCode::LimitExceeded
+        );
+        assert_eq!(
+            classify_diagnostic(&make_item("CORE-LIMIT-003")),
+            ExitCode::LimitExceeded
+        );
+
+        // Unsupported format/layout must return UnsupportedFormat (exit 4)
+        assert_eq!(
+            classify_diagnostic(&make_item("L52-HEADER-003")),
+            ExitCode::UnsupportedFormat
         );
     }
 }

@@ -325,3 +325,58 @@ fn test_diagnostic_exhaustion_must_never_authorize_invalid_bytecode() {
         "Must not report CORE-LIMIT-003 when limit was not reached"
     );
 }
+
+#[test]
+fn test_diagnostic_truncation_preserves_error_and_rejects() {
+    let mut chunk = create_valid_dummy_chunk();
+    chunk.main_proto.maxstacksize = 2;
+    chunk.main_proto.constants = vec![]; // 0 constants
+
+    // 9,999 warning-producing instructions (R(10) >= maxstacksize 2)
+    let mut insts = Vec::with_capacity(10_000);
+    let raw_warn = RawInstruction54::encode_iabc(Opcode54::Move, 10, 0, 0, 0);
+
+    for pc in 0..9_999 {
+        insts.push(InstructionWord {
+            id: StableId::instruction(ProtoPath::root(), pc),
+            pc,
+            raw_word: raw_warn,
+            raw_hex: hex::encode(raw_warn.to_le_bytes()),
+            source: SourceLocation::new(0, &raw_warn.to_le_bytes()),
+        });
+    }
+
+    // 10,000th instruction produces BOTH a warning (R(10) >= 2) AND an error (LOADK K(999) with 0 constants)
+    let raw_both = RawInstruction54::encode_iabx(Opcode54::Loadk, 10, 999);
+    insts.push(InstructionWord {
+        id: StableId::instruction(ProtoPath::root(), 9_999),
+        pc: 9_999,
+        raw_word: raw_both,
+        raw_hex: hex::encode(raw_both.to_le_bytes()),
+        source: SourceLocation::new(0, &raw_both.to_le_bytes()),
+    });
+
+    chunk.main_proto.instructions = insts;
+
+    let (verdict, diags) = validate_chunk_lua54(&chunk);
+
+    // Must be Verdict::Invalid, never ValidForAnalysis or ValidForParser
+    assert_eq!(
+        verdict,
+        Verdict::Invalid,
+        "Chunk with 9,999 warnings and 1 invalid-constant error must be Invalid, not ValidForAnalysis"
+    );
+
+    // The error L54-VAL-CONST-001 must NOT be discarded by diagnostic truncation!
+    assert!(
+        diags.iter().any(|d| d.code == "L54-VAL-CONST-001"),
+        "Diagnostic truncation must preserve the error L54-VAL-CONST-001"
+    );
+
+    // Analysis qualification MUST fail
+    let ana_res = luad_analysis::validate_for_analysis(&chunk);
+    assert!(
+        ana_res.is_err(),
+        "validate_for_analysis must reject Invalid verdict"
+    );
+}

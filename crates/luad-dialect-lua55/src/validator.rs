@@ -1,6 +1,8 @@
 //! Structural and VM invariant validator for Lua 5.5 bytecode chunks.
 
-use luad_core::diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
+use luad_core::diagnostic::{
+    truncate_and_dedup_diagnostics, Diagnostic, DiagnosticCategory, Severity, Verdict,
+};
 use luad_core::model::{Chunk, Prototype};
 
 use crate::opcodes::{Opcode55, RawInstruction55};
@@ -14,6 +16,17 @@ pub fn validate_chunk_lua55(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
     if !limit_reached {
         validate_proto(&chunk.main_proto, &mut diagnostics, &mut limit_reached);
     }
+    limit_reached = limit_reached || diagnostics.len() > MAX_DIAGNOSTICS;
+
+    // Determine failure and completeness BEFORE truncating diagnostics
+    let has_errors = diagnostics.iter().any(|d| d.severity == Severity::Error);
+    let verdict = if has_errors {
+        Verdict::Invalid
+    } else if limit_reached {
+        Verdict::Incomplete
+    } else {
+        Verdict::ValidForParser
+    };
 
     if limit_reached {
         diagnostics.push(Diagnostic::error(
@@ -24,25 +37,7 @@ pub fn validate_chunk_lua55(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
         ));
     }
 
-    let mut deduped = Vec::with_capacity(diagnostics.len().min(MAX_DIAGNOSTICS + 1));
-    let mut seen = std::collections::HashSet::new();
-    for diag in diagnostics {
-        if deduped.len() >= MAX_DIAGNOSTICS && diag.code != "CORE-LIMIT-003" {
-            continue;
-        }
-        if seen.insert(diag.clone()) {
-            deduped.push(diag);
-        }
-    }
-    let diagnostics = deduped;
-
-    let verdict = if limit_reached {
-        Verdict::Incomplete
-    } else if diagnostics.iter().any(|d| d.severity == Severity::Error) {
-        Verdict::Invalid
-    } else {
-        Verdict::ValidForParser
-    };
+    let diagnostics = truncate_and_dedup_diagnostics(diagnostics, MAX_DIAGNOSTICS);
 
     (verdict, diagnostics)
 }
