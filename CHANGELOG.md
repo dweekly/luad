@@ -3,6 +3,12 @@
 All notable changes are documented here. `luad` is a 0.x experimental tool: no dialect
 is promoted to a supported tier and no interface carries a compatibility promise yet.
 
+## Unreleased
+
+- Add the project logo and CI, Codecov, release, and dual-license badges to the README.
+  Publish measured Linux line coverage from the workspace suite and instrumented CLI
+  subprocesses through a separate coverage workflow.
+
 ## 0.3.0 — 2026-09-18
 
 - Emit closed `prototype` expressions with child prototype paths and physical PC

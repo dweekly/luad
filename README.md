@@ -1,4 +1,17 @@
-# `luad`
+<p align="center">
+  <a href="https://dweekly.github.io/luad/">
+    <img src="site/logo.png" alt="luad: a smiling crescent moon inside a magnifying glass" width="160" height="160">
+  </a>
+</p>
+
+<h1 align="center">luad</h1>
+
+<p align="center">
+  <a href="https://github.com/dweekly/luad/actions/workflows/ci.yml"><img src="https://github.com/dweekly/luad/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://codecov.io/gh/dweekly/luad"><img src="https://codecov.io/gh/dweekly/luad/branch/main/graph/badge.svg" alt="Codecov coverage"></a>
+  <a href="https://github.com/dweekly/luad/releases/latest"><img src="https://img.shields.io/github/v/release/dweekly/luad" alt="Latest release"></a>
+  <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License: MIT OR Apache-2.0"></a>
+</p>
 
 `luad` reads compiled Lua bytecode and tells you what is in it: the exact format it was
 built for, the instructions, the constants, the closure bindings, and where every one of
@@ -231,8 +244,8 @@ delete the document in the same change and update this index.
 | [`README.md`](README.md) | What `luad` is, install, first commands, honest limitations, and the documentation index. | 2026-09-18 | Public scope, support status, setup, primary commands, or the documentation set changes. |
 | [`AGENTS.md`](AGENTS.md) | Binding repository instructions, product-batch boundaries, and safety constraints for coding agents. | 2026-08-27 | Development workflow, proof policy, current priority, or repository invariants change. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-27 | Crates, ownership boundaries, core representations, or evidence layers change. |
-| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of released user-visible changes. | 2026-09-18 | Every user-visible change or release; never use it as a forward plan. |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor verification commands, test taxonomy, fixture provenance, and definition of done. | 2026-09-17 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of released and unreleased user-visible changes. | 2026-09-18 | Every user-visible change or release; never use it as a forward plan. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor verification commands, test taxonomy, fixture provenance, and definition of done. | 2026-09-18 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
 | [`PRD.md`](PRD.md) | Product users, firmware-tree workflows, factual analysis boundary, requirements, non-goals, and release outcomes. | 2026-09-06 | Product scope, target users, supported workflows, factual-analysis boundary, or product-level requirements change. |
 | [`ROADMAP.md`](ROADMAP.md) | Release completion boundary, future researcher outcomes, sequencing, and target support boundaries. | 2026-09-17 | Release scope, dependencies, parallel ownership, acceptance criteria, support boundaries, or exclusions change. |
 | [`SECURITY.md`](SECURITY.md) | Supported-version policy, the planned 1.0 target matrix, vulnerability reporting, and hostile-input threat model. | 2026-09-16 | Support policy, the planned target matrix, reporting channel, trust boundary, or threat model changes. |

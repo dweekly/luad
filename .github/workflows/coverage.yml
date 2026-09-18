@@ -1,0 +1,65 @@
+name: Coverage
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/coverage.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'crates/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/coverage.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    name: Linux line coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          components: llvm-tools-preview
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@4076c08d76dba979c11a7285295b0716c1d67908 # v2
+        with:
+          tool: cargo-llvm-cov@0.9.1
+      - name: Install official Lua compilers
+        run: bash scripts/install_ci_compilers.sh
+      - name: Measure workspace and CLI subprocess coverage
+        run: bash scripts/coverage.sh "${RUNNER_TEMP}/lcov.info"
+      - name: Retain coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-coverage
+          path: ${{ runner.temp }}/lcov.info
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ runner.temp }}/lcov.info
+          disable_search: true
+          fail_ci_if_error: true
