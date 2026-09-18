@@ -16,7 +16,8 @@ real firmware, but no dialect is promoted to a supported tier and nothing here i
 qualified as a basis for security conclusions. Lua 5.2, 5.3, and 5.5 provide structural
 facts and validation; derived analysis is refused for these dialects. Please file issues.
 
-See [limitations](#limitations) for what specifically does not work yet.
+See [limitations](#limitations) for what specifically does not work yet, or the
+[project website](https://dweekly.github.io/luad/) for an introduction.
 
 ## What it does
 
@@ -72,9 +73,28 @@ build on it without scraping text. Supported formats vary by command — see
 
 ## Install
 
-Prebuilt archives for `linux-x86_64` and `macos-aarch64` are attached to each
-[GitHub release](https://github.com/dweekly/luad/releases). Download, verify the
-checksum, and extract.
+Prebuilt archives for `linux-x86_64` and `macos-aarch64` are attached to
+[release 0.2.0](https://github.com/dweekly/luad/releases/tag/v0.2.0), together with
+checksums, an evidence index, and a CycloneDX source SBOM. Download all five assets
+into an empty directory with the GitHub CLI, verify, and extract:
+
+```console
+mkdir luad-0.2.0-downloads && cd luad-0.2.0-downloads
+gh release download v0.2.0 --repo dweekly/luad
+shasum -a 256 -c SHA256SUMS
+tar xzf luad-0.2.0-macos-aarch64.tar.gz
+./luad-0.2.0-macos-aarch64/luad --version
+```
+
+On Linux x86-64, substitute `linux-x86_64` for `macos-aarch64`. Verify build provenance
+against the release's exact source revision:
+
+```console
+gh attestation verify luad-0.2.0-macos-aarch64.tar.gz \
+  --repo dweekly/luad \
+  --signer-workflow dweekly/luad/.github/workflows/ci.yml \
+  --source-digest cfadac0b896cc14969a0771dc9bb63f11e0b5281
+```
 
 From source, with a Rust 1.85 or newer toolchain:
 
@@ -239,7 +259,7 @@ delete the document in the same change and update this index.
 | [`docs/ROADMAP-1.0.md`](docs/ROADMAP-1.0.md) | The full qualification program a future 1.0 would need: milestones, evidence gates, target promotion, and release acceptance. | 2026-09-16 | The 1.0 destination, milestone order, release acceptance, or the qualification lifecycle changes. |
 | [`docs/BRINGUP.md`](docs/BRINGUP.md) | Setup for a developer machine, a self-hosted Actions runner, and a release builder, with the owning file for every tool pin. | 2026-09-02 | A tool pin, its owning file, the doctor's checks, runner labels or security boundary, or the release dry-run and rehearsal entry points change. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, separate product and qualification CI lanes, proportional evidence, process budgets, and agent orchestration. | 2026-08-27 | Planning artifacts, CI lanes, customer cadence, agent roles, evidence policy, process budgets, provider interfaces, or sprint-advance mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | No-feature-work checkpoint; finish authorized release verification before selecting another contract. | 2026-09-17 | A stage replaces it with its contract: a qualification stage through a dedicated planning change, any other stage in the first commit of its own pull request. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | No-feature-work checkpoint; select the next researcher outcome and contract separately. | 2026-09-17 | A stage replaces it with its contract: a qualification stage through a dedicated planning change, any other stage in the first commit of its own pull request. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-08-27 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/PRIOR-ART-AND-CORPORA.md`](docs/PRIOR-ART-AND-CORPORA.md) | External tools, datasets, and bytecode-emitting ecosystems evaluated against the product scope, candidate fixture sources with license and provenance constraints, and the fidelity gaps they expose. | 2026-09-06 | A listed project changes license or status, a candidate corpus or vendor profile is adopted or rejected, or the PRD prior-art table is revised. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, schemas, identities, commands, diagnostics, and exit behavior. | 2026-08-27 | Any public command, schema, record, stable ID, diagnostic, or exit contract changes. |
