@@ -59,6 +59,9 @@ The report is `artifacts/coverage/lcov.info`. It includes the CLI and libraries;
 the `luad-oracle` tooling crate and cargo-llvm-cov's default test/dependency exclusions
 are omitted from the report, while their tests still run. The badge measures Linux
 line coverage, not branch coverage, semantic correctness, or supported-target status.
+Containment tests deliberately terminate child processes, so some coverage writes can
+be incomplete. Report merging warns about invalid profiles and retains the valid ones;
+it fails if none can be merged. Counters from interrupted processes may be absent.
 Coverage tooling is optional for contributors and does not change `scripts/check.sh`.
 
 Dependency changes must also pass the pinned `cargo-deny` policy:

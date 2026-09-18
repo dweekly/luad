@@ -14,8 +14,11 @@ cargo build --locked -p luad-cli --bin luad
 target_dir="$(cargo metadata --locked --no-deps --format-version 1 | jq -r .target_directory)"
 export CARGO_BIN_EXE_luad="${target_dir}/debug/luad"
 cargo test --locked --workspace
+# Containment tests deliberately kill children, which can interrupt profile writes.
+# Retain valid profiles; LLVM still fails if none can be merged.
 cargo llvm-cov report --lcov \
-    --ignore-filename-regex '(^|/)crates/luad-oracle/' --output-path "${report}"
+    --failure-mode all --ignore-filename-regex '(^|/)crates/luad-oracle/' \
+    --output-path "${report}"
 
 test -s "${report}"
 grep -Eq '^SF:.*crates/luad-cli/src/' "${report}"
