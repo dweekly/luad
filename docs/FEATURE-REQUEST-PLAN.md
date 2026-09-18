@@ -1,10 +1,10 @@
 # Feature-request delivery plan
 
-Status: proposed post-0.2.0 sequencing.
+Status: proposed sequencing for future feature selection.
 
-Fresh as of: 2026-09-17.
+Fresh as of: 2026-09-18.
 
-`luad` 0.2.0 has published. This plan translates the Deco research requests into bounded future sprint outcomes. It is not an active implementation contract: a new contract in [`NEXT-SPRINT.md`](NEXT-SPRINT.md) must select each outcome before work begins. Private firmware measurements prioritize the work but do not become fixtures, test authorities, or core security policy.
+This plan translates the remaining Deco research requests into bounded future sprint outcomes. It is not an active implementation contract: a new contract in [`NEXT-SPRINT.md`](NEXT-SPRINT.md) must select each outcome before work begins. Private firmware measurements prioritize the work but do not become fixtures, test authorities, or core security policy.
 
 ## Shared boundary and evidence
 
@@ -20,23 +20,7 @@ bash scripts/gates/gate-batch-export.sh
 
 Extend an existing gate when it owns the same fact family. Add a gate only for a new interaction it cannot falsify. Every comparator needs a corruption control; required fixtures and compilers fail rather than skip. The steward runs the focused gate and one clean-candidate aggregate `bash scripts/check.sh`.
 
-## 1. Closure-valued argument origins (R-1c)
-
-**Outcome:** Consumers identify callbacks passed as arguments rather than receiving an `unknown{overwritten}` value.
-
-**Public claim:** A proven `CLOSURE` definition of an argument register emits a closed `prototype` expression containing the child `ProtoPath` and closure-site evidence:
-
-```json
-{"kind":"prototype","prototype":"0/6/0","evidence":["proto:0/6:pc:6"]}
-```
-
-**Implementation:** Extend `OriginExpressionKind` in `crates/luad-analysis/src/origins.rs`, carry existing child-prototype and closure-site facts into argument resolution, and render the same typed fact through `origins` and `export --facts origin`. Closure identity does not imply inference of captured values; the current mutable- and ambiguous-capture safeguards remain unchanged.
-
-**Evidence:** Use a compiler-produced `f(function() end)` fixture; assert exact JSON, JSONL, text, and export output; regenerate origin/export schemas; extend `gate-argument-origins-lua51`; and add a comparator mutation for the child path or evidence.
-
-**Stop:** Proven closure arguments no longer report `overwritten`; actual overwrites and ambiguity retain explicit unresolved reasons.
-
-## 2. Constant-key table-literal origins (R-1a)
+## 1. Constant-key table-literal origins (R-1a)
 
 **Outcome:** Consumers inspect request-shaped objects passed between Lua functions without manual construction tracing.
 
@@ -48,7 +32,7 @@ Extend an existing gate when it owns the same fact family. Add a gate only for a
 
 **Stop:** Output preserves exact known fields and visible cutoffs without asserting array or dynamic-key semantics.
 
-## 3. CFG alternatives for bounded definitions (R-1b)
+## 2. CFG alternatives for bounded definitions (R-1b)
 
 **Outcome:** Consumers see bounded definitions reaching a join instead of an opaque `control-flow-conflict`.
 
@@ -60,7 +44,7 @@ Extend an existing gate when it owns the same fact family. Add a gate only for a
 
 **Stop:** Results are deterministic, bounded, evidence-linked, and cannot be mistaken for taint or an end-to-end path assertion.
 
-## 4. Corpus-wide `query --input-list` (R-4)
+## 3. Corpus-wide `query --input-list` (R-4)
 
 **Outcome:** One exact query runs across an explicit artifact list with per-input identity and failures retained.
 
@@ -72,7 +56,7 @@ Extend an existing gate when it owns the same fact family. Add a gate only for a
 
 **Stop:** No failed file becomes an apparently clean no-match result.
 
-## 5. Export fact-family discovery (R-5)
+## 4. Export fact-family discovery (R-5)
 
 **Outcome:** Consumers discover every accepted `export --facts` value at runtime.
 
@@ -84,7 +68,7 @@ Extend an existing gate when it owns the same fact family. Add a gate only for a
 
 **Stop:** Consumers need neither source inspection nor guessing.
 
-## 6. Convention-gated cross-chunk linking (R-2)
+## 5. Convention-gated cross-chunk linking (R-2)
 
 **Outcome:** A corpus consumer connects a proved LuCI module label to its defining artifact and prototype when a named convention applies.
 
@@ -96,7 +80,7 @@ Extend an existing gate when it owns the same fact family. Add a gate only for a
 
 **Stop:** The convention remains opt-in and auditable, never a universal Lua or runtime reachability claim.
 
-## 7. Caller-unioned parameter substitution (R-3)
+## 6. Caller-unioned parameter substitution (R-3)
 
 Defer this pending a design-and-evidence spike. It must not replace bytecode-local `parameter` origins. The spike defines cross-file call-site identity, admissible proven `callgraph` edges, recursion, callbacks, cycles, depth limits, and cutoff behavior.
 
@@ -113,12 +97,11 @@ Documentation and fixtures ship with the fact they evidence.
 
 ## Proposed order
 
-1. Closure-valued argument origins.
-2. Constant-key table-literal origins.
-3. CFG alternatives.
-4. Corpus-wide query input lists.
-5. Fact-family discovery.
-6. Convention-gated cross-chunk linking.
-7. Caller-unioned substitution only after its safety and consumer spike.
+1. Constant-key table-literal origins.
+2. CFG alternatives.
+3. Corpus-wide query input lists.
+4. Fact-family discovery.
+5. Convention-gated cross-chunk linking.
+6. Caller-unioned substitution only after its safety and consumer spike.
 
 This order starts with local, provable origin facts, then adds corpus composition, and postpones inter-artifact and caller-union semantics until their identity and interpretation boundaries are explicit.
