@@ -5,6 +5,8 @@ use luad_core::diagnostic::{Diagnostic, DiagnosticCategory, Severity, Verdict};
 use luad_core::id::StableId;
 use luad_core::model::{Chunk, Prototype};
 
+const MAX_DIAGNOSTICS: usize = 10_000;
+
 /// Validate all structural and VM invariants of a parsed Lua 5.4 chunk.
 pub fn validate_chunk_lua54(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
     let mut diagnostics = chunk.diagnostics.clone();
@@ -40,6 +42,18 @@ pub fn validate_chunk_lua54(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
     // 2. Prototype validation
     validate_proto_lua54(&chunk.main_proto, &mut diagnostics);
 
+    let mut deduped = Vec::with_capacity(diagnostics.len().min(MAX_DIAGNOSTICS));
+    let mut seen = std::collections::HashSet::new();
+    for diag in diagnostics {
+        if deduped.len() >= MAX_DIAGNOSTICS {
+            break;
+        }
+        if seen.insert(diag.clone()) {
+            deduped.push(diag);
+        }
+    }
+    let diagnostics = deduped;
+
     let has_errors = diagnostics.iter().any(|d| d.severity == Severity::Error);
     let verdict = if has_errors {
         Verdict::Invalid
@@ -62,6 +76,9 @@ fn uses_register_a(op: Opcode54) -> bool {
 }
 
 fn validate_proto_lua54(proto: &Prototype, diagnostics: &mut Vec<Diagnostic>) {
+    if diagnostics.len() >= MAX_DIAGNOSTICS {
+        return;
+    }
     let _proto_id = proto.id.clone();
     let num_instructions = proto.instructions.len();
     let num_constants = proto.constants.len();
@@ -70,6 +87,9 @@ fn validate_proto_lua54(proto: &Prototype, diagnostics: &mut Vec<Diagnostic>) {
 
     // Validate instructions
     for inst in &proto.instructions {
+        if diagnostics.len() >= MAX_DIAGNOSTICS {
+            return;
+        }
         let raw = RawInstruction54::decode(inst.raw_word);
         let inst_id = inst.id.clone();
 
@@ -181,6 +201,9 @@ fn validate_proto_lua54(proto: &Prototype, diagnostics: &mut Vec<Diagnostic>) {
 
     // Recursively validate child prototypes
     for child in &proto.protos {
+        if diagnostics.len() >= MAX_DIAGNOSTICS {
+            return;
+        }
         validate_proto_lua54(child, diagnostics);
     }
 }

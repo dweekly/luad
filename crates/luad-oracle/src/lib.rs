@@ -14,6 +14,7 @@ pub mod listing_parser;
 pub mod release_bundle;
 pub mod release_package;
 pub mod release_sbom;
+pub mod tripwire;
 
 pub use candidate::{
     decompress_gzip, parse_tar, resolve_test_binary, verify_platform_attestation,
@@ -27,6 +28,10 @@ pub use differential_disasm::{
 };
 pub use independent_lua51_oracle::{
     IndependentInstruction51, IndependentOpMode51, IndependentOpcode51,
+};
+pub use tripwire::{
+    parse_gnu_time_trailer, parse_macos_time_trailer, run_with_tripwire, TripwireBudget,
+    TripwireError, TripwireMetrics,
 };
 
 pub use gate_runner::{

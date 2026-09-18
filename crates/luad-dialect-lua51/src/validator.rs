@@ -6,14 +6,20 @@ use luad_core::model::{Chunk, Prototype};
 use crate::opcodes::{OpMode51, Opcode51, RawInstruction51};
 use crate::roles::{discover_roles_lua51, Lua51RoleFault};
 
+const MAX_DIAGNOSTICS: usize = 10_000;
+
 /// Validate Lua 5.1 chunk invariants.
 pub fn validate_chunk_lua51(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
     let mut diagnostics = chunk.diagnostics.clone();
     validate_proto(&chunk.main_proto, &mut diagnostics);
 
-    let mut deduped = Vec::with_capacity(diagnostics.len());
+    let mut deduped = Vec::with_capacity(diagnostics.len().min(MAX_DIAGNOSTICS));
+    let mut seen = std::collections::HashSet::new();
     for diag in diagnostics {
-        if !deduped.contains(&diag) {
+        if deduped.len() >= MAX_DIAGNOSTICS {
+            break;
+        }
+        if seen.insert(diag.clone()) {
             deduped.push(diag);
         }
     }
@@ -29,11 +35,17 @@ pub fn validate_chunk_lua51(chunk: &Chunk) -> (Verdict, Vec<Diagnostic>) {
 }
 
 fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
+    if diags.len() >= MAX_DIAGNOSTICS {
+        return;
+    }
     let num_insts = proto.instructions.len();
     let role_map = discover_roles_lua51(proto);
 
     // Report role map faults (truncated companion ranges)
     for fault in &role_map.faults {
+        if diags.len() >= MAX_DIAGNOSTICS {
+            return;
+        }
         match fault {
             Lua51RoleFault::TruncatedClosure { owner_pc, .. } => {
                 let inst = &proto.instructions[*owner_pc];
@@ -76,6 +88,9 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
 
     // 2. Validate instructions
     for (pc, inst) in proto.instructions.iter().enumerate() {
+        if diags.len() >= MAX_DIAGNOSTICS {
+            return;
+        }
         if !role_map.is_executable(pc) {
             continue;
         }
@@ -400,6 +415,9 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>) {
     }
 
     for child in &proto.protos {
+        if diags.len() >= MAX_DIAGNOSTICS {
+            return;
+        }
         validate_proto(child, diags);
     }
 }
