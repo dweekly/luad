@@ -18,6 +18,17 @@ const MAX_TRANSFER_STEPS: usize = 1_000_000;
 const MAX_TABLE_SCAN_STEPS: usize = 64;
 const MAX_TABLE_FIELDS: usize = 64;
 const MAX_ALTERNATIVES: usize = 8;
+/// How many times a block's outgoing state may change before its still-moving slots are
+/// widened to `Unknown`.
+///
+/// The origin lattice has unbounded height: a loop-carried `i = i + 1` merges to
+/// `Alternatives[0, ADD(0, 1)]`, whose transfer yields `ADD(Alternatives[..], 1)`, which
+/// the next merge adds as a further option. Each pass is strictly larger than the last, so
+/// the worklist never reaches a fixpoint and terminates only by exhausting its step budget,
+/// which reports every call in the prototype as `analysis-limit`. Widening bounds the
+/// iteration instead, so a prototype containing a loop still resolves the expressions that
+/// do converge.
+const MAX_BLOCK_REVISITS: usize = 8;
 
 /// A lossless literal suitable for structural equality in an origin graph.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
@@ -289,6 +300,7 @@ fn run_dataflow(
     let mut queued: BTreeSet<usize> = worklist.iter().copied().collect();
     let mut steps = 0usize;
     let mut exhausted = false;
+    let mut revisits = vec![0usize; cfg.blocks.len()];
     while let Some(block_index) = worklist.pop_front() {
         queued.remove(&block_index);
         let block = &cfg.blocks[block_index];
@@ -316,6 +328,31 @@ fn run_dataflow(
             break;
         }
         if state != out_states[block_index] {
+            revisits[block_index] = revisits[block_index].saturating_add(1);
+            if revisits[block_index] > MAX_BLOCK_REVISITS {
+                // Widen: every slot still moving at this point is loop-carried and is not
+                // going to settle, so raise it to the top of the lattice. Slots that have
+                // already converged keep their exact expression.
+                for (slot, previous) in state.iter_mut().zip(out_states[block_index].iter()) {
+                    if slot != previous {
+                        let evidence = match (&slot, previous) {
+                            (FlowValue::Origin(next), FlowValue::Origin(prior)) => next
+                                .evidence
+                                .iter()
+                                .chain(prior.evidence.iter())
+                                .cloned()
+                                .collect::<Vec<_>>(),
+                            (FlowValue::Origin(next), _) => next.evidence.clone(),
+                            (_, FlowValue::Origin(prior)) => prior.evidence.clone(),
+                            _ => Vec::new(),
+                        };
+                        *slot = FlowValue::Origin(unknown(
+                            OriginUnknownReason::ControlFlowConflict,
+                            evidence,
+                        ));
+                    }
+                }
+            }
             out_states[block_index] = state;
             for edge in &block.successors {
                 if cfg.blocks[edge.to_block].is_reachable && queued.insert(edge.to_block) {
