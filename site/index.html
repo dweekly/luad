@@ -42,10 +42,10 @@
   "applicationCategory": "DeveloperApplication",
   "applicationSubCategory": "Reverse engineering",
   "operatingSystem": "Linux, macOS",
-  "softwareVersion": "0.2.0",
+  "softwareVersion": "0.3.1",
   "url": "https://dweekly.github.io/luad/",
   "codeRepository": "https://github.com/dweekly/luad",
-  "downloadUrl": "https://github.com/dweekly/luad/releases/tag/v0.2.0",
+  "downloadUrl": "https://github.com/dweekly/luad/releases/tag/v0.3.1",
   "programmingLanguage": "Rust",
   "license": "https://spdx.org/licenses/MIT.html",
   "description": "A memory-safe Rust CLI and library that inspects, disassembles, and validates compiled Lua bytecode, including the non-stock layouts found in embedded firmware. Reports the exact declared profile with byte-level provenance.",
@@ -62,7 +62,7 @@
   <div style="display:flex;align-items:center;gap:.6rem">
     <img src="logo.png" alt="" width="26" height="26" style="display:block">
     <strong style="font-family:var(--mono);color:var(--text);letter-spacing:.04em">luad</strong>
-    <span class="tag-ver">v0.2.0 · experimental</span>
+    <span class="tag-ver">v0.3.1 · experimental</span>
   </div>
   <nav aria-label="Primary">
     <a href="#problem">The problem</a>
@@ -87,7 +87,7 @@
     layout the file declares, and hands the facts to whichever decompiler can use them.</span>
   </p>
   <div class="cta rise">
-    <a class="btn btn-primary" href="https://github.com/dweekly/luad/releases/tag/v0.2.0">Download v0.2.0</a>
+    <a class="btn btn-primary" href="https://github.com/dweekly/luad/releases/tag/v0.3.1">Download v0.3.1</a>
     <a class="btn" href="https://github.com/dweekly/luad">Source on GitHub</a>
   </div>
 </section>
@@ -229,25 +229,25 @@ Verdict:           ValidForParser</pre>
   <h2>Install</h2>
   <p>
     Prebuilt archives for Linux x86-64 and macOS arm64 are attached to
-    <a href="https://github.com/dweekly/luad/releases/tag/v0.2.0">the release</a>.
+    <a href="https://github.com/dweekly/luad/releases/tag/v0.3.1">the release</a>.
     Download all five release assets into an empty directory with the GitHub CLI, then
     verify the checksums and extract the archive for your platform:
   </p>
-<pre><span class="c">$</span> mkdir luad-0.2.0-downloads &amp;&amp; cd luad-0.2.0-downloads
-<span class="c">$</span> gh release download v0.2.0 --repo dweekly/luad
+<pre><span class="c">$</span> mkdir luad-0.3.1-downloads &amp;&amp; cd luad-0.3.1-downloads
+<span class="c">$</span> gh release download v0.3.1 --repo dweekly/luad
 <span class="c">$</span> shasum -a 256 -c SHA256SUMS
-<span class="c">$</span> tar xzf luad-0.2.0-macos-aarch64.tar.gz
-<span class="c">$</span> ./luad-0.2.0-macos-aarch64/luad --help</pre>
+<span class="c">$</span> tar xzf luad-0.3.1-macos-aarch64.tar.gz
+<span class="c">$</span> ./luad-0.3.1-macos-aarch64/luad --help</pre>
   <p>
     The example uses macOS arm64; on Linux x86-64, substitute
     <code>linux-x86_64</code> for <code>macos-aarch64</code>. The release also includes
     an evidence index and CycloneDX source SBOM. Verify the archive's build provenance
     with the GitHub CLI:
   </p>
-<pre><span class="c">$</span> gh attestation verify luad-0.2.0-macos-aarch64.tar.gz \
+<pre><span class="c">$</span> gh attestation verify luad-0.3.1-macos-aarch64.tar.gz \
     --repo dweekly/luad \
     --signer-workflow dweekly/luad/.github/workflows/ci.yml \
-    --source-digest cfadac0b896cc14969a0771dc9bb63f11e0b5281</pre>
+    --source-digest e92a784fdc44c1deb64983ce8449d3a515664d39</pre>
   <p>Or build from source with Rust 1.85 or newer:</p>
 <pre><span class="c">$</span> git clone https://github.com/dweekly/luad.git
 <span class="c">$</span> cd luad &amp;&amp; cargo install --path crates/luad-cli --locked</pre>
@@ -256,12 +256,12 @@ Verdict:           ValidForParser</pre>
 <section class="shell" id="limits">
   <h2>What doesn't work yet</h2>
   <p>
-    luad is version 0.2.0 and experimental. No dialect is promoted to a supported tier,
+    luad is version 0.3.1 and experimental. No dialect is promoted to a supported tier,
     the supported set is empty, and no interface carries a compatibility promise.
   </p>
   <div class="table-scroll">
   <table>
-    <caption class="dim" style="text-align:left;padding-bottom:.6rem;font-size:.85rem">Dialect coverage as of v0.2.0. Every tier is <em>experimental</em>.</caption>
+    <caption class="dim" style="text-align:left;padding-bottom:.6rem;font-size:.85rem">Dialect coverage as of v0.3.1. Every tier is <em>experimental</em>.</caption>
     <thead><tr><th scope="col">Dialect</th><th scope="col">Opcodes</th><th scope="col">State</th></tr></thead>
     <tbody>
       <tr><td>lua5.1</td><td>38</td><td class="ok">Best exercised. LNUM32 and stock layouts both read.</td></tr>
@@ -282,10 +282,10 @@ Verdict:           ValidForParser</pre>
       establish complete semantic correctness or support for every vendor layout.
     </p>
     <p>
-      The <a href="https://github.com/dweekly/luad/blob/v0.2.0/docs/examples/RECIPES.md#12-reproducible-firmware-investigation-walkthrough">public firmware walkthrough</a>
+      The <a href="https://github.com/dweekly/luad/blob/v0.3.1/docs/examples/RECIPES.md#12-reproducible-firmware-investigation-walkthrough">public firmware walkthrough</a>
       covers mixed-input inventory, layout inspection, constants, raw disassembly, and
       profile-aware handoff. No external decompiler is required to build or test luad.
-      See the <a href="https://github.com/dweekly/luad/releases/tag/v0.2.0">release notes and evidence</a>
+      See the <a href="https://github.com/dweekly/luad/releases/tag/v0.3.1">release notes and evidence</a>
       for the exact release scope.
     </p>
   </div>
@@ -372,7 +372,7 @@ Verdict:           ValidForParser</pre>
 <footer class="shell">
   <p>
     <a href="https://github.com/dweekly/luad">github.com/dweekly/luad</a> ·
-    <a href="https://github.com/dweekly/luad/releases/tag/v0.2.0">v0.2.0</a> ·
+    <a href="https://github.com/dweekly/luad/releases/tag/v0.3.1">v0.3.1</a> ·
     <a href="https://github.com/dweekly/luad/issues">Issues</a> ·
     MIT or Apache-2.0
   </p>
