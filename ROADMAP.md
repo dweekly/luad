@@ -60,22 +60,26 @@ there). Re-run over the private corpus: the `control-flow-conflict` count falls 
 previously-blocked bounded sink arguments resolve, with no argument losing an expression
 it had in 0.3.1.
 
-### Make the origin unknown-reason cap explicit (B-9)
+### Investigate the origin unknown-reason saturation at 2000 (B-9)
 
-Two origin unknown-reason totals saturate at exactly 2000 corpus-wide while no single
-file approaches that number, which is the signature of a silent global cap on a counted
-or de-duplicated set. It is not in the `origins.rs` analysis constants
-(`MAX_EXPRESSION_*`, `MAX_TRANSFER_STEPS`, `MAX_ALTERNATIVES`, `MAX_BLOCK_REVISITS`); the
-next place to look is the export and records/dedup path. A consumer measuring
-release-over-release deltas read `unsupported-value` as falling 2394 to 2000 and
-`overwritten` as rising 1976 to 2000, both cap artifacts rather than real movement, and
-nearly reported a regression and an improvement that did not happen. Per the sequencing
-rule below, a silently clamped count is a correctness defect, not an ergonomics one.
+In one downstream aggregation, two origin unknown-reason totals read exactly 2000
+corpus-wide while no single file approached that number. That is the shape of a silent
+cap, but the responsible layer is not yet identified and this is not confirmed to be a
+`luad` defect. It is not in the `origins.rs` analysis constants (`MAX_EXPRESSION_*`,
+`MAX_TRANSFER_STEPS`, `MAX_ALTERNATIVES`, `MAX_BLOCK_REVISITS`), and `luad`'s own paths do
+not obviously clamp a global unknown-reason count: `handle_origins` serializes every call
+site, and `export` uses a per-file `FactEmitter` with an optional `max_facts_per_file`
+whose truncation is surfaced explicitly through `file_end.is_truncated`. So the
+saturation may be a consumer-side aggregation artifact rather than anything `luad` does.
+It still matters because a consumer read the totals as `unsupported-value` falling 2394
+to 2000 and `overwritten` rising 1976 to 2000, both of which are suspect if either side
+is clamping, and nearly reported movement that may not have happened.
 
-**Acceptance.** Locate the cap; either lift it or make truncation explicit with a
-diagnostic and a truncated flag so a clamped total is never presented as a measured one.
-A test asserts that when the cap would bind, the output carries the truncation signal
-rather than a silently clamped count.
+**Acceptance.** First reproduce the 2000 saturation across raw `luad` output and the
+consumer aggregation separately, to locate the responsible layer. If it is `luad`, make
+the truncation explicit with a diagnostic and a truncated flag, and add a test asserting
+the signal is present when the limit binds. If it is the consumer, close this as
+not-a-`luad`-defect and record why, so the observation is not re-filed.
 
 ## Later
 
