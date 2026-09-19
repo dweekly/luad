@@ -22,7 +22,7 @@ non-standard ones that turn up inside extracted router and embedded firmware.
 It does not decompile. When you want source back, `luad` tells you exactly which profile
 the chunk uses so you can hand it to a decompiler that reads that profile.
 
-## Status: 0.3.0, experimental
+## Status: 0.3.1, experimental
 
 This is an early release of a tool built for fun. It works, and it gives real answers on
 real firmware, but no dialect is promoted to a supported tier and nothing here is
@@ -172,7 +172,7 @@ required to build or test luad; the walkthrough verifies luad facts and refusal 
 
 ## Limitations
 
-Current scope in 0.3.0:
+Current scope in 0.3.1:
 
 | Dialect | Opcodes | Tier | State |
 |---|---:|---|---|
@@ -192,8 +192,8 @@ answers, not that its correctness has been qualified.
 Lua 5.2, 5.3, and 5.5 are limited to structural facts and validation. Derived analysis
 commands refuse these dialects rather than presenting unqualified semantic results.
 Layout, operand, analysis-eligibility, and malformed-input regressions cover the fixes
-in 0.3.0; they do not establish complete semantic correctness or support for every
-vendor layout. See [the changelog](CHANGELOG.md#030--2026-09-18) for release details.
+in 0.3.1; they do not establish complete semantic correctness or support for every
+vendor layout. See [the changelog](CHANGELOG.md#031--2026-09-18) for release details.
 
 `luad` also does not do firmware extraction, decompilation, source reconstruction,
 exploitability judgment, or persistent research state. Those belong in other tools, and
@@ -215,7 +215,7 @@ luad schema chunk
 
 Consumers should read [docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md) for exit
 codes, stable-ID scope, truncation behavior, and the stdout/stderr contract. Schemas are
-versioned, but at 0.3.0 nothing carries a compatibility promise yet.
+versioned, but at 0.3.1 nothing carries a compatibility promise yet.
 
 [docs/examples/RECIPES.md](docs/examples/RECIPES.md) has practical composition recipes.
 
@@ -226,7 +226,7 @@ runnable Lua bytecode tool against chunks that stock desktop Lua never produces,
 starting with EdgeTX radio firmware (32-bit Lua 5.3, 4-byte floats, a header slot that
 does not describe the body). The honest summary as of 2026-09-02: tools built on the
 stock loader (official `luac`, luadec, rizin, ChunkSpy) refuse those chunks by name; the
-two unluac lineages read them correctly. luad 0.3.0 refuses unsupported numeric layouts
+two unluac lineages read them correctly. luad 0.3.1 refuses unsupported numeric layouts
 at the header; it does not provide an EdgeTX profile.
 
 This dated comparison informs the work. No goal here requires other tools to remain
