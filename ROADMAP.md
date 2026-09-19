@@ -19,6 +19,64 @@ dialects experimental until their named evidence gates authorize promotion. The
 [1.0 program](docs/ROADMAP-1.0.md) does not gate an experimental 0.x release.
 Implementation history belongs in [CHANGELOG.md](CHANGELOG.md) and Git history.
 
+## Origin precision
+
+Two measured origin-analysis gaps, stack-ranked. Both surfaced from running `luad`
+0.3.1 over a private OpenWrt-derived Lua 5.1 LNUM32 firmware corpus (~260 files) as the
+whole fact engine under a downstream security-analysis pipeline. A private corpus can
+find defects and measure usefulness but cannot promote a format; the acceptance criteria
+below therefore pair a public fixture with a re-measurement against that corpus. The
+counts are stated once: after the 0.3.x work, `control-flow-conflict` is the largest
+remaining origin unknown-reason (2,940 down to 1,016 corpus-wide), and it sits behind 99
+of 175 unresolved call-argument origins that reach shell and filesystem sinks.
+
+### Emit a bounded `alternatives` set instead of `control-flow-conflict`
+
+When origin analysis reaches a control-flow join, or widens a loop-carried slot, it
+collapses the slot to the opaque `control-flow-conflict` unknown-reason. `alternatives`
+already exists for some bounded joins, so where the set of reaching definitions is
+finite the origin should be that `alternatives` expression, not the opaque reason. A
+consumer cannot see through `control-flow-conflict`; an `alternatives` set it can.
+
+The 0.3.1 loop-widening fix (PR #85) sharpened this rather than caused it. That fix
+deliberately widens a loop-carried slot to `control-flow-conflict` after
+`MAX_BLOCK_REVISITS` to stop unbounded lattice growth, which was the right call against
+the alternative of reporting the whole prototype as `analysis-limit`. But the widened
+slots are frequently the sibling expressions of a resolvable argument in the same
+constructed command string, so widening to the top of the lattice makes those siblings
+unreadable downstream. The gap to close: widen to a bounded `alternatives` set where one
+exists (respecting `MAX_ALTERNATIVES`), and reserve `control-flow-conflict` for the
+genuinely unbounded case.
+
+The concrete repro prototype (a constructed shell-command argument whose siblings are
+loop-widened) is recorded in the consumer's private notes, not here, because it names an
+unreleased finding in a shipping product.
+
+**Acceptance.** A public fixture that exercises both a bounded join and a loop-carried
+slot in one command-shaped expression; `luad origins` emits `alternatives` with the
+candidate set where the reaching set is bounded, and keeps `control-flow-conflict` only
+where it is genuinely unbounded (the existing loop-widening regression test still holds
+there). Re-run over the private corpus: the `control-flow-conflict` count falls and
+previously-blocked bounded sink arguments resolve, with no argument losing an expression
+it had in 0.3.1.
+
+### Make the origin unknown-reason cap explicit (B-9)
+
+Two origin unknown-reason totals saturate at exactly 2000 corpus-wide while no single
+file approaches that number, which is the signature of a silent global cap on a counted
+or de-duplicated set. It is not in the `origins.rs` analysis constants
+(`MAX_EXPRESSION_*`, `MAX_TRANSFER_STEPS`, `MAX_ALTERNATIVES`, `MAX_BLOCK_REVISITS`); the
+next place to look is the export and records/dedup path. A consumer measuring
+release-over-release deltas read `unsupported-value` as falling 2394 to 2000 and
+`overwritten` as rising 1976 to 2000, both cap artifacts rather than real movement, and
+nearly reported a regression and an improvement that did not happen. Per the sequencing
+rule below, a silently clamped count is a correctness defect, not an ergonomics one.
+
+**Acceptance.** Locate the cap; either lift it or make truncation explicit with a
+diagnostic and a truncated flag so a clamped total is never presented as a measured one.
+A test asserts that when the cap would bind, the output carries the truncation signal
+rather than a silently clamped count.
+
 ## Later
 
 - Promote an exact target once one profile's evidence is complete end to end. See the
