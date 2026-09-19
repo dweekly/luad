@@ -3,8 +3,13 @@
 All notable changes are documented here. `luad` is a 0.x experimental tool: no dialect
 is promoted to a supported tier and no interface carries a compatibility promise yet.
 
-## Unreleased
+## 0.3.1 — 2026-09-18
 
+- Fix Lua 5.1 origin analysis exhausting its transfer-step budget on functions that
+  contain loops. Loop-carried slots whose value kept growing on every pass now widen to
+  `control-flow-conflict` after a bounded number of block revisits, so every call outside
+  the loop keeps its exact origin instead of the whole prototype reporting
+  `analysis-limit` (144 to 17 `analysis-limit` results across a 260-file firmware corpus).
 - Add the project logo and CI, Codecov, release, and dual-license badges to the README.
   Publish measured Linux line coverage from the workspace suite and instrumented CLI
   subprocesses through a separate coverage workflow.
