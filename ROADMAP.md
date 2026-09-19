@@ -19,6 +19,68 @@ dialects experimental until their named evidence gates authorize promotion. The
 [1.0 program](docs/ROADMAP-1.0.md) does not gate an experimental 0.x release.
 Implementation history belongs in [CHANGELOG.md](CHANGELOG.md) and Git history.
 
+## Origin precision
+
+Two measured origin-analysis gaps, stack-ranked. Both surfaced from running `luad`
+0.3.1 over a private OpenWrt-derived Lua 5.1 LNUM32 firmware corpus (~260 files) as the
+whole fact engine under a downstream security-analysis pipeline. A private corpus can
+find defects and measure usefulness but cannot promote a format; the acceptance criteria
+below therefore pair a public fixture with a re-measurement against that corpus. The
+counts are stated once: after the 0.3.x work, `control-flow-conflict` is the largest
+remaining origin unknown-reason (2,940 down to 1,016 corpus-wide), and it sits behind 99
+of 175 unresolved call-argument origins that reach shell and filesystem sinks.
+
+### Emit a bounded `alternatives` set instead of `control-flow-conflict`
+
+When origin analysis reaches a control-flow join, or widens a loop-carried slot, it
+collapses the slot to the opaque `control-flow-conflict` unknown-reason. `alternatives`
+already exists for some bounded joins, so where the set of reaching definitions is
+finite the origin should be that `alternatives` expression, not the opaque reason. A
+consumer cannot see through `control-flow-conflict`; an `alternatives` set it can.
+
+The 0.3.1 loop-widening fix (PR #85) sharpened this rather than caused it. That fix
+deliberately widens a loop-carried slot to `control-flow-conflict` after
+`MAX_BLOCK_REVISITS` to stop unbounded lattice growth, which was the right call against
+the alternative of reporting the whole prototype as `analysis-limit`. But the widened
+slots are frequently the sibling expressions of a resolvable argument in the same
+constructed command string, so widening to the top of the lattice makes those siblings
+unreadable downstream. The gap to close: widen to a bounded `alternatives` set where one
+exists (respecting `MAX_ALTERNATIVES`), and reserve `control-flow-conflict` for the
+genuinely unbounded case.
+
+The concrete repro prototype (a constructed shell-command argument whose siblings are
+loop-widened) is recorded in the consumer's private notes, not here, because it names an
+unreleased finding in a shipping product.
+
+**Acceptance.** A public fixture that exercises both a bounded join and a loop-carried
+slot in one command-shaped expression; `luad origins` emits `alternatives` with the
+candidate set where the reaching set is bounded, and keeps `control-flow-conflict` only
+where it is genuinely unbounded (the existing loop-widening regression test still holds
+there). Re-run over the private corpus: the `control-flow-conflict` count falls and
+previously-blocked bounded sink arguments resolve, with no argument losing an expression
+it had in 0.3.1.
+
+### Investigate the origin unknown-reason saturation at 2000 (B-9)
+
+In one downstream aggregation, two origin unknown-reason totals read exactly 2000
+corpus-wide while no single file approached that number. That is the shape of a silent
+cap, but the responsible layer is not yet identified and this is not confirmed to be a
+`luad` defect. It is not in the `origins.rs` analysis constants (`MAX_EXPRESSION_*`,
+`MAX_TRANSFER_STEPS`, `MAX_ALTERNATIVES`, `MAX_BLOCK_REVISITS`), and `luad`'s own paths do
+not obviously clamp a global unknown-reason count: `handle_origins` serializes every call
+site, and `export` uses a per-file `FactEmitter` with an optional `max_facts_per_file`
+whose truncation is surfaced explicitly through `file_end.is_truncated`. So the
+saturation may be a consumer-side aggregation artifact rather than anything `luad` does.
+It still matters because a consumer read the totals as `unsupported-value` falling 2394
+to 2000 and `overwritten` rising 1976 to 2000, both of which are suspect if either side
+is clamping, and nearly reported movement that may not have happened.
+
+**Acceptance.** First reproduce the 2000 saturation across raw `luad` output and the
+consumer aggregation separately, to locate the responsible layer. If it is `luad`, make
+the truncation explicit with a diagnostic and a truncated flag, and add a test asserting
+the signal is present when the limit binds. If it is the consumer, close this as
+not-a-`luad`-defect and record why, so the observation is not re-filed.
+
 ## Later
 
 - Promote an exact target once one profile's evidence is complete end to end. See the
