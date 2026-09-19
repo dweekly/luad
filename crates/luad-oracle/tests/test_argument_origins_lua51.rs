@@ -990,3 +990,74 @@ sink(function() end)
     assert_eq!(val["prototype"], "0/1");
     assert_eq!(val["evidence"], serde_json::json!(["proto:0:pc:2"]));
 }
+
+fn loop_widening_chunk() -> luad_core::Chunk {
+    let _ = luad_oracle::require_luac51();
+    let root = luad_oracle::find_workspace_root();
+    let source = std::fs::read_to_string(root.join("tests/fixtures/origins_loop_widening.lua"))
+        .expect("read origins_loop_widening.lua");
+    luad_oracle::compile_and_parse_lua51(&source, false).expect("compile loop widening fixture")
+}
+
+#[test]
+fn test_loop_carried_values_widen_rather_than_growing_without_bound() {
+    let analysis = analyze_chunk_origins(&loop_widening_chunk());
+    let origins = fixed_origins(&analysis);
+    assert!(!origins.is_empty(), "fixture must produce fixed arguments");
+
+    // The loop-carried accumulator cannot be bounded, so it must be widened to the top of
+    // the lattice at the loop head. Reaching `ExpressionDepthLimit` instead means the
+    // merge kept nesting `ADD(Alternatives[..], 1)` one level per iteration until the
+    // expression bounds truncated it, which is the unbounded-height behaviour widening
+    // exists to prevent; on a prototype with enough blocks that same growth exhausts the
+    // worklist step budget and reports every call as `analysis-limit`.
+    let widened = origins.iter().any(|origin| {
+        matches!(
+            &origin.kind,
+            OriginExpressionKind::Unknown {
+                reason: OriginUnknownReason::ControlFlowConflict
+            }
+        )
+    });
+    let ground_out = origins.iter().any(|origin| {
+        matches!(
+            &origin.kind,
+            OriginExpressionKind::Unknown {
+                reason: OriginUnknownReason::ExpressionDepthLimit
+            }
+        )
+    });
+    assert!(
+        widened && !ground_out,
+        "loop-carried value must widen to control-flow-conflict, not grow to a depth limit"
+    );
+
+    // No argument may be reported as `analysis-limit`.
+    for origin in &origins {
+        assert!(
+            !matches!(
+                &origin.kind,
+                OriginExpressionKind::Unknown {
+                    reason: OriginUnknownReason::AnalysisLimit
+                }
+            ),
+            "an argument reported analysis-limit; the worklist ran out of steps"
+        );
+    }
+
+    // An argument that is not loop-carried keeps its exact expression.
+    let concat = origins
+        .iter()
+        .find(|origin| matches!(&origin.kind, OriginExpressionKind::Concat { .. }))
+        .expect("the post-loop sink argument must resolve to a concat");
+    let OriginExpressionKind::Concat { parts } = &concat.kind else {
+        unreachable!("filtered above")
+    };
+    assert_eq!(parts.len(), 3, "expected two literals and one field read");
+    assert!(
+        matches!(&parts[2].kind, OriginExpressionKind::Field { base, .. }
+            if matches!(&base.kind, OriginExpressionKind::Parameter { .. })),
+        "the third part must be a field read off the parameter, got {:?}",
+        parts[2].kind
+    );
+}
