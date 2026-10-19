@@ -29,6 +29,21 @@ real firmware, but no dialect is promoted to a supported tier and nothing here i
 qualified as a basis for security conclusions. Lua 5.2, 5.3, and 5.5 provide structural
 facts and validation; derived analysis is refused for these dialects. Please file issues.
 
+**Development stage: prototype, until 1.0.** There are no external users yet, so changes
+land directly on `main` without a pull request or a pre-merge review, including large ones.
+A smoke run of the real CLI is the expected check, and `git revert` plus a fresh patch
+release is the recovery path — recovery is cheap here, so gating changes to prevent it
+would cost more than it saves.
+
+This governs process only. The repository invariants in [`AGENTS.md`](AGENTS.md) — named
+evidence gates, required oracles that may not skip, a negative control for every
+comparator, bounded input and traversal, and `unsafe_code = "forbid"` — do not scale with
+stage and apply to every change. They are enforced by CI rather than by human review, which
+is why they are compatible with moving fast: they cost nothing per change and catch the
+class of error that a revert cannot undo, namely a wrong answer presented as a fact.
+
+Revisit this line at the 1.0 release, or sooner if someone else starts depending on `luad`.
+
 See [limitations](#limitations) for what specifically does not work yet.
 
 ## What it does
@@ -241,7 +256,7 @@ delete the document in the same change and update this index.
 
 | Document | Purpose | Fresh as of | Revalidate or delete when |
 |---|---|---:|---|
-| [`README.md`](README.md) | What `luad` is, install, first commands, honest limitations, and the documentation index. | 2026-09-18 | Public scope, support status, setup, primary commands, or the documentation set changes. |
+| [`README.md`](README.md) | What `luad` is, install, first commands, honest limitations, and the documentation index. | 2026-10-19 | Public scope, support status, development stage, setup, primary commands, or the documentation set changes. |
 | [`AGENTS.md`](AGENTS.md) | Binding repository instructions, product-batch boundaries, and safety constraints for coding agents. | 2026-08-27 | Development workflow, proof policy, current priority, or repository invariants change. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, model boundaries, trust layers, and architectural invariants. | 2026-08-27 | Crates, ownership boundaries, core representations, or evidence layers change. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of released and unreleased user-visible changes. | 2026-09-18 | Every user-visible change or release; never use it as a forward plan. |
