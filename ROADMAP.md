@@ -2,7 +2,7 @@
 
 Status: future priorities after the experimental 0.2 release candidate.
 
-Fresh as of: 2026-09-17.
+Fresh as of: 2026-10-19.
 
 ## Release completion boundary
 
@@ -28,7 +28,11 @@ find defects and measure usefulness but cannot promote a format; the acceptance 
 below therefore pair a public fixture with a re-measurement against that corpus. The
 counts are stated once: after the 0.3.x work, `control-flow-conflict` is the largest
 remaining origin unknown-reason (2,940 down to 1,016 corpus-wide), and it sits behind 99
-of 175 unresolved call-argument origins that reach shell and filesystem sinks.
+of 175 unresolved call-argument origins that reach shell and filesystem sinks. A second
+OpenWrt-derived corpus (~175 bytecode files) shows the same ordering, with
+`control-flow-conflict` on 19 of 105 unresolved shell-and-filesystem sink arguments; that
+corroborates the direction from an independent corpus and does not restate the figure
+above, which is not currently reproducible against the first one.
 
 ### Emit a bounded `alternatives` set instead of `control-flow-conflict`
 
