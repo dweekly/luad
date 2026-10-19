@@ -14,6 +14,8 @@
   "expected_tests": [
     "test_cli_export_unknown_link_convention_fails_closed",
     "test_cli_export_with_link_convention",
+    "test_cross_chunk_inverse_enumerates_every_caller_of_one_target",
+    "test_cross_chunk_inverse_pins_argument_origins_per_call_site",
     "test_cross_chunk_link_schema_validation",
     "test_cross_chunk_linking_absent",
     "test_cross_chunk_linking_duplicate_conflict",

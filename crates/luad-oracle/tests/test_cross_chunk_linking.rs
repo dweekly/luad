@@ -58,6 +58,60 @@ function dynamic_func()
 end
 "#;
 
+// A library shaped like the firmware case the inverse edge has to answer for: several
+// exported functions, one of them reached from more than one chunk, one reached once, and
+// one never reached. Prototype order is 0/0 network_get_firm, 0/1 merge_profile,
+// 0/2 never_called.
+const MOD_SVC_SRC: &str = r#"
+module("svc.config", package.seeall)
+
+function network_get_firm(iface)
+    os.execute("network_get_firm " .. iface)
+end
+
+function merge_profile(name)
+    network_get_firm(name)
+    os.execute("mkdir /tmp/profile.d/" .. name)
+end
+
+function never_called(path)
+    os.execute("ls /tmp/merge/" .. path)
+end
+"#;
+
+// Two call sites into the same target with different argument origins: one forwards a
+// caller parameter field, the other passes a literal. A consumer needs that distinction to
+// tell a forwarded value from a fixed one.
+const CALLER_SVC_A_SRC: &str = r#"
+local cfg = require("svc.config")
+
+local function handle(request)
+    cfg.network_get_firm(request.ifname)
+end
+
+local function handle_constant(_request)
+    cfg.network_get_firm("eth0")
+end
+
+return { handle = handle, handle_constant = handle_constant }
+"#;
+
+// A third call site into the same target, plus one into a different function of the same
+// module, so the inverse set cannot be "every call that reaches this module".
+const CALLER_SVC_B_SRC: &str = r#"
+local cfg = require("svc.config")
+
+local function handle(request)
+    cfg.network_get_firm(request.query.iface .. "0")
+end
+
+local function unrelated(request)
+    cfg.merge_profile(request.name)
+end
+
+return { handle = handle, unrelated = unrelated }
+"#;
+
 /// Ensure the fixture binaries and MANIFEST.json exist in tests/fixtures/cross_chunk/.
 fn ensure_fixtures() {
     static INIT: std::sync::Once = std::sync::Once::new();
@@ -82,6 +136,17 @@ fn ensure_fixtures() {
                 "mod_dynamic.luac",
                 MOD_DYNAMIC_SRC,
                 "dynamic_module_declaration",
+            ),
+            ("mod_svc.luac", MOD_SVC_SRC, "defining_module_svc_config"),
+            (
+                "caller_svc_a.luac",
+                CALLER_SVC_A_SRC,
+                "caller_svc_config_two_sites",
+            ),
+            (
+                "caller_svc_b.luac",
+                CALLER_SVC_B_SRC,
+                "caller_svc_config_mixed_targets",
             ),
         ];
 
@@ -601,5 +666,176 @@ fn test_cross_chunk_link_limit_exceeded_schema_validation() {
     assert!(
         validator.is_valid(&rec_val),
         "link record with LimitExceeded status must validate against link.schema.json"
+    );
+}
+
+/// Group resolved links by the prototype they reach: the inverse of the forward edge.
+fn callers_of(
+    links: &[CrossChunkLinkFact],
+    target_path: &str,
+    target_proto: &ProtoPath,
+) -> Vec<CrossChunkLinkFact> {
+    let mut sites: Vec<CrossChunkLinkFact> = links
+        .iter()
+        .filter(|link| {
+            link.status == LinkStatus::Resolved
+                && link
+                    .target_artifact
+                    .as_ref()
+                    .is_some_and(|artifact| artifact.path == target_path)
+                && link.target_proto.as_ref() == Some(target_proto)
+        })
+        .cloned()
+        .collect();
+    sites.sort_by(|a, b| {
+        (&a.caller_path, &a.caller_proto, a.call_pc).cmp(&(
+            &b.caller_path,
+            &b.caller_proto,
+            b.call_pc,
+        ))
+    });
+    sites
+}
+
+/// A target reached from two chunks enumerates every reaching site, a target reached once
+/// enumerates only its own, and a target reached by nothing enumerates an empty set that is
+/// distinguishable from a failed resolution. Without the third case an inverse edge set
+/// cannot be trusted to mean "no caller" rather than "lookup failed".
+#[test]
+fn test_cross_chunk_inverse_enumerates_every_caller_of_one_target() {
+    ensure_fixtures();
+    let dir = fixture_dir();
+    let mod_svc = parse_fixture_chunk(&dir.join("mod_svc.luac"));
+    let caller_a = parse_fixture_chunk(&dir.join("caller_svc_a.luac"));
+    let caller_b = parse_fixture_chunk(&dir.join("caller_svc_b.luac"));
+    let target_path = mod_svc.0.path.clone();
+
+    let chunks = vec![mod_svc, caller_a.clone(), caller_b.clone()];
+    let links = analyze_corpus_links(&chunks, LinkConvention::LuciModuleSetglobal);
+
+    let network_get_firm = ProtoPath::root().child(0);
+    let merge_profile = ProtoPath::root().child(1);
+    let never_called = ProtoPath::root().child(2);
+
+    let reaching = callers_of(&links, &target_path, &network_get_firm);
+    assert_eq!(
+        reaching.len(),
+        3,
+        "network_get_firm is reached from three sites across two chunks, got {:?}",
+        reaching
+            .iter()
+            .map(|l| (&l.caller_path, &l.caller_proto, l.call_pc))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(reaching[0].caller_path, caller_a.0.path);
+    assert_eq!(reaching[1].caller_path, caller_a.0.path);
+    assert_eq!(reaching[2].caller_path, caller_b.0.path);
+    for link in &reaching {
+        assert_eq!(
+            link.label_segments,
+            vec!["svc", "config", "network_get_firm"]
+        );
+        assert!(!link.evidence.is_empty(), "each site carries its evidence");
+    }
+
+    let merge_sites = callers_of(&links, &target_path, &merge_profile);
+    assert_eq!(
+        merge_sites.len(),
+        1,
+        "merge_profile is reached once; the inverse set is per-prototype, not per-module"
+    );
+    assert_eq!(merge_sites[0].caller_path, caller_b.0.path);
+
+    assert!(
+        callers_of(&links, &target_path, &never_called).is_empty(),
+        "never_called is reached by nothing in this corpus"
+    );
+    assert!(
+        links.iter().all(|link| link.status == LinkStatus::Resolved),
+        "no link in this corpus is unresolved, so the empty set above is an absence of \
+         callers rather than a failure to resolve one"
+    );
+}
+
+/// Pin the argument origin at each reaching site. The caller count alone does not answer
+/// whether a value is forwarded into the target: one site forwards a field of its own
+/// parameter, another passes a literal, and a third builds a concatenation. A regression
+/// that preserved the edges but lost the expressions would pass the test above.
+#[test]
+fn test_cross_chunk_inverse_pins_argument_origins_per_call_site() {
+    use luad_analysis::origins::OriginExpressionKind;
+    use luad_analysis::{analyze_chunk_origins, CallArgumentWindow};
+
+    ensure_fixtures();
+    let dir = fixture_dir();
+    let mod_svc = parse_fixture_chunk(&dir.join("mod_svc.luac"));
+    let caller_a = parse_fixture_chunk(&dir.join("caller_svc_a.luac"));
+    let caller_b = parse_fixture_chunk(&dir.join("caller_svc_b.luac"));
+    let target_path = mod_svc.0.path.clone();
+
+    let chunks = vec![mod_svc, caller_a.clone(), caller_b.clone()];
+    let links = analyze_corpus_links(&chunks, LinkConvention::LuciModuleSetglobal);
+    let reaching = callers_of(&links, &target_path, &ProtoPath::root().child(0));
+    assert_eq!(reaching.len(), 3);
+
+    // Index every call argument origin in both calling chunks by call id.
+    let mut arguments = std::collections::BTreeMap::new();
+    for (identity, chunk) in [&caller_a, &caller_b] {
+        for prototype in analyze_chunk_origins(chunk).prototypes {
+            for call in prototype.calls {
+                arguments.insert(
+                    (identity.path.clone(), call.call_id.clone()),
+                    call.argument_window,
+                );
+            }
+        }
+    }
+
+    let mut first_argument_kinds = Vec::new();
+    for link in &reaching {
+        let window = arguments
+            .get(&(link.caller_path.clone(), link.call_id.clone()))
+            .unwrap_or_else(|| {
+                panic!(
+                    "every reaching site joins to an argument window by call id; missing {} {}",
+                    link.caller_path, link.call_id
+                )
+            });
+        match window {
+            CallArgumentWindow::Fixed { arguments } => {
+                assert_eq!(arguments.len(), 1, "one declared argument at each site");
+                first_argument_kinds.push(arguments[0].origin.kind.clone());
+            }
+            CallArgumentWindow::Open { reason } => {
+                panic!("fixed argument window expected, got open: {reason:?}")
+            }
+        }
+    }
+
+    // request.ifname: a field of the caller's own parameter, which is the shape that makes
+    // a forwarded value visible to a consumer.
+    assert!(
+        matches!(&first_argument_kinds[0], OriginExpressionKind::Field { base, .. }
+            if matches!(base.kind, OriginExpressionKind::Parameter { index: 0, .. })),
+        "site 1 forwards a field of parameter 0, got {:?}",
+        first_argument_kinds[0]
+    );
+    // "eth0": a literal, which is what demotes a site rather than confirming it.
+    assert!(
+        matches!(
+            &first_argument_kinds[1],
+            OriginExpressionKind::Literal { .. }
+        ),
+        "site 2 passes a literal, got {:?}",
+        first_argument_kinds[1]
+    );
+    // request.query.iface .. "0": a concatenation, so the expression survives being built.
+    assert!(
+        matches!(
+            &first_argument_kinds[2],
+            OriginExpressionKind::Concat { .. }
+        ),
+        "site 3 passes a concatenation, got {:?}",
+        first_argument_kinds[2]
     );
 }
