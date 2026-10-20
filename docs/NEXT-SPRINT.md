@@ -1,28 +1,38 @@
 # Sprint checkpoint
 
-## Open question, owned by the consumer: does the firmware convention match?
+## Blocked on evidence: the uncovered binding convention (issue #89)
 
-`--link-convention luci-module-setglobal` resolves the cross-chunk caller edge for the
-`module()` / `require()` shape. Whether the library bindings in a real vendor firmware tree
-use that shape, or another one, decides whether anything further is owed here. The downstream
-consumer is measuring the resolved-versus-unresolved split over its corpus.
+`--link-convention luci-module-setglobal` resolves the cross-chunk caller edge for the flat
+`module()` / `require()` shape, at a 60% resolve rate over a private vendor corpus of ~175
+bytecode files. It resolves 1 of the 43 shell sink arguments that motivated the request,
+because the library layer those sinks live in uses a **dotted submodule** binding (`a.b.c`
+where `a.b` is itself a module) that the convention does not recognize.
 
-- If most sites resolve, no `luad` change is owed and the remaining gap is documentation
-  (issue #95: a worked export → cross-chunk edge → argument origin chain).
-- If a substantial share come back unresolved, the ask is the specific conventions
-  `luci-module-setglobal` does not cover, named one at a time with a fixture each, and a new
-  contract is recorded then. A second convention is not authorized by this checkpoint.
+No implementation is authorized until the binding is specified, because a second convention
+built on an assumption about how that binding is emitted would silently default an unknown
+convention and could not be falsified. The two questions that select between the candidate
+fixes, both answerable from an export that already exists, are recorded in #89: whether the
+module-export index contains any entry under the dotted prefix (a definition-side gap), or
+whether the unresolved call sites carry the full dotted path in their `callee` label segments
+(a matching-side gap).
+
+**To unblock:** a minimal reproducing chunk pair for the real binding shape, which becomes the
+public fixture. The consumer that measured this has moved to vendor findings and is not
+supplying it, so this is dormant rather than in progress.
+
+## Accepted and closed out
+
+The inverse of a resolved cross-chunk link needs no new fact family: it is a regrouping of
+shipped facts, joined to `origin` facts on `(caller_path, call_id)`.
+`gate-cross-chunk-link` now owns that interaction — the inverse set is per-prototype rather
+than per-module, an unreached export yields an empty set distinguishable from a failed
+resolution, and the argument origin at each reaching site is pinned by kind.
 
 ## Not authorized here
 
-No new fact family for reverse edges. The inverse of a resolved cross-chunk link is a
-regrouping of facts `luad` already emits, now pinned by `gate-cross-chunk-link`; adding a
-command that returns the same facts in a different shape is a convenience, not a capability,
-and needs its own decision.
-
-No bounded-`alternatives` work, which remains the top-ranked origin-precision item in
-[ROADMAP.md](../ROADMAP.md) and is independent of the above. No supported-target promotion, no
-1.0 release, no new dialects.
+No second link convention, per the above. No bounded-`alternatives` work, which remains the
+top-ranked origin-precision item in [ROADMAP.md](../ROADMAP.md) and is the next outcome to
+select if #89 stays dormant. No supported-target promotion, no 1.0 release, no new dialects.
 
 ## Stop conditions
 
