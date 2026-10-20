@@ -12,6 +12,7 @@
     "--nocapture"
   ],
   "expected_tests": [
+    "test_aliased_table_option_is_invalidated_by_a_later_write",
     "test_cfg_alternatives_emit_alternatives_expression",
     "test_closure_argument_origin_emits_prototype_expression",
     "test_constant_key_table_literal_origins_emit_table_literal_expression",

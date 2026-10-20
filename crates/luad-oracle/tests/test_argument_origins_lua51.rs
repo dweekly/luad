@@ -1027,6 +1027,64 @@ sink(function() end)
     assert_eq!(val["evidence"], serde_json::json!(["proto:0:pc:2"]));
 }
 
+fn table_alias_chunk() -> luad_core::Chunk {
+    let _ = luad_oracle::require_luac51();
+    let root = luad_oracle::find_workspace_root();
+    let source = std::fs::read_to_string(root.join("tests/fixtures/origins_table_alias.lua"))
+        .expect("read origins_table_alias.lua");
+    luad_oracle::compile_and_parse_lua51(&source, false).expect("compile table alias fixture")
+}
+
+#[test]
+fn test_aliased_table_option_is_invalidated_by_a_later_write() {
+    let analysis = analyze_chunk_origins(&table_alias_chunk());
+    let origins = fixed_origins(&analysis);
+
+    // The join is partly resolved, so it stays a set rather than collapsing to one reason.
+    let joined = origins
+        .iter()
+        .find(|origin| matches!(&origin.kind, OriginExpressionKind::Alternatives { .. }))
+        .expect("the sink argument must report an alternatives set");
+    let OriginExpressionKind::Alternatives { options } = &joined.kind else {
+        unreachable!("filtered above")
+    };
+    assert_eq!(options.len(), 2);
+
+    // Preserving the resolved side of a join must not preserve a table whose contents a
+    // later write through an alias has changed. `t[1] = "new"` happens after the join, so
+    // reporting the table with "old" in it would be a resolved candidate that is wrong.
+    for option in options {
+        assert!(
+            !matches!(
+                option.kind,
+                OriginExpressionKind::Table { .. } | OriginExpressionKind::TableLiteral { .. }
+            ),
+            "an aliased table survived a later write as a resolved option: {option:?}"
+        );
+    }
+    assert!(
+        options.iter().any(|option| matches!(
+            option.kind,
+            OriginExpressionKind::Unknown {
+                reason: OriginUnknownReason::UnsupportedValue
+            }
+        )),
+        "the invalidated option must say why it is unknown, got {options:?}"
+    );
+
+    // The other option keeps its own reason, so the invalidation is targeted at the alias
+    // rather than collapsing the whole set.
+    assert!(
+        options.iter().any(|option| matches!(
+            option.kind,
+            OriginExpressionKind::Unknown {
+                reason: OriginUnknownReason::DynamicKey
+            }
+        )),
+        "the unaliased option must keep its reason, got {options:?}"
+    );
+}
+
 fn loop_widening_chunk() -> luad_core::Chunk {
     let _ = luad_oracle::require_luac51();
     let root = luad_oracle::find_workspace_root();

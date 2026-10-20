@@ -930,14 +930,61 @@ fn invalidate_table_aliases(
     let base = origin_from_flow(get_register(before, base));
     for (slot, previous) in state.iter_mut().zip(before) {
         if let FlowValue::Origin(candidate) = previous {
-            if same_shape(candidate, &base) && contains_table(candidate) {
-                *slot = FlowValue::Origin(unknown(
-                    OriginUnknownReason::UnsupportedValue,
-                    [instruction.id.clone()],
-                ));
+            let mut rewritten = candidate.clone();
+            if invalidate_aliased_subexpressions(&mut rewritten, &base, instruction) {
+                *slot = FlowValue::Origin(rewritten);
             }
         }
     }
+}
+
+/// Replace every subexpression that is the table this instruction mutates, reporting whether
+/// anything was replaced.
+///
+/// Recursive rather than whole-slot: an aliased table can sit inside a larger expression, most
+/// visibly as one option of an `Alternatives` set reaching a partly resolved join. Comparing
+/// only the whole slot left such an option advertising the contents the table held before the
+/// write, which is a resolved candidate that is simply wrong. The `contains_table` guard keeps
+/// an unresolved base from matching unrelated unknowns by shape.
+fn invalidate_aliased_subexpressions(
+    expression: &mut OriginExpression,
+    base: &OriginExpression,
+    instruction: &SemanticInstruction,
+) -> bool {
+    if same_shape(expression, base) && contains_table(expression) {
+        *expression = unknown(
+            OriginUnknownReason::UnsupportedValue,
+            [instruction.id.clone()],
+        );
+        return true;
+    }
+    let mut invalidated = false;
+    let mut recurse = |child: &mut OriginExpression| {
+        if invalidate_aliased_subexpressions(child, base, instruction) {
+            invalidated = true;
+        }
+    };
+    match &mut expression.kind {
+        OriginExpressionKind::Field { base: inner, .. }
+        | OriginExpressionKind::Unary { operand: inner, .. } => recurse(inner),
+        OriginExpressionKind::Binary { left, right, .. } => {
+            recurse(left);
+            recurse(right);
+        }
+        OriginExpressionKind::Concat { parts } | OriginExpressionKind::Table { entries: parts } => {
+            parts.iter_mut().for_each(recurse);
+        }
+        OriginExpressionKind::TableLiteral { fields, .. } => {
+            fields
+                .iter_mut()
+                .for_each(|field| recurse(&mut field.value));
+        }
+        OriginExpressionKind::Alternatives { options } => {
+            options.iter_mut().for_each(recurse);
+        }
+        _ => {}
+    }
+    invalidated
 }
 
 fn invalidate_table_values(state: &mut RegisterState, instruction: &SemanticInstruction) {

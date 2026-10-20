@@ -12,6 +12,10 @@ is promoted to a supported tier and no interface carries a compatibility promise
   an option carrying its reason. On `tests/fixtures/origins.lua` the root-kind histogram
   moves `unknown` 8 to 7 and `alternatives` 3 to 4, with no origin losing an expression.
   `has_unknown` is public so the previous conservative reading stays derivable from a set.
+- Invalidate an aliased table inside a larger origin expression when a later write mutates
+  it. The alias check compared only the whole slot, so a table reaching a partly resolved
+  join survived as an option advertising the contents it held before the write. Preserving
+  the resolved side of a join exposed this; the check now recurses into subexpressions.
 - `control-flow-conflict` is now reserved for a loop-carried value widened at
   `MAX_BLOCK_REVISITS`, where the set of reaching definitions is not finite. It still
   absorbs a join, which termination depends on: widening to a bounded set there was tried

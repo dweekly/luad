@@ -30,8 +30,10 @@ private corpus, which means it is not yet an acceptance criterion.
 
 A control-flow join with one bounded and one unresolved predecessor emits the `alternatives`
 set, keeping the unresolved definition as an option with its own reason.
-`gate-argument-origins-lua51` owns it: the option's specific reason is pinned, not merely its
-kind; `has_unknown` is public so the conservative reading stays derivable from a set; the
+`gate-argument-origins-lua51` owns it, including the interaction that preserving a resolved
+option exposed: an aliased table inside an expression is invalidated by a later write, so no
+option advertises contents a mutation has changed. The option's specific reason is pinned, not
+merely its kind; `has_unknown` is public so the conservative reading stays derivable from a set; the
 killer-mutation control targets the unknown option inside a set, which is where a partly
 resolved join can now lose it; and three unit tests pin that a bare or embedded
 `control-flow-conflict` absorbs a join, which is the property termination depends on.
