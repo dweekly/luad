@@ -12,6 +12,7 @@
     "--nocapture"
   ],
   "expected_tests": [
+    "test_aliased_table_is_invalidated_when_the_mutated_register_is_itself_a_join",
     "test_aliased_table_option_is_invalidated_by_a_later_write",
     "test_cfg_alternatives_emit_alternatives_expression",
     "test_closure_argument_origin_emits_prototype_expression",

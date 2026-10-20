@@ -928,10 +928,22 @@ fn invalidate_table_aliases(
         return;
     };
     let base = origin_from_flow(get_register(before, base));
+    // The mutated register may itself hold a set of reaching definitions, in which case the
+    // write goes through whichever one the branch selected. Every table option is therefore a
+    // possible alias and each has to be matched; comparing against the set as a whole matches
+    // only a candidate that happens to share its exact shape.
+    let mut aliases = Vec::new();
+    collect_candidate_options(&base, &mut aliases);
     for (slot, previous) in state.iter_mut().zip(before) {
         if let FlowValue::Origin(candidate) = previous {
             let mut rewritten = candidate.clone();
-            if invalidate_aliased_subexpressions(&mut rewritten, &base, instruction) {
+            let mut invalidated = false;
+            for alias in &aliases {
+                if invalidate_aliased_subexpressions(&mut rewritten, alias, instruction) {
+                    invalidated = true;
+                }
+            }
+            if invalidated {
                 *slot = FlowValue::Origin(rewritten);
             }
         }

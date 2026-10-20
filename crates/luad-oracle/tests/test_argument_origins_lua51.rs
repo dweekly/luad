@@ -1085,6 +1085,70 @@ fn test_aliased_table_option_is_invalidated_by_a_later_write() {
     );
 }
 
+fn alias_origins_in(analysis: &ChunkOriginAnalysis, proto_suffix: &str) -> Vec<OriginExpression> {
+    analysis
+        .prototypes
+        .iter()
+        .filter(|prototype| prototype.proto_id.to_string().ends_with(proto_suffix))
+        .flat_map(|prototype| &prototype.calls)
+        .flat_map(|fact| match &fact.argument_window {
+            CallArgumentWindow::Fixed { arguments } => arguments
+                .iter()
+                .map(|argument| argument.origin.clone())
+                .collect::<Vec<_>>(),
+            CallArgumentWindow::Open { .. } => vec![],
+        })
+        .collect()
+}
+
+fn sole_alternatives(origins: &[OriginExpression]) -> Vec<OriginExpression> {
+    let found = origins
+        .iter()
+        .find(|origin| matches!(&origin.kind, OriginExpressionKind::Alternatives { .. }))
+        .expect("an alternatives origin");
+    let OriginExpressionKind::Alternatives { options } = &found.kind else {
+        unreachable!("filtered above")
+    };
+    options.clone()
+}
+
+#[test]
+fn test_aliased_table_is_invalidated_when_the_mutated_register_is_itself_a_join() {
+    let analysis = analyze_chunk_origins(&table_alias_chunk());
+
+    // `b` holds a set over `t` and `other`, and the write goes through it, so the option
+    // holding `t` must not keep the contents it had before the write.
+    let joined_base = sole_alternatives(&alias_origins_in(&analysis, "0/2"));
+    for option in &joined_base {
+        assert!(
+            !matches!(
+                option.kind,
+                OriginExpressionKind::Table { .. } | OriginExpressionKind::TableLiteral { .. }
+            ),
+            "a table aliased through a joined base survived the write: {option:?}"
+        );
+    }
+
+    // Precision in the other direction: `third` is never an alias of `b`, so its option
+    // must survive. Blanket invalidation on any write would lose it.
+    let two_sets = sole_alternatives(&alias_origins_in(&analysis, "0/3"));
+    assert!(
+        two_sets.iter().any(|option| matches!(
+            option.kind,
+            OriginExpressionKind::Unknown {
+                reason: OriginUnknownReason::UnsupportedValue
+            }
+        )),
+        "the aliased option must be invalidated, got {two_sets:?}"
+    );
+    assert!(
+        two_sets
+            .iter()
+            .any(|option| matches!(option.kind, OriginExpressionKind::Table { .. })),
+        "a table that is not an alias of the mutated register must survive, got {two_sets:?}"
+    );
+}
+
 fn loop_widening_chunk() -> luad_core::Chunk {
     let _ = luad_oracle::require_luac51();
     let root = luad_oracle::find_workspace_root();
