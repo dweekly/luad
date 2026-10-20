@@ -28,11 +28,19 @@ find defects and measure usefulness but cannot promote a format; the acceptance 
 below therefore pair a public fixture with a re-measurement against that corpus. The
 counts are stated once: after the 0.3.x work, `control-flow-conflict` is the largest
 remaining origin unknown-reason (2,940 down to 1,016 corpus-wide), and it sits behind 99
-of 175 unresolved call-argument origins that reach shell and filesystem sinks. A second
-OpenWrt-derived corpus (~175 bytecode files) shows the same ordering, with
-`control-flow-conflict` on 19 of 105 unresolved shell-and-filesystem sink arguments; that
-corroborates the direction from an independent corpus and does not restate the figure
-above, which is not currently reproducible against the first one.
+of 175 unresolved call-argument origins that reach shell and filesystem sinks, measured over
+a corpus 97% of whose files are bytecode this tool parses. A second OpenWrt-derived corpus
+shows the same ordering, with `control-flow-conflict` on 19 of 105 unresolved
+shell-and-filesystem sink arguments; that corroborates the direction from an independent
+corpus and does not restate the figure above, which is not currently reproducible against
+the first one.
+
+The second corpus is the weaker of the two and its denominator says why: 175 of its 279
+files are bytecode and 104 are plain Lua source this tool does not read, so every count
+from it describes 63% of the image rather than the image. The vendor stopped precompiling
+much of its Lua tree between the two product generations, which is a packaging difference
+between corpora and not a property of any analysis here. Two counts taken over coverages
+that far apart are not like-for-like, however closely they agree.
 
 ### Emit a bounded `alternatives` set instead of `control-flow-conflict`
 
