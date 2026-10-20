@@ -3,6 +3,20 @@
 All notable changes are documented here. `luad` is a 0.x experimental tool: no dialect
 is promoted to a supported tier and no interface carries a compatibility promise yet.
 
+## Unreleased
+
+- Keep the resolved side of a partly unresolved control-flow join in Lua 5.1 origin
+  analysis. A join whose reaching definitions include an `Unknown` collapsed to
+  `control-flow-conflict`, discarding the definition that did resolve and flattening the
+  unresolved one's own reason; it now emits the `alternatives` set with that definition as
+  an option carrying its reason. On `tests/fixtures/origins.lua` the root-kind histogram
+  moves `unknown` 8 to 7 and `alternatives` 3 to 4, with no origin losing an expression.
+  `has_unknown` is public so the previous conservative reading stays derivable from a set.
+- `control-flow-conflict` is now reserved for a loop-carried value widened at
+  `MAX_BLOCK_REVISITS`, where the set of reaching definitions is not finite. It still
+  absorbs a join, which termination depends on: widening to a bounded set there was tried
+  and reinstated the unbounded lattice growth that 0.3.1 fixed.
+
 ## 0.3.1 — 2026-09-18
 
 - Fix Lua 5.1 origin analysis exhausting its transfer-step budget on functions that
