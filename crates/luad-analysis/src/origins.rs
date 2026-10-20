@@ -428,7 +428,22 @@ fn meet_value(left: &FlowValue, right: &FlowValue) -> FlowValue {
                     left.evidence.iter().chain(&right.evidence).cloned(),
                 ));
             }
-            if has_unknown(left) || has_unknown(right) {
+            // `ControlFlowConflict` is the top of the lattice and absorbs the join. It is the
+            // marker the loop widening at `MAX_BLOCK_REVISITS` writes, and termination depends
+            // on it absorbing: a widened slot that instead became one option of a set would
+            // feed a strictly larger set on every pass, so the worklist would never reach a
+            // fixpoint and would stop by exhausting its step budget, reporting every call in
+            // the prototype as `analysis-limit` including the ones that converged at once.
+            //
+            // Every other reason survives as an option instead of being flattened into this
+            // one. Those reasons come from a transfer function rather than from iteration, so
+            // a set holding them is bounded by the number of reaching definitions and does not
+            // grow per pass; a slot that does keep moving is widened to the conflict above and
+            // absorbs from then on. Keeping them lets a consumer see which branch resolved and
+            // why the other did not, which the flattening made unrecoverable: the conservative
+            // answer is still derivable from the set with `has_unknown`, the resolved side is
+            // not derivable from a bare `control-flow-conflict`.
+            if has_control_flow_conflict(left) || has_control_flow_conflict(right) {
                 return FlowValue::Origin(unknown(
                     OriginUnknownReason::ControlFlowConflict,
                     left.evidence.iter().chain(&right.evidence).cloned(),
@@ -1870,7 +1885,12 @@ fn first_cutoff(expression: &OriginExpression) -> Option<OriginUnknownReason> {
     }
 }
 
-fn has_unknown(expression: &OriginExpression) -> bool {
+/// Whether any subexpression is an explicit `Unknown`.
+///
+/// A join may now report `Alternatives` in which one option is `Unknown`, which is strictly
+/// more information than a collapsed unknown but is not the conservative reading. A consumer
+/// that wants the conservative reading derives it with this.
+pub fn has_unknown(expression: &OriginExpression) -> bool {
     match &expression.kind {
         OriginExpressionKind::Unknown { .. } => true,
         OriginExpressionKind::Field { base, .. }
@@ -1883,6 +1903,34 @@ fn has_unknown(expression: &OriginExpression) -> bool {
             fields.iter().any(|field| has_unknown(&field.value))
         }
         OriginExpressionKind::Alternatives { options } => options.iter().any(has_unknown),
+        _ => false,
+    }
+}
+
+/// Whether any subexpression is the `ControlFlowConflict` top of the lattice.
+///
+/// Recursive rather than top-level: a transfer function can embed a widened slot inside a
+/// larger expression, and such an expression must absorb a join for the same termination
+/// reason the bare marker does.
+fn has_control_flow_conflict(expression: &OriginExpression) -> bool {
+    match &expression.kind {
+        OriginExpressionKind::Unknown { reason } => {
+            matches!(reason, OriginUnknownReason::ControlFlowConflict)
+        }
+        OriginExpressionKind::Field { base, .. }
+        | OriginExpressionKind::Unary { operand: base, .. } => has_control_flow_conflict(base),
+        OriginExpressionKind::Binary { left, right, .. } => {
+            has_control_flow_conflict(left) || has_control_flow_conflict(right)
+        }
+        OriginExpressionKind::Concat { parts } | OriginExpressionKind::Table { entries: parts } => {
+            parts.iter().any(has_control_flow_conflict)
+        }
+        OriginExpressionKind::TableLiteral { fields, .. } => fields
+            .iter()
+            .any(|field| has_control_flow_conflict(&field.value)),
+        OriginExpressionKind::Alternatives { options } => {
+            options.iter().any(has_control_flow_conflict)
+        }
         _ => false,
     }
 }
@@ -2369,25 +2417,105 @@ mod tests {
         assert_eq!(options.len(), 2);
     }
 
-    #[test]
-    fn unresolved_join_is_explicit_conflict() {
-        let parameter = FlowValue::Origin(expression(
+    fn root_parameter() -> FlowValue {
+        FlowValue::Origin(expression(
             OriginExpressionKind::Parameter {
                 owner: ProtoPath::root(),
                 index: 0,
             },
             [],
-        ));
+        ))
+    }
+
+    #[test]
+    fn unresolved_join_keeps_the_resolved_side_and_the_unresolved_reason() {
         let unresolved = FlowValue::Origin(unknown(OriginUnknownReason::DynamicKey, []));
-        assert!(matches!(
-            meet_value(&parameter, &unresolved),
-            FlowValue::Origin(OriginExpression {
-                kind: OriginExpressionKind::Unknown {
-                    reason: OriginUnknownReason::ControlFlowConflict
-                },
-                ..
-            })
+        let joined = meet_value(&root_parameter(), &unresolved);
+        let FlowValue::Origin(ref origin) = joined else {
+            panic!("expected an origin, got {joined:?}");
+        };
+        let OriginExpressionKind::Alternatives { ref options } = origin.kind else {
+            panic!("expected alternatives, got {joined:?}");
+        };
+        assert_eq!(options.len(), 2, "both definitions must survive the join");
+        assert!(
+            options
+                .iter()
+                .any(|option| matches!(option.kind, OriginExpressionKind::Parameter { .. })),
+            "the resolved side must survive, got {options:?}"
+        );
+        assert!(
+            options.iter().any(|option| matches!(
+                option.kind,
+                OriginExpressionKind::Unknown {
+                    reason: OriginUnknownReason::DynamicKey
+                }
+            )),
+            "the unresolved side must keep its own reason, got {options:?}"
+        );
+        assert!(
+            has_unknown(origin),
+            "the conservative reading must stay derivable from the set"
+        );
+    }
+
+    #[test]
+    fn control_flow_conflict_absorbs_a_join() {
+        // Termination depends on this. The loop widening at `MAX_BLOCK_REVISITS` writes a
+        // conflict, and if that became one option of a set instead of absorbing, every pass
+        // would build a strictly larger set, the worklist would never reach a fixpoint, and it
+        // would stop only by exhausting its step budget.
+        let widened = FlowValue::Origin(unknown(OriginUnknownReason::ControlFlowConflict, []));
+        for other in [root_parameter(), widened.clone()] {
+            for joined in [meet_value(&widened, &other), meet_value(&other, &widened)] {
+                assert!(
+                    matches!(
+                        joined,
+                        FlowValue::Origin(OriginExpression {
+                            kind: OriginExpressionKind::Unknown {
+                                reason: OriginUnknownReason::ControlFlowConflict
+                            },
+                            ..
+                        })
+                    ),
+                    "a widened slot must absorb the join, got {joined:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn an_embedded_conflict_also_absorbs_a_join() {
+        // A transfer function can bury a widened slot inside a larger expression, which must
+        // absorb for the same reason the bare marker does.
+        let embedded = FlowValue::Origin(expression(
+            OriginExpressionKind::Concat {
+                parts: vec![
+                    unknown(OriginUnknownReason::ControlFlowConflict, []),
+                    expression(
+                        OriginExpressionKind::Literal {
+                            constant_id: None,
+                            value: OriginLiteral::Nil,
+                        },
+                        [],
+                    ),
+                ],
+            },
+            [],
         ));
+        let joined = meet_value(&embedded, &root_parameter());
+        assert!(
+            matches!(
+                joined,
+                FlowValue::Origin(OriginExpression {
+                    kind: OriginExpressionKind::Unknown {
+                        reason: OriginUnknownReason::ControlFlowConflict
+                    },
+                    ..
+                })
+            ),
+            "an embedded conflict must absorb the join, got {joined:?}"
+        );
     }
 
     #[test]

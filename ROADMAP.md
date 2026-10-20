@@ -2,7 +2,7 @@
 
 Status: future priorities after the experimental 0.2 release candidate.
 
-Fresh as of: 2026-10-19.
+Fresh as of: 2026-10-20.
 
 ## Release completion boundary
 
@@ -42,35 +42,30 @@ much of its Lua tree between the two product generations, which is a packaging d
 between corpora and not a property of any analysis here. Two counts taken over coverages
 that far apart are not like-for-like, however closely they agree.
 
-### Emit a bounded `alternatives` set instead of `control-flow-conflict`
+### Re-measure the join-site `alternatives` change over the private corpus
 
-When origin analysis reaches a control-flow join, or widens a loop-carried slot, it
-collapses the slot to the opaque `control-flow-conflict` unknown-reason. `alternatives`
-already exists for some bounded joins, so where the set of reaching definitions is
-finite the origin should be that `alternatives` expression, not the opaque reason. A
-consumer cannot see through `control-flow-conflict`; an `alternatives` set it can.
+A join with one bounded and one unresolved predecessor now emits the `alternatives` set, with
+the unresolved definition kept as an option carrying its own reason, rather than collapsing to
+`control-flow-conflict`. On the public fixture one argument moved from `unknown` to a set, none
+lost an expression, and `sink(unresolved_alt)` reports
+`alternatives("defined" | unknown:DynamicKey)` where it previously reported only the conflict.
+That is a public-fixture result; the corpus-wide effect is not measured.
 
-The 0.3.1 loop-widening fix (PR #85) sharpened this rather than caused it. That fix
-deliberately widens a loop-carried slot to `control-flow-conflict` after
-`MAX_BLOCK_REVISITS` to stop unbounded lattice growth, which was the right call against
-the alternative of reporting the whole prototype as `analysis-limit`. But the widened
-slots are frequently the sibling expressions of a resolvable argument in the same
-constructed command string, so widening to the top of the lattice makes those siblings
-unreadable downstream. The gap to close: widen to a bounded `alternatives` set where one
-exists (respecting `MAX_ALTERNATIVES`), and reserve `control-flow-conflict` for the
-genuinely unbounded case.
+What is owed is the re-measurement the acceptance criteria named: over the private corpus, the
+`control-flow-conflict` count and whether previously-blocked bounded sink arguments resolve,
+with no argument losing an expression it had in 0.3.1. The counts above predate the change and
+are not restated as current.
 
-The concrete repro prototype (a constructed shell-command argument whose siblings are
-loop-widened) is recorded in the consumer's private notes, not here, because it names an
-unreleased finding in a shipping product.
-
-**Acceptance.** A public fixture that exercises both a bounded join and a loop-carried
-slot in one command-shaped expression; `luad origins` emits `alternatives` with the
-candidate set where the reaching set is bounded, and keeps `control-flow-conflict` only
-where it is genuinely unbounded (the existing loop-widening regression test still holds
-there). Re-run over the private corpus: the `control-flow-conflict` count falls and
-previously-blocked bounded sink arguments resolve, with no argument losing an expression
-it had in 0.3.1.
+`control-flow-conflict` remains correct for one case and keeps that name: a loop-carried value
+widened at `MAX_BLOCK_REVISITS`, whose set of reaching definitions is not finite. Widening to a
+bounded set there was tried and is not available. The conflict marker has to absorb a join, or
+a widened slot becomes one option of a strictly larger set on every pass, the worklist never
+reaches a fixpoint, and it stops by exhausting its step budget, which reports every call in the
+prototype as `analysis-limit` including the ones that converged at once. That was measured on
+`tests/fixtures/origins_loop_widening.lua`, where the non-loop-carried sink argument lost its
+concat expression entirely. The two sites are coupled: join precision depends on the widening
+marker staying the top of the lattice, so the remaining imprecision there is bounded by an
+analysis constant rather than by the lattice, and the constant would be the deliverable.
 
 ### Investigate the origin unknown-reason saturation at 2000 (B-9)
 

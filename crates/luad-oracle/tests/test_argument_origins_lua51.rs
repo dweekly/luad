@@ -149,7 +149,7 @@ fn test_origin_matrix_histogram_and_cardinality_are_pinned() {
     assert_eq!(
         histogram,
         BTreeMap::from([
-            ("alternatives", 3),
+            ("alternatives", 4),
             ("binary", 7),
             ("call-result", 2),
             ("concat", 1),
@@ -159,7 +159,7 @@ fn test_origin_matrix_histogram_and_cardinality_are_pinned() {
             ("prototype", 1),
             ("table-literal", 6),
             ("unary", 3),
-            ("unknown", 8),
+            ("unknown", 7),
         ])
     );
 }
@@ -236,9 +236,12 @@ fn test_origins_preserve_concat_mod_captures_and_explicit_stops() {
     );
     assert!(!proto_origin.evidence.is_empty());
 
+    // `ControlFlowConflict` is deliberately absent here. Every join in this fixture is
+    // bounded on at least one side, so each one now reports an `Alternatives` set that keeps
+    // the unresolved option's own reason; the conflict is reserved for the genuinely unbounded
+    // loop-carried case, which `origins_loop_widening.lua` owns.
     for reason in [
         OriginUnknownReason::DynamicKey,
-        OriginUnknownReason::ControlFlowConflict,
         OriginUnknownReason::VarargValue,
         OriginUnknownReason::UnsupportedValue,
         OriginUnknownReason::ExpressionDepthLimit,
@@ -383,20 +386,28 @@ fn test_origin_killer_mutations_are_rejected() {
     *operator = "FORMAT".to_string();
     reject(&expected, relabeled_mod);
 
-    let mut erased_conflict = expected.clone();
-    fixed_origin_mut(&mut erased_conflict, |origin| {
-        matches!(
-            origin.kind,
-            OriginExpressionKind::Unknown {
-                reason: OriginUnknownReason::ControlFlowConflict
-            }
-        )
-    })
-    .kind = OriginExpressionKind::Parameter {
+    // An unresolved option inside an `Alternatives` set must not be silently replaceable by a
+    // resolved value. This is where a partly resolved join can now lose its unknown, so the
+    // mutation targets the option rather than a collapsed top-level conflict.
+    let mut erased_unknown_option = expected.clone();
+    let OriginExpressionKind::Alternatives { options } =
+        &mut fixed_origin_mut(&mut erased_unknown_option, |origin| {
+            matches!(&origin.kind, OriginExpressionKind::Alternatives { options }
+                if options.iter().any(luad_analysis::has_unknown))
+        })
+        .kind
+    else {
+        unreachable!("selected an alternatives origin")
+    };
+    let unknown_option = options
+        .iter_mut()
+        .find(|option| luad_analysis::has_unknown(option))
+        .expect("an unknown option");
+    unknown_option.kind = OriginExpressionKind::Parameter {
         owner: ProtoPath::root(),
         index: 0,
     };
-    reject(&expected, erased_conflict);
+    reject(&expected, erased_unknown_option);
 
     let mut erased_cutoff = expected.clone();
     fixed_origin_mut(&mut erased_cutoff, |origin| {
@@ -754,13 +765,38 @@ fn test_cfg_alternatives_emit_alternatives_expression() {
         .expect("loop_val alternatives origin");
     assert!(!loop_val.evidence.is_empty());
 
-    // 5. Unresolved predecessor: unresolved_alt (ControlFlowConflict)
-    assert!(origins.iter().any(|origin| matches!(
-        origin.kind,
+    // 5. Unresolved predecessor: unresolved_alt is `"defined"` on one branch and the dynamic
+    //    key `math[parameter]` on the other. The set keeps both, and the unresolved option
+    //    keeps its own `dynamic-key` reason rather than being flattened into a conflict, so a
+    //    consumer can see which branch resolved and why the other did not. Asserted by that
+    //    specific reason, not merely by the option being unknown.
+    let partly_unresolved = origins
+        .iter()
+        .find(|origin| match &origin.kind {
+            OriginExpressionKind::Alternatives { options } => {
+                options.len() == 2 && has_string_literal(&options[0], "defined")
+            }
+            _ => false,
+        })
+        .expect("partly unresolved alternatives origin");
+    let OriginExpressionKind::Alternatives {
+        options: partly_unresolved_opts,
+    } = &partly_unresolved.kind
+    else {
+        unreachable!("filtered above")
+    };
+    assert_eq!(
+        partly_unresolved_opts[1].kind,
         OriginExpressionKind::Unknown {
-            reason: OriginUnknownReason::ControlFlowConflict
-        }
-    )));
+            reason: OriginUnknownReason::DynamicKey
+        },
+        "the unresolved option must keep its own reason, got {:?}",
+        partly_unresolved_opts[1].kind
+    );
+    assert!(
+        luad_analysis::has_unknown(partly_unresolved),
+        "a consumer must still be able to derive the conservative reading from the set"
+    );
 
     // 6. Option overflow: overflow_alt (AnalysisLimit)
     assert!(origins.iter().any(|origin| matches!(
@@ -800,7 +836,7 @@ fn test_cfg_alternatives_emit_alternatives_expression() {
     assert!(query.status.success());
     let query_output = String::from_utf8_lossy(&query.stdout);
     let query_val: serde_json::Value = serde_json::from_str(&query_output).expect("valid json");
-    assert_eq!(query_val["data"]["count"], 3);
+    assert_eq!(query_val["data"]["count"], 4);
 }
 
 fn fixed_origin_mut(

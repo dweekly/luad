@@ -408,10 +408,14 @@ literals emit deterministically ordered fields and retain partial reconstruction
 `incomplete: true`. When bounded definitions reach a control-flow join, `alternatives`
 emits a deduplicated, deterministically ordered list of candidate origin expressions
 with reaching evidence. Structurally equal options are deduplicated with their evidence
-unioned. Conflicting control-flow definitions with unresolved predecessors or exceeding
-the option budget (`MAX_ALTERNATIVES = 8`), dynamic keys, mutable or ambiguous captures,
-varargs, aliasing boundaries, unreachable code, and analysis limits remain distinct
-machine-visible reasons.
+unioned. An option may itself be `unknown` carrying its own reason: a join with one bounded
+and one unresolved predecessor emits the set rather than a single reason, so a consumer can
+see which definition resolved and why the other did not. The conservative reading remains
+derivable from the set, since any option being unknown makes the whole expression unknown.
+`control-flow-conflict` is reserved for a loop-carried value widened at the iteration bound,
+where the set of reaching definitions is not finite. Exceeding the option budget
+(`MAX_ALTERNATIVES = 8`), dynamic keys, mutable or ambiguous captures, varargs, aliasing
+boundaries, unreachable code, and analysis limits remain distinct machine-visible reasons.
 
 Operands are captured before the writing instruction changes its destination, so an
 operation such as `CONCAT A A C` cannot recurse into its own result. JSON uses the

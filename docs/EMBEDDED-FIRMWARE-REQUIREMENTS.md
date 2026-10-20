@@ -183,9 +183,12 @@ upvalue → nested-child upvalue while keeping each hop tied to an exact closure
 - Selected registers and call arguments link to a bounded value-expression graph that
   distinguishes constants, parameters, upvalues, call results, concatenations, other
   computations, cycles, and explicit cutoffs.
-- When multiple individually bounded definitions reach one use, the origin graph
-  preserves evidence-linked alternatives rather than replacing the entire set with a
-  plausible complete negative answer.
+- When multiple definitions reach one use, the origin graph preserves evidence-linked
+  alternatives rather than replacing the entire set with a plausible complete negative
+  answer. A definition that is itself unresolved becomes an option carrying its own reason,
+  so a partly resolved join does not discard the side that did resolve. Only a loop-carried
+  value widened at the iteration bound, whose reaching set is not finite, collapses to a
+  single conflict reason.
 - A bounded `NEWTABLE` plus constant-key field-write sequence can expose a table-literal
   origin whose field values retain their own origins and instruction evidence.
 - Operand origins are captured at the writing instruction. A destination that aliases

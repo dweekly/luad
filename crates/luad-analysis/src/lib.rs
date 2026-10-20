@@ -30,7 +30,7 @@ pub use linking::{
     ModuleExportIndex, MAX_INDEXED_EXPORTS, MAX_LINK_FACTS,
 };
 pub use origins::{
-    analyze_chunk_origins, CallArgumentWindow, CallOriginFact, ChunkOriginAnalysis,
+    analyze_chunk_origins, has_unknown, CallArgumentWindow, CallOriginFact, ChunkOriginAnalysis,
     FixedArgumentOrigin, OriginAnalysis, OriginExpression, OriginExpressionKind, OriginLiteral,
     OriginUnknownReason, TableLiteralField,
 };
