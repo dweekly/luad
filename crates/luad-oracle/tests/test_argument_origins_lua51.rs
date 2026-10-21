@@ -1739,3 +1739,102 @@ fn test_a_key_read_off_a_non_parameter_base_is_not_a_parameter_field() {
         parameter_contract_of(&analysis, "0/3")
     );
 }
+
+#[test]
+fn test_lnum32_authority_chunk_pins_argument_level_origin_verdicts() {
+    // Structural counts -- instructions, prototypes, call sites -- cannot catch a precision
+    // regression: the 0.3.0 origins regression left all three identical while changing
+    // answers on real firmware. What catches it is pinning specific
+    // (prototype, pc, argument) verdicts, and nothing here did that for a non-stock layout.
+    // This pins them on the committed OpenWrt-derived 32-bit LNUM authority chunk, whose
+    // provenance is recorded in the AUTHORITY.json beside it.
+    let luad = luad_oracle::luad_binary_path().display().to_string();
+    let root = luad_oracle::find_workspace_root();
+    let path = root.join("tests/fixtures/authority/lua51-openwrt-lnum32/authority_lnum32.luac");
+    let output = Command::new(&luad)
+        .args([
+            "origins",
+            path.to_str().expect("lnum32 path"),
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("luad origins must run on the lnum32 authority chunk");
+    assert_eq!(output.status.code(), Some(0));
+    let document: MachineDocument<ChunkOriginAnalysis> =
+        serde_json::from_slice(&output.stdout).expect("lnum32 origins document");
+    assert_eq!(
+        document.interpretation.profile, "lua5.1-lnum32",
+        "the point of this fixture is the non-stock layout"
+    );
+    assert_eq!(
+        document.interpretation.validated_layout.as_deref(),
+        Some("int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4"),
+        "a verdict pinned under the wrong layout proves nothing about that layout"
+    );
+
+    let facts = all_facts(&document.data);
+    let verdicts: Vec<(String, usize, usize, &OriginExpression)> = facts
+        .iter()
+        .flat_map(|fact| match &fact.argument_window {
+            CallArgumentWindow::Fixed { arguments } => arguments
+                .iter()
+                .map(|argument| {
+                    (
+                        fact.proto_path.to_string(),
+                        fact.pc,
+                        argument.argument_index,
+                        &argument.origin,
+                    )
+                })
+                .collect::<Vec<_>>(),
+            CallArgumentWindow::Open { .. } => vec![],
+        })
+        .collect();
+    assert_eq!(
+        verdicts.len(),
+        2,
+        "the pinned set is exact, so a new call site cannot silently stand in for a \
+         regressed one: {verdicts:?}"
+    );
+
+    // `math.floor(float_fraction)` where `float_fraction = 1.5`. Resolving this argument to
+    // the preserved literal requires decoding the number under `num=8,integral_flag=4`, so
+    // the verdict depends on the layout and not only on the dataflow. The preserved bytes
+    // are what is pinned, not a re-rendered value.
+    let (proto, pc, index, origin) = &verdicts[0];
+    assert_eq!((proto.as_str(), *pc, *index), ("0", 20, 0));
+    assert!(
+        matches!(
+            &origin.kind,
+            OriginExpressionKind::Literal {
+                value: OriginLiteral::Float {
+                    raw_hex,
+                    is_nan: false,
+                    is_inf: false,
+                },
+                ..
+            } if raw_hex == "000000000000f83f"
+        ),
+        "proto 0 pc 20 arg 0 must resolve to the preserved float literal: {origin:?}"
+    );
+    assert!(
+        !origin.evidence.is_empty(),
+        "a pinned verdict with no evidence cannot be traced back to an instruction"
+    );
+
+    // `pairs(values)` after `values` was written through and had reached a callee. The
+    // conservative answer is the verdict here, and pinning it is what would catch it
+    // silently becoming a reconstruction of contents a callee may have changed.
+    let (proto, pc, index, origin) = &verdicts[1];
+    assert_eq!((proto.as_str(), *pc, *index), ("0", 33, 0));
+    assert!(
+        matches!(
+            origin.kind,
+            OriginExpressionKind::Unknown {
+                reason: OriginUnknownReason::UnsupportedValue
+            }
+        ),
+        "proto 0 pc 33 arg 0 must stay conservative: {origin:?}"
+    );
+}

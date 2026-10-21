@@ -5,6 +5,15 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- `gate-argument-origins-lua51` now pins argument-level origin verdicts on the committed
+  OpenWrt-derived 32-bit LNUM authority chunk, not only its profile. Structural counts cannot
+  catch a precision regression -- the 0.3.0 origins regression left instruction, prototype and
+  call-site counts identical while changing answers -- and no non-stock layout had a pinned
+  verdict. One of the two pinned verdicts resolves a preserved float literal, which depends on
+  decoding numbers under `num=8,integral_flag=4`, so it fails if the layout handling moves and
+  not only if the dataflow does. The pinned set is exact, so a new call site cannot stand in
+  for a regressed one, and the chunk is a `required_fixtures` entry of the gate.
+
 - `luad origins` now reports each prototype's parameter field accesses: every constant-key
   table access whose base resolves to one of its own parameters, with the parameter index, the
   key path from the parameter outward, whether it reads or writes, and instruction and
