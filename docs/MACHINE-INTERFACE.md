@@ -472,28 +472,6 @@ branch as `overwritten`.
 which is why it also covers writes made more than once before a use. It is not a claim that
 a bounded set of reaching definitions was found and discarded.
 
-A captured register the enclosing prototype writes after building the closure reports the
-set of definitions that can reach the closure, not a single value and not `mutable-capture`.
-In Lua 5.1 the closure holds an open upvalue onto the parent's stack slot, so such a write is
-visible to the closure, and the closure may run before or after it; the set therefore carries
-the same meaning it carries at a control-flow join, which is that each member is reachable
-and no ordering is claimed. The value the register holds where the closure is built is one
-member. A write that cannot reach the closure, including one the closure's own binding
-precedes, is not a member. Nor is a write past the point the cell is closed: closing the
-upvalue ends the register's identity as the captured variable, and a compiler is free to
-reuse that register for an unrelated local whose writes the capture can never observe.
-
-`mutable-capture` remains the reason in the cases where that set cannot be bounded or
-completed: a cell written through a closure rather than by the parent, because those writes
-run at a time this analysis does not order against the read; a member that does not resolve;
-a member holding a table, whose contents a later call can change without writing the
-register; more members than the alternatives limit; a reachable close of the cell, after
-which which writes belong to the captured variable is not recoverable from the register
-alone; and more qualifying writes, or a larger replay, than the per-capture bounds allow. The set is never emitted partially,
-because a set reads as every possibility and a consumer cannot tell a truncated one from a
-complete one. `ambiguous-capture` continues to mean the capture itself could not be
-identified, which is a different failure from a capture whose value set is unbounded.
-
 Operands are captured before the writing instruction changes its destination, so an
 operation such as `CONCAT A A C` cannot recurse into its own result. JSON uses the
 `origins` schema. JSONL emits self-identifying `origin` facts followed by a summary.

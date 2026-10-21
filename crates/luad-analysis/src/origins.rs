@@ -29,18 +29,6 @@ const MAX_ALTERNATIVES: usize = 8;
 /// iteration instead, so a prototype containing a loop still resolves the expressions that
 /// do converge.
 const MAX_BLOCK_REVISITS: usize = 8;
-/// Qualifying writes the reaching-definition set will consider for one capture. Each write
-/// contributes its own evidence id to the member it stores, so an unbounded count is both
-/// unbounded output and quadratic work in merging it. A capture with more writes than this
-/// reports `MutableCapture`: the answer is still a set of at most `MAX_ALTERNATIVES`
-/// members, so a prototype assigning one local this many times after building a closure is
-/// refused rather than answered from truncated evidence.
-const MAX_CAPTURE_REACHING_WRITES: usize = 64;
-/// Instructions the reaching-definition replay for one capture may step through. The replay
-/// visits each reachable block at most once, so this bounds it by the prototype's size
-/// rather than by the number of writes; a prototype larger than this reports
-/// `MutableCapture` instead of running unbounded work per capture.
-const MAX_CAPTURE_REPLAY_STEPS: usize = 100_000;
 
 /// A lossless literal suitable for structural equality in an origin graph.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
@@ -1928,7 +1916,6 @@ fn derive_child_captures(
                         &state,
                         instructions,
                         cfg,
-                        &dataflow.in_states,
                         parent_captures,
                         summary,
                     )
@@ -1966,7 +1953,6 @@ fn capture_from_descriptor(
     state: &RegisterState,
     parent_instructions: &[SemanticInstruction],
     parent_cfg: &ControlFlowGraph,
-    parent_in_states: &[RegisterState],
     parent_captures: &CaptureEnvironment,
     summary: &crate::capture_mutation::CaptureMutationSummary,
 ) -> OriginExpression {
@@ -1979,41 +1965,16 @@ fn capture_from_descriptor(
     }
     let value = match descriptor.reads.first() {
         Some(EffectTarget::Register { index }) => {
-            // A closure that writes the cell is excluded here rather than resolved: those
-            // writes live in a child prototype and run when that closure is called, which
-            // this analysis does not order against anything. A register the closure
-            // instruction itself overwrites has no determinable pre-closure value.
             if Some(*index) == closure_destination
                 || summary.is_local_register_mutated(&parent.path, *index)
-            {
-                unknown(OriginUnknownReason::MutableCapture, [])
-            } else if effect_may_be_written_after(
-                parent_instructions,
-                parent_cfg,
-                closure.pc,
-                &EffectTarget::Register { index: *index },
-            ) {
-                // The parent writes the captured register after building the closure. Every
-                // such write is in this prototype, so the definitions that can reach the
-                // closure are a finite set the parent makes visible.
-                match reaching_capture_set(
-                    *index,
-                    closure.pc,
-                    origin_from_flow(get_register(state, *index)),
+                || effect_may_be_written_after(
                     parent_instructions,
                     parent_cfg,
-                    parent_in_states,
-                    parent_captures,
-                    usize::from(parent.maxstacksize),
-                ) {
-                    Some(set) => {
-                        return add_expression_evidence(
-                            set,
-                            [child_id, closure.id.clone(), descriptor.id.clone()],
-                        )
-                    }
-                    None => unknown(OriginUnknownReason::MutableCapture, []),
-                }
+                    closure.pc,
+                    &EffectTarget::Register { index: *index },
+                )
+            {
+                unknown(OriginUnknownReason::MutableCapture, [])
             } else {
                 origin_from_flow(get_register(state, *index))
             }
@@ -2053,158 +2014,6 @@ fn capture_from_descriptor(
         );
     }
     add_expression_evidence(value, [child_id, closure.id.clone(), descriptor.id.clone()])
-}
-
-/// The definitions of a captured register that can reach a closure: the value the register
-/// holds where the closure is built, together with the value written by every write the
-/// parent can execute afterwards. The closure may run before or after any of those writes,
-/// so this is a set of reaching definitions rather than a claim about one path -- the
-/// meaning `Alternatives` already carries at a control-flow join.
-///
-/// Returns `None`, leaving the caller to report `MutableCapture`, whenever the set cannot
-/// be completed: a member that does not resolve, a member holding a table (whose contents a
-/// later call can change without writing the register), or more members than
-/// `MAX_ALTERNATIVES`. A partial set must not be emitted, because a set reads as the
-/// complete set of possibilities and a consumer cannot tell a truncated one from a whole
-/// one.
-#[allow(clippy::too_many_arguments)]
-fn reaching_capture_set(
-    register: u8,
-    closure_pc: usize,
-    at_closure: OriginExpression,
-    instructions: &[SemanticInstruction],
-    cfg: &ControlFlowGraph,
-    in_states: &[RegisterState],
-    captures: &CaptureEnvironment,
-    frame_size: usize,
-) -> Option<OriginExpression> {
-    fn resolved(expression: &OriginExpression) -> bool {
-        !has_unknown(expression)
-            && !contains_table(expression)
-            && !contains_alternatives(expression)
-    }
-
-    if !resolved(&at_closure) {
-        return None;
-    }
-    let origin_block = cfg
-        .blocks
-        .iter()
-        .find(|block| block.instruction_pcs.contains(&closure_pc))?;
-    let reachable = reachable_blocks_after(cfg, origin_block.index);
-    let target = EffectTarget::Register { index: register };
-    let mut options = vec![at_closure];
-    let mut budget = MAX_CAPTURE_REPLAY_STEPS;
-
-    // Each reachable block is replayed once and every write in it collected on that pass,
-    // so the work is bounded by the prototype's instruction count rather than by the
-    // number of writes. Replaying per write instead re-walks the block prefix each time,
-    // which is quadratic in a block that assigns the same local repeatedly.
-    for block in &cfg.blocks {
-        if !block.is_reachable {
-            continue;
-        }
-        // The same "after" relation `effect_may_be_written_after` uses, so the set covers
-        // exactly the writes that made it refuse. The closure's own block is included
-        // because a write can follow the closure within it.
-        if block.index != origin_block.index && !reachable.contains(&block.index) {
-            continue;
-        }
-        let incoming = in_states.get(block.index)?;
-        let mut state = incoming.clone();
-        for &pc in &block.instruction_pcs {
-            let Some(instruction) = instructions.get(pc) else {
-                continue;
-            };
-            if budget == 0 {
-                return None;
-            }
-            budget -= 1;
-            // A write in the closure's own block is after it by program order, or by the
-            // block reaching itself around a loop.
-            let after = if block.index == origin_block.index {
-                pc > closure_pc || reachable.contains(&origin_block.index)
-            } else {
-                true
-            };
-            // Closing the cell ends this register's identity as the captured variable: the
-            // closure's upvalue is closed, and the compiler is free to reuse the register
-            // for an unrelated local whose writes this capture can never see. Which later
-            // writes belong to which variable is not recoverable from the register alone,
-            // so the set is abandoned at that boundary rather than guessed.
-            if after && closes_register(instruction, register) {
-                return None;
-            }
-            // Transferred unconditionally, as the dataflow does, so a value computed by
-            // earlier instructions in the block resolves; closure-binding descriptors are
-            // skipped only as *writes*, since they carry no standalone effect.
-            transfer(instruction, &mut state, captures, frame_size);
-            if is_closure_binding(instruction) || !write_overlaps(&instruction.writes, &target) {
-                continue;
-            }
-            if !after {
-                continue;
-            }
-            if options.len() > MAX_CAPTURE_REACHING_WRITES {
-                return None;
-            }
-            let written = origin_from_flow(get_register(&state, register));
-            if !resolved(&written) {
-                return None;
-            }
-            options.push(written);
-        }
-    }
-
-    let mut flattened = Vec::new();
-    for option in &options {
-        collect_candidate_options(option, &mut flattened);
-    }
-    let mut deduplicated: Vec<OriginExpression> = Vec::new();
-    for candidate in flattened {
-        if let Some(existing) = deduplicated
-            .iter_mut()
-            .find(|existing| same_shape(existing, &candidate))
-        {
-            union_expression_evidence(existing, &candidate);
-        } else {
-            deduplicated.push(candidate);
-        }
-    }
-    if deduplicated.len() > MAX_ALTERNATIVES {
-        return None;
-    }
-    // One member means every write stores what the register already held, so the value is
-    // not in doubt and a one-member set would imply a choice that does not exist.
-    if deduplicated.len() == 1 {
-        return deduplicated.pop();
-    }
-    deduplicated.sort();
-    let evidence: Vec<StableId> = deduplicated
-        .iter()
-        .flat_map(|option| option.evidence.iter().cloned())
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
-    Some(bounded_expression(
-        OriginExpressionKind::Alternatives {
-            options: deduplicated,
-        },
-        evidence,
-    ))
-}
-
-/// Whether this instruction closes the upvalue cell backing `register`. Every dialect's
-/// lifter reports the boundary as `CloseUpvalues`, which closes all cells at or above a
-/// register, so the physical opcode carrying it does not matter here.
-fn closes_register(instruction: &SemanticInstruction, register: u8) -> bool {
-    instruction
-        .implicit_effects
-        .iter()
-        .any(|effect| match effect {
-            ImplicitEffect::CloseUpvalues { min_register } => *min_register <= register,
-            _ => false,
-        })
 }
 
 fn state_before_pc(

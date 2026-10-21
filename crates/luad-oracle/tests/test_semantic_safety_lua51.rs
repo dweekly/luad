@@ -2415,26 +2415,7 @@ struct CaptureObservation {
     origin_is_mutable_capture: Option<bool>,
 }
 
-/// Rows where the origin analysis resolves the captured value although the shared cell is
-/// mutable. The two are separate questions: the cell being writable does not mean the value
-/// is in doubt, because origins reports the set of definitions that can reach the capture and
-/// that set can have one member. Each entry carries why, and the entry asserts the resolution
-/// rather than tolerating it, so a row that stops resolving is a failure here too.
-const ORIGIN_RESOLVES_DESPITE_MUTATION: &[&str] = &[
-    // The parent's later write is `CLOSURE R0, proto 0`: the same prototype the register
-    // already held. Both definitions reaching the capture are closures of `0/0`, so the
-    // reaching set deduplicates to one member. Origins names prototypes, not closure
-    // instances, which makes that a complete answer. The callee and relation facts still
-    // refuse, because they do not consult the set, and this row pins that their refusal is
-    // not evidence that the value is unknown.
-    "parent-writes-shared-local-after-closure",
-];
-
-fn capture_mismatches(
-    name: &str,
-    expected: &CaptureVerdict,
-    observed: &CaptureObservation,
-) -> Vec<String> {
+fn capture_mismatches(expected: &CaptureVerdict, observed: &CaptureObservation) -> Vec<String> {
     let mut mismatches = Vec::new();
     match expected {
         CaptureVerdict::Mutable => {
@@ -2456,16 +2437,9 @@ fn capture_mismatches(
                     observed.calls_xref_targets
                 ));
             }
-            match (
-                ORIGIN_RESOLVES_DESPITE_MUTATION.contains(&name),
-                observed.origin_is_mutable_capture,
-            ) {
-                (false, Some(false)) => mismatches
-                    .push("origin analysis must agree the shared cell is mutable".to_string()),
-                (true, Some(true)) => mismatches.push(
-                    "this row's reaching definitions agree, so the origin must resolve".to_string(),
-                ),
-                _ => {}
+            if observed.origin_is_mutable_capture == Some(false) {
+                mismatches
+                    .push("origin analysis must agree the shared cell is mutable".to_string());
             }
         }
         CaptureVerdict::Preserved { callee } => {
@@ -2919,7 +2893,7 @@ fn test_shared_capture_mutation_matrix() {
         let chunk = parse_chunk(&build_chunk(&row.root));
         let call_id = format!("{}:pc:{}", row.caller_path, row.caller_pc);
         let observed = observe_capture(&chunk, &call_id, row.capture_slot.is_some());
-        let mismatches = capture_mismatches(row.name, &row.verdict, &observed);
+        let mismatches = capture_mismatches(&row.verdict, &observed);
         assert!(
             mismatches.is_empty(),
             "{label} ({call_id}): {mismatches:?}\nobserved={observed:?}"
@@ -2993,21 +2967,11 @@ fn test_shared_capture_killer_mutations_are_rejected() {
         origin_is_mutable_capture: Some(false),
     };
     assert!(
-        capture_mismatches(
-            "faithful-mutable",
-            &CaptureVerdict::Mutable,
-            &faithful_mutable
-        )
-        .is_empty(),
+        capture_mismatches(&CaptureVerdict::Mutable, &faithful_mutable).is_empty(),
         "the comparator must accept a faithful rejection"
     );
     assert!(
-        capture_mismatches(
-            "faithful-preserved",
-            &preserved(&stale),
-            &faithful_preserved
-        )
-        .is_empty(),
+        capture_mismatches(&preserved(&stale), &faithful_preserved).is_empty(),
         "the comparator must accept a faithful preservation"
     );
 
@@ -3056,7 +3020,7 @@ fn test_shared_capture_killer_mutations_are_rejected() {
     ];
     for (name, expected, observed) in killers {
         assert!(
-            !capture_mismatches(name, &expected, &observed).is_empty(),
+            !capture_mismatches(&expected, &observed).is_empty(),
             "capture killer mutation survived: {name}"
         );
     }

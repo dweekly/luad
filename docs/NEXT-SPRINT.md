@@ -65,13 +65,6 @@ implementation rather than only against no implementation.
   known. The previously pinned behaviour was wrong and is corrected.
 - Each prototype reports its parameter field accesses, resolved by the dataflow rather than by
   register number, which is a prototype's input contract. Issue #99.
-- A captured register the parent writes after building the closure reports its reaching
-  definitions instead of `mutable-capture`, which is sound only because the set is refused
-  whenever it cannot be completed: a cell written through a closure, an unresolved member, a
-  member holding a table, or an overflow of the alternatives limit. Issue #97. The gate pins
-  the refusals alongside the sets, and pins that a write the closure's binding precedes is not
-  a member, since collecting every write to the register would report a value the closure
-  cannot see.
 - Argument-level origin verdicts are pinned on the 32-bit LNUM authority chunk together with
   its validated layout, since structural counts cannot catch a precision regression.
 

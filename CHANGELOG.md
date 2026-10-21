@@ -5,36 +5,6 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
-- `luad origins` now reports the set of definitions that can reach a captured register the
-  enclosing prototype writes after building the closure, where it previously reported
-  `unknown:mutable-capture`. In Lua 5.1 the closure holds an open upvalue onto the parent's
-  stack slot, so a later write by the parent is visible to the closure and reporting only the
-  value at the capture would be a wrong answer; the closure may also run before any of those
-  writes, so no single value is the answer either. The set is the reaching definitions,
-  carrying the meaning `alternatives` already carries at a control-flow join. Writes that
-  cannot reach the closure are excluded, including writes the closure's binding precedes, so
-  this is not a collection of every write to the register. `mutable-capture` stands wherever
-  the set cannot be bounded or completed: a cell written through a closure rather than by the
-  parent, a member that does not resolve, a member holding a table, or more members than
-  `MAX_ALTERNATIVES`. The set is never emitted partially, because a set reads as every
-  possibility. The emitted shapes are unchanged, so no schema moves: a consumer already
-  handling `alternatives` at a join handles this.
-
-  Two defects in that change, both found by review before any release carried them and both
-  verified by reproduction first, are corrected here rather than shipped. A write past the
-  point the captured cell is closed is no longer a member: closing the upvalue ends the
-  register's identity as that variable, and `luac5.1` reuses the register for the next local,
-  so collecting by register alone reported an unrelated variable's value. On
-  `do local x = "a"; f = function() sink(x) end; x = "b" end; local y = "c"` that produced
-  `alternatives("a" | "b" | "c")`, where `"c"` is `y`; it now reports `mutable-capture`. The
-  boundary is read from the lifter's `CloseUpvalues` effect, which every dialect emits, rather
-  than from a mnemonic. Separately, the per-write state replay is now bounded: each reachable
-  block is replayed once with every write in it collected on that pass, and the number of
-  qualifying writes is capped by `MAX_CAPTURE_REACHING_WRITES` because each write contributes
-  its own evidence id to the member it stores. A chunk assigning one captured local 10,000
-  times took over 30 seconds and now takes 0.10, matching the prior release. Both corrections
-  have a control test that fails against the uncorrected code.
-
 - `gate-argument-origins-lua51` now pins argument-level origin verdicts on the committed
   OpenWrt-derived 32-bit LNUM authority chunk, not only its profile. Structural counts cannot
   catch a precision regression -- the 0.3.0 origins regression left instruction, prototype and

@@ -55,9 +55,6 @@ measured before and after, and none measured corpus-wide:
   previously discarded entirely
 - a table access whose key register holds only literals names its field rather than reporting
   `dynamic-key`
-- a captured register the parent writes after building the closure reports its reaching
-  definitions rather than `mutable-capture`, which was 18 of 20 `mutable-capture` arguments on
-  the measurement that reopened issue #97
 
 What is owed is the re-measurement the acceptance criteria named: over the private corpus, the
 count per unknown-reason and whether previously-blocked bounded sink arguments resolve, with no
@@ -73,16 +70,43 @@ longer reported, because the holder may have written the same key. Arguments tha
 carried such a field now carry fewer fields or none. That is a 0.3.1 defect corrected, not a
 precision regression, and a re-measurement should separate it from the rest.
 
-`mutable-capture` also keeps its name for the cases it still covers, which are now narrower
-than the name suggests: a cell written through a closure rather than by the enclosing
-prototype, where the writes do not live in the parent and run at a time nothing here orders
-against the read; a reachable close of the captured cell, past which the register may hold an
-unrelated local and which writes belong to the captured variable is not recoverable from the
-register alone; and a capture with more qualifying writes than `MAX_CAPTURE_REACHING_WRITES`,
-which is a bound on evidence and work rather than a limit of the analysis. Extending the reaching-definition set to those would need the call sites of
-the mutating closure and an ordering against them, which is interprocedural and is declined
-for the reason recorded against issue #93, not merely unbuilt. The parent-written case is
-closed.
+### Reaching definitions for a rewritten capture: attempted and withdrawn
+
+`mutable-capture` covers a captured register the enclosing prototype writes after building
+the closure. Reporting the set of definitions that can reach the closure was implemented,
+accepted on a public fixture, and withdrawn; it is not merely unbuilt. The premise is sound
+and is worth rebuilding: in Lua 5.1 the closure holds an open upvalue onto the parent's stack
+slot, so a later write by the parent is visible to the closure and reporting only the value at
+the capture is a wrong answer, while the closure may also run before that write, so no single
+value is the answer either. What failed was the method of enumerating the writes.
+
+Two defects, each a wrong answer rather than lost precision, were found by review after the
+change was on `main` and neither by its fixture suite:
+
+- Writes were collected by register across a close of the captured cell. Closing the upvalue
+  ends the register's identity as that variable, and `luac5.1` reuses the register for the next
+  local in scope, so an unrelated variable's value was reported as a possible origin. The
+  reproduction is `do local x = "a"; f = function() sink(x) end; x = "b" end; local y = "c"`,
+  which reported `alternatives("a" | "b" | "c")` where `"c"` is `y`.
+- Writes were collected from `SemanticInstruction::writes`, which is a declared-effect list
+  and not an exhaustive enumeration of register modification. `CALL A B 0` declares no writes
+  at all, `FORPREP` declares only `R(A)` while converting `A+1` and `A+2`, and `TFORLOOP`
+  declares `A+3` upward while writing `A+2`. A capture clobbered by any of those was reported
+  as a complete set with that definition missing, which is the failure the never-partial rule
+  exists to prevent.
+
+Both are instances of one mistake, which is what withdraws the approach rather than patching
+it: the set was built by subtracting writes that could be ruled out, so anything the
+enumeration failed to see silently became absent from a set that reads as complete. A rebuild
+must invert that default, in the discipline this file already requires of escape analysis: an
+allowlist of instructions whose register writes are known to be completely declared, refusing
+the capture when any instruction on the path is not on it, with the cell's lifetime bounded by
+its close rather than by block reachability.
+
+The work must also be bounded per prototype and not per capture. A budget charged per captured
+slot bounds each replay and bounds nothing in aggregate: 50 locals captured by 20 closures in a
+3,000-call prototype replayed the parent 1,000 times, each replay under its own limit, taking
+30.77 seconds against 0.38 before the change.
 
 `control-flow-conflict` remains correct for one case and keeps that name: a loop-carried value
 widened at `MAX_BLOCK_REVISITS`, whose set of reaching definitions is not finite. Widening to a
