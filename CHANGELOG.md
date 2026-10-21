@@ -5,6 +5,17 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Report the determinable prefix of an open argument window in Lua 5.1 origin analysis.
+  `CALL`/`TAILCALL` with a top-dependent argument count emitted only `open-argument-window`
+  and discarded every argument, including the ones at fixed registers below the tail:
+  `sink("rm -rf " .. params.dir, "flag", helper())` reported nothing at all, losing the one
+  argument a reader of a shell-shaped call came for. The window stays open and still reports
+  its reason; it now also carries the prefix, dense from index zero with registers contiguous
+  from the callee, covering every determinable position rather than only the resolved ones so
+  no position is reassigned. The prefix is bounded by the open-result marker and is empty
+  without it, because counting registers to the frame size instead would report arguments the
+  call does not have. The `origins` and `export` schemas gain the field.
+
 - Resolve the `a or b` and `a and b` idioms over locals in Lua 5.1 origin analysis. `TESTSET`
   had no transfer function, so its write fell through to the unmodeled-write default and the
   tested branch was reported as `unknown:overwritten`. It is now modeled per edge: the assigned

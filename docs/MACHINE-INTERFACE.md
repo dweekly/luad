@@ -398,6 +398,16 @@ argument window contains exactly one owner-qualified, evidence-linked expression
 each argument register. A top-dependent argument window is represented explicitly and
 never guessed.
 
+A top-dependent window also carries the arguments at fixed registers before its tail
+begins, in position order. Only the tail of such a window is top-dependent: the tail starts
+where the instruction producing an unknown number of results writes, and arguments below
+that are ordinary determinable arguments. The prefix is dense from index zero with registers
+contiguous from the callee, so a position is never reassigned, and it reports every
+determinable position rather than only the resolved ones. It is bounded by the open-result
+marker and is empty when that marker is absent or when the first argument is already
+top-dependent, so it can never be read as the complete argument list; the window still
+reports its reason either way.
+
 Expressions preserve typed literals, parameters, safe closure captures, child
 prototypes, global and constant-key field lookups, fixed call results, eager
 concatenations, constant-key table literals, table-construction inputs, control-flow

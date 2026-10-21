@@ -162,7 +162,8 @@ fn test_callee_resolution_proves_paths_joins_and_multihop_captures() {
         matches!(
             forward_origin.argument_window,
             luad_analysis::CallArgumentWindow::Open {
-                reason: luad_analysis::OriginUnknownReason::OpenArgumentWindow
+                reason: luad_analysis::OriginUnknownReason::OpenArgumentWindow,
+                ..
             }
         ),
         "forwarded call origin must retain an open argument window"
@@ -188,7 +189,8 @@ fn test_callee_resolution_proves_paths_joins_and_multihop_captures() {
         matches!(
             dynamic_origin.argument_window,
             luad_analysis::CallArgumentWindow::Open {
-                reason: luad_analysis::OriginUnknownReason::OpenArgumentWindow
+                reason: luad_analysis::OriginUnknownReason::OpenArgumentWindow,
+                ..
             }
         ),
         "dynamic forwarder call origin must retain an open argument window"

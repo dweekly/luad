@@ -806,7 +806,7 @@ fn test_cross_chunk_inverse_pins_argument_origins_per_call_site() {
                 assert_eq!(arguments.len(), 1, "one declared argument at each site");
                 first_argument_kinds.push(arguments[0].origin.kind.clone());
             }
-            CallArgumentWindow::Open { reason } => {
+            CallArgumentWindow::Open { reason, .. } => {
                 panic!("fixed argument window expected, got open: {reason:?}")
             }
         }

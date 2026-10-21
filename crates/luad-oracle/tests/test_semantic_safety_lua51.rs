@@ -2535,7 +2535,7 @@ fn observe_capture(chunk: &Chunk, call_id: &str, trace_origin: bool) -> CaptureO
                     }
                 )
             }
-            CallArgumentWindow::Open { reason } => {
+            CallArgumentWindow::Open { reason, .. } => {
                 panic!("{call_id} argument window unexpectedly open: {reason:?}")
             }
         }

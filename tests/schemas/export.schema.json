@@ -450,10 +450,18 @@
         {
           "type": "object",
           "required": [
+            "arguments",
             "kind",
             "reason"
           ],
           "properties": {
+            "arguments": {
+              "description": "Arguments at fixed registers before the open tail begins, in position order.\n\nThe window stays open: this is a prefix, never the whole argument list, and is empty when the first argument is already top-dependent. A call such as `sink(cmd, \"flag\", helper())` has two determinable arguments that reporting only the reason discards, and for a call whose first argument is the interesting one that is the entire fact a reader wanted.",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/FixedArgumentOrigin"
+              }
+            },
             "kind": {
               "type": "string",
               "enum": [

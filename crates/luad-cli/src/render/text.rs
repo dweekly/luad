@@ -714,8 +714,20 @@ pub fn render_origins(
                         )?;
                     }
                 }
-                luad_analysis::CallArgumentWindow::Open { reason } => {
-                    writeln!(writer, "  arguments <- open:{reason:?}")?;
+                luad_analysis::CallArgumentWindow::Open { reason, arguments } => {
+                    // The determinable prefix prints first, in position order, and the open
+                    // tail prints after it so the rendering cannot read as a complete
+                    // argument list.
+                    for argument in arguments {
+                        writeln!(
+                            writer,
+                            "  arg[{}] R({}) <- {}",
+                            argument.argument_index,
+                            argument.register,
+                            format_origin_expression(&argument.origin)
+                        )?;
+                    }
+                    writeln!(writer, "  arg[{}..] <- open:{reason:?}", arguments.len())?;
                 }
             }
         }

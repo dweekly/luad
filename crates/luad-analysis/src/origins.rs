@@ -169,8 +169,20 @@ pub struct FixedArgumentOrigin {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum CallArgumentWindow {
-    Fixed { arguments: Vec<FixedArgumentOrigin> },
-    Open { reason: OriginUnknownReason },
+    Fixed {
+        arguments: Vec<FixedArgumentOrigin>,
+    },
+    Open {
+        reason: OriginUnknownReason,
+        /// Arguments at fixed registers before the open tail begins, in position order.
+        ///
+        /// The window stays open: this is a prefix, never the whole argument list, and is
+        /// empty when the first argument is already top-dependent. A call such as
+        /// `sink(cmd, "flag", helper())` has two determinable arguments that reporting only
+        /// the reason discards, and for a call whose first argument is the interesting one
+        /// that is the entire fact a reader wanted.
+        arguments: Vec<FixedArgumentOrigin>,
+    },
 }
 
 /// Auditable origins for one physical `CALL` or `TAILCALL` instruction.
@@ -1495,6 +1507,44 @@ fn enumerate_calls_with_reason(
         .collect()
 }
 
+/// Argument indices at fixed registers before an open window's top-dependent tail.
+///
+/// The tail starts at the destination of the instruction that produced an unknown number of
+/// results, and that instruction already marked every register from there upward with
+/// `OpenResultWindow`. The first such register above the callee therefore bounds the
+/// determinable prefix.
+///
+/// Finding that marker is required, not merely used when present. Without it there is
+/// nothing to say where the argument list ends, and counting registers up to the frame size
+/// instead would report arguments the call does not have. An unmodeled instruction that
+/// invalidated the frame under a different reason is exactly that case, so the absence of the
+/// marker yields an empty prefix and the window reports only its reason.
+fn determinable_prefix_length(
+    state: &[FlowValue],
+    base: u8,
+    frame_size: usize,
+) -> std::ops::Range<usize> {
+    let first = match base.checked_add(1) {
+        Some(first) => usize::from(first),
+        None => return 0..0,
+    };
+    let tail = (first..frame_size).find(|register| {
+        matches!(
+            state.get(*register),
+            Some(FlowValue::Origin(OriginExpression {
+                kind: OriginExpressionKind::Unknown {
+                    reason: OriginUnknownReason::OpenResultWindow,
+                },
+                ..
+            }))
+        )
+    });
+    match tail {
+        Some(tail) => 0..tail.saturating_sub(first),
+        None => 0..0,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn call_fact(
     proto: &Prototype,
@@ -1509,48 +1559,50 @@ fn call_fact(
     let base = register_operand(instruction, 0).unwrap_or(0);
     let argument_count = count_operands(instruction).first().copied();
     let frame_size = usize::from(proto.maxstacksize);
+    let fixed_argument = |argument_index: usize| {
+        let register = base
+            .checked_add(1)
+            .and_then(|first| first.checked_add(argument_index as u8))
+            .unwrap_or(u8::MAX);
+        let origin = forced_reason.map_or_else(
+            || {
+                if let Some(block) = block {
+                    if let Some(table_origin) = reconstruct_table_literal(
+                        proto,
+                        block,
+                        instructions,
+                        instruction.pc,
+                        register,
+                        incoming,
+                        captures,
+                        frame_size,
+                    ) {
+                        return table_origin;
+                    }
+                }
+                origin_from_flow(get_register(state, register))
+            },
+            |reason| unknown(reason, [instruction.id.clone()]),
+        );
+        FixedArgumentOrigin {
+            argument_index,
+            register,
+            origin,
+        }
+    };
     let argument_window = match argument_count {
         Some((_, true)) => CallArgumentWindow::Open {
             reason: forced_reason.unwrap_or(OriginUnknownReason::OpenArgumentWindow),
+            arguments: determinable_prefix_length(state, base, frame_size)
+                .map(&fixed_argument)
+                .collect(),
         },
-        Some((count, false)) => {
-            let arguments = (0..count.saturating_sub(1))
-                .map(|argument_index| {
-                    let register = base
-                        .checked_add(1)
-                        .and_then(|first| first.checked_add(argument_index as u8))
-                        .unwrap_or(u8::MAX);
-                    let origin = forced_reason.map_or_else(
-                        || {
-                            if let Some(block) = block {
-                                if let Some(table_origin) = reconstruct_table_literal(
-                                    proto,
-                                    block,
-                                    instructions,
-                                    instruction.pc,
-                                    register,
-                                    incoming,
-                                    captures,
-                                    frame_size,
-                                ) {
-                                    return table_origin;
-                                }
-                            }
-                            origin_from_flow(get_register(state, register))
-                        },
-                        |reason| unknown(reason, [instruction.id.clone()]),
-                    );
-                    FixedArgumentOrigin {
-                        argument_index,
-                        register,
-                        origin,
-                    }
-                })
-                .collect();
-            CallArgumentWindow::Fixed { arguments }
-        }
+        Some((count, false)) => CallArgumentWindow::Fixed {
+            arguments: (0..count.saturating_sub(1)).map(&fixed_argument).collect(),
+        },
         None => CallArgumentWindow::Open {
             reason: forced_reason.unwrap_or(OriginUnknownReason::UnsupportedInstruction),
+            arguments: Vec::new(),
         },
     };
     CallOriginFact {
@@ -2535,6 +2587,40 @@ mod tests {
             },
             [],
         ))
+    }
+
+    fn open_result_tail() -> FlowValue {
+        FlowValue::Origin(unknown(OriginUnknownReason::OpenResultWindow, []))
+    }
+
+    #[test]
+    fn the_determinable_prefix_stops_at_the_open_result_tail() {
+        // Callee in R(1), two determinable arguments in R(2) and R(3), and the
+        // top-producing instruction's results from R(4) upward.
+        let mut state = vec![root_parameter(); 8];
+        for slot in state.iter_mut().skip(4) {
+            *slot = open_result_tail();
+        }
+        assert_eq!(determinable_prefix_length(&state, 1, 8), 0..2);
+    }
+
+    #[test]
+    fn a_frame_with_no_open_result_tail_yields_no_prefix() {
+        // Nothing in the frame says where the argument list ends. Counting registers up to
+        // the frame size would report six arguments for a call that may have one, so the
+        // scan has to find the marker rather than fall back to the frame. Not reachable
+        // from compiler output, which is why it is pinned here and not in a fixture.
+        let state = vec![root_parameter(); 8];
+        assert_eq!(determinable_prefix_length(&state, 1, 8), 0..0);
+    }
+
+    #[test]
+    fn an_immediately_open_window_yields_no_prefix() {
+        let mut state = vec![root_parameter(); 8];
+        for slot in state.iter_mut().skip(2) {
+            *slot = open_result_tail();
+        }
+        assert_eq!(determinable_prefix_length(&state, 1, 8), 0..0);
     }
 
     #[test]

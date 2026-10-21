@@ -6,7 +6,8 @@ use std::process::Command;
 
 use luad_analysis::{
     analyze_chunk_origins, CallArgumentWindow, CallOriginFact, ChunkOriginAnalysis,
-    OriginExpression, OriginExpressionKind, OriginLiteral, OriginUnknownReason,
+    FixedArgumentOrigin, OriginExpression, OriginExpressionKind, OriginLiteral,
+    OriginUnknownReason,
 };
 use luad_core::envelope::{JsonlDataRecord, MachineDocument};
 use luad_core::model::LuaString;
@@ -254,7 +255,8 @@ fn test_origins_preserve_concat_mod_captures_and_explicit_stops() {
     assert!(all_facts(&analysis).iter().any(|fact| matches!(
         fact.argument_window,
         CallArgumentWindow::Open {
-            reason: OriginUnknownReason::OpenArgumentWindow
+            reason: OriginUnknownReason::OpenArgumentWindow,
+            ..
         }
     )));
 }
@@ -1356,4 +1358,108 @@ fn test_testset_inside_a_concat_keeps_term_order_and_separators() {
         !luad_analysis::has_unknown(concat),
         "no hole remains in the constructed string: {concat:?}"
     );
+}
+
+fn open_window_chunk() -> luad_core::Chunk {
+    let _ = luad_oracle::require_luac51();
+    let root = luad_oracle::find_workspace_root();
+    let source = std::fs::read_to_string(root.join("tests/fixtures/origins_open_window.lua"))
+        .expect("read origins_open_window.lua");
+    luad_oracle::compile_and_parse_lua51(&source, false).expect("compile open window fixture")
+}
+
+/// The sole open-window fact in a prototype, with its determinable prefix.
+fn open_window_in(
+    analysis: &ChunkOriginAnalysis,
+    proto_suffix: &str,
+) -> (OriginUnknownReason, Vec<FixedArgumentOrigin>, u8) {
+    let fact = analysis
+        .prototypes
+        .iter()
+        .filter(|prototype| prototype.proto_id.to_string().ends_with(proto_suffix))
+        .flat_map(|prototype| &prototype.calls)
+        .find(|fact| matches!(fact.argument_window, CallArgumentWindow::Open { .. }))
+        .unwrap_or_else(|| panic!("{proto_suffix} must have an open argument window"));
+    let CallArgumentWindow::Open { reason, arguments } = &fact.argument_window else {
+        unreachable!("filtered above")
+    };
+    (*reason, arguments.clone(), fact.callee_register)
+}
+
+#[test]
+fn test_open_argument_window_reports_its_determinable_prefix() {
+    let analysis = analyze_chunk_origins(&open_window_chunk());
+
+    // `sink("rm -rf " .. params.dir, "flag", helper())`. Only the tail is top-dependent;
+    // the first two arguments sit at fixed registers and were previously discarded with
+    // them, which for a shell-shaped call throws away the command string itself.
+    let (reason, prefix, _) = open_window_in(&analysis, "0/0");
+    assert_eq!(reason, OriginUnknownReason::OpenArgumentWindow);
+    assert_eq!(prefix.len(), 2, "got {prefix:?}");
+    assert!(matches!(
+        prefix[0].origin.kind,
+        OriginExpressionKind::Concat { .. }
+    ));
+    assert!(!luad_analysis::has_unknown(&prefix[0].origin));
+    assert!(matches!(
+        prefix[1].origin.kind,
+        OriginExpressionKind::Literal { .. }
+    ));
+
+    // A `TAILCALL` carries the same window shape.
+    let (_, tail_prefix, _) = open_window_in(&analysis, "0/3");
+    assert_eq!(tail_prefix.len(), 1);
+    assert!(!luad_analysis::has_unknown(&tail_prefix[0].origin));
+}
+
+#[test]
+fn test_open_window_with_no_determinable_prefix_reports_none() {
+    let analysis = analyze_chunk_origins(&open_window_chunk());
+
+    // `sink(unpack(params))` is top-dependent from its first argument. An empty prefix is
+    // the honest answer and has to stay distinguishable from a prefix that happens to
+    // resolve, so that "nothing is determinable here" and "everything is" cannot look
+    // alike. The separate case of a frame carrying no open-result marker at all is not
+    // reachable from compiler output and is covered by a unit test on the scan instead.
+    let (reason, prefix, _) = open_window_in(&analysis, "0/1");
+    assert_eq!(reason, OriginUnknownReason::OpenArgumentWindow);
+    assert!(
+        prefix.is_empty(),
+        "an all-open window must claim no arguments, got {prefix:?}"
+    );
+}
+
+#[test]
+fn test_open_window_prefix_keeps_positions_rather_than_only_what_resolved() {
+    let analysis = analyze_chunk_origins(&open_window_chunk());
+
+    // `sink(params[compute()], "literal", helper())`. The prefix is every determinable
+    // position, not every resolved one: dropping the unresolved first argument would shift
+    // the literal into index 0 and misreport which argument a reader is looking at.
+    let (_, prefix, _) = open_window_in(&analysis, "0/2");
+    assert_eq!(prefix.len(), 2, "got {prefix:?}");
+    assert!(matches!(
+        prefix[0].origin.kind,
+        OriginExpressionKind::Unknown {
+            reason: OriginUnknownReason::DynamicKey
+        }
+    ));
+    assert!(matches!(
+        prefix[1].origin.kind,
+        OriginExpressionKind::Literal { .. }
+    ));
+
+    // Across every open window in the fixture, indices are dense from zero and registers
+    // are contiguous from the callee, so a prefix entry cannot name the wrong slot.
+    for suffix in ["0/0", "0/1", "0/2", "0/3"] {
+        let (_, prefix, callee_register) = open_window_in(&analysis, suffix);
+        for (position, argument) in prefix.iter().enumerate() {
+            assert_eq!(argument.argument_index, position, "{suffix}");
+            assert_eq!(
+                argument.register,
+                callee_register + 1 + position as u8,
+                "{suffix}"
+            );
+        }
+    }
 }
