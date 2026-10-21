@@ -21,8 +21,12 @@ is promoted to a supported tier and no interface carries a compatibility promise
   `params`, which previously required reading a flat constant dump and inferring the contract
   from adjacency -- proximity rather than evidence. The base is resolved by the dataflow, not
   by register number, so a reassigned parameter register reports nothing and a key read off
-  any other base is excluded. `SELF` counts as a read. The `origins` and `export` schemas gain
-  `parameter_fields` on each prototype.
+  any other base is excluded. `SELF` counts as a read. A `SETTABLE` key is read by operand
+  position, since both its key and its value can be constants and taking the first constant
+  anywhere in the instruction names the assigned value as the key. The `origins` schema gains
+  `parameter_fields` on each prototype, and both streaming paths carry the facts as
+  `parameter_field` records: `origins --format jsonl` and `export`, whose `origin` family
+  covers them, so a prototype with a contract and no calls is not an empty record set.
 
 - Stop reporting Lua 5.1 table-literal fields that a callee may have overwritten. The
   reconstruction already detected that a table had been passed to a callee or stored to a
@@ -30,8 +34,9 @@ is promoted to a supported tier and no interface carries a compatibility promise
   read before that point. `incomplete` means a field could not be reconstructed, so
   `{"dir": "/etc"}, incomplete` read as "`dir` is `/etc`, other fields may be missing" when
   `dir` was exactly the value in doubt. Only fields written after the last escape are now
-  reported, the dropped ones counting as unreconstructed, and a table with nothing left to
-  report carries no contents. A call that cannot reach the table still changes nothing. This
+  reported, and the escape itself marks the contents `incomplete` whether or not a field was
+  dropped, because the holder may have added a key this prototype never writes. A table with
+  nothing left to report carries no contents. A call that cannot reach the table still changes nothing. This
   is a defect present in 0.3.1, verified against that tag, and independent of the other
   changes here; the previously pinned behaviour is corrected rather than preserved.
 

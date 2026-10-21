@@ -1587,7 +1587,7 @@ fn test_a_table_whose_fields_predate_an_escape_reports_no_contents() {
     );
 
     // A store to a global is an escape for the same reason as an argument.
-    let global = last_argument_in(&analysis, "0/3");
+    let global = last_argument_in(&analysis, "0/4");
     assert!(
         matches!(
             global.kind,
@@ -1629,7 +1629,7 @@ fn test_a_call_that_cannot_reach_the_table_leaves_it_alone() {
     // prototype can hold it and its contents stand. This is the precision control: without
     // it the rule could be satisfied by invalidating a table on every call, which is what
     // the dataflow already does and what the reconstruction exists to improve on.
-    let intact = last_argument_in(&analysis, "0/2");
+    let intact = last_argument_in(&analysis, "0/3");
     let OriginExpressionKind::TableLiteral { fields, incomplete } = &intact.kind else {
         panic!("expected a table literal, got {intact:?}");
     };
@@ -1837,4 +1837,131 @@ fn test_lnum32_authority_chunk_pins_argument_level_origin_verdicts() {
         ),
         "proto 0 pc 33 arg 0 must stay conservative: {origin:?}"
     );
+}
+
+#[test]
+fn test_a_write_through_a_register_key_is_not_a_parameter_field() {
+    let analysis = analyze_chunk_origins(&parameter_fields_chunk());
+
+    // `params[key] = "0755"` compiles to `SETTABLE 0 1 -1`: the key is the register `key`
+    // and the only constant in the instruction is the assigned value. Taking the first
+    // constant anywhere in the instruction reports `write parameter[0]."0755"`, naming a key
+    // the program never writes. Both the key and the value of a `SETTABLE` can be constants,
+    // so the key has to be read by operand position.
+    assert!(
+        parameter_contract_of(&analysis, "0/5").is_empty(),
+        "an unknown key must yield no fact, got {:?}",
+        parameter_contract_of(&analysis, "0/5")
+    );
+
+    // The control: a constant key alongside a constant value still resolves, so reading by
+    // position did not simply stop reporting writes.
+    assert_eq!(
+        parameter_contract_of(&analysis, "0/6"),
+        vec!["write parameter[0].mode"]
+    );
+}
+
+#[test]
+fn test_an_escaped_table_is_incomplete_even_when_no_field_was_dropped() {
+    let analysis = analyze_chunk_origins(&table_escape_chunk());
+
+    // `local t = {}; mutate(t); t.mode = "0755"; sink(t)`. Every recorded field postdates the
+    // escape, so the retention step drops nothing -- but the callee may have added a key this
+    // prototype never writes, so the surviving fields are a subset of the table and not a
+    // description of it. Keying `incomplete` off whether a field was dropped reports this as
+    // a complete table, which is a stronger claim than was made before the retention step
+    // existed.
+    let partial = last_argument_in(&analysis, "0/2");
+    let OriginExpressionKind::TableLiteral { fields, incomplete } = &partial.kind else {
+        panic!("expected a table literal, got {partial:?}");
+    };
+    assert_eq!(fields.len(), 1, "got {fields:?}");
+    assert!(
+        matches!(&fields[0].key, OriginLiteral::String { value } if value.as_str() == "mode"),
+        "got {fields:?}"
+    );
+    assert!(
+        *incomplete,
+        "the escape itself makes the contents incomplete: {partial:?}"
+    );
+}
+
+#[test]
+fn test_parameter_fields_survive_the_streaming_paths_with_no_calls() {
+    // A prototype with a parameter contract and no calls is the case that separates the
+    // document formats from the streaming ones: there are no `origin` facts to carry it
+    // incidentally, so an emitter iterating only `calls` reports an empty, non-truncated
+    // record set. `RECIPES.md` composes over `export`, so a fact absent there is absent from
+    // the path the documentation is written against.
+    let luad = luad_oracle::luad_binary_path().display().to_string();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let source = dir.path().join("contract.lua");
+    std::fs::write(&source, "return function(params) return params.name end\n")
+        .expect("write source");
+    let compiled = dir.path().join("contract.luac");
+    let luac = luad_oracle::require_luac51();
+    assert!(Command::new(&luac)
+        .args([
+            "-o",
+            compiled.to_str().expect("out"),
+            source.to_str().expect("src")
+        ])
+        .status()
+        .expect("luac must run")
+        .success());
+
+    let path = compiled.to_str().expect("compiled path");
+
+    // The document format reports it, which is the baseline the streaming paths must match.
+    let json = Command::new(&luad)
+        .args(["origins", path, "--format", "json"])
+        .output()
+        .expect("origins json");
+    let document: MachineDocument<ChunkOriginAnalysis> =
+        serde_json::from_slice(&json.stdout).expect("origins document");
+    let document_fields: usize = document
+        .data
+        .prototypes
+        .iter()
+        .map(|prototype| prototype.parameter_fields.len())
+        .sum();
+    assert_eq!(document_fields, 1);
+    assert!(
+        document
+            .data
+            .prototypes
+            .iter()
+            .all(|prototype| prototype.calls.is_empty()),
+        "the fixture must have no calls, or this proves nothing"
+    );
+
+    for (label, argv) in [
+        ("origins jsonl", vec!["origins", path, "--format", "jsonl"]),
+        ("export jsonl", vec!["export", path, "--format", "jsonl"]),
+    ] {
+        let output = Command::new(&luad)
+            .args(&argv)
+            .output()
+            .unwrap_or_else(|error| panic!("{label} must run: {error}"));
+        assert_eq!(output.status.code(), Some(0), "{label}");
+        let text = String::from_utf8_lossy(&output.stdout);
+        let records = text
+            .lines()
+            .filter(|line| line.contains(r#""record_type":"parameter_field""#))
+            .count();
+        assert_eq!(
+            records, document_fields,
+            "{label} must carry every parameter field the document format reports: {text}"
+        );
+        assert!(
+            text.contains(r#""display":"name""#),
+            "{label} must carry the key itself: {text}"
+        );
+        // A record set that is empty and not truncated is the shape that hid this.
+        assert!(
+            !text.contains(r#""total_records":0"#),
+            "{label} reported an empty record set: {text}"
+        );
+    }
 }

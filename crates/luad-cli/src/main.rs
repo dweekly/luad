@@ -1557,10 +1557,13 @@ fn handle_origins(args: OriginsArgs, writer: &mut impl io::Write) -> io::Result<
     }
 
     let analysis = luad_analysis::analyze_chunk_origins(&chunk);
+    // Both fact kinds this analysis emits are streamed, so a prototype with a parameter
+    // contract and no calls is not an empty record set on the streaming paths while the
+    // document formats report it.
     let total_calls: usize = analysis
         .prototypes
         .iter()
-        .map(|prototype| prototype.calls.len())
+        .map(|prototype| prototype.calls.len() + prototype.parameter_fields.len())
         .sum();
     match args.format {
         OutputFormat::Text => render::render_origins(&analysis, writer)?,
@@ -1596,6 +1599,22 @@ fn handle_origins(args: OriginsArgs, writer: &mut impl io::Write) -> io::Result<
             {
                 let record = JsonlDataRecord {
                     record_type: "origin".to_string(),
+                    context: context.clone(),
+                    data: fact,
+                };
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&record).unwrap_or_default()
+                )?;
+            }
+            for fact in analysis
+                .prototypes
+                .iter()
+                .flat_map(|prototype| &prototype.parameter_fields)
+            {
+                let record = JsonlDataRecord {
+                    record_type: "parameter_field".to_string(),
                     context: context.clone(),
                     data: fact,
                 };
@@ -3076,7 +3095,7 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
                 analysis
                     .prototypes
                     .iter()
-                    .map(|prototype| prototype.calls.len())
+                    .map(|prototype| prototype.calls.len() + prototype.parameter_fields.len())
                     .sum::<usize>()
             })
             .unwrap_or(0);
@@ -3144,9 +3163,18 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
         }
 
         if let Some(analysis) = &origin_analysis {
+            // The `origin` family covers both fact kinds this analysis emits. A prototype
+            // with a parameter contract and no calls must not export as nothing, or the
+            // contract is absent from the composition path that the recipes are written
+            // against while the document formats report it.
             'origins: for prototype in &analysis.prototypes {
                 for fact in &prototype.calls {
                     if !emitter.emit_fact("origin", fact)? {
+                        break 'origins;
+                    }
+                }
+                for fact in &prototype.parameter_fields {
+                    if !emitter.emit_fact("parameter_field", fact)? {
                         break 'origins;
                     }
                 }

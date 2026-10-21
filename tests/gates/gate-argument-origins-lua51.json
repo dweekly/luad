@@ -17,8 +17,10 @@
     "test_a_key_read_off_a_non_parameter_base_is_not_a_parameter_field",
     "test_a_key_that_is_not_determinable_still_reports_dynamic_key",
     "test_a_table_whose_fields_predate_an_escape_reports_no_contents",
+    "test_a_write_through_a_register_key_is_not_a_parameter_field",
     "test_aliased_table_is_invalidated_when_the_mutated_register_is_itself_a_join",
     "test_aliased_table_option_is_invalidated_by_a_later_write",
+    "test_an_escaped_table_is_incomplete_even_when_no_field_was_dropped",
     "test_cfg_alternatives_emit_alternatives_expression",
     "test_closure_argument_origin_emits_prototype_expression",
     "test_constant_key_table_literal_origins_emit_table_literal_expression",
@@ -34,6 +36,7 @@
     "test_origins_preserve_concat_mod_captures_and_explicit_stops",
     "test_origins_schema_capability_and_lnum_profile_are_public",
     "test_parameter_field_accesses_report_a_prototypes_input_contract",
+    "test_parameter_fields_survive_the_streaming_paths_with_no_calls",
     "test_public_origins_json_jsonl_and_text_agree",
     "test_register_key_resolves_when_the_key_register_holds_a_literal",
     "test_sibling_closure_mutation_prevents_stale_capture_origin",
@@ -64,7 +67,7 @@
     },
     {
       "path": "tests/fixtures/origins_parameter_fields.lua",
-      "sha256": "df2053264990afe42873dd3a88b269969cf0ef8a29223a783dbb7d62389d466d"
+      "sha256": "7f40d5c6364181c35afae99af741d234056e89701a43f0e920a85ad8c4cfd655"
     },
     {
       "path": "tests/fixtures/origins_register_key.lua",
@@ -72,7 +75,7 @@
     },
     {
       "path": "tests/fixtures/origins_table_escape.lua",
-      "sha256": "34dd5e0d65f8cf07bdfcd8ac898369132cdeb46b299fbde51094c0498609d532"
+      "sha256": "48abbd217053e217d3f0257fd6aedacece712e1042bf1f6c362a525da5b456c2"
     },
     {
       "path": "tests/fixtures/origins_testset.lua",

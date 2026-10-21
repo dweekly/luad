@@ -1531,14 +1531,16 @@ fn reconstruct_table_literal(
     }
 
     if let Some(escape_pc) = last_escape_pc {
-        let before = fields.len();
         fields.retain(|key, _| field_pcs.get(key).is_some_and(|pc| *pc > escape_pc));
-        // Dropped values are unreconstructed fields, which is what `incomplete` reports. A
-        // table whose every field predates the escape has nothing left to say, and the
-        // dataflow's own conservative answer across that call stands instead.
-        if fields.len() != before {
-            incomplete = true;
-        }
+        // The escape itself makes the contents incomplete, not merely the dropping of a
+        // field: the holder may have added a key this prototype never writes, so the fields
+        // that do survive are a subset of the table and not a description of it. Keying this
+        // off whether anything was dropped reports a table whose every field postdates the
+        // escape as completely described, which is a stronger claim than before the retention
+        // step existed.
+        incomplete = true;
+        // Nothing left to say, so the dataflow's own conservative answer across that call
+        // stands instead of an empty table that would read as an empty table.
         if fields.is_empty() {
             return None;
         }
@@ -1615,21 +1617,39 @@ fn collect_parameter_fields(
     facts
 }
 
+/// The constant at an exact operand position, or `None` if that operand is not a constant.
+///
+/// Distinct from `constant_operand`, which returns the nth constant anywhere in the
+/// instruction. Where an instruction has two `RK` operands only a positional lookup can say
+/// which one was read: `SETTABLE A B C` with a register key and a constant value has exactly
+/// one constant, and it is the value.
+fn constant_at(
+    instruction: &SemanticInstruction,
+    position: usize,
+) -> Option<(usize, ConstantValue)> {
+    match instruction.operands.get(position) {
+        Some(TypedOperand::Constant { index, value }) => Some((*index, value.clone())),
+        _ => None,
+    }
+}
+
 fn parameter_field_fact(
     proto: &Prototype,
     instruction: &SemanticInstruction,
     state: &RegisterState,
     access: ParameterFieldAccess,
 ) -> Option<ParameterFieldFact> {
-    // `GETTABLE A B C` and `SELF A B C` read the table in B; `SETTABLE A B C` writes the
-    // table in A. The key is the first constant operand in either case.
-    let base_register = match access {
-        ParameterFieldAccess::Read => register_operand(instruction, 1)?,
-        ParameterFieldAccess::Write => register_operand(instruction, 0)?,
+    // `GETTABLE A B C` and `SELF A B C` read the table in B and the key in C; `SETTABLE A B C`
+    // writes the table in A with the key in B and the value in C. Both the key and the value
+    // can be constants, so the key is read by position: taking the first constant anywhere in
+    // the instruction reports the assigned value as the key whenever the key is a register.
+    let (base_register, key_position) = match access {
+        ParameterFieldAccess::Read => (register_operand(instruction, 1)?, 2),
+        ParameterFieldAccess::Write => (register_operand(instruction, 0)?, 1),
     };
     let base = origin_from_flow(get_register(state, base_register));
     let (parameter_index, base_path) = parameter_root_path(&base, &proto.path)?;
-    let (constant_index, constant) = constant_operand(instruction, 0)?;
+    let (constant_index, constant) = constant_at(instruction, key_position)?;
     let key = origin_literal(&constant)?;
     let key_id = StableId::constant(proto_from_instruction(&instruction.id), constant_index);
     Some(ParameterFieldFact {

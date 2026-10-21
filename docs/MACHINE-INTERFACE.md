@@ -418,9 +418,10 @@ literals emit deterministically ordered fields and retain partial reconstruction
 `incomplete: true`. Once something outside the prototype holds the table -- it was passed to
 a callee, or stored to a global or an upvalue -- a field written before that point is not a
 fact at a later call site, because the holder may have written the same key; only fields
-written after the last such point are reported, the dropped ones counting as the
-unreconstructed fields `incomplete` describes. A table with no field left to report carries
-no contents at all. A call that cannot reach the table does not affect it. When bounded definitions reach a control-flow join, `alternatives`
+written after the last such point are reported, and the escape marks the contents
+`incomplete` whether or not a field was dropped, since the holder may have added a key this
+prototype never writes. A table with no field left to report carries no contents at all. A
+call that cannot reach the table does not affect it. When bounded definitions reach a control-flow join, `alternatives`
 emits a deduplicated, deterministically ordered list of candidate origin expressions
 with reaching evidence. Structurally equal options are deduplicated with their evidence
 unioned. An option may itself be `unknown` carrying its own reason: a join with one bounded
@@ -452,6 +453,12 @@ the parameter was reassigned is not reported, and neither is a key read off any 
 so an access that is reported is a fact about the caller's argument. `SELF` is a read, since
 it reads a method name off its base exactly as `GETTABLE` reads a key. A non-constant key is
 not a parameter field access; it is visible as a `dynamic-key` origin where it reaches a call.
+The key is read at its own operand position, because a `SETTABLE` can carry a constant in both
+its key and its value.
+
+These facts are emitted on every output path: inside each prototype in the `origins` document
+formats, and as `parameter_field` records by `origins --format jsonl` and by `export`, where
+they belong to the `origin` fact family.
 
 A conditional register write is resolved per edge rather than per instruction. `TESTSET` is
 the only Lua 5.1 instruction whose sole effect is a write that one outgoing edge skips, and

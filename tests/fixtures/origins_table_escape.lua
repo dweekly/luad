@@ -15,6 +15,13 @@ local function a_field_written_after_the_escape_survives()
   sink(t)
 end
 
+local function every_field_postdates_the_escape()
+  local t = {}
+  mutate(t)
+  t.mode = "0755"
+  sink(t)
+end
+
 local function a_call_that_never_receives_it_changes_nothing()
   local t = { dir = "/etc" }
   log("starting")
@@ -30,6 +37,7 @@ end
 return {
   every_field_predates_the_escape,
   a_field_written_after_the_escape_survives,
+  every_field_postdates_the_escape,
   a_call_that_never_receives_it_changes_nothing,
   reaching_a_global_is_also_an_escape,
 }

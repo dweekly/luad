@@ -28,10 +28,20 @@ local function method_call_on_a_parameter(params)
   return params:render()
 end
 
+local function written_through_a_register_key(params, key)
+  params[key] = "0755"
+end
+
+local function written_through_a_constant_key_with_a_constant_value(params)
+  params.mode = "0755"
+end
+
 return {
   reads_three_keys,
   nested_and_written,
   base_is_not_a_parameter,
   parameter_register_reassigned,
   method_call_on_a_parameter,
+  written_through_a_register_key,
+  written_through_a_constant_key_with_a_constant_value,
 }
