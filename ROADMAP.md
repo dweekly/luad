@@ -2,7 +2,7 @@
 
 Status: future priorities after the experimental 0.2 release candidate.
 
-Fresh as of: 2026-10-20.
+Fresh as of: 2026-10-21.
 
 ## Release completion boundary
 
@@ -42,19 +42,33 @@ much of its Lua tree between the two product generations, which is a packaging d
 between corpora and not a property of any analysis here. Two counts taken over coverages
 that far apart are not like-for-like, however closely they agree.
 
-### Re-measure the join-site `alternatives` change over the private corpus
+### Re-measure the origin precision changes over the private corpus
 
-A join with one bounded and one unresolved predecessor now emits the `alternatives` set, with
-the unresolved definition kept as an option carrying its own reason, rather than collapsing to
-`control-flow-conflict`. On the public fixture one argument moved from `unknown` to a set, none
-lost an expression, and `sink(unresolved_alt)` reports
-`alternatives("defined" | unknown:DynamicKey)` where it previously reported only the conflict.
-That is a public-fixture result; the corpus-wide effect is not measured.
+Several origin-analysis gaps have closed since 0.3.1, each accepted on a public fixture with a
+measured before and after, and none measured corpus-wide:
+
+- a join with one bounded and one unresolved predecessor emits the `alternatives` set rather
+  than collapsing to `control-flow-conflict`
+- `TESTSET` is modelled, so the `a or b` and `a and b` idioms over locals resolve instead of
+  reporting `overwritten`
+- an open argument window reports the determinable arguments before its tail, which were
+  previously discarded entirely
+- a table access whose key register holds only literals names its field rather than reporting
+  `dynamic-key`
 
 What is owed is the re-measurement the acceptance criteria named: over the private corpus, the
-`control-flow-conflict` count and whether previously-blocked bounded sink arguments resolve,
-with no argument losing an expression it had in 0.3.1. The counts above predate the change and
-are not restated as current.
+count per unknown-reason and whether previously-blocked bounded sink arguments resolve, with no
+argument losing an expression it had in 0.3.1. The counts above this section predate all of it
+and are not restated as current. Any such count must state which field it counted: an earlier
+pass reported `control-flow-conflict` as blocking zero sink arguments by searching a consumer
+verdict field whose vocabulary cannot contain a `luad` reason, so it would have returned zero
+for every reason.
+
+One correctness change moves answers in the other direction and should be expected to: a
+table-literal field written before the table reached a callee, a global or an upvalue is no
+longer reported, because the holder may have written the same key. Arguments that previously
+carried such a field now carry fewer fields or none. That is a 0.3.1 defect corrected, not a
+precision regression, and a re-measurement should separate it from the rest.
 
 `control-flow-conflict` remains correct for one case and keeps that name: a loop-carried value
 widened at `MAX_BLOCK_REVISITS`, whose set of reaching definitions is not finite. Widening to a
@@ -66,6 +80,25 @@ prototype as `analysis-limit` including the ones that converged at once. That wa
 concat expression entirely. The two sites are coupled: join precision depends on the widening
 marker staying the top of the lattice, so the remaining imprecision there is bounded by an
 analysis constant rather than by the lattice, and the constant would be the deliverable.
+
+### What `unsupported-value` and `overwritten` actually mean
+
+Both names read as claims about a value and are not. `overwritten` is the reported reason for
+any register write this analysis does not model, which is why it also covers a register
+written more than once. `unsupported-value` is almost entirely table invalidation: a table
+whose contents may have changed, not a value of an unsupported type. Where a reason's name
+misdescribes it, a consumer counts it looking for the wrong thing; both are now documented in
+[docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md).
+
+The remaining `unsupported-value` population is a blanket invalidation: every `CALL`
+invalidates every register holding a table anywhere in its expression, because a callee may
+mutate a table it can reach. Bounding that needs an escape analysis — a table constructed
+locally, never passed to a call, never stored to a global, upvalue or another table, and never
+captured or returned, cannot be mutated by a callee. It is decidable within a prototype and is
+sound only if built as an allowlist of known-safe readers, defaulting to escaped, since
+enumerating escape routes risks missing one and a missed one reports a stale table. Not
+authorized without its own contract: the failure mode is the class that takes priority over
+feature work.
 
 ### Investigate the origin unknown-reason saturation at 2000 (B-9)
 
