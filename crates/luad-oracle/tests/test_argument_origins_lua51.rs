@@ -1965,3 +1965,196 @@ fn test_parameter_fields_survive_the_streaming_paths_with_no_calls() {
         );
     }
 }
+
+fn mutable_capture_chunk() -> luad_core::Chunk {
+    let _ = luad_oracle::require_luac51();
+    let root = luad_oracle::find_workspace_root();
+    let source = std::fs::read_to_string(root.join("tests/fixtures/origins_mutable_capture.lua"))
+        .expect("read origins_mutable_capture.lua");
+    luad_oracle::compile_and_parse_lua51(&source, false).expect("compile mutable capture fixture")
+}
+
+/// The captured term of the sink argument in a child prototype, which in this fixture is
+/// always `"cat " .. prefix`, so the capture is the concatenation's second part. Reading it
+/// out of the concatenation rather than asserting on the whole expression keeps these tests
+/// about the capture and not about concatenation rendering.
+fn capture_term_in(analysis: &ChunkOriginAnalysis, proto_suffix: &str) -> OriginExpression {
+    let origins = alias_origins_in(analysis, proto_suffix);
+    let [origin] = origins.as_slice() else {
+        panic!("{proto_suffix} must report exactly one argument, got {origins:?}");
+    };
+    let OriginExpressionKind::Concat { parts } = &origin.kind else {
+        panic!("{proto_suffix} must report a concatenation, got {origin:?}");
+    };
+    parts
+        .last()
+        .cloned()
+        .unwrap_or_else(|| panic!("{proto_suffix} concatenation has no parts"))
+}
+
+/// The string literals of an `Alternatives`, sorted, so a set can be pinned by content
+/// without depending on the order the options were collected in.
+fn alternative_strings(expression: &OriginExpression) -> Vec<String> {
+    let OriginExpressionKind::Alternatives { options } = &expression.kind else {
+        panic!("expected an alternatives set, got {expression:?}");
+    };
+    let mut values: Vec<String> = options
+        .iter()
+        .filter_map(|option| match &option.kind {
+            OriginExpressionKind::Literal {
+                value: OriginLiteral::String { value },
+                ..
+            } => Some(value.as_str().to_string()),
+            _ => None,
+        })
+        .collect();
+    values.sort();
+    values
+}
+
+#[test]
+fn test_a_capture_the_parent_rewrites_reports_the_set_of_reaching_definitions() {
+    let analysis = analyze_chunk_origins(&mutable_capture_chunk());
+
+    // `local prefix = "/etc/config"; local run = function() sink("cat " .. prefix) end;
+    // prefix = "/tmp"`. In Lua 5.1 the closure holds an open upvalue onto the parent's
+    // stack slot, so the parent's later write is visible to `run` and reporting only
+    // `"/etc/config"` would be a wrong answer. Both definitions can reach the closure --
+    // `run` may be called before or after the write -- so the answer is the set, which is
+    // what `Alternatives` already means at a control-flow join.
+    assert_eq!(
+        alternative_strings(&capture_term_in(&analysis, "0/0/0")),
+        vec!["/etc/config".to_string(), "/tmp".to_string()],
+    );
+
+    // Two writes after the closure put three definitions in the set. A set that reported
+    // only the newest write, or only the first, would be a claim about an ordering the
+    // analysis has no basis for.
+    assert_eq!(
+        alternative_strings(&capture_term_in(&analysis, "0/1/0")),
+        vec![
+            "/etc/config".to_string(),
+            "/tmp".to_string(),
+            "/var/run".to_string()
+        ],
+    );
+
+    // A write under `if flag then` leaves the pre-closure value reachable too, so the set
+    // is the same size as the single-write case rather than replacing the old value.
+    assert_eq!(
+        alternative_strings(&capture_term_in(&analysis, "0/2/0")),
+        vec!["/etc/config".to_string(), "/tmp".to_string()],
+    );
+
+    // `prefix = "/old"; prefix = "/etc/config"; local run = ...; prefix = "/tmp"`. The
+    // first write cannot reach the closure, because the register no longer holds it when
+    // the upvalue is bound, so the set is the two definitions that can reach and not every
+    // write to the register. Without this the set could be built by collecting writes
+    // anywhere in the prototype, which would report a value the closure can never see.
+    assert_eq!(
+        alternative_strings(&capture_term_in(&analysis, "0/7/0")),
+        vec!["/etc/config".to_string(), "/tmp".to_string()],
+    );
+}
+
+#[test]
+fn test_a_capture_set_member_names_where_an_unresolved_value_came_from() {
+    let analysis = analyze_chunk_origins(&mutable_capture_chunk());
+
+    // `prefix = os.getenv("PREFIX")`. The written value is not a literal, but
+    // `call-result` is a resolved expression: it says the register holds whatever that
+    // call returned, which makes the set complete rather than approximate. The set is
+    // emitted because every member resolves, not because every member is a constant.
+    let set = capture_term_in(&analysis, "0/3/0");
+    let OriginExpressionKind::Alternatives { options } = &set.kind else {
+        panic!("expected an alternatives set, got {set:?}");
+    };
+    assert_eq!(options.len(), 2, "got {options:?}");
+    assert_eq!(
+        alternative_strings(&set),
+        vec!["/etc/config".to_string()],
+        "the literal member stands alongside the call result"
+    );
+    assert!(
+        options
+            .iter()
+            .any(|option| matches!(option.kind, OriginExpressionKind::CallResult { .. })),
+        "the written value must name its call, got {options:?}"
+    );
+}
+
+#[test]
+fn test_a_capture_set_that_cannot_be_completed_keeps_the_reason() {
+    let analysis = analyze_chunk_origins(&mutable_capture_chunk());
+
+    // `for index = 1, count do prefix = prefix .. index end`. The written value is carried
+    // around the loop and widens, so one member of the set does not resolve. Emitting the
+    // rest would read as the complete set of possibilities, which is the failure the
+    // escaped-table `incomplete` flag already demonstrated: a consumer cannot tell a
+    // truncated set from a whole one. The reason has to stand instead.
+    let unresolved = capture_term_in(&analysis, "0/4/0");
+    assert!(
+        matches!(
+            unresolved.kind,
+            OriginExpressionKind::Unknown {
+                reason: OriginUnknownReason::MutableCapture
+            }
+        ),
+        "an incompletable set must not be reported partially, got {unresolved:?}"
+    );
+
+    // A capture mutated through a closure -- `function() prefix = "/tmp" end` -- keeps the
+    // reason as well. Those writes are in a child prototype and run when that closure is
+    // called, which this analysis does not order against the read, so the set of writes is
+    // not bounded by the parent's own instructions. Two guards refuse this independently,
+    // the child-slot check in `capture_from_descriptor` and the mutated-cell check in its
+    // register arm, so this assertion pins the behaviour without distinguishing which one
+    // enforces it: removing either alone leaves the other, and removing both reports
+    // `"/etc/config"` here, which `f()` followed by a call to `write` falsifies.
+    let through_closure = capture_term_in(&analysis, "0/6/1");
+    assert!(
+        matches!(
+            through_closure.kind,
+            OriginExpressionKind::Unknown {
+                reason: OriginUnknownReason::MutableCapture
+            }
+        ),
+        "mutation through a closure keeps the reason, got {through_closure:?}"
+    );
+}
+
+#[test]
+fn test_an_unrewritten_capture_stays_a_single_value_and_not_a_one_member_set() {
+    let analysis = analyze_chunk_origins(&mutable_capture_chunk());
+
+    // No write after the closure at all, so the set is never built and the existing
+    // single-value answer stands. This is the control that the work is driven by the
+    // writes rather than wrapped around every capture.
+    let single = capture_term_in(&analysis, "0/5/0");
+    assert!(
+        matches!(
+            &single.kind,
+            OriginExpressionKind::Literal {
+                value: OriginLiteral::String { value },
+                ..
+            } if value.as_str() == "/etc/config"
+        ),
+        "an unrewritten capture resolves to its one value, got {single:?}"
+    );
+
+    // `prefix = "/etc/config"` again after the closure. Here the set *is* built, from two
+    // reaching definitions that deduplicate to one, and the result must be that value and
+    // not a one-member `Alternatives` implying a choice the program does not offer. This
+    // is the case that exercises the deduplication, which the branch above cannot reach.
+    let deduplicated = capture_term_in(&analysis, "0/8/0");
+    assert!(
+        matches!(
+            &deduplicated.kind,
+            OriginExpressionKind::Literal {
+                value: OriginLiteral::String { value },
+                ..
+            } if value.as_str() == "/etc/config"
+        ),
+        "two identical reaching definitions are one value, got {deduplicated:?}"
+    );
+}

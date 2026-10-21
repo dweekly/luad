@@ -1916,6 +1916,7 @@ fn derive_child_captures(
                         &state,
                         instructions,
                         cfg,
+                        &dataflow.in_states,
                         parent_captures,
                         summary,
                     )
@@ -1953,6 +1954,7 @@ fn capture_from_descriptor(
     state: &RegisterState,
     parent_instructions: &[SemanticInstruction],
     parent_cfg: &ControlFlowGraph,
+    parent_in_states: &[RegisterState],
     parent_captures: &CaptureEnvironment,
     summary: &crate::capture_mutation::CaptureMutationSummary,
 ) -> OriginExpression {
@@ -1965,16 +1967,41 @@ fn capture_from_descriptor(
     }
     let value = match descriptor.reads.first() {
         Some(EffectTarget::Register { index }) => {
+            // A closure that writes the cell is excluded here rather than resolved: those
+            // writes live in a child prototype and run when that closure is called, which
+            // this analysis does not order against anything. A register the closure
+            // instruction itself overwrites has no determinable pre-closure value.
             if Some(*index) == closure_destination
                 || summary.is_local_register_mutated(&parent.path, *index)
-                || effect_may_be_written_after(
-                    parent_instructions,
-                    parent_cfg,
-                    closure.pc,
-                    &EffectTarget::Register { index: *index },
-                )
             {
                 unknown(OriginUnknownReason::MutableCapture, [])
+            } else if effect_may_be_written_after(
+                parent_instructions,
+                parent_cfg,
+                closure.pc,
+                &EffectTarget::Register { index: *index },
+            ) {
+                // The parent writes the captured register after building the closure. Every
+                // such write is in this prototype, so the definitions that can reach the
+                // closure are a finite set the parent makes visible.
+                match reaching_capture_set(
+                    *index,
+                    closure.pc,
+                    origin_from_flow(get_register(state, *index)),
+                    parent_instructions,
+                    parent_cfg,
+                    parent_in_states,
+                    parent_captures,
+                    usize::from(parent.maxstacksize),
+                ) {
+                    Some(set) => {
+                        return add_expression_evidence(
+                            set,
+                            [child_id, closure.id.clone(), descriptor.id.clone()],
+                        )
+                    }
+                    None => unknown(OriginUnknownReason::MutableCapture, []),
+                }
             } else {
                 origin_from_flow(get_register(state, *index))
             }
@@ -2014,6 +2041,124 @@ fn capture_from_descriptor(
         );
     }
     add_expression_evidence(value, [child_id, closure.id.clone(), descriptor.id.clone()])
+}
+
+/// The definitions of a captured register that can reach a closure: the value the register
+/// holds where the closure is built, together with the value written by every write the
+/// parent can execute afterwards. The closure may run before or after any of those writes,
+/// so this is a set of reaching definitions rather than a claim about one path -- the
+/// meaning `Alternatives` already carries at a control-flow join.
+///
+/// Returns `None`, leaving the caller to report `MutableCapture`, whenever the set cannot
+/// be completed: a member that does not resolve, a member holding a table (whose contents a
+/// later call can change without writing the register), or more members than
+/// `MAX_ALTERNATIVES`. A partial set must not be emitted, because a set reads as the
+/// complete set of possibilities and a consumer cannot tell a truncated one from a whole
+/// one.
+#[allow(clippy::too_many_arguments)]
+fn reaching_capture_set(
+    register: u8,
+    closure_pc: usize,
+    at_closure: OriginExpression,
+    instructions: &[SemanticInstruction],
+    cfg: &ControlFlowGraph,
+    in_states: &[RegisterState],
+    captures: &CaptureEnvironment,
+    frame_size: usize,
+) -> Option<OriginExpression> {
+    fn resolved(expression: &OriginExpression) -> bool {
+        !has_unknown(expression)
+            && !contains_table(expression)
+            && !contains_alternatives(expression)
+    }
+
+    if !resolved(&at_closure) {
+        return None;
+    }
+    let origin_block = cfg
+        .blocks
+        .iter()
+        .find(|block| block.instruction_pcs.contains(&closure_pc))?;
+    let reachable = reachable_blocks_after(cfg, origin_block.index);
+    let target = EffectTarget::Register { index: register };
+    let mut options = vec![at_closure];
+
+    for instruction in instructions {
+        if is_closure_binding(instruction) || !write_overlaps(&instruction.writes, &target) {
+            continue;
+        }
+        let writer_block = cfg
+            .blocks
+            .iter()
+            .find(|block| block.instruction_pcs.contains(&instruction.pc))?;
+        // The same "after" relation `effect_may_be_written_after` uses, so the set covers
+        // exactly the writes that made it refuse. A write in the closure's own block is
+        // after it by program order, or by the block reaching itself around a loop.
+        let after = if writer_block.index == origin_block.index {
+            instruction.pc > closure_pc || reachable.contains(&origin_block.index)
+        } else {
+            reachable.contains(&writer_block.index)
+        };
+        if !after || !writer_block.is_reachable {
+            continue;
+        }
+        // The value a write stores is the state after that instruction at its own pc, which
+        // is not the state at the closure: the dataflow's per-block in-state is replayed to
+        // the write and the write applied, so a write whose value is itself computed from
+        // earlier instructions resolves the same way it would at a call site.
+        let incoming = in_states.get(writer_block.index)?;
+        let mut state = state_before_pc(
+            instruction.pc,
+            writer_block,
+            incoming,
+            instructions,
+            captures,
+            frame_size,
+        );
+        transfer(instruction, &mut state, captures, frame_size);
+        let written = origin_from_flow(get_register(&state, register));
+        if !resolved(&written) {
+            return None;
+        }
+        options.push(written);
+    }
+
+    let mut flattened = Vec::new();
+    for option in &options {
+        collect_candidate_options(option, &mut flattened);
+    }
+    let mut deduplicated: Vec<OriginExpression> = Vec::new();
+    for candidate in flattened {
+        if let Some(existing) = deduplicated
+            .iter_mut()
+            .find(|existing| same_shape(existing, &candidate))
+        {
+            union_expression_evidence(existing, &candidate);
+        } else {
+            deduplicated.push(candidate);
+        }
+    }
+    if deduplicated.len() > MAX_ALTERNATIVES {
+        return None;
+    }
+    // One member means every write stores what the register already held, so the value is
+    // not in doubt and a one-member set would imply a choice that does not exist.
+    if deduplicated.len() == 1 {
+        return deduplicated.pop();
+    }
+    deduplicated.sort();
+    let evidence: Vec<StableId> = deduplicated
+        .iter()
+        .flat_map(|option| option.evidence.iter().cloned())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    Some(bounded_expression(
+        OriginExpressionKind::Alternatives {
+            options: deduplicated,
+        },
+        evidence,
+    ))
 }
 
 fn state_before_pc(

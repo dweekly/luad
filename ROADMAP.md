@@ -55,6 +55,9 @@ measured before and after, and none measured corpus-wide:
   previously discarded entirely
 - a table access whose key register holds only literals names its field rather than reporting
   `dynamic-key`
+- a captured register the parent writes after building the closure reports its reaching
+  definitions rather than `mutable-capture`, which was 18 of 20 `mutable-capture` arguments on
+  the measurement that reopened issue #97
 
 What is owed is the re-measurement the acceptance criteria named: over the private corpus, the
 count per unknown-reason and whether previously-blocked bounded sink arguments resolve, with no
@@ -69,6 +72,14 @@ table-literal field written before the table reached a callee, a global or an up
 longer reported, because the holder may have written the same key. Arguments that previously
 carried such a field now carry fewer fields or none. That is a 0.3.1 defect corrected, not a
 precision regression, and a re-measurement should separate it from the rest.
+
+`mutable-capture` also keeps its name for the cases it still covers, which are now narrower
+than the name suggests: a cell written through a closure rather than by the enclosing
+prototype, where the writes do not live in the parent and run at a time nothing here orders
+against the read. Extending the reaching-definition set to those would need the call sites of
+the mutating closure and an ordering against them, which is interprocedural and is declined
+for the reason recorded against issue #93, not merely unbuilt. The parent-written case is
+closed.
 
 `control-flow-conflict` remains correct for one case and keeps that name: a loop-carried value
 widened at `MAX_BLOCK_REVISITS`, whose set of reaching definitions is not finite. Widening to a

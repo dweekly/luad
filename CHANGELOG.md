@@ -5,6 +5,21 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- `luad origins` now reports the set of definitions that can reach a captured register the
+  enclosing prototype writes after building the closure, where it previously reported
+  `unknown:mutable-capture`. In Lua 5.1 the closure holds an open upvalue onto the parent's
+  stack slot, so a later write by the parent is visible to the closure and reporting only the
+  value at the capture would be a wrong answer; the closure may also run before any of those
+  writes, so no single value is the answer either. The set is the reaching definitions,
+  carrying the meaning `alternatives` already carries at a control-flow join. Writes that
+  cannot reach the closure are excluded, including writes the closure's binding precedes, so
+  this is not a collection of every write to the register. `mutable-capture` stands wherever
+  the set cannot be bounded or completed: a cell written through a closure rather than by the
+  parent, a member that does not resolve, a member holding a table, or more members than
+  `MAX_ALTERNATIVES`. The set is never emitted partially, because a set reads as every
+  possibility. The emitted shapes are unchanged, so no schema moves: a consumer already
+  handling `alternatives` at a join handles this.
+
 - `gate-argument-origins-lua51` now pins argument-level origin verdicts on the committed
   OpenWrt-derived 32-bit LNUM authority chunk, not only its profile. Structural counts cannot
   catch a precision regression -- the 0.3.0 origins regression left instruction, prototype and
