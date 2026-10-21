@@ -5,6 +5,14 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Reconstruct a Lua 5.1 table access whose key is a register, where the key register holds
+  only literals. `GETTABLE`/`SELF` reported `dynamic-key` whenever the key was not the
+  instruction's own constant operand, without consulting the key register at all, so
+  `local k = "dir"; sink(params[k])` collapsed the whole argument. One literal key now names
+  one field; a key chosen by a branch names one field per key. A key that is not determinable
+  -- a call result, a loop variable -- still reports `dynamic-key`, because a field cannot be
+  named without naming its key. A reconstructed key carries no constant id.
+
 - Report the determinable prefix of an open argument window in Lua 5.1 origin analysis.
   `CALL`/`TAILCALL` with a top-dependent argument count emitted only `open-argument-window`
   and discarded every argument, including the ones at fixed registers below the tail:

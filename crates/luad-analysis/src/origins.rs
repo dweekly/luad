@@ -776,13 +776,28 @@ fn transfer_gettable(
         );
     }
     let Some((constant_index, constant)) = constant_operand(instruction, 0) else {
+        // The key is a register rather than a constant operand, but the register may still
+        // hold a bounded set of reaching definitions, as it does for `local k = "dir"` or a
+        // key chosen by a branch. `dynamic-key` is reserved for a key that is genuinely not
+        // determinable, so the field is reconstructed where the key is.
+        let key_origin = register_operand(instruction, 2)
+            .map(|key_register| origin_from_flow(get_register(before, key_register)));
+        let base = origin_from_flow(get_register(before, source));
+        let resolved = key_origin
+            .as_ref()
+            .and_then(|key| field_over_literal_keys(&base, key, instruction));
         set_register(
             state,
             destination,
-            FlowValue::Origin(unknown(
-                OriginUnknownReason::DynamicKey,
-                [instruction.id.clone()],
-            )),
+            FlowValue::Origin(resolved.unwrap_or_else(|| {
+                unknown(
+                    OriginUnknownReason::DynamicKey,
+                    key_origin
+                        .iter()
+                        .flat_map(|key| key.evidence.iter().cloned())
+                        .chain([instruction.id.clone()]),
+                )
+            })),
         );
         return;
     };
@@ -808,6 +823,60 @@ fn transfer_gettable(
         [key_id, instruction.id.clone()],
     );
     set_register(state, destination, FlowValue::Origin(result));
+}
+
+/// Reconstruct a field access whose key came from a register, when every value that key
+/// register can hold is a literal.
+///
+/// One literal yields one field. A bounded set of literal keys yields one field per key,
+/// which is the same answer as a key resolved from a constant operand taken once per
+/// candidate. Anything else -- a key that is itself unresolved, computed, or a non-literal
+/// value such as a table -- returns `None`, leaving the access to report `dynamic-key`,
+/// because a field cannot be named without naming its key.
+fn field_over_literal_keys(
+    base: &OriginExpression,
+    key: &OriginExpression,
+    instruction: &SemanticInstruction,
+) -> Option<OriginExpression> {
+    let field = |value: &OriginLiteral, evidence: &[StableId]| {
+        bounded_expression(
+            OriginExpressionKind::Field {
+                base: Box::new(base.clone()),
+                key: value.clone(),
+                // No constant id: the key is a reaching definition of a register, not this
+                // instruction's own constant operand.
+                key_id: None,
+            },
+            evidence
+                .iter()
+                .cloned()
+                .chain([instruction.id.clone()])
+                .collect::<Vec<_>>(),
+        )
+    };
+    match &key.kind {
+        OriginExpressionKind::Literal { value, .. } => Some(field(value, &key.evidence)),
+        OriginExpressionKind::Alternatives { options } => {
+            let fields = options
+                .iter()
+                .map(|option| match &option.kind {
+                    OriginExpressionKind::Literal { value, .. } => {
+                        Some(field(value, &option.evidence))
+                    }
+                    _ => None,
+                })
+                .collect::<Option<Vec<_>>>()?;
+            Some(bounded_expression(
+                OriginExpressionKind::Alternatives { options: fields },
+                key.evidence
+                    .iter()
+                    .cloned()
+                    .chain([instruction.id.clone()])
+                    .collect::<Vec<_>>(),
+            ))
+        }
+        _ => None,
+    }
 }
 
 fn transfer_binary(

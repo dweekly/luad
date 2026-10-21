@@ -12,6 +12,7 @@
     "--nocapture"
   ],
   "expected_tests": [
+    "test_a_key_that_is_not_determinable_still_reports_dynamic_key",
     "test_aliased_table_is_invalidated_when_the_mutated_register_is_itself_a_join",
     "test_aliased_table_option_is_invalidated_by_a_later_write",
     "test_cfg_alternatives_emit_alternatives_expression",
@@ -28,6 +29,7 @@
     "test_origins_preserve_concat_mod_captures_and_explicit_stops",
     "test_origins_schema_capability_and_lnum_profile_are_public",
     "test_public_origins_json_jsonl_and_text_agree",
+    "test_register_key_resolves_when_the_key_register_holds_a_literal",
     "test_sibling_closure_mutation_prevents_stale_capture_origin",
     "test_testset_branch_value_resolves_instead_of_reporting_overwritten",
     "test_testset_inside_a_concat_keeps_term_order_and_separators",
@@ -49,6 +51,10 @@
     {
       "path": "tests/fixtures/origins_open_window.lua",
       "sha256": "9f225d088bdf8d3b7dd77810528893407eda1989534af9dbec4f528af13bb28c"
+    },
+    {
+      "path": "tests/fixtures/origins_register_key.lua",
+      "sha256": "3705236e36b1d966f89933c9c8fbbb46540239e3eb398a1049caf95f20e28873"
     },
     {
       "path": "tests/fixtures/origins_testset.lua",

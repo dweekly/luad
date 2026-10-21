@@ -422,6 +422,13 @@ unioned. An option may itself be `unknown` carrying its own reason: a join with 
 and one unresolved predecessor emits the set rather than a single reason, so a consumer can
 see which definition resolved and why the other did not. The conservative reading remains
 derivable from the set, since any option being unknown makes the whole expression unknown.
+A table access whose key is a register rather than a constant operand is reconstructed when
+every value that key register can hold is a literal: one literal names one field, and a
+bounded set of literal keys names one field per key. `dynamic-key` is reported when the key
+is not determinable, such as a call result or a loop variable, because a field cannot be
+named without naming its key. A reconstructed key carries no constant id, since it is a
+reaching definition of a register rather than the instruction's own operand.
+
 `control-flow-conflict` is reserved for a loop-carried value widened at the iteration bound,
 where the set of reaching definitions is not finite. Exceeding the option budget
 (`MAX_ALTERNATIVES = 8`), dynamic keys, mutable or ambiguous captures, varargs, aliasing

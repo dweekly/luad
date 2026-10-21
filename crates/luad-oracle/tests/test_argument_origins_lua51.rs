@@ -1463,3 +1463,78 @@ fn test_open_window_prefix_keeps_positions_rather_than_only_what_resolved() {
         }
     }
 }
+
+fn register_key_chunk() -> luad_core::Chunk {
+    let _ = luad_oracle::require_luac51();
+    let root = luad_oracle::find_workspace_root();
+    let source = std::fs::read_to_string(root.join("tests/fixtures/origins_register_key.lua"))
+        .expect("read origins_register_key.lua");
+    luad_oracle::compile_and_parse_lua51(&source, false).expect("compile register key fixture")
+}
+
+/// The string key of a `Field` expression, for comparing a reconstructed access by name.
+fn field_key_display(origin: &OriginExpression) -> String {
+    match &origin.kind {
+        OriginExpressionKind::Field { key, .. } => format!("{key:?}"),
+        other => panic!("expected a field, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_register_key_resolves_when_the_key_register_holds_a_literal() {
+    let analysis = analyze_chunk_origins(&register_key_chunk());
+
+    // `local k = "dir"; sink(params[k])`. The key is not this instruction's constant
+    // operand, but it is a literal reaching the key register, so the access is nameable
+    // and previously reported `dynamic-key` for the whole argument.
+    let single = alias_origins_in(&analysis, "0/0");
+    assert_eq!(single.len(), 1);
+    assert!(field_key_display(&single[0]).contains("dir"));
+    assert!(!luad_analysis::has_unknown(&single[0]));
+
+    // A key chosen by a branch is a bounded set of keys, so it is a bounded set of fields.
+    let branched = sole_alternatives(&alias_origins_in(&analysis, "0/1"));
+    assert_eq!(branched.len(), 2, "got {branched:?}");
+    let mut keys: Vec<String> = branched.iter().map(field_key_display).collect();
+    keys.sort();
+    assert!(keys[0].contains("dir"), "got {keys:?}");
+    assert!(keys[1].contains("path"), "got {keys:?}");
+    for field in &branched {
+        assert!(!luad_analysis::has_unknown(field));
+    }
+}
+
+#[test]
+fn test_a_key_that_is_not_determinable_still_reports_dynamic_key() {
+    let analysis = analyze_chunk_origins(&register_key_chunk());
+
+    // `sink(params[compute()])` -- the key is a call result, so the field cannot be named.
+    // Naming a field requires naming its key, and an access reported with a guessed or
+    // omitted key would read as resolved. This is the control that separates "the key
+    // resolved to nothing" from "the key did not resolve".
+    for origin in alias_origins_in(&analysis, "0/2") {
+        assert!(
+            matches!(
+                origin.kind,
+                OriginExpressionKind::Unknown {
+                    reason: OriginUnknownReason::DynamicKey
+                }
+            ),
+            "a computed key must stay dynamic, got {origin:?}"
+        );
+    }
+
+    // `for i = 1, n do out = params[i] end` -- the key is the loop variable, which is
+    // loop-carried and so not a bounded set either.
+    let looped = alias_origins_in(&analysis, "0/3");
+    assert!(
+        looped.iter().all(luad_analysis::has_unknown),
+        "a loop-carried key must stay unresolved, got {looped:?}"
+    );
+    assert!(
+        looped
+            .iter()
+            .any(|origin| format!("{origin:?}").contains("DynamicKey")),
+        "the reason must survive inside the expression, got {looped:?}"
+    );
+}
