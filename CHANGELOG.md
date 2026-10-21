@@ -5,6 +5,22 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Resolve the `a or b` and `a and b` idioms over locals in Lua 5.1 origin analysis. `TESTSET`
+  had no transfer function, so its write fell through to the unmodeled-write default and the
+  tested branch was reported as `unknown:overwritten`. It is now modeled per edge: the assigned
+  value reaches the successor that performs the write, the destination's prior contents reach
+  the one that skips it, which is a distinction the control-flow graph already carried as
+  `conditional-skip`. On `tests/fixtures/origins_testset.lua`, `local chosen = primary or
+  secondary` moves from `alternatives(parameter[1] | unknown:overwritten)` to
+  `alternatives(parameter[0] | parameter[1])`, and a chained `a or b or c`, where one hole
+  swallowed two parameters, moves from `alternatives(parameter[2] | unknown:overwritten)` to
+  all three. Folding both outcomes into one state instead would be unsound in the other
+  direction, putting the retained value on the edge that assigns; `gate-argument-origins-lua51`
+  pins that it does not.
+- `docs/MACHINE-INTERFACE.md` now states what `overwritten` means: a register write the
+  analysis does not model, which is why it also covers a register written more than once. It
+  was previously readable as a claim that a bounded reaching set had been found and discarded.
+
 - `luad --help` and the unrecognized-subcommand error now name the command that answers each
   reader's question, and state plainly that there is no decompiler, pointing at `luad inspect`
   plus unluac for readable source and at `docs/examples/RECIPES.md` for worked chains. The

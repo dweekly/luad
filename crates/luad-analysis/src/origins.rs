@@ -292,6 +292,9 @@ fn run_dataflow(
     let bottom = vec![FlowValue::Bottom; frame_size];
     let mut in_states = vec![bottom.clone(); cfg.blocks.len()];
     let mut out_states = vec![bottom; cfg.blocks.len()];
+    // The out-state for a block whose last instruction writes conditionally, as seen by the
+    // successor on the edge where that write does not happen. `None` for every other block.
+    let mut skip_states: Vec<Option<RegisterState>> = vec![None; cfg.blocks.len()];
     if let Some(entry_index) = cfg.blocks.iter().position(|block| block.is_entry) {
         in_states[entry_index] = entry;
     }
@@ -310,10 +313,11 @@ fn run_dataflow(
         let incoming = if block.is_entry {
             in_states[block_index].clone()
         } else {
-            meet_predecessors(block, &out_states, frame_size)
+            meet_predecessors(block, &cfg.blocks, &out_states, &skip_states, frame_size)
         };
         in_states[block_index] = incoming.clone();
         let mut state = incoming;
+        let mut skip_state: Option<RegisterState> = None;
         for &pc in &block.instruction_pcs {
             steps = steps.saturating_add(1);
             if steps > MAX_TRANSFER_STEPS {
@@ -321,13 +325,19 @@ fn run_dataflow(
                 break;
             }
             if let Some(instruction) = instructions.get(pc) {
+                // `TESTSET` is the one Lua 5.1 instruction whose only effect is a register
+                // write that one of its outgoing edges skips. The state entering that
+                // successor is therefore the state right here, before the write.
+                if instruction.mnemonic == "TESTSET" {
+                    skip_state = Some(state.clone());
+                }
                 transfer(instruction, &mut state, captures, frame_size);
             }
         }
         if exhausted {
             break;
         }
-        if state != out_states[block_index] {
+        if state != out_states[block_index] || skip_state != skip_states[block_index] {
             revisits[block_index] = revisits[block_index].saturating_add(1);
             if revisits[block_index] > MAX_BLOCK_REVISITS {
                 // Widen: every slot still moving at this point is loop-carried and is not
@@ -354,6 +364,7 @@ fn run_dataflow(
                 }
             }
             out_states[block_index] = state;
+            skip_states[block_index] = skip_state;
             for edge in &block.successors {
                 if cfg.blocks[edge.to_block].is_reachable && queued.insert(edge.to_block) {
                     worklist.push_back(edge.to_block);
@@ -399,14 +410,35 @@ fn reverse_postorder(cfg: &ControlFlowGraph) -> Vec<usize> {
     postorder
 }
 
+/// Join the states reaching a block, selecting each predecessor's out-state by edge kind.
+///
+/// A predecessor ending in an instruction whose write is conditional has two distinct
+/// out-states, and which one reaches this block is a property of the edge, not of the
+/// predecessor. `skip_states` holds the state for the `ConditionalSkip` outcome where one
+/// exists; every other edge takes the ordinary out-state.
 fn meet_predecessors(
     block: &crate::BasicBlock,
+    blocks: &[crate::BasicBlock],
     out_states: &[RegisterState],
+    skip_states: &[Option<RegisterState>],
     frame_size: usize,
 ) -> RegisterState {
     let mut result = vec![FlowValue::Bottom; frame_size];
     for predecessor in &block.predecessors {
-        if let Some(state) = out_states.get(*predecessor) {
+        let skipped = blocks.get(*predecessor).is_some_and(|previous| {
+            previous.successors.iter().any(|edge| {
+                edge.to_block == block.index && edge.kind == crate::CfgEdgeKind::ConditionalSkip
+            })
+        });
+        let state = if skipped {
+            match skip_states.get(*predecessor).and_then(Option::as_ref) {
+                Some(state) => Some(state),
+                None => out_states.get(*predecessor),
+            }
+        } else {
+            out_states.get(*predecessor)
+        };
+        if let Some(state) = state {
             for (slot, incoming) in result.iter_mut().zip(state) {
                 *slot = meet_value(slot, incoming);
             }
@@ -523,6 +555,25 @@ fn transfer(
     invalidate_writes(instruction, state, frame_size);
     match instruction.mnemonic.as_str() {
         "MOVE" => {
+            if let (Some(destination), Some(source)) = (
+                register_operand(instruction, 0),
+                register_operand(instruction, 1),
+            ) {
+                set_register(
+                    state,
+                    destination,
+                    add_evidence(get_register(&before, source), &instruction.id),
+                );
+            }
+        }
+        // `R(A) := R(B)`, which is the outcome on the edge the CFG classifies as
+        // `Fallthrough`. On the `ConditionalSkip` edge the assignment does not happen and
+        // `R(A)` keeps what it held, which the worklist supplies as a separate out-state
+        // rather than being folded in here: folding both outcomes into one state would put
+        // the retained value on the taken edge too, where it cannot occur. Without any model
+        // the write falls through to the unmodeled-write default, so the `a or b` and
+        // `a and b` idiom over locals loses its tested branch to `overwritten`.
+        "TESTSET" => {
             if let (Some(destination), Some(source)) = (
                 register_operand(instruction, 0),
                 register_operand(instruction, 1),

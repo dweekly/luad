@@ -417,6 +417,18 @@ where the set of reaching definitions is not finite. Exceeding the option budget
 (`MAX_ALTERNATIVES = 8`), dynamic keys, mutable or ambiguous captures, varargs, aliasing
 boundaries, unreachable code, and analysis limits remain distinct machine-visible reasons.
 
+A conditional register write is resolved per edge rather than per instruction. `TESTSET` is
+the only Lua 5.1 instruction whose sole effect is a write that one outgoing edge skips, and
+its two outcomes reach different successors: the assigned value on the edge that performs the
+write, the destination's prior contents on the edge that skips it. Both therefore appear as
+options at a later join only when both can actually reach it, so the `a or b` and `a and b`
+idioms over locals resolve to their two reaching definitions rather than reporting the tested
+branch as `overwritten`.
+
+`overwritten` is the reported reason for a register write this analysis does not model,
+which is why it also covers writes made more than once before a use. It is not a claim that
+a bounded set of reaching definitions was found and discarded.
+
 Operands are captured before the writing instruction changes its destination, so an
 operation such as `CONCAT A A C` cannot recurse into its own result. JSON uses the
 `origins` schema. JSONL emits self-identifying `origin` facts followed by a summary.

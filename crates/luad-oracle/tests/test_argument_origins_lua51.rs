@@ -1219,3 +1219,141 @@ fn test_loop_carried_values_widen_rather_than_growing_without_bound() {
         parts[2].kind
     );
 }
+
+fn testset_chunk() -> luad_core::Chunk {
+    let _ = luad_oracle::require_luac51();
+    let root = luad_oracle::find_workspace_root();
+    let source = std::fs::read_to_string(root.join("tests/fixtures/origins_testset.lua"))
+        .expect("read origins_testset.lua");
+    luad_oracle::compile_and_parse_lua51(&source, false).expect("compile testset fixture")
+}
+
+/// Parameter indices appearing as options of the sole alternatives set in a prototype.
+fn parameter_options_in(analysis: &ChunkOriginAnalysis, proto_suffix: &str) -> Vec<u8> {
+    let options = sole_alternatives(&alias_origins_in(analysis, proto_suffix));
+    let mut indices: Vec<u8> = options
+        .iter()
+        .filter_map(|option| match &option.kind {
+            OriginExpressionKind::Parameter { index, .. } => Some(*index),
+            _ => None,
+        })
+        .collect();
+    indices.sort_unstable();
+    indices
+}
+
+#[test]
+fn test_testset_branch_value_resolves_instead_of_reporting_overwritten() {
+    let analysis = analyze_chunk_origins(&testset_chunk());
+
+    // `local chosen = primary or secondary` compiles to TESTSET, whose write one outgoing
+    // edge skips. Both reaching definitions are bounded parameters, so the set must name
+    // both: the tested branch previously fell through to the unmodeled-write default and
+    // the whole option read `unknown:overwritten`.
+    let either = sole_alternatives(&alias_origins_in(&analysis, "0/0"));
+    assert_eq!(
+        either.len(),
+        2,
+        "both reaching definitions must be options, got {either:?}"
+    );
+    assert_eq!(parameter_options_in(&analysis, "0/0"), vec![0, 1]);
+
+    // `local chosen = flag and "enabled"` is the same instruction with a literal on the
+    // other side.
+    let guarded = sole_alternatives(&alias_origins_in(&analysis, "0/1"));
+    assert_eq!(guarded.len(), 2);
+    assert!(
+        guarded
+            .iter()
+            .any(|option| matches!(option.kind, OriginExpressionKind::Literal { .. })),
+        "the literal branch must survive: {guarded:?}"
+    );
+    assert_eq!(parameter_options_in(&analysis, "0/1"), vec![0]);
+
+    // A chained `a or b or c` is two TESTSETs feeding one join, so one hole previously
+    // swallowed two parameters rather than one.
+    let chained = sole_alternatives(&alias_origins_in(&analysis, "0/3"));
+    assert_eq!(
+        chained.len(),
+        3,
+        "each link of the chain is a separate reaching definition, got {chained:?}"
+    );
+    assert_eq!(parameter_options_in(&analysis, "0/3"), vec![0, 1, 2]);
+
+    // None of these four is unresolved any more. Asserted as a whole-expression property
+    // rather than per option, so an unknown nested inside one also fails.
+    for suffix in ["0/0", "0/1", "0/2", "0/3"] {
+        for origin in alias_origins_in(&analysis, suffix) {
+            assert!(
+                !luad_analysis::has_unknown(&origin),
+                "{suffix} must be fully resolved, got {origin:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_testset_skip_edge_does_not_reach_the_edge_that_assigns() {
+    let analysis = analyze_chunk_origins(&testset_chunk());
+
+    // The retained value only reaches the successor on the `ConditionalSkip` edge. Folding
+    // both outcomes into one out-state instead puts it on the assigning edge too, where it
+    // cannot occur, and it arrives at the join as a third option reading
+    // `unknown:missing-definition` because nothing had written the destination yet. Pinning
+    // the option count and the absence of that reason is what distinguishes the
+    // edge-sensitive model from the cheaper unsound one.
+    for (suffix, expected) in [("0/0", 2usize), ("0/1", 2), ("0/3", 3)] {
+        let options = sole_alternatives(&alias_origins_in(&analysis, suffix));
+        assert_eq!(
+            options.len(),
+            expected,
+            "{suffix} gained an option that no execution can produce: {options:?}"
+        );
+        for option in &options {
+            assert!(
+                !matches!(
+                    option.kind,
+                    OriginExpressionKind::Unknown {
+                        reason: OriginUnknownReason::MissingDefinition
+                    }
+                ),
+                "{suffix} carries the retained value onto the assigning edge: {options:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_testset_inside_a_concat_keeps_term_order_and_separators() {
+    let analysis = analyze_chunk_origins(&testset_chunk());
+
+    // `sink("mkdir -p " .. (params.dir or fallback) .. "/sub")`. The structural facts a
+    // reader needs to judge a constructed string are term order and the literals framing
+    // each term, so the resolved set must sit in position between them rather than the
+    // whole concat degrading to one term.
+    let origins = alias_origins_in(&analysis, "0/2");
+    let concat = origins
+        .iter()
+        .find(|origin| matches!(&origin.kind, OriginExpressionKind::Concat { .. }))
+        .expect("the sink argument must report a concat");
+    let OriginExpressionKind::Concat { parts } = &concat.kind else {
+        unreachable!("filtered above")
+    };
+    assert_eq!(parts.len(), 3, "term order must survive: {parts:?}");
+    assert!(matches!(
+        parts[0].kind,
+        OriginExpressionKind::Literal { .. }
+    ));
+    assert!(matches!(
+        parts[1].kind,
+        OriginExpressionKind::Alternatives { .. }
+    ));
+    assert!(matches!(
+        parts[2].kind,
+        OriginExpressionKind::Literal { .. }
+    ));
+    assert!(
+        !luad_analysis::has_unknown(concat),
+        "no hole remains in the constructed string: {concat:?}"
+    );
+}
