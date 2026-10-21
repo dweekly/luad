@@ -38,7 +38,15 @@ is promoted to a supported tier and no interface carries a compatibility promise
   dropped, because the holder may have added a key this prototype never writes. A table with
   nothing left to report carries no contents. A call that cannot reach the table still changes nothing. This
   is a defect present in 0.3.1, verified against that tag, and independent of the other
-  changes here; the previously pinned behaviour is corrected rather than preserved.
+  changes here; the previously pinned behaviour is corrected rather than preserved. A consumer
+  holding results from 0.3.1 can find exactly which records this moved without re-deriving
+  anything: `export --format jsonl` is deterministic, so build at `8f0890c` (the commit before
+  this change) and at `main`, export the same inputs with both, and diff the `record_type`
+  `origin` lines; each differing record names its `call_id`. The intervening commits add only
+  new `parameter_field` records and a new `arguments` array on an `open` argument window, so an
+  `origin`-only diff over that range isolates this correction. Diff against `main` rather than
+  `0b6e8c1`: this change shipped with a defect of its own at that commit, corrected in
+  `27e5e4b`.
 
 - Reconstruct a Lua 5.1 table access whose key is a register, where the key register holds
   only literals. `GETTABLE`/`SELF` reported `dynamic-key` whenever the key was not the
