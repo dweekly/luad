@@ -1328,6 +1328,15 @@ fn reconstruct_table_literal(
         .collect();
 
     let mut incomplete = false;
+    // The last point at which something outside this prototype gained a reference to the
+    // table: an argument to a callee, or a store to a global or an upvalue. A field written
+    // before that point is not a fact at the call site, because the holder may have written
+    // to the same key, so only fields written after it survive. This is tracked apart from
+    // `incomplete`, which means a field could not be reconstructed: a consumer reading
+    // fields alongside `incomplete` reasonably takes the fields it was given as known and
+    // only the absent ones as missing, so a possibly-overwritten value must not be one of
+    // the fields it was given.
+    let mut last_escape_pc: Option<usize> = None;
     if span_pcs.len() > MAX_TABLE_SCAN_STEPS {
         incomplete = true;
     }
@@ -1337,6 +1346,7 @@ fn reconstruct_table_literal(
     aliases.insert(initial_reg);
 
     let mut fields: BTreeMap<OriginLiteral, TableLiteralField> = BTreeMap::new();
+    let mut field_pcs: BTreeMap<OriginLiteral, usize> = BTreeMap::new();
     let mut seen_settable = false;
 
     let mut current_state = incoming.to_vec();
@@ -1380,6 +1390,7 @@ fn reconstruct_table_literal(
                                     if fields.len() >= MAX_TABLE_FIELDS {
                                         incomplete = true;
                                     } else {
+                                        field_pcs.insert(key.clone(), pc);
                                         fields.insert(
                                             key.clone(),
                                             TableLiteralField {
@@ -1412,12 +1423,12 @@ fn reconstruct_table_literal(
         if matches!(inst.mnemonic.as_str(), "CALL" | "TAILCALL") {
             let base = register_operand(inst, 0).unwrap_or(0);
             if aliases.contains(&base) {
-                incomplete = true;
+                last_escape_pc = Some(pc);
             }
             if let Some((count, variable)) = count_operands(inst).first().copied() {
                 if variable {
                     if aliases.iter().any(|&r| r > base) {
-                        incomplete = true;
+                        last_escape_pc = Some(pc);
                     }
                 } else {
                     for arg_idx in 0..count.saturating_sub(1) {
@@ -1426,7 +1437,7 @@ fn reconstruct_table_literal(
                             .and_then(|f| f.checked_add(arg_idx as u8))
                         {
                             if aliases.contains(&r) {
-                                incomplete = true;
+                                last_escape_pc = Some(pc);
                             }
                         }
                     }
@@ -1437,7 +1448,7 @@ fn reconstruct_table_literal(
         if matches!(inst.mnemonic.as_str(), "SETGLOBAL" | "SETUPVAL") {
             if let Some(src) = register_operand(inst, 0) {
                 if aliases.contains(&src) {
-                    incomplete = true;
+                    last_escape_pc = Some(pc);
                 }
             }
         }
@@ -1475,6 +1486,20 @@ fn reconstruct_table_literal(
 
     if !aliases.contains(&arg_register) {
         return None;
+    }
+
+    if let Some(escape_pc) = last_escape_pc {
+        let before = fields.len();
+        fields.retain(|key, _| field_pcs.get(key).is_some_and(|pc| *pc > escape_pc));
+        // Dropped values are unreconstructed fields, which is what `incomplete` reports. A
+        // table whose every field predates the escape has nothing left to say, and the
+        // dataflow's own conservative answer across that call stands instead.
+        if fields.len() != before {
+            incomplete = true;
+        }
+        if fields.is_empty() {
+            return None;
+        }
     }
 
     if !seen_settable && !incomplete {

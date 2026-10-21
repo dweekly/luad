@@ -5,6 +5,17 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Stop reporting Lua 5.1 table-literal fields that a callee may have overwritten. The
+  reconstruction already detected that a table had been passed to a callee or stored to a
+  global or upvalue, but recorded it as `incomplete: true` while still emitting the fields
+  read before that point. `incomplete` means a field could not be reconstructed, so
+  `{"dir": "/etc"}, incomplete` read as "`dir` is `/etc`, other fields may be missing" when
+  `dir` was exactly the value in doubt. Only fields written after the last escape are now
+  reported, the dropped ones counting as unreconstructed, and a table with nothing left to
+  report carries no contents. A call that cannot reach the table still changes nothing. This
+  is a defect present in 0.3.1, verified against that tag, and independent of the other
+  changes here; the previously pinned behaviour is corrected rather than preserved.
+
 - Reconstruct a Lua 5.1 table access whose key is a register, where the key register holds
   only literals. `GETTABLE`/`SELF` reported `dynamic-key` whenever the key was not the
   instruction's own constant operand, without consulting the key register at all, so

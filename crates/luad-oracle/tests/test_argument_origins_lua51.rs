@@ -629,22 +629,34 @@ fn test_constant_key_table_literal_origins_emit_table_literal_expression() {
         }
     ));
 
-    // 3. Post-construction escape: incomplete: true, fields [a, b]
+    // 3. Post-construction escape: incomplete: true, field [b] only.
+    //
+    // The fixture writes `a` before `producer(escaped_table)` and `b` after it. Once the
+    // callee holds the table it may write any key, so `a = "x"` is not a fact at the sink
+    // and must not be reported as one; `b = "y"` is the last write to its key and is. The
+    // dropped field is what `incomplete` reports. Reporting both with `incomplete: true`
+    // reads as "these two are known, others may be missing", which is the one wrong answer
+    // a later reader cannot detect.
     let escaped = table_literals
         .iter()
         .find(|origin| match &origin.kind {
             OriginExpressionKind::TableLiteral { fields, incomplete } => {
-                *incomplete && fields.len() == 2
+                *incomplete
+                    && fields.len() == 1
+                    && matches!(&fields[0].key, OriginLiteral::String { value } if value.as_str() == "b")
             }
             _ => false,
         })
-        .expect("escaped table literal");
+        .expect("escaped table literal keeping only the field written after the escape");
+    let OriginExpressionKind::TableLiteral { fields, .. } = &escaped.kind else {
+        unreachable!("filtered above")
+    };
     assert!(matches!(
-        escaped.kind,
-        OriginExpressionKind::TableLiteral {
-            incomplete: true,
+        &fields[0].value.kind,
+        OriginExpressionKind::Literal {
+            value: OriginLiteral::String { value },
             ..
-        }
+        } if value.as_str() == "y"
     ));
 
     // 4. Aliased table: fields [a, b], incomplete: false
@@ -1536,5 +1548,95 @@ fn test_a_key_that_is_not_determinable_still_reports_dynamic_key() {
             .iter()
             .any(|origin| format!("{origin:?}").contains("DynamicKey")),
         "the reason must survive inside the expression, got {looped:?}"
+    );
+}
+
+fn table_escape_chunk() -> luad_core::Chunk {
+    let _ = luad_oracle::require_luac51();
+    let root = luad_oracle::find_workspace_root();
+    let source = std::fs::read_to_string(root.join("tests/fixtures/origins_table_escape.lua"))
+        .expect("read origins_table_escape.lua");
+    luad_oracle::compile_and_parse_lua51(&source, false).expect("compile table escape fixture")
+}
+
+/// The origin of the last call's first argument in a prototype, which in this fixture is
+/// always the `sink` whose argument the escape is being judged against.
+fn last_argument_in(analysis: &ChunkOriginAnalysis, proto_suffix: &str) -> OriginExpression {
+    alias_origins_in(analysis, proto_suffix)
+        .pop()
+        .unwrap_or_else(|| panic!("{proto_suffix} must report an argument"))
+}
+
+#[test]
+fn test_a_table_whose_fields_predate_an_escape_reports_no_contents() {
+    let analysis = analyze_chunk_origins(&table_escape_chunk());
+
+    // `local t = { dir = "/etc" }; mutate(t); sink(t)`. The callee holds the table and may
+    // write any key, so `dir = "/etc"` is not a fact at the sink. Reporting it with
+    // `incomplete: true` would read as "dir is known, other fields may be missing", which
+    // is the one class of wrong answer a later reader cannot detect.
+    let escaped = last_argument_in(&analysis, "0/0");
+    assert!(
+        matches!(
+            escaped.kind,
+            OriginExpressionKind::Unknown {
+                reason: OriginUnknownReason::UnsupportedValue
+            }
+        ),
+        "an escaped table must not advertise contents, got {escaped:?}"
+    );
+
+    // A store to a global is an escape for the same reason as an argument.
+    let global = last_argument_in(&analysis, "0/3");
+    assert!(
+        matches!(
+            global.kind,
+            OriginExpressionKind::Unknown {
+                reason: OriginUnknownReason::UnsupportedValue
+            }
+        ),
+        "a table stored to a global must not advertise contents, got {global:?}"
+    );
+}
+
+#[test]
+fn test_a_field_written_after_an_escape_is_still_reported() {
+    let analysis = analyze_chunk_origins(&table_escape_chunk());
+
+    // `mutate(t); t.mode = "0755"; sink(t)`. The write happens after the callee could have
+    // touched the table, so it is the last write to its key and remains a fact. Dropping it
+    // too would make the escape rule blanket rather than exact.
+    let partial = last_argument_in(&analysis, "0/1");
+    let OriginExpressionKind::TableLiteral { fields, incomplete } = &partial.kind else {
+        panic!("expected a table literal, got {partial:?}");
+    };
+    assert!(
+        *incomplete,
+        "a dropped field is an unreconstructed field: {partial:?}"
+    );
+    assert_eq!(fields.len(), 1, "got {fields:?}");
+    assert!(
+        matches!(&fields[0].key, OriginLiteral::String { value } if value.as_str() == "mode"),
+        "only the post-escape write survives, got {fields:?}"
+    );
+}
+
+#[test]
+fn test_a_call_that_cannot_reach_the_table_leaves_it_alone() {
+    let analysis = analyze_chunk_origins(&table_escape_chunk());
+
+    // `log("starting"); sink(t)` -- `log` never receives `t`, so nothing outside the
+    // prototype can hold it and its contents stand. This is the precision control: without
+    // it the rule could be satisfied by invalidating a table on every call, which is what
+    // the dataflow already does and what the reconstruction exists to improve on.
+    let intact = last_argument_in(&analysis, "0/2");
+    let OriginExpressionKind::TableLiteral { fields, incomplete } = &intact.kind else {
+        panic!("expected a table literal, got {intact:?}");
+    };
+    assert!(!incomplete, "nothing was lost here: {intact:?}");
+    assert_eq!(fields.len(), 1);
+    assert!(
+        matches!(&fields[0].key, OriginLiteral::String { value } if value.as_str() == "dir"),
+        "got {fields:?}"
     );
 }

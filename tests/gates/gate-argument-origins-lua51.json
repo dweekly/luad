@@ -12,7 +12,10 @@
     "--nocapture"
   ],
   "expected_tests": [
+    "test_a_call_that_cannot_reach_the_table_leaves_it_alone",
+    "test_a_field_written_after_an_escape_is_still_reported",
     "test_a_key_that_is_not_determinable_still_reports_dynamic_key",
+    "test_a_table_whose_fields_predate_an_escape_reports_no_contents",
     "test_aliased_table_is_invalidated_when_the_mutated_register_is_itself_a_join",
     "test_aliased_table_option_is_invalidated_by_a_later_write",
     "test_cfg_alternatives_emit_alternatives_expression",
@@ -55,6 +58,10 @@
     {
       "path": "tests/fixtures/origins_register_key.lua",
       "sha256": "3705236e36b1d966f89933c9c8fbbb46540239e3eb398a1049caf95f20e28873"
+    },
+    {
+      "path": "tests/fixtures/origins_table_escape.lua",
+      "sha256": "34dd5e0d65f8cf07bdfcd8ac898369132cdeb46b299fbde51094c0498609d532"
     },
     {
       "path": "tests/fixtures/origins_testset.lua",

@@ -415,7 +415,12 @@ alternatives across bounded definitions, and Lua unary and binary operations. `M
 remains an opcode fact with both operands; callers may recognize a string-format
 convention without `luad` asserting runtime formatting semantics. Constant-key table
 literals emit deterministically ordered fields and retain partial reconstruction with
-`incomplete: true`. When bounded definitions reach a control-flow join, `alternatives`
+`incomplete: true`. Once something outside the prototype holds the table -- it was passed to
+a callee, or stored to a global or an upvalue -- a field written before that point is not a
+fact at a later call site, because the holder may have written the same key; only fields
+written after the last such point are reported, the dropped ones counting as the
+unreconstructed fields `incomplete` describes. A table with no field left to report carries
+no contents at all. A call that cannot reach the table does not affect it. When bounded definitions reach a control-flow join, `alternatives`
 emits a deduplicated, deterministically ordered list of candidate origin expressions
 with reaching evidence. Structurally equal options are deduplicated with their evidence
 unioned. An option may itself be `unknown` carrying its own reason: a join with one bounded
