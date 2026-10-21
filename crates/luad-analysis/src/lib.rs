@@ -32,7 +32,7 @@ pub use linking::{
 pub use origins::{
     analyze_chunk_origins, has_unknown, CallArgumentWindow, CallOriginFact, ChunkOriginAnalysis,
     FixedArgumentOrigin, OriginAnalysis, OriginExpression, OriginExpressionKind, OriginLiteral,
-    OriginUnknownReason, TableLiteralField,
+    OriginUnknownReason, ParameterFieldAccess, ParameterFieldFact, TableLiteralField,
 };
 pub use prototype_identity::{
     analyze_chunk_prototype_identities, analyze_chunk_prototype_identities_v1,

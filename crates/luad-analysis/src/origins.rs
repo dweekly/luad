@@ -196,11 +196,47 @@ pub struct CallOriginFact {
     pub argument_window: CallArgumentWindow,
 }
 
+/// Whether a parameter-rooted table access reads the key or writes it.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum ParameterFieldAccess {
+    Read,
+    Write,
+}
+
+/// One constant-key table access whose base is a parameter of the enclosing prototype.
+///
+/// This is the input contract of a prototype that takes a table: which keys it reads out of
+/// which parameter, and which it writes back. The base is resolved to a parameter by the same
+/// dataflow that resolves call-argument origins, so a reassigned or branch-dependent base is
+/// judged rather than assumed from the register number.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ParameterFieldFact {
+    pub access_id: StableId,
+    pub proto_path: ProtoPath,
+    pub pc: usize,
+    pub mnemonic: String,
+    pub access: ParameterFieldAccess,
+    /// Parameter index the accessed value is rooted at.
+    pub parameter_index: u8,
+    /// Path of field keys from the parameter to the accessed key, outermost first. A direct
+    /// `params.name` has an empty path; `params.opts.name` has `["opts"]`.
+    pub base_path: Vec<OriginLiteral>,
+    pub key: OriginLiteral,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_id: Option<StableId>,
+    pub evidence: Vec<StableId>,
+}
+
 /// Call-argument origins for one prototype.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct OriginAnalysis {
     pub proto_id: StableId,
     pub calls: Vec<CallOriginFact>,
+    /// Constant-key accesses rooted at a parameter, ordered by program counter.
+    pub parameter_fields: Vec<ParameterFieldFact>,
 }
 
 /// Call-argument origins for every prototype in one chunk.
@@ -257,9 +293,15 @@ fn analyze_proto_tree(
     } else {
         collect_calls(proto, &instructions, &cfg, &dataflow.in_states, captures)
     };
+    let parameter_fields = if dataflow.exhausted {
+        Vec::new()
+    } else {
+        collect_parameter_fields(proto, &instructions, &cfg, &dataflow.in_states, captures)
+    };
     results.push(OriginAnalysis {
         proto_id: proto.id.clone(),
         calls,
+        parameter_fields,
     });
 
     let children = derive_child_captures(proto, &instructions, &cfg, &dataflow, captures, summary);
@@ -1514,6 +1556,94 @@ fn reconstruct_table_literal(
         },
         [newtable_inst.id.clone()],
     ))
+}
+
+/// Resolve a parameter root and the field path leading to it, if the expression is one.
+///
+/// Returns the parameter index and the keys from the parameter outward, so `params.opts`
+/// yields `(0, ["opts"])`. Anything whose root is not a parameter of this prototype, or whose
+/// path passes through a non-constant key, yields `None`: a key read off an unknown base says
+/// nothing about any parameter's contract.
+fn parameter_root_path(
+    expression: &OriginExpression,
+    owner: &ProtoPath,
+) -> Option<(u8, Vec<OriginLiteral>)> {
+    match &expression.kind {
+        OriginExpressionKind::Parameter { owner: at, index } if at == owner => {
+            Some((*index, Vec::new()))
+        }
+        OriginExpressionKind::Field { base, key, .. } => {
+            let (index, mut path) = parameter_root_path(base, owner)?;
+            path.push(key.clone());
+            Some((index, path))
+        }
+        _ => None,
+    }
+}
+
+/// Constant-key table accesses whose base resolves to a parameter of this prototype.
+fn collect_parameter_fields(
+    proto: &Prototype,
+    instructions: &[SemanticInstruction],
+    cfg: &ControlFlowGraph,
+    in_states: &[RegisterState],
+    captures: &CaptureEnvironment,
+) -> Vec<ParameterFieldFact> {
+    let frame_size = usize::from(proto.maxstacksize);
+    let mut facts = Vec::new();
+    for block in cfg.blocks.iter().filter(|block| block.is_reachable) {
+        let mut state = in_states[block.index].clone();
+        for &pc in &block.instruction_pcs {
+            let Some(instruction) = instructions.get(pc) else {
+                continue;
+            };
+            let access = match instruction.mnemonic.as_str() {
+                // `SELF` reads a method name off its base exactly as `GETTABLE` reads a key.
+                "GETTABLE" | "SELF" => Some(ParameterFieldAccess::Read),
+                "SETTABLE" => Some(ParameterFieldAccess::Write),
+                _ => None,
+            };
+            if let Some(access) = access {
+                if let Some(fact) = parameter_field_fact(proto, instruction, &state, access) {
+                    facts.push(fact);
+                }
+            }
+            transfer(instruction, &mut state, captures, frame_size);
+        }
+    }
+    facts.sort_by_key(|fact| fact.pc);
+    facts
+}
+
+fn parameter_field_fact(
+    proto: &Prototype,
+    instruction: &SemanticInstruction,
+    state: &RegisterState,
+    access: ParameterFieldAccess,
+) -> Option<ParameterFieldFact> {
+    // `GETTABLE A B C` and `SELF A B C` read the table in B; `SETTABLE A B C` writes the
+    // table in A. The key is the first constant operand in either case.
+    let base_register = match access {
+        ParameterFieldAccess::Read => register_operand(instruction, 1)?,
+        ParameterFieldAccess::Write => register_operand(instruction, 0)?,
+    };
+    let base = origin_from_flow(get_register(state, base_register));
+    let (parameter_index, base_path) = parameter_root_path(&base, &proto.path)?;
+    let (constant_index, constant) = constant_operand(instruction, 0)?;
+    let key = origin_literal(&constant)?;
+    let key_id = StableId::constant(proto_from_instruction(&instruction.id), constant_index);
+    Some(ParameterFieldFact {
+        access_id: instruction.id.clone(),
+        proto_path: proto.path.clone(),
+        pc: instruction.pc,
+        mnemonic: instruction.mnemonic.clone(),
+        access,
+        parameter_index,
+        base_path,
+        key,
+        key_id: Some(key_id.clone()),
+        evidence: vec![instruction.id.clone(), key_id],
+    })
 }
 
 fn collect_calls(

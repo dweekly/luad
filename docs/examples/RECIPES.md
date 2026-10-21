@@ -174,6 +174,47 @@ luad export firmware/*.lua --format jsonl | jq -r '
 
 ---
 
+## 5a. Reading a Handler's Input Contract
+
+The question a reader of a dispatch-table codebase arrives with: for a prototype whose entry
+point is `function handler(params)`, which keys does it read out of `params`? `luad origins`
+answers it directly, because the base of each access is resolved by the dataflow rather than
+assumed from the register number.
+
+```bash
+luad origins firmware/dispatch.lua
+# proto:0/0:pc:0 GETTABLE read  parameter[0]."name"
+# proto:0/0:pc:3 GETTABLE read  parameter[0]."type"
+# proto:0/0:pc:9 GETTABLE read  parameter[0]."enable"
+```
+
+The key set per parameter, per prototype, as machine output:
+
+```bash
+luad origins firmware/dispatch.lua --format json | jq -r '
+  .data.prototypes[] |
+  .proto_id as $proto |
+  .parameter_fields[] |
+  [$proto, .access, "parameter[\(.parameter_index)]",
+   ([.base_path[].value.display] + [.key.value.display] | join("."))] | @tsv'
+```
+
+Only accesses whose base resolves to a parameter of that prototype appear. A key read off
+another table, or off a register whose parameter was reassigned, is absent — which is the
+difference between this and reading a flat constant dump, where adjacent strings invite a
+contract to be inferred from proximity rather than evidence.
+
+Keys reached through a non-constant index are not parameter fields. Where such an access
+reaches a call argument it is visible as a `dynamic-key` origin, and where the index register
+holds only literals the field is named instead:
+
+```bash
+luad origins firmware/dispatch.lua --format json | jq -c '
+  .. | objects | select(.kind == "unknown" and .reason == "dynamic-key")'
+```
+
+---
+
 ## 6. Navigating Provable Caller-to-Prototype Relations
 
 List every exact relation and every explicit stop reason without interpreting either as

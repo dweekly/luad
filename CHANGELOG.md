@@ -5,6 +5,16 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- `luad origins` now reports each prototype's parameter field accesses: every constant-key
+  table access whose base resolves to one of its own parameters, with the parameter index, the
+  key path from the parameter outward, whether it reads or writes, and instruction and
+  constant evidence. This answers which keys a `function handler(params)` reads out of
+  `params`, which previously required reading a flat constant dump and inferring the contract
+  from adjacency -- proximity rather than evidence. The base is resolved by the dataflow, not
+  by register number, so a reassigned parameter register reports nothing and a key read off
+  any other base is excluded. `SELF` counts as a read. The `origins` and `export` schemas gain
+  `parameter_fields` on each prototype.
+
 - Stop reporting Lua 5.1 table-literal fields that a callee may have overwritten. The
   reconstruction already detected that a table had been passed to a callee or stored to a
   global or upvalue, but recorded it as `incomplete: true` while still emitting the fields

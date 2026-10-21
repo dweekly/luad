@@ -77,7 +77,8 @@
               ]
             }
           }
-        ]
+        ],
+        "parameter_fields": []
       }
     ]
   }

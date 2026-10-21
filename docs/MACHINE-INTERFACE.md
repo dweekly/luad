@@ -439,6 +439,20 @@ where the set of reaching definitions is not finite. Exceeding the option budget
 (`MAX_ALTERNATIVES = 8`), dynamic keys, mutable or ambiguous captures, varargs, aliasing
 boundaries, unreachable code, and analysis limits remain distinct machine-visible reasons.
 
+Each prototype also carries its parameter field accesses: every constant-key table access
+whose base resolves to one of its own parameters, ordered by program counter, with the
+parameter index, the path of keys from the parameter outward, whether the access reads or
+writes, and the instruction and constant evidence. This is the input contract of a prototype
+that takes a table -- which keys a `function handler(params)` reads out of `params`, and
+which it writes back.
+
+The base is resolved by the same dataflow that resolves call-argument origins, not by
+register number. A key read off a value that merely occupies a parameter's register after
+the parameter was reassigned is not reported, and neither is a key read off any other base,
+so an access that is reported is a fact about the caller's argument. `SELF` is a read, since
+it reads a method name off its base exactly as `GETTABLE` reads a key. A non-constant key is
+not a parameter field access; it is visible as a `dynamic-key` origin where it reaches a call.
+
 A conditional register write is resolved per edge rather than per instruction. `TESTSET` is
 the only Lua 5.1 instruction whose sole effect is a write that one outgoing edge skips, and
 its two outcomes reach different successors: the assigned value on the edge that performs the

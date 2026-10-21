@@ -7,7 +7,7 @@ use std::process::Command;
 use luad_analysis::{
     analyze_chunk_origins, CallArgumentWindow, CallOriginFact, ChunkOriginAnalysis,
     FixedArgumentOrigin, OriginExpression, OriginExpressionKind, OriginLiteral,
-    OriginUnknownReason,
+    OriginUnknownReason, ParameterFieldAccess,
 };
 use luad_core::envelope::{JsonlDataRecord, MachineDocument};
 use luad_core::model::LuaString;
@@ -1638,5 +1638,104 @@ fn test_a_call_that_cannot_reach_the_table_leaves_it_alone() {
     assert!(
         matches!(&fields[0].key, OriginLiteral::String { value } if value.as_str() == "dir"),
         "got {fields:?}"
+    );
+}
+
+fn parameter_fields_chunk() -> luad_core::Chunk {
+    let _ = luad_oracle::require_luac51();
+    let root = luad_oracle::find_workspace_root();
+    let source = std::fs::read_to_string(root.join("tests/fixtures/origins_parameter_fields.lua"))
+        .expect("read origins_parameter_fields.lua");
+    luad_oracle::compile_and_parse_lua51(&source, false).expect("compile parameter fields fixture")
+}
+
+/// Every parameter-rooted access in a prototype as `access parameter[i].path.key`.
+fn parameter_contract_of(analysis: &ChunkOriginAnalysis, proto_suffix: &str) -> Vec<String> {
+    analysis
+        .prototypes
+        .iter()
+        .filter(|prototype| prototype.proto_id.to_string().ends_with(proto_suffix))
+        .flat_map(|prototype| &prototype.parameter_fields)
+        .map(|fact| {
+            let key_of = |literal: &OriginLiteral| match literal {
+                OriginLiteral::String { value } => value.as_str().to_string(),
+                other => format!("{other:?}"),
+            };
+            let access = match fact.access {
+                ParameterFieldAccess::Read => "read",
+                ParameterFieldAccess::Write => "write",
+            };
+            let mut path = String::new();
+            for segment in &fact.base_path {
+                path.push('.');
+                path.push_str(&key_of(segment));
+            }
+            format!(
+                "{access} parameter[{}]{path}.{}",
+                fact.parameter_index,
+                key_of(&fact.key)
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn test_parameter_field_accesses_report_a_prototypes_input_contract() {
+    let analysis = analyze_chunk_origins(&parameter_fields_chunk());
+
+    // The three keys this handler validates, which is the question a reader of a
+    // dispatch-table codebase arrives with. Previously answerable only by reading a flat
+    // constant dump and inferring the contract from adjacency.
+    assert_eq!(
+        parameter_contract_of(&analysis, "0/0"),
+        vec![
+            "read parameter[0].name",
+            "read parameter[0].type",
+            "read parameter[0].enable",
+        ]
+    );
+
+    // A nested read carries the path from the parameter outward, and a write is reported
+    // with its direction rather than folded in with the reads: `params.result = ...` is a
+    // different fact about the contract than reading it.
+    assert_eq!(
+        parameter_contract_of(&analysis, "0/1"),
+        vec![
+            "read parameter[0].opts",
+            "read parameter[0].opts.mode",
+            "write parameter[0].result",
+            "read parameter[0].result",
+        ]
+    );
+
+    // `SELF` reads a method name off its base exactly as `GETTABLE` reads a key.
+    assert_eq!(
+        parameter_contract_of(&analysis, "0/4"),
+        vec!["read parameter[0].render"]
+    );
+}
+
+#[test]
+fn test_a_key_read_off_a_non_parameter_base_is_not_a_parameter_field() {
+    let analysis = analyze_chunk_origins(&parameter_fields_chunk());
+
+    // `local other = { mode = "0755" }; return other.mode, os.time()`. Neither base is the
+    // parameter, so neither key says anything about the parameter's contract. This is the
+    // control that separates a resolved base from a key that merely appears nearby, which
+    // is exactly what reading a flat constant dump cannot distinguish.
+    assert!(
+        parameter_contract_of(&analysis, "0/2").is_empty(),
+        "got {:?}",
+        parameter_contract_of(&analysis, "0/2")
+    );
+
+    // `params = { mode = "0755" }; return params.mode`. The register still holds what was
+    // the parameter slot, but the parameter's value is gone, so the access is not a fact
+    // about the caller's argument. Keying this off the register number instead of the
+    // dataflow would report `mode` here and be wrong.
+    assert!(
+        parameter_contract_of(&analysis, "0/3").is_empty(),
+        "got {:?}",
+        parameter_contract_of(&analysis, "0/3")
     );
 }

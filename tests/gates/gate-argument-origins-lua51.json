@@ -14,6 +14,7 @@
   "expected_tests": [
     "test_a_call_that_cannot_reach_the_table_leaves_it_alone",
     "test_a_field_written_after_an_escape_is_still_reported",
+    "test_a_key_read_off_a_non_parameter_base_is_not_a_parameter_field",
     "test_a_key_that_is_not_determinable_still_reports_dynamic_key",
     "test_a_table_whose_fields_predate_an_escape_reports_no_contents",
     "test_aliased_table_is_invalidated_when_the_mutated_register_is_itself_a_join",
@@ -31,6 +32,7 @@
     "test_origin_matrix_histogram_and_cardinality_are_pinned",
     "test_origins_preserve_concat_mod_captures_and_explicit_stops",
     "test_origins_schema_capability_and_lnum_profile_are_public",
+    "test_parameter_field_accesses_report_a_prototypes_input_contract",
     "test_public_origins_json_jsonl_and_text_agree",
     "test_register_key_resolves_when_the_key_register_holds_a_literal",
     "test_sibling_closure_mutation_prevents_stale_capture_origin",
@@ -54,6 +56,10 @@
     {
       "path": "tests/fixtures/origins_open_window.lua",
       "sha256": "9f225d088bdf8d3b7dd77810528893407eda1989534af9dbec4f528af13bb28c"
+    },
+    {
+      "path": "tests/fixtures/origins_parameter_fields.lua",
+      "sha256": "df2053264990afe42873dd3a88b269969cf0ef8a29223a783dbb7d62389d466d"
     },
     {
       "path": "tests/fixtures/origins_register_key.lua",

@@ -405,6 +405,7 @@
       "type": "object",
       "required": [
         "calls",
+        "parameter_fields",
         "proto_id"
       ],
       "properties": {
@@ -412,6 +413,13 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/CallOriginFact"
+          }
+        },
+        "parameter_fields": {
+          "description": "Constant-key accesses rooted at a parameter, ordered by program counter.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ParameterFieldFact"
           }
         },
         "proto_id": {
@@ -890,6 +898,80 @@
         "analysis-limit",
         "unreachable"
       ]
+    },
+    "ParameterFieldAccess": {
+      "description": "Whether a parameter-rooted table access reads the key or writes it.",
+      "type": "string",
+      "enum": [
+        "read",
+        "write"
+      ]
+    },
+    "ParameterFieldFact": {
+      "description": "One constant-key table access whose base is a parameter of the enclosing prototype.\n\nThis is the input contract of a prototype that takes a table: which keys it reads out of which parameter, and which it writes back. The base is resolved to a parameter by the same dataflow that resolves call-argument origins, so a reassigned or branch-dependent base is judged rather than assumed from the register number.",
+      "type": "object",
+      "required": [
+        "access",
+        "access_id",
+        "base_path",
+        "evidence",
+        "key",
+        "mnemonic",
+        "parameter_index",
+        "pc",
+        "proto_path"
+      ],
+      "properties": {
+        "access": {
+          "$ref": "#/definitions/ParameterFieldAccess"
+        },
+        "access_id": {
+          "$ref": "#/definitions/StableId"
+        },
+        "base_path": {
+          "description": "Path of field keys from the parameter to the accessed key, outermost first. A direct `params.name` has an empty path; `params.opts.name` has `[\"opts\"]`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/OriginLiteral"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StableId"
+          }
+        },
+        "key": {
+          "$ref": "#/definitions/OriginLiteral"
+        },
+        "key_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mnemonic": {
+          "type": "string"
+        },
+        "parameter_index": {
+          "description": "Parameter index the accessed value is rooted at.",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "pc": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "proto_path": {
+          "$ref": "#/definitions/ProtoPath"
+        }
+      }
     },
     "ParseMode": {
       "description": "Parsing mode behavior.",

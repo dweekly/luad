@@ -219,6 +219,33 @@ fn test_cli_broken_pipe_completions_bash() {
 }
 
 #[test]
+fn test_cli_broken_pipe_issue_78_reported_repro() {
+    // The exact command from the report: a Lua 5.1 chunk, the raw and effects renderers,
+    // and a reader that takes one line. Those renderers write incrementally and in small
+    // pieces, which is the condition the report isolated -- a single large JSON write
+    // completed before the reader exited and never reached the failure. Exit 101 from a
+    // panic was also outside the exit range `docs/MACHINE-INTERFACE.md` documents.
+    let fixture = "tests/fixtures/precompiled/lua51/closures.luac";
+    let (code, stdout, stderr) =
+        run_with_early_closed_pipe(&["disasm", fixture, "--raw", "--effects"], 1);
+
+    assert_eq!(code, Some(0), "early pipe close must exit 0 quietly");
+    assert_eq!(stdout.lines().count(), 1);
+    assert!(
+        !stderr.contains("panic"),
+        "stderr must not contain a panic: {stderr}"
+    );
+    assert!(
+        !stderr.contains("Broken pipe"),
+        "stderr must not mention the broken pipe: {stderr}"
+    );
+    assert!(
+        stderr.is_empty(),
+        "an ordinary early termination is not an error: {stderr}"
+    );
+}
+
+#[test]
 fn test_cli_full_output_controls_match_uninterrupted() {
     let luad = get_luad_bin();
     let root = luad_oracle::find_workspace_root();

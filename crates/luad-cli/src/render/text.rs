@@ -696,6 +696,30 @@ pub fn render_origins(
     writer: &mut impl Write,
 ) -> io::Result<()> {
     for prototype in &analysis.prototypes {
+        // The parameter contract first: which keys this prototype reads out of, and writes
+        // back to, each of its parameters. It is a property of the prototype rather than of
+        // any one call, so it precedes the call facts.
+        for fact in &prototype.parameter_fields {
+            let access = match fact.access {
+                luad_analysis::ParameterFieldAccess::Read => "read",
+                luad_analysis::ParameterFieldAccess::Write => "write",
+            };
+            let mut path = String::new();
+            for key in &fact.base_path {
+                path.push('.');
+                path.push_str(&format_origin_literal(key));
+            }
+            writeln!(
+                writer,
+                "{} {:<8} {:<5} parameter[{}]{}.{}",
+                fact.access_id,
+                fact.mnemonic,
+                access,
+                fact.parameter_index,
+                path,
+                format_origin_literal(&fact.key),
+            )?;
+        }
         for fact in &prototype.calls {
             writeln!(
                 writer,
@@ -756,26 +780,30 @@ fn float_from_raw_hex(raw_hex: &str) -> Option<f64> {
     }
 }
 
-fn format_origin_expression(expression: &luad_analysis::OriginExpression) -> String {
-    use luad_analysis::{OriginExpressionKind, OriginLiteral};
-
-    fn literal(value: &OriginLiteral) -> String {
-        match value {
-            OriginLiteral::Nil => "nil".to_string(),
-            OriginLiteral::Boolean { value } => value.to_string(),
-            OriginLiteral::Integer { value, .. } => render_integer(*value),
-            // `OriginLiteral::Float` stores only the preserved bytes because the
-            // enum derives `Eq`. Decode them back to binary64 so the scalar
-            // authority owns this spelling too; a byte width other than the
-            // declared four or eight is not a float this renderer can speak
-            // for, so it shows the bytes.
-            OriginLiteral::Float { raw_hex, .. } => match float_from_raw_hex(raw_hex) {
-                Some(value) => render_float(value),
-                None => format!("float({raw_hex})"),
-            },
-            OriginLiteral::String { value } => render_byte_string(&value.raw_bytes),
-        }
+/// Render one preserved origin literal in the text form the origin expressions use.
+fn format_origin_literal(value: &luad_analysis::OriginLiteral) -> String {
+    use luad_analysis::OriginLiteral;
+    match value {
+        OriginLiteral::Nil => "nil".to_string(),
+        OriginLiteral::Boolean { value } => value.to_string(),
+        OriginLiteral::Integer { value, .. } => render_integer(*value),
+        // `OriginLiteral::Float` stores only the preserved bytes because the
+        // enum derives `Eq`. Decode them back to binary64 so the scalar
+        // authority owns this spelling too; a byte width other than the
+        // declared four or eight is not a float this renderer can speak
+        // for, so it shows the bytes.
+        OriginLiteral::Float { raw_hex, .. } => match float_from_raw_hex(raw_hex) {
+            Some(value) => render_float(value),
+            None => format!("float({raw_hex})"),
+        },
+        OriginLiteral::String { value } => render_byte_string(&value.raw_bytes),
     }
+}
+
+fn format_origin_expression(expression: &luad_analysis::OriginExpression) -> String {
+    use luad_analysis::OriginExpressionKind;
+
+    let literal = format_origin_literal;
 
     match &expression.kind {
         OriginExpressionKind::Literal { value, .. } => literal(value),
