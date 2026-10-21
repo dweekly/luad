@@ -570,8 +570,27 @@ fn handle_write_error(err: &io::Error) -> ! {
     ExitCode::IoError.exit();
 }
 
+/// Parse argv, adding the intent map when the failure is an unknown subcommand.
+///
+/// Clap's own error names the verbs without saying which question each answers, so a reader who
+/// guessed a verb `luad` does not have gets a list that cannot tell them they guessed a missing
+/// capability rather than the wrong spelling. The map goes to stderr; machine stdout is unaffected.
+fn parse_cli() -> Cli {
+    match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(err) => {
+            if err.kind() == clap::error::ErrorKind::InvalidSubcommand {
+                let _ = err.print();
+                eprintln!("\n{}", args::INTENT_MAP);
+                ExitCode::UsageError.exit();
+            }
+            err.exit();
+        }
+    }
+}
+
 fn main() {
-    let cli = Cli::parse();
+    let cli = parse_cli();
     let stdout = io::stdout();
     let mut writer = io::BufWriter::new(stdout.lock());
 

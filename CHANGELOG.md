@@ -5,6 +5,13 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- `luad --help` and the unrecognized-subcommand error now name the command that answers each
+  reader's question, and state plainly that there is no decompiler, pointing at `luad inspect`
+  plus unluac for readable source and at `docs/examples/RECIPES.md` for worked chains. The
+  subcommand list named mechanisms only, so a reader who guessed `luad decompile` got a verb
+  list that could not distinguish an absent capability from a misspelling. The map prints to
+  stderr; machine stdout is unchanged.
+
 - Keep the resolved side of a partly unresolved control-flow join in Lua 5.1 origin
   analysis. A join whose reaching definitions include an `Unknown` collapsed to
   `control-flow-conflict`, discarding the definition that did resolve and flattening the

@@ -318,3 +318,58 @@ fn test_cli_inspect_and_disasm() {
     let query_json: serde_json::Value = serde_json::from_slice(&query_out.stdout).unwrap();
     assert!(query_json["data"]["count"].as_u64().unwrap() > 0);
 }
+
+#[test]
+fn test_unknown_subcommand_names_the_command_for_each_question() {
+    let luad = get_luad_bin();
+    // `decompile` is the verb a reader guesses when they have bytecode and want to read it, and
+    // it is a capability this tool does not have. The failure has to distinguish that from a
+    // misspelling, so it carries the intent map and says the decompiler is absent.
+    let output = Command::new(&luad)
+        .arg("decompile")
+        .output()
+        .expect("luad with an unknown subcommand must run");
+
+    assert_eq!(
+        output.status.code(),
+        Some(2),
+        "an unknown subcommand is a usage error"
+    );
+    assert!(
+        output.stdout.is_empty(),
+        "machine stdout must stay empty on a usage error, got {:?}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("unrecognized subcommand 'decompile'"));
+    assert!(
+        stderr.contains("has no decompiler"),
+        "the absent capability must be stated, not implied by omission: {stderr}"
+    );
+    assert!(stderr.contains("docs/examples/RECIPES.md"));
+    // Each question-shaped line must name a verb that actually exists.
+    for verb in [
+        "luad inspect",
+        "luad disasm",
+        "luad callees",
+        "luad origins",
+        "luad callgraph",
+        "luad query",
+        "luad cfg",
+        "luad explain",
+        "luad export",
+    ] {
+        assert!(stderr.contains(verb), "intent map must offer {verb}");
+    }
+
+    // The same map is reachable from the route the error recommends.
+    let help = Command::new(&luad)
+        .arg("--help")
+        .output()
+        .expect("luad --help must run");
+    assert_eq!(help.status.code(), Some(0));
+    let help_text = String::from_utf8_lossy(&help.stdout);
+    assert!(help_text.contains("Which command answers which question"));
+    assert!(help_text.contains("has no decompiler"));
+}

@@ -13,12 +13,35 @@ pub enum OutputFormat {
 }
 
 /// Root command-line options for `luad`.
+/// Maps a reader's question to the command that answers it.
+///
+/// The subcommand list names mechanisms, which does not tell a first-time reader which verb
+/// answers their question; this is shown in `--help` and again when a subcommand is not
+/// recognized, where an absent verb is the likeliest reason someone is reading at all.
+pub const INTENT_MAP: &str = "\
+Which command answers which question:
+  What is this file, and what layout?            luad inspect
+  What are the instructions and the constants,
+    labelled per prototype in pool order?        luad disasm
+  What does this call, by name?                  luad callees
+  What values reach a call's arguments?          luad origins
+  Which prototypes call which?                   luad callgraph
+  Where is this string or global used?           luad query --where ...
+  What are the branches and blocks?              luad cfg
+  What does this field or diagnostic mean?       luad explain
+  Facts for a whole firmware tree, as JSONL?     luad export
+
+`luad` has no decompiler and reconstructs no source. For readable Lua, compose with unluac
+after confirming the exact profile with `luad inspect`; see the comparison table in
+ROADMAP.md. Worked fact-consumption chains are in docs/examples/RECIPES.md.";
+
 #[derive(Parser, Debug)]
 #[command(
     name = "luad",
     about = "Explainable Lua bytecode laboratory for inspection, validation, and analysis",
     version,
-    propagate_version = true
+    propagate_version = true,
+    after_help = INTENT_MAP
 )]
 pub struct Cli {
     #[command(subcommand)]
