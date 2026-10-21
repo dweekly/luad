@@ -29,6 +29,18 @@ const MAX_ALTERNATIVES: usize = 8;
 /// iteration instead, so a prototype containing a loop still resolves the expressions that
 /// do converge.
 const MAX_BLOCK_REVISITS: usize = 8;
+/// Qualifying writes the reaching-definition set will consider for one capture. Each write
+/// contributes its own evidence id to the member it stores, so an unbounded count is both
+/// unbounded output and quadratic work in merging it. A capture with more writes than this
+/// reports `MutableCapture`: the answer is still a set of at most `MAX_ALTERNATIVES`
+/// members, so a prototype assigning one local this many times after building a closure is
+/// refused rather than answered from truncated evidence.
+const MAX_CAPTURE_REACHING_WRITES: usize = 64;
+/// Instructions the reaching-definition replay for one capture may step through. The replay
+/// visits each reachable block at most once, so this bounds it by the prototype's size
+/// rather than by the number of writes; a prototype larger than this reports
+/// `MutableCapture` instead of running unbounded work per capture.
+const MAX_CAPTURE_REPLAY_STEPS: usize = 100_000;
 
 /// A lossless literal suitable for structural equality in an origin graph.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
@@ -2082,45 +2094,66 @@ fn reaching_capture_set(
     let reachable = reachable_blocks_after(cfg, origin_block.index);
     let target = EffectTarget::Register { index: register };
     let mut options = vec![at_closure];
+    let mut budget = MAX_CAPTURE_REPLAY_STEPS;
 
-    for instruction in instructions {
-        if is_closure_binding(instruction) || !write_overlaps(&instruction.writes, &target) {
+    // Each reachable block is replayed once and every write in it collected on that pass,
+    // so the work is bounded by the prototype's instruction count rather than by the
+    // number of writes. Replaying per write instead re-walks the block prefix each time,
+    // which is quadratic in a block that assigns the same local repeatedly.
+    for block in &cfg.blocks {
+        if !block.is_reachable {
             continue;
         }
-        let writer_block = cfg
-            .blocks
-            .iter()
-            .find(|block| block.instruction_pcs.contains(&instruction.pc))?;
         // The same "after" relation `effect_may_be_written_after` uses, so the set covers
-        // exactly the writes that made it refuse. A write in the closure's own block is
-        // after it by program order, or by the block reaching itself around a loop.
-        let after = if writer_block.index == origin_block.index {
-            instruction.pc > closure_pc || reachable.contains(&origin_block.index)
-        } else {
-            reachable.contains(&writer_block.index)
-        };
-        if !after || !writer_block.is_reachable {
+        // exactly the writes that made it refuse. The closure's own block is included
+        // because a write can follow the closure within it.
+        if block.index != origin_block.index && !reachable.contains(&block.index) {
             continue;
         }
-        // The value a write stores is the state after that instruction at its own pc, which
-        // is not the state at the closure: the dataflow's per-block in-state is replayed to
-        // the write and the write applied, so a write whose value is itself computed from
-        // earlier instructions resolves the same way it would at a call site.
-        let incoming = in_states.get(writer_block.index)?;
-        let mut state = state_before_pc(
-            instruction.pc,
-            writer_block,
-            incoming,
-            instructions,
-            captures,
-            frame_size,
-        );
-        transfer(instruction, &mut state, captures, frame_size);
-        let written = origin_from_flow(get_register(&state, register));
-        if !resolved(&written) {
-            return None;
+        let incoming = in_states.get(block.index)?;
+        let mut state = incoming.clone();
+        for &pc in &block.instruction_pcs {
+            let Some(instruction) = instructions.get(pc) else {
+                continue;
+            };
+            if budget == 0 {
+                return None;
+            }
+            budget -= 1;
+            // A write in the closure's own block is after it by program order, or by the
+            // block reaching itself around a loop.
+            let after = if block.index == origin_block.index {
+                pc > closure_pc || reachable.contains(&origin_block.index)
+            } else {
+                true
+            };
+            // Closing the cell ends this register's identity as the captured variable: the
+            // closure's upvalue is closed, and the compiler is free to reuse the register
+            // for an unrelated local whose writes this capture can never see. Which later
+            // writes belong to which variable is not recoverable from the register alone,
+            // so the set is abandoned at that boundary rather than guessed.
+            if after && closes_register(instruction, register) {
+                return None;
+            }
+            // Transferred unconditionally, as the dataflow does, so a value computed by
+            // earlier instructions in the block resolves; closure-binding descriptors are
+            // skipped only as *writes*, since they carry no standalone effect.
+            transfer(instruction, &mut state, captures, frame_size);
+            if is_closure_binding(instruction) || !write_overlaps(&instruction.writes, &target) {
+                continue;
+            }
+            if !after {
+                continue;
+            }
+            if options.len() > MAX_CAPTURE_REACHING_WRITES {
+                return None;
+            }
+            let written = origin_from_flow(get_register(&state, register));
+            if !resolved(&written) {
+                return None;
+            }
+            options.push(written);
         }
-        options.push(written);
     }
 
     let mut flattened = Vec::new();
@@ -2159,6 +2192,19 @@ fn reaching_capture_set(
         },
         evidence,
     ))
+}
+
+/// Whether this instruction closes the upvalue cell backing `register`. Every dialect's
+/// lifter reports the boundary as `CloseUpvalues`, which closes all cells at or above a
+/// register, so the physical opcode carrying it does not matter here.
+fn closes_register(instruction: &SemanticInstruction, register: u8) -> bool {
+    instruction
+        .implicit_effects
+        .iter()
+        .any(|effect| match effect {
+            ImplicitEffect::CloseUpvalues { min_register } => *min_register <= register,
+            _ => false,
+        })
 }
 
 fn state_before_pc(

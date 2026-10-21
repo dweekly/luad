@@ -76,7 +76,10 @@ precision regression, and a re-measurement should separate it from the rest.
 `mutable-capture` also keeps its name for the cases it still covers, which are now narrower
 than the name suggests: a cell written through a closure rather than by the enclosing
 prototype, where the writes do not live in the parent and run at a time nothing here orders
-against the read. Extending the reaching-definition set to those would need the call sites of
+against the read; a reachable close of the captured cell, past which the register may hold an
+unrelated local and which writes belong to the captured variable is not recoverable from the
+register alone; and a capture with more qualifying writes than `MAX_CAPTURE_REACHING_WRITES`,
+which is a bound on evidence and work rather than a limit of the analysis. Extending the reaching-definition set to those would need the call sites of
 the mutating closure and an ordering against them, which is interprocedural and is declined
 for the reason recorded against issue #93, not merely unbuilt. The parent-written case is
 closed.

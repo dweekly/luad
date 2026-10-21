@@ -115,6 +115,36 @@ local function a_write_of_the_same_value()
   return run
 end
 
+-- A write the compiler places after the captured cell is closed. The `do` block ends the
+-- local's scope, so `CLOSE` closes the closure's upvalue and the register is free for an
+-- unrelated local. `later` is compiled into that same register, and its value can never
+-- reach this capture. The set is abandoned at the close boundary, because which later
+-- writes belong to which variable is not recoverable from the register alone.
+local function a_write_after_the_cell_is_closed()
+  local run
+  do
+    local prefix = "/etc/config"
+    run = function()
+      sink("cat " .. prefix)
+    end
+    prefix = "/tmp"
+  end
+  local later = "/must-not-be-reported"
+  return run, later
+end
+
+-- More qualifying writes than the reaching-definition set will consider. These all store
+-- the same value, so the set would deduplicate to two members, but the count is bounded
+-- before deduplication to keep both the evidence and the work per capture finite.
+local function more_writes_than_the_bound()
+  local prefix = "/etc/config"
+  local run = function()
+    sink("cat " .. prefix)
+  end
+  prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"; prefix = "/tmp"
+  return run
+end
+
 return {
   one_write_after_the_closure,
   two_writes_after_the_closure,
@@ -125,4 +155,6 @@ return {
   mutated_through_the_closure,
   an_earlier_write_the_closure_cannot_see,
   a_write_of_the_same_value,
+  a_write_after_the_cell_is_closed,
+  more_writes_than_the_bound,
 }

@@ -20,6 +20,21 @@ is promoted to a supported tier and no interface carries a compatibility promise
   possibility. The emitted shapes are unchanged, so no schema moves: a consumer already
   handling `alternatives` at a join handles this.
 
+  Two defects in that change, both found by review before any release carried them and both
+  verified by reproduction first, are corrected here rather than shipped. A write past the
+  point the captured cell is closed is no longer a member: closing the upvalue ends the
+  register's identity as that variable, and `luac5.1` reuses the register for the next local,
+  so collecting by register alone reported an unrelated variable's value. On
+  `do local x = "a"; f = function() sink(x) end; x = "b" end; local y = "c"` that produced
+  `alternatives("a" | "b" | "c")`, where `"c"` is `y`; it now reports `mutable-capture`. The
+  boundary is read from the lifter's `CloseUpvalues` effect, which every dialect emits, rather
+  than from a mnemonic. Separately, the per-write state replay is now bounded: each reachable
+  block is replayed once with every write in it collected on that pass, and the number of
+  qualifying writes is capped by `MAX_CAPTURE_REACHING_WRITES` because each write contributes
+  its own evidence id to the member it stores. A chunk assigning one captured local 10,000
+  times took over 30 seconds and now takes 0.10, matching the prior release. Both corrections
+  have a control test that fails against the uncorrected code.
+
 - `gate-argument-origins-lua51` now pins argument-level origin verdicts on the committed
   OpenWrt-derived 32-bit LNUM authority chunk, not only its profile. Structural counts cannot
   catch a precision regression -- the 0.3.0 origins regression left instruction, prototype and

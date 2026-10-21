@@ -20,6 +20,7 @@
     "test_a_key_read_off_a_non_parameter_base_is_not_a_parameter_field",
     "test_a_key_that_is_not_determinable_still_reports_dynamic_key",
     "test_a_table_whose_fields_predate_an_escape_reports_no_contents",
+    "test_a_write_past_the_cell_close_is_not_a_member_of_the_set",
     "test_a_write_through_a_register_key_is_not_a_parameter_field",
     "test_aliased_table_is_invalidated_when_the_mutated_register_is_itself_a_join",
     "test_aliased_table_option_is_invalidated_by_a_later_write",
@@ -32,6 +33,7 @@
     "test_export_origin_records_equal_direct_command",
     "test_lnum32_authority_chunk_pins_argument_level_origin_verdicts",
     "test_loop_carried_values_widen_rather_than_growing_without_bound",
+    "test_more_reaching_writes_than_the_bound_refuses_rather_than_truncating",
     "test_open_argument_window_reports_its_determinable_prefix",
     "test_open_window_prefix_keeps_positions_rather_than_only_what_resolved",
     "test_open_window_with_no_determinable_prefix_reports_none",
@@ -67,7 +69,7 @@
     },
     {
       "path": "tests/fixtures/origins_mutable_capture.lua",
-      "sha256": "1116976896c9bb9ea1458e372758ccc1f4dcd49413a316f301ebbd692371551c"
+      "sha256": "155877ddb7d99f825d742ade684bd3c6cd02a35a469da7c094194225ddc48019"
     },
     {
       "path": "tests/fixtures/origins_open_window.lua",

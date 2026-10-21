@@ -479,13 +479,17 @@ visible to the closure, and the closure may run before or after it; the set ther
 the same meaning it carries at a control-flow join, which is that each member is reachable
 and no ordering is claimed. The value the register holds where the closure is built is one
 member. A write that cannot reach the closure, including one the closure's own binding
-precedes, is not a member.
+precedes, is not a member. Nor is a write past the point the cell is closed: closing the
+upvalue ends the register's identity as the captured variable, and a compiler is free to
+reuse that register for an unrelated local whose writes the capture can never observe.
 
 `mutable-capture` remains the reason in the cases where that set cannot be bounded or
 completed: a cell written through a closure rather than by the parent, because those writes
 run at a time this analysis does not order against the read; a member that does not resolve;
 a member holding a table, whose contents a later call can change without writing the
-register; and more members than the alternatives limit. The set is never emitted partially,
+register; more members than the alternatives limit; a reachable close of the cell, after
+which which writes belong to the captured variable is not recoverable from the register
+alone; and more qualifying writes, or a larger replay, than the per-capture bounds allow. The set is never emitted partially,
 because a set reads as every possibility and a consumer cannot tell a truncated one from a
 complete one. `ambiguous-capture` continues to mean the capture itself could not be
 identified, which is a different failure from a capture whose value set is unbounded.

@@ -2158,3 +2158,53 @@ fn test_an_unrewritten_capture_stays_a_single_value_and_not_a_one_member_set() {
         "two identical reaching definitions are one value, got {deduplicated:?}"
     );
 }
+
+#[test]
+fn test_a_write_past_the_cell_close_is_not_a_member_of_the_set() {
+    let analysis = analyze_chunk_origins(&mutable_capture_chunk());
+
+    // `do local prefix = "/etc/config"; run = function() ... end; prefix = "/tmp" end;
+    // local later = "/must-not-be-reported"`. Ending the scope emits `CLOSE`, which closes
+    // the closure's upvalue and frees the register; `luac5.1` then compiles `later` into
+    // that same register. Collecting writes by register past that boundary reports a value
+    // from an unrelated variable, which is the one failure class a revert cannot undo: a
+    // wrong answer a consumer trusts. Without the close boundary this reports
+    // `alternatives("/etc/config" | "/tmp" | "/must-not-be-reported")`, so the literal
+    // below is the assertion that matters, not just the reason.
+    let closed = capture_term_in(&analysis, "0/9/0");
+    assert!(
+        matches!(
+            closed.kind,
+            OriginExpressionKind::Unknown {
+                reason: OriginUnknownReason::MutableCapture
+            }
+        ),
+        "a set abandoned at the close boundary keeps the reason, got {closed:?}"
+    );
+    assert!(
+        !format!("{closed:?}").contains("must-not-be-reported"),
+        "a write past the close is a different variable and must not appear: {closed:?}"
+    );
+}
+
+#[test]
+fn test_more_reaching_writes_than_the_bound_refuses_rather_than_truncating() {
+    let analysis = analyze_chunk_origins(&mutable_capture_chunk());
+
+    // 65 writes of `prefix` after the closure, one past `MAX_CAPTURE_REACHING_WRITES`.
+    // Every write contributes its own evidence id to the member it stores, so an unbounded
+    // count is unbounded output and quadratic work merging it. These writes all store the
+    // same value, so the set would deduplicate to two members and be *correct* -- this
+    // test pins the bound, not a correctness fix, and the conservative reason is what a
+    // bound is allowed to cost.
+    let over_bound = capture_term_in(&analysis, "0/10/0");
+    assert!(
+        matches!(
+            over_bound.kind,
+            OriginExpressionKind::Unknown {
+                reason: OriginUnknownReason::MutableCapture
+            }
+        ),
+        "past the write bound the reason stands, got {over_bound:?}"
+    );
+}
