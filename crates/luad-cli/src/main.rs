@@ -513,55 +513,6 @@ fn wrap_document<T>(
     }
 }
 
-struct TrackedWriter<'a, W: io::Write> {
-    inner: &'a mut W,
-    error: Option<io::Error>,
-}
-
-impl<'a, W: io::Write> TrackedWriter<'a, W> {
-    fn new(inner: &'a mut W) -> Self {
-        Self { inner, error: None }
-    }
-
-    fn check_error(self) -> io::Result<()> {
-        if let Some(err) = self.error {
-            Err(err)
-        } else {
-            Ok(())
-        }
-    }
-}
-
-impl<'a, W: io::Write> io::Write for TrackedWriter<'a, W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match self.inner.write(buf) {
-            Ok(n) => Ok(n),
-            Err(e) => {
-                let kind = e.kind();
-                let err_msg = e.to_string();
-                if self.error.is_none() {
-                    self.error = Some(io::Error::new(kind, err_msg));
-                }
-                Err(e)
-            }
-        }
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        match self.inner.flush() {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                let kind = e.kind();
-                let err_msg = e.to_string();
-                if self.error.is_none() {
-                    self.error = Some(io::Error::new(kind, err_msg));
-                }
-                Err(e)
-            }
-        }
-    }
-}
-
 fn handle_write_error(err: &io::Error) -> ! {
     if err.kind() == io::ErrorKind::BrokenPipe {
         std::process::exit(0);
@@ -1146,9 +1097,16 @@ fn handle_schema(args: SchemaArgs, writer: &mut impl io::Write) -> io::Result<Ex
 
 fn handle_completions(args: CompletionsArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let mut cmd = Cli::command();
-    let mut tracked = TrackedWriter::new(writer);
-    clap_complete::generate(args.shell, &mut cmd, "luad", &mut tracked);
-    tracked.check_error()?;
+    // `clap_complete` writes with `.expect`, so a closed stdout -- `luad completions bash |
+    // head -1` -- aborted the process with a panic and exit 101 instead of the quiet exit
+    // every other command gives. Its fallible `try_generate` does not fix this: not every
+    // shell's implementation is fallible to the bottom, and fish's panics in a helper. The
+    // script is therefore rendered into memory, where a write cannot fail, and sent to the
+    // real writer through the normal error path. Its size is fixed by this CLI's own
+    // definition rather than by any input, so the buffer is bounded.
+    let mut script = Vec::new();
+    clap_complete::generate(args.shell, &mut cmd, "luad", &mut script);
+    writer.write_all(&script)?;
     Ok(ExitCode::Success)
 }
 
@@ -3276,6 +3234,57 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A writer that accepts `budget` bytes and then reports a broken pipe, which is what a
+    /// reader closing mid-script looks like to the process writing it.
+    struct BrokenPipeAfter {
+        remaining: usize,
+    }
+
+    impl io::Write for BrokenPipeAfter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            if self.remaining == 0 {
+                return Err(io::Error::new(io::ErrorKind::BrokenPipe, "broken pipe"));
+            }
+            let accepted = buf.len().min(self.remaining);
+            self.remaining -= accepted;
+            Ok(accepted)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// `clap_complete`'s infallible `generate` panics when a write fails, which made
+    /// `luad completions <shell> | head -1` abort with a panic and exit 101 instead of the
+    /// quiet exit every other command gives on a closed pipe. Whether the panic happened
+    /// depended on whether the whole script fit in the pipe buffer before the reader closed,
+    /// so a test that drives a real pipe passes or fails by a race, which is why this one
+    /// supplies the failure directly. Returning a `BrokenPipe` error is what lets `main` route
+    /// it to `handle_write_error`; the shells are covered individually because each has its own
+    /// generator with its own write sites.
+    #[test]
+    fn test_completions_report_a_broken_pipe_instead_of_panicking() {
+        for shell in [
+            clap_complete::Shell::Bash,
+            clap_complete::Shell::Zsh,
+            clap_complete::Shell::Fish,
+            clap_complete::Shell::PowerShell,
+            clap_complete::Shell::Elvish,
+        ] {
+            // Enough to emit a prefix of the script and then fail, so the error is raised
+            // inside the generator rather than before it writes anything.
+            let mut writer = BrokenPipeAfter { remaining: 64 };
+            let result = handle_completions(CompletionsArgs { shell }, &mut writer);
+            let err = result.expect_err(&format!("{shell} must report the closed pipe"));
+            assert_eq!(
+                err.kind(),
+                io::ErrorKind::BrokenPipe,
+                "{shell} must report the pipe closure as BrokenPipe so main exits quietly, got {err:?}"
+            );
+        }
+    }
 
     #[test]
     fn test_fact_emitter_budget_and_counts() {

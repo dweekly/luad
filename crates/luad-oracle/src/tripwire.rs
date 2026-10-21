@@ -455,6 +455,17 @@ pub fn run_with_tripwire(
 mod tests {
     use super::*;
 
+    /// How long the obstruction in the promptness tests holds, and the bound those
+    /// tests allow. They assert that the tripwire returns on its own deadline instead of
+    /// waiting for whatever is holding its pipes, so what has to be measured is that the
+    /// elapsed time stays far away from `OBSTRUCTION_HOLD`, not that it lands within some
+    /// absolute figure: a loaded machine delays the wakeup and the reap without the tripwire
+    /// having waited for anything. The two are kept an order of magnitude apart so scheduling
+    /// delay cannot reach the bound while a tripwire that really waits exceeds it by 3x. A
+    /// bound close to the deadline instead measures how busy the host is.
+    const OBSTRUCTION_HOLD: Duration = Duration::from_secs(3);
+    const PROMPT_RETURN_BOUND: Duration = Duration::from_secs(1);
+
     #[cfg(unix)]
     #[test]
     fn test_process_group_signal_targets_only_the_child_group() {
@@ -578,15 +589,22 @@ mod tests {
         };
 
         let start = Instant::now();
-        let res = run_with_tripwire(sh, &["-c", "sleep 0.3"], None, &budget);
+        let res = run_with_tripwire(
+            sh,
+            &["-c", &format!("sleep {}", OBSTRUCTION_HOLD.as_secs())],
+            None,
+            &budget,
+        );
         let elapsed = start.elapsed();
 
         match res {
             Err(TripwireError::WallTimeCeilingExceeded { ceiling, .. }) => {
                 assert_eq!(ceiling, Duration::from_millis(15));
                 assert!(
-                    elapsed < Duration::from_millis(200),
-                    "Tripwire must kill child actively (took {elapsed:?}), not wait for 300ms sleeper to finish"
+                    elapsed < PROMPT_RETURN_BOUND,
+                    "Tripwire must kill the child actively rather than waiting for the sleeper \
+                     (took {elapsed:?}, bound {PROMPT_RETURN_BOUND:?}, obstruction \
+                     {OBSTRUCTION_HOLD:?})"
                 );
             }
             other => panic!("Expected WallTimeCeilingExceeded, got {other:?}"),
@@ -650,15 +668,21 @@ mod tests {
         let large_stdin = vec![0x41u8; 1024 * 1024];
 
         let start = Instant::now();
-        let res = run_with_tripwire(sh, &["-c", "sleep 0.3"], Some(&large_stdin), &budget);
+        let res = run_with_tripwire(
+            sh,
+            &["-c", &format!("sleep {}", OBSTRUCTION_HOLD.as_secs())],
+            Some(&large_stdin),
+            &budget,
+        );
         let elapsed = start.elapsed();
 
         match res {
             Err(TripwireError::WallTimeCeilingExceeded { ceiling, .. }) => {
                 assert_eq!(ceiling, Duration::from_millis(15));
                 assert!(
-                    elapsed < Duration::from_millis(150),
-                    "Tripwire must not block on stdin writes before deadline (took {elapsed:?})"
+                    elapsed < PROMPT_RETURN_BOUND,
+                    "Tripwire must not block on stdin writes before deadline (took {elapsed:?}, \
+                     bound {PROMPT_RETURN_BOUND:?}, obstruction {OBSTRUCTION_HOLD:?})"
                 );
             }
             other => panic!("Expected WallTimeCeilingExceeded, got {other:?}"),
@@ -679,17 +703,27 @@ mod tests {
             max_stderr_bytes: 1024 * 1024,
         };
 
-        // Child exits immediately but background descendant holds stdout pipe open for 300ms
+        // Child exits immediately but a background descendant holds the stdout pipe open
         let start = Instant::now();
-        let res = run_with_tripwire(sh, &["-c", "(sleep 0.3) & exit 0"], None, &budget);
+        let res = run_with_tripwire(
+            sh,
+            &[
+                "-c",
+                &format!("(sleep {}) & exit 0", OBSTRUCTION_HOLD.as_secs()),
+            ],
+            None,
+            &budget,
+        );
         let elapsed = start.elapsed();
 
         match res {
             Err(TripwireError::WallTimeCeilingExceeded { ceiling, .. }) => {
                 assert_eq!(ceiling, Duration::from_millis(15));
                 assert!(
-                    elapsed < Duration::from_millis(150),
-                    "Tripwire must not block indefinitely waiting on descendant-held pipes (took {elapsed:?})"
+                    elapsed < PROMPT_RETURN_BOUND,
+                    "Tripwire must not block indefinitely waiting on descendant-held pipes \
+                     (took {elapsed:?}, bound {PROMPT_RETURN_BOUND:?}, obstruction \
+                     {OBSTRUCTION_HOLD:?})"
                 );
             }
             other => panic!("Expected WallTimeCeilingExceeded, got {other:?}"),
