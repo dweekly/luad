@@ -1,232 +1,319 @@
 # `luad` roadmap
 
-Status: future priorities after the experimental 0.2 release candidate.
+Status: plan of record for community usefulness and the firmware consumer.
 
-Fresh as of: 2026-10-21.
+Fresh as of: 2026-10-22.
 
-## Release completion boundary
+## Destination and product boundary
 
-Publish only a clean, versioned revision with truthful release notes, passing Linux
-x86-64 and macOS ARM64 CI, same-revision archives and source SBOM, and verified build
-attestations. Consume accepted bytes without rebuilding. Require fresh-download checks
-and the public walkthrough on both native platforms before declaring release complete.
-Any failed required check blocks publication; corrected published bytes require a new
-version rather than moving a version tag.
+Make unfamiliar PUC Lua bytecode useful to people and tools: identify its declared
+format, inspect exact constants and closure bindings, follow supported call and value
+relationships, compare artifacts, and reproduce each answer from the original bytes.
+The first audience is firmware researchers and Lua tool authors; VM learners and
+maintainers comparing builds provide a second check that the product is not specific
+to one investigation. Scripts and agents are interfaces to these users, not independent
+proof of community demand.
 
-The [active sprint or checkpoint](docs/NEXT-SPRINT.md) controls implementation scope.
-Choose the next researcher outcome separately after release verification. Keep all
-dialects experimental until their named evidence gates authorize promotion. The
-[1.0 program](docs/ROADMAP-1.0.md) does not gate an experimental 0.x release.
-Implementation history belongs in [CHANGELOG.md](CHANGELOG.md) and Git history.
+Earn a distinct place through reliable interpretation, byte provenance, explicit
+uncertainty, bounded operation, and a usable machine contract. Measure the useful
+combination against existing tools rather than claiming that Rust, disassembly,
+constant pools, CFGs, or embedded-layout handling are unique. Reuse compatible tools
+and contribute fixes and fixtures upstream when that solves the user's problem.
 
-## Origin precision
+Keep extraction, decompilation, source reconstruction, target execution, authentication
+policy, taint classification, exploitability, and persistent research state outside the
+core. A caller-oriented view can belong in `luad` even when it reorganizes existing
+facts. Its contract must preserve assumptions, identity, context, and incomplete
+coverage; determinism alone does not establish semantic correctness.
+LuaJIT and Luau are separate bytecode systems outside the product.
 
-Two measured origin-analysis gaps, stack-ranked. Both surfaced from running `luad`
-0.3.1 over a private OpenWrt-derived Lua 5.1 LNUM32 firmware corpus (~260 files) as the
-whole fact engine under a downstream security-analysis pipeline. A private corpus can
-find defects and measure usefulness but cannot promote a format; the acceptance criteria
-below therefore pair a public fixture with a re-measurement against that corpus. The
-counts are stated once: after the 0.3.x work, `control-flow-conflict` is the largest
-remaining origin unknown-reason (2,940 down to 1,016 corpus-wide), and it sits behind 99
-of 175 unresolved call-argument origins that reach shell and filesystem sinks, measured over
-a corpus 97% of whose files are bytecode this tool parses. A second OpenWrt-derived corpus
-shows the same ordering, with `control-flow-conflict` on 19 of 105 unresolved
-shell-and-filesystem sink arguments; that corroborates the direction from an independent
-corpus and does not restate the figure above, which is not currently reproducible against
-the first one.
+[docs/NEXT-SPRINT.md](docs/NEXT-SPRINT.md) authorizes the single implementation batch.
+This roadmap does not authorize production edits. Remove accepted obligations from
+this file; retain history and accepted measurements in commits, issues, release
+evidence, and [CHANGELOG.md](CHANGELOG.md).
 
-The second corpus is the weaker of the two and its denominator says why: 175 of its 279
-files are bytecode and 104 are plain Lua source this tool does not read, so every count
-from it describes 63% of the image rather than the image. The vendor stopped precompiling
-much of its Lua tree between the two product generations, which is a packaging difference
-between corpora and not a property of any analysis here. Two counts taken over coverages
-that far apart are not like-for-like, however closely they agree.
+## How to choose the next batch
 
-### Re-measure the origin precision changes over the private corpus
+Rank candidates in this order:
 
-Several origin-analysis gaps have closed since 0.3.1, each accepted on a public fixture with a
-measured before and after, and none measured corpus-wide:
+- Eliminate a reproducible false answer or an unbounded path on an exposed surface.
+- Unblock a named user question or remove a repeated, error-prone integration step.
+- Improve useful coverage on the actual files and relationships needed by that task.
+- Reduce measured latency, output, or installation friction on that workflow.
+- Expand targets or integrations only when the preceding options cannot answer the need.
 
-- a join with one bounded and one unresolved predecessor emits the `alternatives` set rather
-  than collapsing to `control-flow-conflict`
-- `TESTSET` is modelled, so the `a or b` and `a and b` idioms over locals resolve instead of
-  reporting `overwritten`
-- an open argument window reports the determinable arguments before its tail, which were
-  previously discarded entirely
-- a table access whose key register holds only literals names its field rather than reporting
-  `dynamic-key`
+For each candidate record the user, question, current workaround, evidence and its
+confidence, expected benefit, dependencies, implementation cost, and correctness risk.
+Use counts when reproducible, with their population, tool revision, input identity,
+consumer revision, and field definition. A correctness counterexample needs no adoption
+count. A raw unknown-reason histogram is not a measure of questions blocked, and more
+resolved values are not an improvement if uncertainty has been discarded.
 
-What is owed is the re-measurement the acceptance criteria named: over the private corpus, the
-count per unknown-reason and whether previously-blocked bounded sink arguments resolve, with no
-argument losing an expression it had in 0.3.1. The counts above this section predate all of it
-and are not restated as current. Any such count must state which field it counted: an earlier
-pass reported `control-flow-conflict` as blocking zero sink arguments by searching a consumer
-verdict field whose vocabulary cannot contain a `luad` reason, so it would have returned zero
-for every reason.
+Re-rank after every two or three related product batches and after an outside trial.
+A new silent incorrect answer interrupts feature work. Each implementation contract
+must map acceptance assertions to exact executable commands before code changes;
+existing tests or gates are reused unless they cannot falsify the new interaction.
 
-One correctness change moves answers in the other direction and should be expected to: a
-table-literal field written before the table reached a callee, a global or an upvalue is no
-longer reported, because the holder may have written the same key. Arguments that previously
-carried such a field now carry fewer fields or none. That is a 0.3.1 defect corrected, not a
-precision regression, and a re-measurement should separate it from the rest.
+## Delivery order
 
-### Reaching definitions for a rewritten capture: attempted and withdrawn
+The two ownership tracks below meet at a shared public workflow. Fixes in the private
+consumer do not require expanding the core, and a waiting private measurement does not
+block a public correctness fix. Coordinate shared interface changes across the tracks
+so consumer and core results retain matching schema and interpretation identities.
 
-`mutable-capture` covers a captured register the enclosing prototype writes after building
-the closure. Reporting the set of definitions that can reach the closure was implemented,
-accepted on a public fixture, and withdrawn; it is not merely unbuilt. The premise is sound
-and is worth rebuilding: in Lua 5.1 the closure holds an open upvalue onto the parent's stack
-slot, so a later write by the parent is visible to the closure and reporting only the value at
-the capture is a wrong answer, while the closure may also run before that write, so no single
-value is the answer either. What failed was the method of enumerating the writes.
+These are milestones, not single implementation assignments. Contract and accept one
+coherent outcome at a time; split public corpus/reference-consumer work, caller
+inspection, and packaged trial preparation into bounded batches as their dependencies
+become reviewable.
 
-Two defects, each a wrong answer rather than lost precision, were found by review after the
-change was on `main` and neither by its fixture suite:
+| Order | Outcome | Owner | Dependency and exit condition |
+|---|---|---|---|
+| A | Trustworthy comparison and convention-based links | `luad` | First implementation work; public counterexamples and controls must distinguish changed artifacts and unsupported bindings. |
+| B | A reliable firmware measurement loop | Firmware consumer, with public reproductions in `luad` | May be prepared independently of A; no before/after product ranking until coverage and consumer semantics are checked. |
+| C | Useful public investigation and caller-inspection workflows | `luad`, plus a small reference consumer | Depends on A for comparison/link claims and on B for firmware benefit claims; exact answers must be obtainable without a custom decoder. |
+| D | Independent evidence of value against alternatives | Maintainer and outside users | Trial an installable C candidate before interface freeze; correct the blocking findings. |
+| E | A clearly scoped experimental announcement | Maintainer | A-D close for the advertised workflows; install, evidence, limits, and fresh-download checks pass. |
+| F | A narrow stable contract and exact target qualification | `luad` | Adopt the 1.0 program only after utility is established; promote no target by implication. |
 
-- Writes were collected by register across a close of the captured cell. Closing the upvalue
-  ends the register's identity as that variable, and `luac5.1` reuses the register for the next
-  local in scope, so an unrelated variable's value was reported as a possible origin. The
-  reproduction is `do local x = "a"; f = function() sink(x) end; x = "b" end; local y = "c"`,
-  which reported `alternatives("a" | "b" | "c")` where `"c"` is `y`.
-- Writes were collected from `SemanticInstruction::writes`, which is a declared-effect list
-  and not an exhaustive enumeration of register modification. `CALL A B 0` declares no writes
-  at all, `FORPREP` declares only `R(A)` while converting `A+1` and `A+2`, and `TFORLOOP`
-  declares `A+3` upward while writing `A+2`. A capture clobbered by any of those was reported
-  as a complete set with that definition missing, which is the failure the never-partial rule
-  exists to prevent.
+### A. Correct false answers before expanding analysis
 
-Both are instances of one mistake, which is what withdraws the approach rather than patching
-it: the set was built by subtracting writes that could be ruled out, so anything the
-enumeration failed to see silently became absent from a set that reads as complete. A rebuild
-must invert that default, in the discipline this file already requires of escape analysis: an
-allowlist of instructions whose register writes are known to be completely declared, refusing
-the capture when any instruction on the path is not on it, with the cell's lifetime bounded by
-its close rather than by block reachability.
+Deliver comparison and linking as separate bounded product batches, comparison first.
 
-The work must also be bounded per prototype and not per capture. A budget charged per captured
-slot bounds each replay and bounds nothing in aggregate: 50 locals captured by 20 closures in a
-3,000-call prototype replayed the parent 1,000 times, each replay under its own limit, taking
-30.77 seconds against 0.38 before the change.
+**Comparison.** Make `diff` detect same-count constant-value changes in both default
+and `--semantic` modes. Specify equality for every field included in the claim:
+constants and exact scalar representations, prototype additions/removals, parameters,
+vararg flags, captures, instructions, declared layout, and selected debug metadata.
+A same-length string replacement or a removed child must not produce `is_identical`.
+Use identical inputs as the positive control and isolated changes as negative controls.
+Do not describe normalized instruction comparison as proof of behavioral equivalence.
+If an advertised comparison cannot be established within the batch, report that boundary
+explicitly rather than returning an unconditional equality result.
 
-`control-flow-conflict` remains correct for one case and keeps that name: a loop-carried value
-widened at `MAX_BLOCK_REVISITS`, whose set of reaching definitions is not finite. Widening to a
-bounded set there was tried and is not available. The conflict marker has to absorb a join, or
-a widened slot becomes one option of a strictly larger set on every pass, the worklist never
-reaches a fixpoint, and it stops by exhausting its step budget, which reports every call in the
-prototype as `analysis-limit` including the ones that converged at once. That was measured on
-`tests/fixtures/origins_loop_widening.lua`, where the non-loop-carried sink argument lost its
-concat expression entirely. The two sites are coupled: join precision depends on the widening
-marker staying the top of the lattice, so the remaining imprecision there is bounded by an
-analysis constant rather than by the lattice, and the constant would be the deliverable.
+Start in `crates/luad-analysis/src/diff.rs`, the public diff handler in
+`crates/luad-cli/src/main.rs`, and `crates/luad-oracle/tests/test_analysis.rs`.
+Add public CLI assertions for the claimed modes and reuse ordinary tests; a new
+comparison framework or release gate is not a prerequisite.
 
-### What `unsupported-value` and `overwritten` actually mean
+**Convention-based linking.** Define the admitted module-initialization shape before
+extending resolution. A function store invalidated by a later nil, non-closure,
+ambiguous, or potentially clobbering store must not prove an export. A module declaration
+in a statically unreachable branch must not establish the module environment. Exercise
+conditional declarations, multiple declarations, aliases, and resource cutoffs with
+positive ordinary module pairs. Refuse shapes outside the proved subset rather than
+building a whole-program interpreter.
 
-Both names read as claims about a value and are not. `overwritten` is the reported reason for
-any register write this analysis does not model, which is why it also covers a register
-written more than once. `unsupported-value` is almost entirely table invalidation: a table
-whose contents may have changed, not a value of an unsupported type. Where a reason's name
-misdescribes it, a consumer counts it looking for the wrong thing; both are now documented in
-[docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md).
+Start in `crates/luad-analysis/src/linking.rs`, its shared global-store analysis in
+`callees.rs`, and `crates/luad-oracle/tests/test_cross_chunk_linking.rs`. Extend
+`gate-cross-chunk-link` for the new interaction and preserve duplicate, absent, and
+limit outcomes. Keep convention selection explicit. Never silently auto-enable it
+because a path looks like LuCI.
 
-The remaining `unsupported-value` population is a blanket invalidation: every `CALL`
-invalidates every register holding a table anywhere in its expression, because a callee may
-mutate a table it can reach. Bounding that needs an escape analysis — a table constructed
-locally, never passed to a call, never stored to a global, upvalue or another table, and never
-captured or returned, cannot be mutated by a callee. It is decidable within a prototype and is
-sound only if built as an allowlist of known-safe readers, defaulting to escaped, since
-enumerating escape routes risks missing one and a missed one reports a stale table. Not
-authorized without its own contract: the failure mode is the class that takes priority over
-feature work.
+**Exit:** the counterexamples are retained as public source with generated-fixture
+provenance where binaries are retained; the relevant public assertions, existing gate,
+and one aggregate check pass. Correctness fixes receive a new experimental patch
+release when packaged; no tag is moved. Do not promote `diff` or linking to stable.
 
-### Investigate the origin unknown-reason saturation at 2000 (B-9)
+### B. Make the firmware consumer a reliable product signal
 
-In one downstream aggregation, two origin unknown-reason totals read exactly 2000
-corpus-wide while no single file approached that number. That is the shape of a silent
-cap, but the responsible layer is not yet identified and this is not confirmed to be a
-`luad` defect. It is not in the `origins.rs` analysis constants (`MAX_EXPRESSION_*`,
-`MAX_TRANSFER_STEPS`, `MAX_ALTERNATIVES`, `MAX_BLOCK_REVISITS`), and `luad`'s own paths do
-not obviously clamp a global unknown-reason count: `handle_origins` serializes every call
-site, and `export` uses a per-file `FactEmitter` with an optional `max_facts_per_file`
-whose truncation is surfaced explicitly through `file_end.is_truncated`. So the
-saturation may be a consumer-side aggregation artifact rather than anything `luad` does.
-It still matters because a consumer read the totals as `unsupported-value` falling 2394
-to 2000 and `overwritten` rising 1976 to 2000, both of which are suspect if either side
-is clamping, and nearly reported movement that may not have happened.
+The private consumer owns this work in its own repository. Keep private binaries,
+security findings, model/version coordinates, and raw investigation output there.
+Upstream only minimized, redistributable VM or interface reproductions.
 
-**Acceptance.** First reproduce the 2000 saturation across raw `luad` output and the
-consumer aggregation separately, to locate the responsible layer. If it is `luad`, make
-the truncation explicit with a diagnostic and a truncated flag, and add a test asserting
-the signal is present when the limit binds. If it is the consumer, close this as
-not-a-`luad`-defect and record why, so the observation is not re-filed.
+**Qualify the consumer's interpretation.** Preserve unknowns at expression, recursion,
+field-path, and output limits. Reject unknown schema variants instead of treating them
+as empty. Require file and export completion, explicit skipped/failed/truncated counts,
+and artifact-plus-interpretation identities. A truncated stream must not yield a clean
+empty result. Consume the core's link records rather than maintaining a competing
+instruction-based export resolver where the supported convention applies.
 
-## Later
+Keep lexical containment separate from call reachability. A never-invoked nested
+closure must not make its parent's endpoint reach a sink; an explicitly invoked twin
+must provide the necessary edge. Qualify callback registration and dispatch-table
+recovery with decoy tables, aliases, overwrites, branches, and unknown cases. Separate
+possible call-graph paths from feasible execution and from authentication judgments.
+Retain per-caller origin evidence so unrelated callers cannot taint a specific path by
+union. Treat security labels as investigation-specific hypotheses requiring validation.
 
-- Promote an exact target once one profile's evidence is complete end to end. See the
-  [version 1 support boundary](#version-1-support-boundary) for which two, and
-  [docs/ROADMAP-1.0.md](docs/ROADMAP-1.0.md) for what promotion requires.
-- Freeze the machine interface. Today's schemas are versioned but carry no compatibility
-  promise; a small external consumer should be able to depend on them through a 1.x line.
-- EdgeTX Lua 5.3 32-bit, stock Lua 5.4.9, and vendor opcode-map profiles, each chosen by
-  demonstrated need and a public compiler authority rather than for completeness.
-- Partial-facts recovery, bounded value and call analysis, and a Rizin or Kaitai adapter,
-  each needing a concrete consumer before it is worth building.
+**Close source coverage outside the core.** Inventory bytecode, source, unsupported,
+and failed inputs separately, including which missing files supply needed callers or
+callees. Evaluate an existing Lua parser or a pinned compatible offline compiler for
+source files. A compiler bridge must be isolated and bounded, must not execute the
+source or chunk, and must preserve source-to-generated-artifact identity, syntax and
+numeric-mode assumptions, and mappings usable by the consumer. Generated bytecode is a
+new artifact, not the vendor's original bytes. If compatibility cannot be demonstrated,
+retain a separately labeled source path and explicit unresolved coverage.
+
+**Resolve byte order from artifacts.** Inspect actual headers and representative body
+fields from each required platform. Record an inventory by encoded profile, widths,
+and byte order; do not infer chunk layout from the CPU. Propose big-endian parsing only
+if a needed encoded layout is genuinely refused and public compiler authority plus a
+redistributable positive fixture can define it. A refusal control alone cannot qualify
+reading that layout.
+
+**Re-measure with a fixed denominator.** Pin the input inventory/hashes, core build,
+consumer revision/configuration, and scope. Compare the released baseline with the
+candidate at `(artifact, prototype, pc, argument)`, alongside task-level caller and
+endpoint results. Account separately for lost information, corrected stale answers,
+newly known answers, source coverage, and consumer fixes. Recheck the suspected 2000
+saturation in raw records and aggregation separately; localize it before assigning a
+core fix. Do not run the private pipeline's findings through the core's `diff` command
+as a substitute for a typed origin comparator.
+
+**Exit:** the consumer detects deliberate false reachability, cutoff loss, missing
+records, and stale or mismatched inputs; records complete coverage and scoped before/
+after results; and identifies the highest-cost remaining question with public reproducers
+for any core defects. Consumer counts alone never qualify a target or a security finding.
+Unresolved source or dynamic paths may remain explicitly outside coverage; a complete
+accounting must not be described as complete whole-firmware analysis.
+
+### C. Deliver complete public workflows and convenient factual views
+
+Provide three executable workflows from a packaged candidate and public inputs:
+
+- **Inspect and investigate:** inventory a mixed tree, identify declared layouts, find a
+  literal/global, inspect its uses and closure bindings, and recover the supporting byte
+  locations. Account for source, malformed, unsupported, and truncated inputs.
+- **Inspect callers:** select an exact artifact and prototype in an explicit corpus,
+  enumerate the supported incoming relations, and inspect each caller's argument
+  origins. Show duplicate/failed resolutions and corpus coverage beside the answer.
+- **Compare and hand off:** identify exact content changes between two related builds,
+  inspect changed constants or prototypes, and pass an exactly compatible artifact to
+  a tested external tool. Separate structural/content changes from behavioral claims.
+
+Use a small redistributable application/module subset and applicable official Lua
+cases compiled with pinned stock 5.1 and OpenWrt LNUM32 authorities. Include stripped/
+debug pairs, closures, module initialization, field repacking, open arguments, loops,
+and the actual loop-convergence regression shape. Pin argument-level expressions and
+conservative unknowns as well as structure. Reuse the existing origin and link gates;
+a realistic fixture is valuable only if an assertion can detect its relevant defect.
+Retain source licenses, compiler/patch identities, commands, hashes, and controls.
+
+**Make caller inspection a convenient operation with an explicitly experimental
+evidence boundary.** Choose the CLI spelling and typed response in its
+contract, reuse existing relation/link/origin analysis, and begin with bounded one-hop
+per-caller records. Do not require users to join a full instruction export for this
+question. Preserve bytecode-local parameter origins. An empty enumerated caller list
+means no observed caller in that corpus, not unreachable code or a complete negative.
+Unenumerated callers remain unknown; they cannot be listed or counted by assumption.
+Multi-hop substitution and flattening into a union require separate evidence of need.
+
+Ship one small reference consumer demonstrating schema checks, identity-scoped joins,
+completion checks, unknown propagation, and caller context. Share its factual adapter
+across the workflows; keep firmware dispatch, sink, and authentication policy outside it.
+Test duplicate local IDs across artifacts, unusual paths/string bytes, omitted records,
+and unknown variants. Persistence and a general-purpose SDK are not prerequisites.
+
+Measure time to first answer, end-to-end time, peak memory, output bytes, and glue code
+on public workloads and a privately scoped firmware replay. Prefer existing family
+selection, targeted queries, and reuse of computed analysis. Set quantitative budgets
+from these baselines before claiming performance or implementing a new optimization.
+No persistent index, schema redesign, or uniform limit increase without a demonstrated
+bottleneck and a falsifiable improvement target.
+
+**Exit:** each workflow has reproducible commands, exact expected answers and failure
+cases, applicable profile/tool versions, bounded output, and byte evidence. A user
+needs no custom bytecode decoder. The README leads directly to these outcomes and
+states current capability limits; existing discoverability features are tested rather
+than rebuilt merely because a reader overlooked them.
+
+### D. Establish independent usefulness
+
+Recruit at least two people outside the development loop: a firmware researcher and a
+Lua tool author or maintainer with a different task. Give each a packaged candidate,
+public inputs appropriate to their task, and the public documentation. Define the
+question and success assertions before the trial; preserve uncoached first-use results.
+Internal agents can prepare fixtures but cannot substitute for these participants.
+
+Run the same relevant tasks with exact versions of official `luac`, unluac/unluac-rs,
+and a current applicable Rizin build. Separate source inspection, project claims, and
+executed results, including released versus development versions. Compare correct
+answers, refusal/unknown behavior, glue code, installation effort, time, and evidence
+traceability. Do not score a decompiler on a task it does not promise or require an
+alternative to fail for `luad` to succeed. Update the dated prior-art survey from results.
+
+**Exit:** outside users complete the public tasks, blocking errors and misconceptions
+are corrected, and at least one task demonstrates a concrete reason to choose or embed
+`luad`. If there is no useful advantage, narrow the product to an adapter, reusable
+library, or shared evidence contribution instead of expanding feature breadth. Preserve
+sanitized trial and comparison records in durable release/PR evidence.
+
+### E. Announce a useful experimental release
+
+Announce after A-D establish the advertised workflows, without waiting for every 1.0
+qualification obligation. Publish the task-specific value, exact experimental profiles,
+known limitations, and working examples; do not advertise a vulnerability scanner,
+behavioral-equivalence checker, or universal Lua backend.
+
+Require the exact packaged revision to pass the relevant named gates, aggregate CI on
+Linux x86-64 and macOS ARM64, existing hostile-input smoke checks, and workflow transfer
+from fresh downloads. Retain matching archives, checksums, source SBOM, build identity,
+and required attestations using existing machinery. Do not rebuild accepted bytes or
+move a released tag. A known false answer in an advertised workflow blocks announcement
+until fixed, explicitly refused, or removed from that advertised workflow.
+
+Clearing a private firmware image or resolving every unknown is not an announcement
+condition. Require reliable consumer accounting for any claimed firmware benefit;
+keep incomplete private coverage visible while shipping independently demonstrated
+public workflows.
+
+Use the project issues/discussions for reports; do not create a new feedback platform.
+Publish useful fixtures and format notes alongside the release and invite upstream
+reuse. Seek outside participants before announcement so trial findings can shape it.
+
+**Exit:** a new user can install, answer the documented questions, understand omissions,
+and continue in an existing tool. Capability status remains experimental until its
+separate promotion gate passes. Record subsequent independent use and repeat tasks;
+star counts, model reviews, and a successful self-run are not adoption evidence.
+
+### F. Stabilize what users actually depend on
+
+Adopt [docs/ROADMAP-1.0.md](docs/ROADMAP-1.0.md) when outside use justifies a compatibility
+promise. Freeze the smallest command/fact subset that serves those workflows, including
+identity, limits, completion, errors, and schema evolution. Give experimental derived
+facts an explicit boundary so a stable export envelope does not promote them implicitly.
 
 ### Version 1 support boundary
 
-If and when `luad` reaches 1.0, that release will promote exactly two independently
-qualified targets, as defined by the canonical
-[release boundary](docs/RELEASING.md#frozen-version-1-boundary):
+Preserve the [frozen version-1 boundary](docs/RELEASING.md#frozen-version-1-boundary):
 
-1. OpenWrt-derived Lua 5.1.5 profile `lua5.1-lnum32` with
-   `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4`;
-2. stock PUC Lua 5.1.5 profile `lua5.1` with
-   `int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0`.
+| Qualification order | Compiler/profile | Exact serialized layout |
+|---|---|---|
+| First | OpenWrt-derived Lua 5.1.5, `lua5.1-lnum32` | `int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4` |
+| Second | Stock PUC Lua 5.1.5, `lua5.1` | `int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0` |
 
-Passing one will not imply the other. Each profile, numeric representation, word size,
-and byte order remains a separate claim, and no target inherits support from a nearby
-layout. This is a future compatibility promise, not a present support claim: the
-supported target set is empty today.
+No adjacent layout, dialect, or analysis inherits support. Changing that future release
+boundary requires its own explicit planning decision and corresponding requirements/
+release-policy changes.
 
-## Sequencing: breadth before integration
+## Conditional work after the first useful workflows
 
-Expand layout and validation coverage using public compiler authority before embedding
-luad facts in another tool. Select vendor profiles by demonstrated researcher need.
-Qualify analysis for an exact dialect before exposing it to dependent integrations.
-A silent incorrect answer takes priority over an adapter or integration feature.
+Select from this list by verified task benefit, cost, and risk, not issue age or raw
+frequency. None is an automatic prerequisite for announcement or a 1.0 promise.
 
-## Out of scope
+- **Mutable-capture origins:** evaluate only after a qualified consumer identifies
+  affected questions. Bound a cell by its close and distinguish register reuse; require
+  a complete effect model or a known-safe instruction allowlist, refuse unknown writes,
+  and charge replay to a shared per-prototype budget. Cover open-result calls, numeric
+  and generic loops, closure-mediated writes, and unresolved members. Preserve
+  `mutable-capture` when the set cannot be established completely. Use
+  [#97](https://github.com/dweekly/luad/issues/97) as a source of adversarial cases, not a
+  permanent reason to staff or decline the work.
+- **Table/escape precision:** improve only for measured questions, using known-safe
+  readers and explicit escapes. A later callee or alias write cannot preserve stale
+  contents merely to improve a resolution count.
+- **Additional profiles:** prioritize actual refused artifacts with public authority.
+  Encoded big-endian Lua 5.1, vendor opcode maps, EdgeTX, and newer stock releases compete
+  on that basis. Do not add a second module convention for an unverified matching gap.
+  Revisit the future release boundary if justified demand changes its ordering.
+- **Multi-hop caller inspection:** require per-call-site context, bounded recursion,
+  open/missing arguments, callbacks, aliases, and unknown caller coverage. Keep a
+  union of possible inputs separate from any claimed feasible execution path.
+- **Integrations and distribution:** choose a Rizin/decompiler adapter, in-process API,
+  Windows package, package-manager channel, or WASM only when a named outside user has
+  an otherwise blocked workflow. Reuse ecosystem formats and compare implementation
+  cost with contributing the missing capability upstream.
 
-Firmware extraction, decompilation, source reconstruction, security policy,
-exploitability judgment, target execution, and persistent research state stay outside
-the core. LuaJIT and Luau are separate bytecode systems outside the product.
-
-`luad` owns deterministic VM facts that competent analysts should agree on. Callers own
-investigation-specific judgments: whether a callee is dangerous, whether a value is
-attacker-controlled, whether a path is exploitable.
-
-## Compose with the ecosystem
-
-`luad` identifies the profile and gives you the bytes. These tools do the rest:
-
-| Task | Reach for |
-|---|---|
-| Extract firmware containers | [Unblob](https://github.com/onekey-sec/unblob) or [Binwalk](https://github.com/ReFirmLabs/binwalk) |
-| Recover readable Lua source | [unluac](https://sourceforge.net/projects/unluac/) or [unluac-rs](https://github.com/x3zvawq/unluac-rs), after checking the exact input profile |
-| Work with explicit opcode/type maps | The [unluac fork's mapping conventions](https://github.com/Jeong-Min-Cho/unluac), without guessing a map |
-| Interactive reverse engineering | [Rizin](https://github.com/rizinorg/rizin) |
-| LuaJIT bytecode | [LuaJIT Decompiler v2](https://github.com/marsinator358/luajit-decompiler-v2) |
-| Luau | [Luau's own tooling](https://github.com/luau-lang/luau) |
-
-Keep comparisons dated and specific to the measured task; see
-[docs/PRIOR-ART-AND-CORPORA.md](docs/PRIOR-ART-AND-CORPORA.md). Share minimized public
-reproducers upstream. An upstream project fixing a defect is a good outcome, and no goal
-here requires another tool to remain deficient.
-
-## Sequencing rules
-
-- A silent incorrect answer interrupts planned feature work.
-- Only an active sprint contract authorizes implementation.
-- Documentation states current behavior. Roadmap intent is never promoted into
-  present-tense support.
-- A private corpus may find defects and measure usefulness, but cannot define or promote
-  a format without public authority and redistributable evidence.
+Do not reopen loop widening by replacing its absorbing conflict marker with a growing
+set. Any new mechanism must first establish a bounded lattice/fixpoint and preserve
+unaffected call origins. Do not add decompilation, source parsing, automatic opcode-map
+inference, policy classifications, or persistent sessions as incidental extensions.

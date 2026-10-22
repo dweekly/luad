@@ -107,6 +107,20 @@ artifact-local paths or asserts source or behavioral equivalence.
 
 A diagnostic's primary byte offset identifies the field or byte where the failure was detected. Wrapping an error with prototype, constant, or instruction context must not replace that offset with the caller's earlier cursor position. Human-readable context and structural paths are separate fields.
 
+### Completeness and context are explicit
+
+A declared register-effect list is not necessarily exhaustive: open-result calls and
+loop instructions can modify registers beyond the listed writes. A complete candidate
+set requires exhaustive effects or a known-safe instruction allowlist, with refusal
+for unmodeled writes. Captured-cell identity ends at its close; register reuse cannot
+extend that cell's lifetime. Repeated replay consumes a shared per-prototype budget.
+
+Lexical nesting does not establish a call edge. An empty enumerated caller set does
+not establish unreachability; corpus omissions and unresolved calls remain unknown.
+Per-caller inputs and a union over possible callers are distinct from a feasible path.
+Convenient views may regroup typed facts, but must retain identity, assumptions,
+caller context, and explicit cutoffs rather than silently completing a partial answer.
+
 ### Determinism
 
 For identical bytes, configuration, dialect implementation, and tool version, machine output must be byte-for-byte deterministic. Ordered maps or explicit sorting are required at serialization boundaries.
@@ -140,4 +154,5 @@ When adding a dialect, opcode, analysis, or command:
 - add schema and deterministic-output coverage for machine records;
 - advertise the feature only after its named evidence gate passes.
 
-Composable-workflow features are deferred until the factual layer is trustworthy.
+Correctness fixes precede views that depend on them. A composed view has its own
+semantic and coverage contract even when its underlying facts are already available.

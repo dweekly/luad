@@ -13,17 +13,38 @@ reproducing it. External observations below are dated 2026-09-02 and must be rec
 new tool recommendation or qualification uses them. The README freshness date also
 covers alignment with current product scope; it does not refresh those observations.
 
+### Source and documentation check, 2026-10-22
+
+These observations update positioning, not the dated execution matrix below:
+
+- Rizin's development branch has explicit `openwrt-5.1` and `tp-link-5.1` analysis
+  dispatch in [analysis_luac.c](https://github.com/rizinorg/rizin/blob/dev/librz/arch/p/analysis/analysis_luac.c),
+  an LNUM integer tag in [luac_common.h](https://github.com/rizinorg/rizin/blob/dev/librz/bin/format/luac/luac_common.h),
+  and OpenWrt handling in [parse.c](https://github.com/rizinorg/rizin/blob/dev/librz/bin/format/luac/parse.c).
+  [Commit fa24ea7](https://github.com/rizinorg/rizin/commit/fa24ea7aab6538487cecf47e148d109f80f4825a)
+  identifies an OpenWrt constant-tag change. Do not generalize an older build's refusal
+  to the current development branch or claim it has no machine interface. Execute a
+  pinned build against the same tasks before judging compatibility or correctness.
+- The [unluac-rs README](https://github.com/x3zvawq/unluac-rs/blob/main/README.md)
+  advertises a Rust library, CLI, Wasm/JavaScript, and browser function/constant/CFG
+  inspection across PUC Lua 5.1-5.5, LuaJIT, and Luau. These are project claims, not an
+  independent correctness result. Rust, version breadth, and constant/CFG inspection
+  cannot establish `luad`'s distinct value on their own.
+
+Revalidate these moving sources at the selected comparison revision. The root roadmap
+requires task-specific comparisons and outside trials; it does not require competitors
+to remain deficient. Source availability is not proof of a tested decompiler handoff.
+
 ## 1. Surveyed projects and verdicts
 
 | Project | What it is | Ships `.luac`? | Verdict for `luad` |
 |---|---|---|---|
 | [bartholomort/lua-obfuscator-corpus](https://huggingface.co/datasets/bartholomort/lua-obfuscator-corpus) (Hugging Face; there is no GitHub repository of that name) | 26,357 obfuscated Lua/Luau **source** files across 16 obfuscator families with per-version and per-preset labels, plus 1,244 unobfuscated baselines. CC BY-SA 4.0, gated, "research purposes only". | No. Extension census of the full file manifest: 26,275 `.lua`, 82 `.luau`, zero `.luac`. | **Influence, do not vendor.** Useful as a compile-then-analyze benchmark for CFG and dominator behaviour under control-flow flattening, with a monotonic preset-difficulty axis (Weak/Medium/Strong, Minimal/Default/Maximum). The share-alike license and the unclear copyright of "decompiled Roblox scripts" keep it out of this tree. Regenerate labeled samples instead with [Prometheus](https://github.com/prometheus-lua/Prometheus) over this repository's own MIT sources. |
-| [EdgeTX/edgetx-sdcard](https://github.com/EdgeTX/edgetx-sdcard) | SD-card contents for EdgeTX radio firmware: 379 `.lua` scripts, no repository-level license (spot-checked files carry "Copyright (C) EdgeTX, License GPLv2" headers; others carry none). | No `.luac` in the repository. The **radio** compiles these scripts to `.luac` on the SD card, and upstream EdgeTX ships a host compiler for the same dialect (section 4). | **New corpus source, and a fidelity gap.** EdgeTX bytecode is a 32-bit Lua 5.3 dialect with a 4-byte `lua_Number` and a non-standard header slot. `luad` accepts the header today and then fails inside the body with a misleading diagnostic (section 5). |
+| [EdgeTX/edgetx-sdcard](https://github.com/EdgeTX/edgetx-sdcard) | SD-card contents for EdgeTX radio firmware: 379 `.lua` scripts, no repository-level license (spot-checked files carry "Copyright (C) EdgeTX, License GPLv2" headers; others carry none). | No `.luac` in the repository. The **radio** compiles these scripts to `.luac` on the SD card, and upstream EdgeTX ships a host compiler for the same dialect (section 4). | **Candidate corpus and profile.** The dated matrix below records the earlier reader experiment; current `luad` refuses unsupported numeric layouts and has no EdgeTX profile. Recheck the exact compiler/layout before choosing work. |
 
 ## 2. Prior art the PRD table does not cover
 
-`PRD.md` §1.3 lists twelve tools. The entries below are absent from that table or are
-described there in a way that no longer matches the tool. "Competitor" means the tool
+The entries below supply research detail behind `PRD.md` §1.3. "Competitor" means the tool
 produces facts that overlap `luad`'s output; "consumer" means it needs such facts and
 currently derives them itself.
 
@@ -32,10 +53,9 @@ currently derives them itself.
 - [rizin](https://github.com/rizinorg/rizin) (LGPL-3.0, active): a first-class `luac`
   architecture with per-version ISA tables under `librz/arch/isa/luac/{v50,v51,v52,v53,v54,v55,luajit}`,
   a `bin_luac` loader, and rizin's own CFG, xref, and graph machinery. **Competitor.**
-  The PRD's "radare2 Lua support" row understates this; rizin, not radare2, is the
-  platform to differentiate against. `luad`'s distinct ground is memory safety,
-  embedded and vendor layouts, hostile-input bounds, and machine-readable diff and
-  query facts rather than an interactive session.
+  The source check above includes explicit embedded handling. Compare exact profiles,
+  factual provenance, bounds, and task completion rather than assuming the interactive
+  platform lacks automation or firmware support.
 - [Cerbero Suite `Pkg.LUAC`](https://sdk.cerbero.io/latest/Pkg.LUAC.html) (commercial):
   parses Lua 5.0 through 5.4 with version-specific opcode sets and exposes the prototype
   tree and debug metadata. Competitor, closed source.
@@ -47,10 +67,9 @@ currently derives them itself.
 
 ### Rust neighbours
 
-- [x3zvawq/unluac-rs](https://github.com/x3zvawq/unluac-rs) (MIT, pushed 2026-08-31):
-  multi-dialect decompilation library. The PRD calls it "testing-stage"; it is actively
-  maintained and MIT-licensed, which makes it the one neighbour whose code could be
-  reused. Competitor for parsing, consumer for facts.
+- [x3zvawq/unluac-rs](https://github.com/x3zvawq/unluac-rs) (MIT): multi-dialect
+  decompilation library and workspace; see the dated source/documentation check above.
+  Candidate for compatible reuse and factual integration as well as comparison.
 - [metaworm/luac-parser-rs](https://github.com/metaworm/luac-parser-rs) (no license
   file): parses 5.1 through 5.4, LuaJIT, and Luau; custom parsers compile to WASM and are
   hot-loaded by a hosted decompiler to handle unofficial dialects. The plugin-parser
@@ -60,7 +79,7 @@ currently derives them itself.
   lifter with SSA and control-flow restructuring. Reference for structuring, consumer
   for facts.
 - [Coldzer0/LuaDecompiler](https://github.com/Coldzer0/LuaDecompiler) (Pascal, AGPL-3.0,
-  active): the only other public tool claiming Lua 5.5 alongside 5.1 through 5.4.
+  active): another public tool claiming Lua 5.5 alongside 5.1 through 5.4.
   Competitor; AGPL means reference only.
 
 ### The `luadec` lineage and its reusable ideas

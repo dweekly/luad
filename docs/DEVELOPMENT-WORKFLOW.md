@@ -28,6 +28,14 @@ governed by the same authority and algorithm belong in one table-driven batch. F
 opcodes, record variants, and diagnostics are not separate sprints merely because they
 can be enumerated separately.
 
+The root roadmap owns product order; `docs/ROADMAP-1.0.md` supplies qualification
+obligations when a stable promise is selected. It is not a second product backlog.
+For each candidate record the user question, workaround, evidence and confidence,
+expected benefit, dependencies, cost, and correctness risk. Counts must name their
+population, input identity, tool/consumer revisions, and field definition. A public
+correctness counterexample needs no consumer-count threshold. Rank silent false
+answers before precision or breadth, and re-rank after outside trials.
+
 ## 2. Delivery lanes
 
 The steward selects the least expensive lane that can falsify the claim.
@@ -132,7 +140,8 @@ reproducible correctness failure becomes a minimized public regression.
 `docs/NEXT-SPRINT.md` stays short enough to review as one decision. When a product lane
 is active, its contract contains:
 
-1. **Outcome** — the concrete researcher question or workflow enabled.
+1. **Outcome** — the concrete user question or workflow enabled, current workaround,
+   and evidence of the blocker; distinguish measured benefit from a hypothesis.
 2. **Public claim** — observable behavior, including command or library boundary.
 3. **Scope** — affected subsystem and allowed paths.
 4. **Non-goals** — adjacent behavior that remains outside the batch.
@@ -201,7 +210,7 @@ presence or counts.
 8. **Close, then advance separately.** Replace the accepted contract with the neutral
    no-work checkpoint in the implementation pull request and update indexed
    documentation whose freshness trigger fired. The next public claim is the first
-   entry of the roadmap's release execution sequence; it enters `NEXT-SPRINT.md` as
+   unmet applicable outcome in the root roadmap; it enters `NEXT-SPRINT.md` as
    described in section 12.
 
 An external review occurs between steps 5 and 6 only when a risk trigger in section 3
@@ -357,8 +366,8 @@ After local acceptance, replace `docs/NEXT-SPRINT.md` with its neutral no-work
 checkpoint in the same implementation pull request; do not put the next claim there.
 Then push and merge the reviewed work, push `main`, and run
 `scripts/verify-main-pushed.sh`. Before another implementation batch begins, replace
-the checkpoint with one forward-looking contract, the first unmet entry of the
-roadmap's release execution sequence. A target-qualification stage merges that
+the checkpoint with one forward-looking contract for the root roadmap's first unmet
+applicable outcome. A target-qualification stage merges that
 contract in a dedicated planning change before any implementation, because its
 acceptance commands must be fixed before code. Every other stage carries the contract
 in the first commit of its own pull request, where review reads it before the
