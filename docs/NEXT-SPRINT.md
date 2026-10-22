@@ -41,8 +41,11 @@ by guessed namespace. Preserve explicit convention selection, unsupported/absent
 outcomes when evidence is complete, limits, deterministic ordering, and stdout discipline.
 
 Reuse parser bounds and linear role checks; do not introduce unbounded declaration
-lookahead or dump raw constants/subtrees. Any new admission budget must have a limit
-outcome/control, never silent omission.
+lookahead or dump raw constants/subtrees. Before lifting, cap a candidate root at 16,384 physical words and 16 MiB of
+referenced constant representation bytes (count every use, including raw/display bytes).
+These admission work budgets prevent repeated large constants from amplifying the
+shared lifter. Each cutoff needs a limit outcome and a public negative/positive control,
+never silent omission.
 
 Tests/evidence: `crates/luad-oracle/tests/test_cross_chunk_linking.rs` and
 `tests/gates/gate-cross-chunk-link.json`. Compile new public source literals at runtime
