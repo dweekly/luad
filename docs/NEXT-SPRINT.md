@@ -21,7 +21,8 @@ After admission, reuse shared global-store value facts. Keep root stores only, c
 the last store by PC for each exact raw name, and index it only if it is a closure.
 Direct closure aliases and a final replacement closure remain useful positives.
 Unknown/exhausted analysis refuses certainty. The admitted module CALL invalidates
-its temporary register tail before any later read; crafted, structurally valid bytecode
+its temporary register tail before any later read; only a final zero-result root
+RETURN is admitted (an explicit returned value can replace package.loaded). Crafted, structurally valid bytecode
 must not retain pre-call closure or literal facts there. Do not change shared callgraph
 semantics in this batch.
 
@@ -53,7 +54,10 @@ lookahead or dump raw constants/subtrees. Before lifting, cap a candidate root a
 referenced constant representation bytes (count every use, including raw/display bytes).
 These admission work budgets prevent repeated large constants from amplifying the
 shared lifter. Each cutoff needs a limit outcome and a public negative/positive control,
-never silent omission.
+never silent omission. Bound MOVE evidence chains at 64 steps before lifting and
+retained index label payloads at 32 MiB (charge key and definition copies). Each needs
+an isolated cutoff and a positive control, to bound evidence/prefix copying as well
+as constant materialization.
 
 Tests/evidence: `crates/luad-oracle/tests/test_cross_chunk_linking.rs` and
 `tests/gates/gate-cross-chunk-link.json`. Compile new public source literals at runtime
