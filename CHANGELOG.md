@@ -5,6 +5,15 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Fix false `diff` equality for same-count constant replacements, exact float/string
+  representations, capture descriptors, varargs, child changes, header/layout fields,
+  trailing bytes and same-length debug changes. Comparison is positional decoded
+  content, not behavioral equivalence. `--semantic` conservatively retains physical
+  bits and shows decoded fields/roles without copying constant payloads per use;
+  `--ignore debug` excludes all compared debug names/lines/scopes and rejects typos.
+  JSONL now retains chunk-wide differences in the root `diff_prototype` record.
+  Required official Lua 5.1.5 public source-pair tests exercise all formats and modes.
+
 - `gate-argument-origins-lua51` now pins argument-level origin verdicts on the committed
   OpenWrt-derived 32-bit LNUM authority chunk, not only its profile. Structural counts cannot
   catch a precision regression -- the 0.3.0 origins regression left instruction, prototype and

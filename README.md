@@ -195,11 +195,18 @@ No dialect is in the `supported` tier and the supported set is empty, which is w
 `luad capabilities` reports. Experimental means the code is present and gives useful
 answers, not that its correctness has been qualified.
 
-Known experimental-analysis limits: `diff` can miss constant-value changes when pool
-counts and instructions stay the same, in both default and `--semantic` modes.
-Convention-based links can name an export after it is overwritten or use an
-unreachable module declaration. Do not treat these results as proof of unchanged
-content or runtime reachability. Correcting these cases is the first work in
+`diff` compares exact decoded content by position, including constant bytes and numeric
+representations, prototype shape, capture descriptors, headers/layouts, and physical
+instruction words. `--semantic` adds decoded instruction fields and physical roles;
+it retains unused bits and companion words. `--ignore debug` excludes names, line data,
+and local scopes. Equality means no compared content changed, not behavioral equivalence
+or byte identity; use the artifact hash for byte identity. See the
+[machine interface](docs/MACHINE-INTERFACE.md#cfg-xrefs-query-and-diff) and
+[public comparison regressions](crates/luad-oracle/tests/test_diff_cli.rs).
+
+Known experimental-analysis limit: convention-based links can name an export after it
+is overwritten or use an unreachable module declaration. Do not treat links as proof
+of runtime reachability. Correcting these cases is the next work in
 [the roadmap](ROADMAP.md#a-correct-false-answers-before-expanding-analysis).
 
 Lua 5.2, 5.3, and 5.5 are limited to structural facts and validation. Derived analysis
@@ -257,7 +264,7 @@ delete the document in the same change and update this index.
 | [`README.md`](README.md) | What luad is, installation, current limitations, first workflows, and the documentation index. | 2026-10-22 | Public scope, known analysis defects, support status, setup, workflows, or the documentation set changes. |
 | [`AGENTS.md`](AGENTS.md) | Binding instructions, bounded implementation scope, completeness discipline, and safety constraints. | 2026-10-22 | Development workflow, proof policy, current priority, or repository invariants change. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, representations, completeness and context boundaries, and evidence layers. | 2026-10-22 | Crates, ownership, effect completeness, identity/context boundaries, or evidence layers change. |
-| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of released and unreleased user-visible changes. | 2026-09-18 | Every user-visible change or release; never use it as a forward plan. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of released and unreleased user-visible changes. | 2026-10-22 | Every user-visible change or release; never use it as a forward plan. |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contributor verification commands, test taxonomy, fixture provenance, and definition of done. | 2026-09-18 | Toolchain, test commands, gates, fixture policy, or contribution workflow changes. |
 | [`PRD.md`](PRD.md) | Community and firmware users, factual-composition requirements, scope, and release outcomes. | 2026-10-22 | Target users, workflows, factual boundary, prior-art claims, or product requirements change. |
 | [`ROADMAP.md`](ROADMAP.md) | Ordered outcomes for reliable answers, the firmware consumer, public workflows, outside utility trials, announcement, and stabilization. | 2026-10-22 | A milestone closes, user evidence changes priorities, or scope, dependencies, release boundaries, or stop conditions change. |
@@ -265,7 +272,7 @@ delete the document in the same change and update this index.
 | [`docs/ROADMAP-1.0.md`](docs/ROADMAP-1.0.md) | Stable-release qualification obligations, exact targets, minimal machine contract, hostile-input evidence, and transfer. | 2026-10-22 | The stable target set, qualified surface, acceptance obligations, or qualification lifecycle changes. |
 | [`docs/BRINGUP.md`](docs/BRINGUP.md) | Setup for a developer machine, a self-hosted Actions runner, and a release builder, with the owning file for every tool pin. | 2026-09-02 | A tool pin, its owning file, the doctor's checks, runner labels or security boundary, or the release dry-run and rehearsal entry points change. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, evidence-based selection, proportional verification, qualification lanes, and orchestration. | 2026-10-22 | Selection criteria, planning ownership, CI lanes, roles, evidence policy, or sprint mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Neutral checkpoint selecting reliable comparison as the next outcome to contract. | 2026-10-22 | A bounded contract replaces the checkpoint or the first roadmap outcome changes. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Neutral delivery checkpoint; selects the next bounded linking contract before implementation. | 2026-10-22 | A bounded contract replaces the checkpoint or the first roadmap outcome changes. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-10-20 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/PRIOR-ART-AND-CORPORA.md`](docs/PRIOR-ART-AND-CORPORA.md) | Dated executed comparisons and source observations, corpus candidates, provenance, and research leads. | 2026-10-22 | A comparison is executed, a cited project/profile changes, or a candidate corpus is selected; source checks do not refresh older experiments. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, identities, schemas, limits, completion, current analysis caveats, and exit behavior. | 2026-10-22 | Public commands, schemas, known limitations, identities, diagnostics, or completion/exit contracts change. |

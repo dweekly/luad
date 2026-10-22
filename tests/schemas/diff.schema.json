@@ -97,7 +97,7 @@
       }
     },
     "ChunkDiff": {
-      "description": "Complete structural and semantic chunk difference report.",
+      "description": "Complete decoded-content difference report.",
       "type": "object",
       "required": [
         "header_diffs",
@@ -108,22 +108,22 @@
       ],
       "properties": {
         "header_diffs": {
-          "description": "Differences in chunk header fields.",
+          "description": "Differences in chunk header, interpretation, or trailing content.",
           "type": "array",
           "items": {
             "type": "string"
           }
         },
         "is_identical": {
-          "description": "Whether both chunks are structurally and semantically equivalent.",
+          "description": "No differences in compared content under the selected options. This does not assert runtime or behavioral equivalence.",
           "type": "boolean"
         },
         "new_sha256": {
-          "description": "New chunk SHA-256.",
+          "description": "New input identity (not compared content).",
           "type": "string"
         },
         "old_sha256": {
-          "description": "Old chunk SHA-256.",
+          "description": "Old input identity (not compared content).",
           "type": "string"
         },
         "proto_diffs": {
@@ -292,14 +292,14 @@
       ],
       "properties": {
         "new": {
-          "description": "Representation in second (new) chunk.",
+          "description": "Bounded representation in second (new) chunk.",
           "type": [
             "string",
             "null"
           ]
         },
         "old": {
-          "description": "Representation in first (old) chunk.",
+          "description": "Bounded representation in first (old) chunk.",
           "type": [
             "string",
             "null"
@@ -333,7 +333,7 @@
       ]
     },
     "ProtoDiff": {
-      "description": "Differences identified within a matching prototype path.",
+      "description": "Differences identified within a matching positional prototype path.",
       "type": "object",
       "required": [
         "constant_diffs",
@@ -351,7 +351,7 @@
           }
         },
         "header_diffs": {
-          "description": "Header/parameter changes.",
+          "description": "Prototype metadata changes, including selected debug content.",
           "type": "array",
           "items": {
             "type": "string"
@@ -365,7 +365,7 @@
           }
         },
         "path": {
-          "description": "Prototype path.",
+          "description": "Positional prototype path.",
           "allOf": [
             {
               "$ref": "#/definitions/ProtoPath"

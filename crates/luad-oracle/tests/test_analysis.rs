@@ -459,3 +459,354 @@ fn test_cli_cfg_dot_golden() {
     let actual_dot = String::from_utf8_lossy(&output.stdout);
     assert_eq!(actual_dot.trim(), expected_golden.trim());
 }
+
+// These isolated mutations are negative controls for the comparator. They use a
+// required official compilation as their baseline, not hand-built pseudo chunks.
+fn comparison_fixture() -> luad_core::model::Chunk {
+    luad_oracle::compile_and_parse_lua51(
+        "local captured = 'before'; return function(arg, ...) local named = arg; return captured, named end",
+        false,
+    ).expect("required Lua 5.1.5 compiler")
+}
+
+fn assert_comparison_change(
+    base: &luad_core::model::Chunk,
+    mutate: impl Fn(&mut luad_core::model::Chunk),
+    family: &str,
+) {
+    let mut altered = base.clone();
+    mutate(&mut altered);
+    for semantic in [false, true] {
+        let diff = diff_chunks(base, &altered, semantic, false);
+        assert!(!diff.is_identical, "missed {family}, semantic={semantic}");
+        let found = match family {
+            "chunk" => !diff.header_diffs.is_empty(),
+            "prototype" => diff.proto_diffs.iter().any(|p| !p.header_diffs.is_empty()),
+            "constant" => diff
+                .proto_diffs
+                .iter()
+                .any(|p| !p.constant_diffs.is_empty()),
+            "upvalue" => diff.proto_diffs.iter().any(|p| !p.upvalue_diffs.is_empty()),
+            "instruction" => diff
+                .proto_diffs
+                .iter()
+                .any(|p| !p.instruction_diffs.is_empty()),
+            _ => panic!("unknown test family"),
+        };
+        assert!(found, "missing {family} report: {diff:?}");
+    }
+}
+
+#[test]
+fn comparison_constant_types_and_exact_payloads() {
+    use luad_core::model::{ConstantValue as C, LuaString};
+    let mut base = comparison_fixture();
+    let values = vec![
+        C::Nil,
+        C::Boolean(false),
+        C::Boolean(true),
+        C::Integer {
+            val: 1,
+            raw_hex: "01000000".into(),
+        },
+        C::Integer {
+            val: 1,
+            raw_hex: "00000001".into(),
+        },
+        C::Integer {
+            val: 2,
+            raw_hex: "02000000".into(),
+        },
+        C::ShortString(LuaString::from_bytes(b"before")),
+        C::ShortString(LuaString::from_bytes(b"after!")),
+        C::ShortString(LuaString::from_bytes(&[0xff])),
+        C::ShortString(LuaString::from_bytes(&[0xfe])),
+        C::LongString(LuaString::from_bytes(b"before")),
+    ];
+    for (i, a) in values.iter().enumerate() {
+        base.main_proto.constants[0].value = a.clone();
+        for (j, b) in values.iter().enumerate() {
+            if i == j {
+                assert!(diff_chunks(&base, &base.clone(), true, false).is_identical);
+            } else {
+                assert_comparison_change(
+                    &base,
+                    |c| c.main_proto.constants[0].value = b.clone(),
+                    "constant",
+                );
+            }
+        }
+    }
+    // Equal string bytes ignore derived display/UTF-8 bookkeeping.
+    base.main_proto.constants[0].value = C::ShortString(LuaString::from_bytes(b"same"));
+    let mut display_only = base.clone();
+    if let C::ShortString(s) = &mut display_only.main_proto.constants[0].value {
+        s.display = "different derived rendering".into();
+        s.is_utf8 = false;
+    }
+    assert!(diff_chunks(&base, &display_only, true, false).is_identical);
+    // No use of f64's NaN != NaN or equality that erases signed zero.
+    for bits in [
+        0,
+        1u64 << 63,
+        0x7ff8_0000_0000_0001,
+        0x7ff8_0000_0000_0002,
+        0x7ff0_0000_0000_0000,
+        0xfff0_0000_0000_0000,
+    ] {
+        let value = f64::from_bits(bits);
+        base.main_proto.constants[0].value = C::Float {
+            val: value,
+            raw_hex: format!("{bits:016x}"),
+            is_nan: value.is_nan(),
+            is_inf: value.is_infinite(),
+        };
+        for semantic in [false, true] {
+            assert!(diff_chunks(&base, &base.clone(), semantic, false).is_identical);
+        }
+        assert_comparison_change(
+            &base,
+            |c| {
+                if let C::Float { raw_hex, .. } = &mut c.main_proto.constants[0].value {
+                    raw_hex.push('1');
+                }
+            },
+            "constant",
+        );
+        assert_comparison_change(
+            &base,
+            |c| {
+                if let C::Float { val, .. } = &mut c.main_proto.constants[0].value {
+                    *val = f64::from_bits(bits ^ (1 << 63));
+                }
+            },
+            "constant",
+        );
+    }
+    base.main_proto.constants[0].value = C::Float {
+        val: f64::from_bits(0x7ff8_0000_0000_0001),
+        raw_hex: "010000000000f87f".into(),
+        is_nan: true,
+        is_inf: false,
+    };
+    assert_comparison_change(
+        &base,
+        |c| {
+            c.main_proto.constants[0].value = C::Float {
+                val: f64::from_bits(0x7ff8_0000_0000_0002),
+                raw_hex: "020000000000f87f".into(),
+                is_nan: true,
+                is_inf: false,
+            };
+        },
+        "constant",
+    );
+}
+
+#[test]
+fn comparison_complete_shape_captures_and_headers() {
+    use luad_core::model::Chunk;
+    let base = comparison_fixture();
+    let headers: &[fn(&mut Chunk)] = &[
+        |c| c.header.signature.push('x'),
+        |c| c.header.version ^= 1,
+        |c| c.header.format ^= 1,
+        |c| c.header.luac_data.push('x'),
+        |c| c.header.instruction_size ^= 1,
+        |c| c.header.lua_integer_size ^= 1,
+        |c| c.header.sizeof_sizet ^= 1,
+        |c| c.header.lua_number_size ^= 1,
+        |c| c.header.luac_int ^= 1,
+        |c| c.header.luac_num = -0.0,
+        |c| c.dialect.push('x'),
+        |c| c.trailing_bytes = Some("00".into()),
+        |c| c.interpretation.as_mut().unwrap().validated_layout = Some("different".into()),
+    ];
+    for mutate in headers {
+        assert_comparison_change(&base, mutate, "chunk");
+    }
+    let protos: &[fn(&mut Chunk)] = &[
+        |c| c.main_proto.numparams ^= 1,
+        |c| c.main_proto.is_vararg ^= 1,
+        |c| c.main_proto.maxstacksize ^= 1,
+        |c| {
+            c.main_proto.protos.clear();
+        },
+        |c| {
+            c.main_proto.protos.push(c.main_proto.protos[0].clone());
+        },
+    ];
+    for mutate in protos {
+        assert_comparison_change(&base, mutate, "prototype");
+    }
+    let captures: &[fn(&mut Chunk)] = &[
+        |c| c.main_proto.protos[0].upvalues[0].instack ^= 1,
+        |c| c.main_proto.protos[0].upvalues[0].idx ^= 1,
+        |c| c.main_proto.protos[0].upvalues[0].kind ^= 1,
+        |c| c.main_proto.protos[0].upvalues.clear(),
+    ];
+    for mutate in captures {
+        assert_comparison_change(&base, mutate, "upvalue");
+    }
+    assert_comparison_change(
+        &base,
+        |c| {
+            c.main_proto.constants.pop();
+        },
+        "constant",
+    );
+    assert_comparison_change(
+        &base,
+        |c| {
+            c.main_proto.instructions.pop();
+        },
+        "instruction",
+    );
+}
+
+#[test]
+fn comparison_debug_exclusion_and_provenance_invariance() {
+    use luad_core::model::{Chunk, LuaString, Prototype};
+    let mut base = comparison_fixture();
+    base.main_proto.line_info = vec![1];
+    let mutations: &[fn(&mut Chunk)] = &[
+        |c| c.main_proto.source_name = Some(LuaString::from_bytes(b"different")),
+        |c| c.main_proto.line_defined += 1,
+        |c| c.main_proto.last_line_defined += 1,
+        |c| c.main_proto.line_info[0] = 2,
+        |c| c.main_proto.abs_line_info[0].line += 1,
+        |c| c.main_proto.abs_line_info[0].pc += 1,
+        |c| c.main_proto.loc_vars[0].name.raw_bytes[0] ^= 1,
+        |c| c.main_proto.loc_vars[0].startpc += 1,
+        |c| c.main_proto.loc_vars[0].endpc += 1,
+        |c| c.main_proto.protos[0].upvalues[0].name = Some(LuaString::from_bytes(b"other")),
+        |c| c.main_proto.protos[0].upvalue_names[0] = Some(LuaString::from_bytes(b"other")),
+    ];
+    for mutate in mutations {
+        let mut other = base.clone();
+        mutate(&mut other);
+        for semantic in [false, true] {
+            assert!(!diff_chunks(&base, &other, semantic, false).is_identical);
+            assert!(diff_chunks(&base, &other, semantic, true).is_identical);
+        }
+    }
+    fn relocate(p: &mut Prototype) {
+        p.path = luad_core::id::ProtoPath(vec![9]);
+        p.id = StableId::Chunk;
+        p.source.byte_offset += 900;
+        if let Some(s) = &mut p.source_name {
+            s.display = "derived display".into();
+        }
+        for i in &mut p.instructions {
+            i.id = StableId::Chunk;
+            i.source.byte_offset += 900;
+            i.raw_hex = "derived".into();
+        }
+        for k in &mut p.constants {
+            k.id = StableId::Chunk;
+            k.source.byte_offset += 900;
+        }
+        for u in &mut p.upvalues {
+            u.id = StableId::Chunk;
+            u.source.byte_offset += 900;
+        }
+        for l in &mut p.loc_vars {
+            l.id = StableId::Chunk;
+            l.source.byte_offset += 900;
+        }
+        for l in &mut p.abs_line_info {
+            l.source.byte_offset += 900;
+        }
+        for child in &mut p.protos {
+            relocate(child);
+        }
+    }
+    let mut other = base.clone();
+    relocate(&mut other.main_proto);
+    other.sha256 = "different provenance".into();
+    other.byte_length += 900;
+    other.header.source.byte_offset += 900;
+    let i = other.interpretation.as_mut().unwrap();
+    i.parse_mode = "permissive".into();
+    i.detection_evidence = "different invocation".into();
+    i.selection_mode = luad_core::dialect::SelectionMode::Explicit;
+    for semantic in [false, true] {
+        assert!(diff_chunks(&base, &other, semantic, false).is_identical);
+    }
+}
+
+#[test]
+fn comparison_preserves_operand_and_companion_words_without_large_lift() {
+    use luad_core::model::{ConstantValue, LuaString};
+    let base = comparison_fixture();
+    // The Lua 5.1 RETURN explanation omits B (return count) and the unused C
+    // field. Retain both even when their prose explanations are identical.
+    let pc = base.main_proto.instructions.len() - 1;
+    let old_explanation = luad_dialect_lua51::lift_proto_lua51(&base.main_proto)[pc]
+        .explanation
+        .clone();
+    let mut return_change = base.clone();
+    return_change.main_proto.instructions[pc].raw_word ^= 1 << 23;
+    assert_eq!(
+        old_explanation,
+        luad_dialect_lua51::lift_proto_lua51(&return_change.main_proto)[pc].explanation
+    );
+    assert_comparison_change(
+        &base,
+        |c| c.main_proto.instructions[pc].raw_word ^= 1 << 23,
+        "instruction",
+    );
+    assert_comparison_change(
+        &base,
+        |c| c.main_proto.instructions[pc].raw_word ^= 1 << 14,
+        "instruction",
+    );
+    let roles = luad_dialect_lua51::roles::discover_roles_lua51(&base.main_proto);
+    let binding = roles
+        .roles
+        .iter()
+        .position(|r| !r.is_executable())
+        .expect("closure binding");
+    assert_comparison_change(
+        &base,
+        |c| c.main_proto.instructions[binding].raw_word ^= 1 << 23,
+        "instruction",
+    );
+    // SETLIST's following physical word is data, including low bits that could
+    // otherwise decode as an opcode. Preserve it without standalone effects.
+    let mut setlist = base.clone();
+    setlist.main_proto.instructions[0].raw_word = luad_dialect_lua51::RawInstruction51::encode_iabc(
+        luad_dialect_lua51::Opcode51::SetList,
+        0,
+        1,
+        0,
+    );
+    setlist.main_proto.instructions[1].raw_word = 1;
+    for profile in ["lua5.1", "lua5.1-lnum32", "lua5.1-stock32"] {
+        setlist.dialect = profile.into();
+        let mut changed = setlist.clone();
+        changed.main_proto.instructions[1].raw_word = 2;
+        let diff = diff_chunks(&setlist, &changed, true, false);
+        assert!(!diff.is_identical);
+        let word = &diff.proto_diffs[0].instruction_diffs[0];
+        assert_eq!(word.pc, 1);
+        assert!(word.old.as_ref().unwrap().contains("SetlistExtra"));
+        assert!(word
+            .new
+            .as_ref()
+            .unwrap()
+            .contains("physical_word=0x00000002"));
+    }
+    let mut large = base.clone();
+    large.main_proto.constants[0].value =
+        ConstantValue::ShortString(LuaString::from_bytes(&vec![b'a'; 2_000_000]));
+    large.main_proto.instructions = vec![base.main_proto.instructions[0].clone(); 10_000];
+    assert!(diff_chunks(&large, &large, true, false).is_identical);
+    let mut other = large.clone();
+    if let ConstantValue::ShortString(s) = &mut other.main_proto.constants[0].value {
+        s.raw_bytes[1_999_999] = b'b';
+    }
+    let diff = diff_chunks(&large, &other, true, false);
+    assert!(!diff.is_identical);
+    assert!(diff.proto_diffs[0].constant_diffs[0].len() < 400);
+}
