@@ -551,19 +551,60 @@ the option preserves the default all-family stream. When selection is explicit,
 order; the field is absent from an unfiltered export.
 
 `--link-convention CONVENTION` explicitly enables corpus-wide module indexing and
-inter-artifact resolution under a named convention. Discover supported conventions at
-runtime via `luad capabilities --format json` under `export.link_conventions` or
-`luad export --help` (currently `luci-module-setglobal`). When enabled, batch export
-emits auditable `cross_chunk_link` records connecting call-sites to their defining
-artifacts and prototypes with explicit statuses (`resolved`, `absent`, `duplicate`,
-`dynamic`, or `unsupported`). Linking is order-invariant and bounds corpus indexing.
-Records conform to `luad schema link`.
+inter-artifact binding under a named convention. Discover conventions at runtime via
+`luad capabilities --format json` under `export.link_conventions` or
+`luad export --help` (currently `luci-module-setglobal`). JSONL `cross_chunk_link`
+records conform to `luad schema link` and carry caller evidence plus a target artifact
+and prototype only when `resolved`.
 
-The current experimental resolver can retain a closure export after a non-closure
-overwrite and can recognize a module declaration in unreachable code. `resolved`
-therefore does not prove a runtime call edge. Convention selection remains explicit;
-the roadmap's link-correctness batch must qualify the admitted initialization shapes
-before dependent caller views claim stronger resolution.
+The Lua 5.1 convention admits a deliberately narrow initialization subset: one direct
+literal `module("name")` call, optionally with `package.seeall`, in a straight-line
+root before global stores. It assumes standard module/package primitives, consistent
+`package.loaded`/global namespace bindings, and successful initialization. The official
+[Lua 5.1 module contract](https://www.lua.org/manual/5.1/manual.html#pdf-module) defines
+those primitives; alternative loaders/environments and later runtime writes are outside
+this conditional binding claim. No record proves a runtime call edge or reachability.
+
+Branches, skips, loops, multiple or aliased declarations, pre-declaration stores,
+root calls including `require`, table/upvalue mutations, and code after a return refuse
+admission. General table reads can invoke metamethods and are refused; the direct
+`package.seeall` option lookup is admitted before the declaration. Names use exact UTF-8
+bytes; module names with empty segments or embedded NUL are refused (the official
+[5.1.5 module implementation](https://www.lua.org/source/5.1/loadlib.c.html#ll_module)
+uses C-string APIs). A module namespace has at most 31 segments, reserving the caller
+path's 32nd segment for the exported field.
+
+Only each name's final root store is used. A directly constructed closure, including
+its local aliases, supplies a candidate; a later nil/boolean/number/string removes it.
+An opaque value preserves uncertainty. Lexically nested function bodies never execute
+merely by being present, and their stores cannot invent or replace root exports.
+Admission stops before lifting at 16,384 root physical words or 16 MiB of referenced
+constant representation bytes, counted per use including raw/display bytes. A cutoff
+is `limit_exceeded`, not silent omission. Retained export definitions, including
+duplicates, share the 10,000-definition cap.
+
+Corpus construction and the CLI index pass select artifacts in canonical identity/path
+order before applying capacity. Repeated identical artifact identities count once for
+indexing; export still processes duplicate paths per occurrence in its stream. Statuses:
+
+- `duplicate`: at least two retained admitted definitions prove a conflict.
+- `dynamic`: an initialization/final value is unproved, or a provider input could not be
+  read/parsed/validated. An unknown declaration may hide any namespace; uncertainty
+  applies globally until a narrower analysis can justify scoping it.
+- `limit_exceeded`: admission/index capacity prevents completion (or the per-chunk link
+  fact budget is reached). Local fact-budget markers retain their limit status.
+- `resolved` / `absent`: one / no admitted definition in a complete index. Absent refers
+  to the selected corpus/convention, never an outside module or whole program.
+- `unsupported`: the caller dialect is outside this convention's Lua 5.1 profiles.
+
+A singleton in an incomplete index cannot become `resolved` or `absent`; targets are
+omitted. Known duplicates remain duplicates. The existing link scope includes literal
+`luci` paths and indexed module labels; incomplete indexing also emits uncertainty for
+other multi-segment symbolic paths that could conceal an export. Default partial export
+success can still exit zero: inspect `file_end` and `export_end` as well as link statuses.
+The [cross-chunk gate tests](../crates/luad-oracle/tests/test_cross_chunk_linking.rs)
+exercise overwrites, refused declarations/clobbers, child bodies, aliases, capacity
+permutations, missing/corrupt providers and both admission cutoffs.
 
 Every data record has a required `context` object. Successful facts carry
 `input_identity` and `interpretation`; parse-failure diagnostics carry identity with a

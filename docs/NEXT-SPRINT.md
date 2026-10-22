@@ -80,11 +80,10 @@ Required assertions, added to the existing gate:
   permutation (normalized link facts), missing/corrupt provider inputs, and unselected
   convention. Existing negative/absent/duplicate/schema/limit controls remain intact.
 
-The external design review of public source identified the defects above. Its claim
-that status precedence alone guarantees order invariance is insufficient for a mixed-
-label capped corpus; canonical preselection and an explicit permutation regression
-must establish that property. Obtain bounded independent implementation criticism if
-any authority ambiguity remains; a model verdict substitutes for no executable check.
+Prove order invariance with a mixed-label capped corpus: status precedence alone is
+not proof. Canonical preselection and an explicit permutation regression must establish
+that property. Obtain bounded independent implementation criticism if any authority
+ambiguity remains; a model verdict substitutes for no executable check.
 
 ## Stop condition
 

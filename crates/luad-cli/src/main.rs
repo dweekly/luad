@@ -2770,7 +2770,11 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
     let mut module_export_index = luad_analysis::ModuleExportIndex::default();
     let mut any_limit_exceeded = false;
     if let Some(convention) = link_convention {
-        for path_str in &file_paths {
+        let mut index_paths: Vec<_> = file_paths.iter().collect();
+        index_paths.sort();
+        index_paths.dedup();
+        for path_str in index_paths {
+            let mut indexed = false;
             if let Ok(bytes) = read_input_bytes_with_reporting(path_str, false) {
                 if let Ok((chunk, identity, _config, _interp)) = parse_chunk_detailed(
                     path_str,
@@ -2785,7 +2789,14 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
                         convention,
                         &mut module_export_index,
                     );
+                    indexed = true;
                 }
+            }
+            if !indexed {
+                // An unreadable/unparsed provider may conceal another definition.
+                module_export_index
+                    .dynamic_artifacts
+                    .insert(path_str.clone());
             }
         }
         if module_export_index.export_limit_exceeded {

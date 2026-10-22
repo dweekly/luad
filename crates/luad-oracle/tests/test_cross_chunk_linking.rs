@@ -839,3 +839,428 @@ fn test_cross_chunk_inverse_pins_argument_origins_per_call_site() {
         first_argument_kinds[2]
     );
 }
+
+fn compiled_source(name: &str, source: &str) -> (InputIdentity, luad_core::Chunk) {
+    let chunk = luad_oracle::compile_and_parse_lua51(source, true)
+        .expect("required official Lua 5.1.5 compiler");
+    (
+        InputIdentity {
+            path: name.into(),
+            sha256: chunk.sha256.clone(),
+            byte_length: chunk.byte_length,
+        },
+        chunk,
+    )
+}
+
+fn source_links(provider: &str) -> Vec<CrossChunkLinkFact> {
+    analyze_corpus_links(
+        &[
+            compiled_source("provider.luac", provider),
+            compiled_source("caller.luac", "luci.sys.exec('argument')"),
+        ],
+        LinkConvention::LuciModuleSetglobal,
+    )
+}
+
+#[test]
+fn test_module_final_root_store_controls() {
+    let prefix = "module('luci.sys'); function exec() return 1 end; ";
+    // Known literals remove the old closure; opaque lookups preserve uncertainty.
+    for (suffix, expected) in [
+        ("exec=nil", LinkStatus::Absent),
+        ("exec=42", LinkStatus::Absent),
+        ("exec=false", LinkStatus::Absent),
+        ("exec=true", LinkStatus::Absent),
+        ("local cleared=nil; exec=cleared", LinkStatus::Absent),
+        ("exec='literal'", LinkStatus::Absent),
+        ("exec=opaque", LinkStatus::Dynamic),
+        ("exec=opaque()", LinkStatus::Dynamic),
+    ] {
+        let links = source_links(&format!("{prefix}{suffix}"));
+        let call = links
+            .iter()
+            .find(|x| x.caller_path == "caller.luac")
+            .expect("total caller outcome");
+        assert_eq!(call.status, expected, "{suffix}: {links:?}");
+        assert!(call.target_artifact.is_none() && call.target_proto.is_none());
+    }
+    let links = source_links(&format!("{prefix}function exec() return 2 end"));
+    assert_eq!(links.len(), 1);
+    assert_eq!(links[0].status, LinkStatus::Resolved);
+    assert_eq!(links[0].target_proto, Some(ProtoPath::root().child(1)));
+    assert_eq!(
+        links[0].target_artifact.as_ref().unwrap().path,
+        "provider.luac"
+    );
+}
+
+#[test]
+fn test_module_admission_refuses_unproved_initialization() {
+    for source in [
+        "if false then module('luci.sys') end; function exec() end",
+        "if flag then module('luci.sys') end; function exec() end",
+        "module('luci.sys'); if flag then function exec() end end",
+        "module('luci.sys'); module('other'); function exec() end",
+        "function exec() end; module('luci.sys')",
+        "local function dormant() module('luci.sys'); function exec() end end",
+        "local declare=module; declare('luci.sys'); function exec() end",
+        "local name='luci.sys'; module(name); function exec() end",
+        "module('luci.sys'); local x=require('dependency'); function exec() end",
+        "local x=require('dependency'); module('luci.sys'); function exec() end",
+        "module('luci.sys'); function exec() end; clobber()",
+        "module('luci.sys'); function exec() end; _M.exec=nil",
+        "module('luci.sys'); function exec() end; package.loaded['luci.sys']={}",
+        "do return end; module('luci.sys'); function exec() end",
+        "module('\u{005c}255'); function exec() end",
+        "module('luci.sys\u{005c}000suffix'); function exec() end",
+    ] {
+        let links = source_links(source);
+        let caller = links
+            .iter()
+            .find(|x| x.caller_path == "caller.luac")
+            .expect("uncertain caller outcome");
+        assert_eq!(caller.status, LinkStatus::Dynamic, "{source}: {links:?}");
+        assert!(caller.target_proto.is_none() && caller.target_artifact.is_none());
+    }
+    // Admission must use raw bytes, not a stale/escaped display spelling.
+    let (id, mut chunk) = compiled_source("provider.luac", MOD_SYS_SRC);
+    for c in &mut chunk.main_proto.constants {
+        if let luad_core::model::ConstantValue::ShortString(s) = &mut c.value {
+            if s.raw_bytes == b"exec" {
+                s.raw_bytes = vec![0xff];
+            }
+        }
+    }
+    let caller = compiled_source("caller.luac", CALLER_SYS_SRC);
+    let links = analyze_corpus_links(&[(id, chunk), caller], LinkConvention::LuciModuleSetglobal);
+    assert_eq!(links[0].status, LinkStatus::Dynamic);
+}
+
+#[test]
+fn test_module_positive_aliases_and_child_bodies() {
+    for (source, expected) in [
+        ("module('luci.sys',package.seeall); local f=function() end; exec=f", 0),
+        ("module('luci.sys'); function exec() end; local function dormant() function exec() end end", 0),
+        ("local f=function() end; module('luci.sys'); exec=f", 0),
+    ] {
+        let links = source_links(source);
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].status, LinkStatus::Resolved, "{source}");
+        assert_eq!(links[0].target_proto, Some(ProtoPath::root().child(expected)));
+        assert!(!links[0].evidence.is_empty());
+    }
+    // A closure's body cannot invent an export when initialization never calls it.
+    let links =
+        source_links("module('luci.sys'); local function dormant() function exec() end end");
+    assert_eq!(links[0].status, LinkStatus::Absent);
+    let chunks = [
+        compiled_source(
+            "provider.luac",
+            "module('luci.sys'); local f=function() end; exec=f; alias=f",
+        ),
+        compiled_source("caller.luac", "luci.sys.exec(); luci.sys.alias()"),
+    ];
+    let links = analyze_corpus_links(&chunks, LinkConvention::LuciModuleSetglobal);
+    assert_eq!(links.len(), 2);
+    assert!(links
+        .iter()
+        .all(|x| x.status == LinkStatus::Resolved
+            && x.target_proto == Some(ProtoPath::root().child(0))));
+}
+
+#[test]
+fn test_module_incomplete_index_never_proves_unique_or_absent() {
+    use luad_analysis::build_module_export_index_bounded;
+    let a = compiled_source("00-provider.luac", MOD_SYS_SRC);
+    let b = compiled_source("10-duplicate.luac", MOD_SYS_DUP_SRC);
+    let caller = compiled_source("caller.luac", CALLER_SYS_SRC);
+    for order in [[&a, &b], [&b, &a]] {
+        let index = build_module_export_index_bounded(
+            order.map(|x| (&x.0, &x.1)),
+            LinkConvention::LuciModuleSetglobal,
+            1,
+        );
+        assert!(index.export_limit_exceeded);
+        assert_eq!(index.exports.values().map(Vec::len).sum::<usize>(), 1);
+        let links = resolve_chunk_links(
+            &caller.0,
+            &caller.1,
+            &index,
+            LinkConvention::LuciModuleSetglobal,
+        );
+        assert_eq!(links[0].status, LinkStatus::LimitExceeded);
+        assert!(links[0].target_artifact.is_none() && links[0].target_proto.is_none());
+    }
+    let dynamic = compiled_source("dynamic.luac", "module(opaque); function maybe() end");
+    let links = analyze_corpus_links(
+        &[a.clone(), dynamic.clone(), caller.clone()],
+        LinkConvention::LuciModuleSetglobal,
+    );
+    let site = links
+        .iter()
+        .find(|x| x.caller_path == "caller.luac")
+        .unwrap();
+    assert_eq!(site.status, LinkStatus::Dynamic);
+    assert!(site.target_artifact.is_none());
+    let links = analyze_corpus_links(
+        &[a.clone(), b, dynamic, caller.clone()],
+        LinkConvention::LuciModuleSetglobal,
+    );
+    let site = links
+        .iter()
+        .find(|x| x.caller_path == "caller.luac")
+        .unwrap();
+    assert_eq!(
+        site.status,
+        LinkStatus::Duplicate,
+        "two retained definitions still prove duplicate"
+    );
+    let index = build_module_export_index_bounded(
+        [(&a.0, &a.1), (&a.0, &a.1)],
+        LinkConvention::LuciModuleSetglobal,
+        1,
+    );
+    assert!(
+        !index.export_limit_exceeded,
+        "repeated artifact identity is one definition"
+    );
+    assert_eq!(
+        resolve_chunk_links(
+            &caller.0,
+            &caller.1,
+            &index,
+            LinkConvention::LuciModuleSetglobal
+        )[0]
+        .status,
+        LinkStatus::Resolved
+    );
+}
+
+#[test]
+fn test_module_mixed_label_cap_permutations_are_deterministic() {
+    use luad_analysis::build_module_export_index_bounded;
+    let inputs = [
+        compiled_source("00-provider.luac", MOD_SYS_SRC),
+        compiled_source("10-duplicate.luac", MOD_SYS_DUP_SRC),
+        compiled_source(
+            "20-other.luac",
+            "module('luci.other'); function entry() end",
+        ),
+    ];
+    let caller = compiled_source("caller.luac", "luci.sys.exec(); luci.other.entry()");
+    let mut expected = None;
+    for order in [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ] {
+        let index = build_module_export_index_bounded(
+            order.map(|i| (&inputs[i].0, &inputs[i].1)),
+            LinkConvention::LuciModuleSetglobal,
+            2,
+        );
+        assert!(index.export_limit_exceeded);
+        assert_eq!(index.exports.values().map(Vec::len).sum::<usize>(), 2);
+        let links = resolve_chunk_links(
+            &caller.0,
+            &caller.1,
+            &index,
+            LinkConvention::LuciModuleSetglobal,
+        )
+        .facts;
+        assert_eq!(links.len(), 2);
+        assert_eq!(links[0].status, LinkStatus::Duplicate);
+        assert_eq!(links[1].status, LinkStatus::LimitExceeded);
+        assert!(links
+            .iter()
+            .all(|x| x.target_proto.is_none() && x.target_artifact.is_none()));
+        if let Some(expected) = &expected {
+            assert_eq!(&links, expected);
+        } else {
+            expected = Some(links);
+        }
+    }
+}
+
+#[test]
+fn test_module_admission_budgets_fail_closed() {
+    use luad_analysis::linking::{MAX_MODULE_INIT_CONSTANT_BYTES, MAX_MODULE_INIT_WORDS};
+    let namespace = std::iter::once("luci")
+        .chain(std::iter::repeat_n("segment", 30))
+        .collect::<Vec<_>>()
+        .join(".");
+    let provider = compiled_source(
+        "provider.luac",
+        &format!("module('{namespace}'); function exec() end"),
+    );
+    let caller = compiled_source("caller.luac", &format!("{namespace}.exec()"));
+    let links = analyze_corpus_links(&[provider, caller], LinkConvention::LuciModuleSetglobal);
+    assert_eq!(links.len(), 1);
+    assert_eq!(links[0].status, LinkStatus::Resolved);
+    let too_deep = format!("module('{namespace}.extra'); function exec() end");
+    assert_eq!(source_links(&too_deep)[0].status, LinkStatus::LimitExceeded);
+    let small = "module('luci.sys'); padding=0; function exec() end";
+    assert_eq!(source_links(small)[0].status, LinkStatus::Resolved);
+    let words = format!(
+        "module('luci.sys'); {} function exec() end",
+        "padding=0;".repeat(MAX_MODULE_INIT_WORDS)
+    );
+    assert_eq!(source_links(&words)[0].status, LinkStatus::LimitExceeded);
+    // Interning keeps one constant in the chunk; lifting every use would clone it.
+    let large = "a".repeat(1024 * 1024);
+    let assignment = format!("padding='{large}';");
+    let once = format!("module('luci.sys'); {assignment} function exec() end");
+    assert_eq!(source_links(&once)[0].status, LinkStatus::Resolved);
+    let uses = MAX_MODULE_INIT_CONSTANT_BYTES / (large.len() * 2) + 1;
+    let many = format!(
+        "module('luci.sys'); {} function exec() end",
+        assignment.repeat(uses)
+    );
+    assert_eq!(source_links(&many)[0].status, LinkStatus::LimitExceeded);
+}
+
+fn selected_cli_links(
+    paths: &[&Path],
+    convention: bool,
+) -> (std::process::Output, Vec<CrossChunkLinkFact>) {
+    let mut cmd = Command::new(get_luad_bin());
+    cmd.args(["export", "--facts", "callee"]);
+    if convention {
+        cmd.args(["--link-convention", "luci-module-setglobal"]);
+    }
+    for path in paths {
+        cmd.arg(path);
+    }
+    let output = cmd.output().expect("run selected export");
+    let mut links: Vec<CrossChunkLinkFact> = output
+        .stdout
+        .split(|b| *b == b'\n')
+        .filter(|s| !s.is_empty())
+        .filter_map(|line| {
+            let record: serde_json::Value =
+                serde_json::from_slice(line).expect("machine stdout is JSONL");
+            (record["record_type"] == "cross_chunk_link")
+                .then(|| serde_json::from_value(record["data"].clone()).unwrap())
+        })
+        .collect();
+    links.sort_by(|a, b| {
+        (&a.caller_path, &a.caller_proto, a.call_pc).cmp(&(
+            &b.caller_path,
+            &b.caller_proto,
+            b.call_pc,
+        ))
+    });
+    (output, links)
+}
+
+#[test]
+fn test_cli_module_linking_overwrite_and_completeness_controls() {
+    let dir = tempfile::tempdir().unwrap();
+    let provider = dir.path().join("provider.luac");
+    let caller = dir.path().join("caller.luac");
+    fs::write(
+        &caller,
+        luad_oracle::compile_source_lua51(CALLER_SYS_SRC, true).expect("required Lua 5.1.5"),
+    )
+    .unwrap();
+    for (source, status) in [
+        (MOD_SYS_SRC, LinkStatus::Resolved),
+        (
+            "module('luci.sys'); function exec() end; exec=nil",
+            LinkStatus::Absent,
+        ),
+        (
+            "if false then module('luci.sys') end; function exec() end",
+            LinkStatus::Dynamic,
+        ),
+    ] {
+        fs::write(
+            &provider,
+            luad_oracle::compile_source_lua51(source, true).expect("required Lua 5.1.5"),
+        )
+        .unwrap();
+        let (output, links) = selected_cli_links(&[&provider, &caller], true);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let site = links
+            .iter()
+            .find(|x| x.caller_path == caller.display().to_string())
+            .unwrap();
+        assert_eq!(site.status, status);
+        if status == LinkStatus::Resolved {
+            assert_eq!(site.target_proto, Some(ProtoPath::root().child(0)));
+            assert_eq!(
+                site.target_artifact.as_ref().unwrap().path,
+                provider.display().to_string()
+            );
+        } else {
+            assert!(site.target_proto.is_none() && site.target_artifact.is_none());
+        }
+        let (other, permuted) = selected_cli_links(&[&caller, &provider], true);
+        assert!(other.status.success());
+        assert_eq!(links, permuted);
+        assert!(selected_cli_links(&[&provider, &caller], false)
+            .1
+            .is_empty());
+    }
+    fs::write(
+        &provider,
+        luad_oracle::compile_source_lua51(MOD_SYS_SRC, true).expect("required Lua 5.1.5"),
+    )
+    .unwrap();
+    let missing = dir.path().join("missing.luac");
+    let corrupt = dir.path().join("corrupt.luac");
+    fs::write(&corrupt, b"\x1bLua\x51\x00").unwrap();
+    for unavailable in [&missing, &corrupt] {
+        let (output, links) = selected_cli_links(&[&provider, &caller, unavailable], true);
+        // Default export permits partial success; completeness lives in typed
+        // terminal records (MACHINE-INTERFACE.md), not process status alone.
+        assert!(output.status.success());
+        let records: Vec<serde_json::Value> = output
+            .stdout
+            .split(|b| *b == b'\n')
+            .filter(|s| !s.is_empty())
+            .map(|s| serde_json::from_slice(s).unwrap())
+            .collect();
+        let terminals: Vec<_> = records
+            .iter()
+            .filter(|r| {
+                r["record_type"] == "file_end" && r["path"] == unavailable.display().to_string()
+            })
+            .collect();
+        assert_eq!(terminals.len(), 1);
+        assert_eq!(
+            terminals[0]["status"],
+            if unavailable == &missing {
+                "failed"
+            } else {
+                "skipped"
+            }
+        );
+        let end = records.last().unwrap();
+        assert_eq!(end["record_type"], "export_end");
+        assert_eq!(end["files_succeeded"], 2);
+        assert_eq!(end["files_processed"], 3);
+        assert_eq!(
+            end["files_failed"],
+            if unavailable == &missing { 1 } else { 0 }
+        );
+        assert_eq!(
+            end["files_skipped"],
+            if unavailable == &corrupt { 1 } else { 0 }
+        );
+        let site = links
+            .iter()
+            .find(|x| x.caller_path == caller.display().to_string())
+            .unwrap();
+        assert_eq!(site.status, LinkStatus::Dynamic);
+        assert!(site.target_proto.is_none() && site.target_artifact.is_none());
+    }
+}

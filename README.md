@@ -204,10 +204,13 @@ or byte identity; use the artifact hash for byte identity. See the
 [machine interface](docs/MACHINE-INTERFACE.md#cfg-xrefs-query-and-diff) and
 [public comparison regressions](crates/luad-oracle/tests/test_diff_cli.rs).
 
-Known experimental-analysis limit: convention-based links can name an export after it
-is overwritten or use an unreachable module declaration. Do not treat links as proof
-of runtime reachability. Correcting these cases is the next work in
-[the roadmap](ROADMAP.md#a-correct-false-answers-before-expanding-analysis).
+Convention-based linking requires explicit `--link-convention luci-module-setglobal`
+and admits straight-line root initialization with one literal module declaration.
+It uses final root closure stores, refuses ambiguous initialization and clobbering
+operations, and cannot claim a unique target from an incomplete index. A binding is
+conditional on that convention, not runtime reachability. See the
+[exact admitted shapes, statuses and budgets](docs/MACHINE-INTERFACE.md#export)
+and [executable controls](crates/luad-oracle/tests/test_cross_chunk_linking.rs).
 
 Lua 5.2, 5.3, and 5.5 are limited to structural facts and validation. Derived analysis
 commands refuse these dialects rather than presenting unqualified semantic results.
