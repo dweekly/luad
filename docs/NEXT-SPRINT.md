@@ -33,6 +33,8 @@ Allowed production paths:
 Allowed tests/evidence and documentation:
 
 - `crates/luad-oracle/tests/test_analysis.rs`;
+- generated `tests/schemas/diff.schema.json` descriptions, regenerated from the typed
+  CLI schema without changing its shape;
 - new ordinary CLI tests `crates/luad-oracle/tests/test_diff_cli.rs`;
 - public source pair `tests/fixtures/comparison/before.lua` and `after.lua`, compiled
   during tests by required official Lua 5.1.5; retain no generated binary without a

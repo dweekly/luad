@@ -537,6 +537,14 @@ fn comparison_constant_types_and_exact_payloads() {
             }
         }
     }
+    // Equal string bytes ignore derived display/UTF-8 bookkeeping.
+    base.main_proto.constants[0].value = C::ShortString(LuaString::from_bytes(b"same"));
+    let mut display_only = base.clone();
+    if let C::ShortString(s) = &mut display_only.main_proto.constants[0].value {
+        s.display = "different derived rendering".into();
+        s.is_utf8 = false;
+    }
+    assert!(diff_chunks(&base, &display_only, true, false).is_identical);
     // No use of f64's NaN != NaN or equality that erases signed zero.
     for bits in [
         0,
@@ -575,6 +583,24 @@ fn comparison_constant_types_and_exact_payloads() {
             "constant",
         );
     }
+    base.main_proto.constants[0].value = C::Float {
+        val: f64::from_bits(0x7ff8_0000_0000_0001),
+        raw_hex: "010000000000f87f".into(),
+        is_nan: true,
+        is_inf: false,
+    };
+    assert_comparison_change(
+        &base,
+        |c| {
+            c.main_proto.constants[0].value = C::Float {
+                val: f64::from_bits(0x7ff8_0000_0000_0002),
+                raw_hex: "020000000000f87f".into(),
+                is_nan: true,
+                is_inf: false,
+            };
+        },
+        "constant",
+    );
 }
 
 #[test]
@@ -641,12 +667,13 @@ fn comparison_complete_shape_captures_and_headers() {
 #[test]
 fn comparison_debug_exclusion_and_provenance_invariance() {
     use luad_core::model::{Chunk, LuaString, Prototype};
-    let base = comparison_fixture();
+    let mut base = comparison_fixture();
+    base.main_proto.line_info = vec![1];
     let mutations: &[fn(&mut Chunk)] = &[
         |c| c.main_proto.source_name = Some(LuaString::from_bytes(b"different")),
         |c| c.main_proto.line_defined += 1,
         |c| c.main_proto.last_line_defined += 1,
-        |c| c.main_proto.line_info.push(1),
+        |c| c.main_proto.line_info[0] = 2,
         |c| c.main_proto.abs_line_info[0].line += 1,
         |c| c.main_proto.abs_line_info[0].pc += 1,
         |c| c.main_proto.loc_vars[0].name.raw_bytes[0] ^= 1,
@@ -712,8 +739,8 @@ fn comparison_debug_exclusion_and_provenance_invariance() {
 fn comparison_preserves_operand_and_companion_words_without_large_lift() {
     use luad_core::model::{ConstantValue, LuaString};
     let base = comparison_fixture();
-    // The Lua 5.1 RETURN explanation omits its unused C field. Conservative
-    // comparison retains this encoding even when both explanations are identical.
+    // The Lua 5.1 RETURN explanation omits B (return count) and the unused C
+    // field. Retain both even when their prose explanations are identical.
     let pc = base.main_proto.instructions.len() - 1;
     let old_explanation = luad_dialect_lua51::lift_proto_lua51(&base.main_proto)[pc]
         .explanation
@@ -745,6 +772,31 @@ fn comparison_preserves_operand_and_companion_words_without_large_lift() {
         |c| c.main_proto.instructions[binding].raw_word ^= 1 << 23,
         "instruction",
     );
+    // SETLIST's following physical word is data, including low bits that could
+    // otherwise decode as an opcode. Preserve it without standalone effects.
+    let mut setlist = base.clone();
+    setlist.main_proto.instructions[0].raw_word = luad_dialect_lua51::RawInstruction51::encode_iabc(
+        luad_dialect_lua51::Opcode51::SetList,
+        0,
+        1,
+        0,
+    );
+    setlist.main_proto.instructions[1].raw_word = 1;
+    for profile in ["lua5.1", "lua5.1-lnum32", "lua5.1-stock32"] {
+        setlist.dialect = profile.into();
+        let mut changed = setlist.clone();
+        changed.main_proto.instructions[1].raw_word = 2;
+        let diff = diff_chunks(&setlist, &changed, true, false);
+        assert!(!diff.is_identical);
+        let word = &diff.proto_diffs[0].instruction_diffs[0];
+        assert_eq!(word.pc, 1);
+        assert!(word.old.as_ref().unwrap().contains("SetlistExtra"));
+        assert!(word
+            .new
+            .as_ref()
+            .unwrap()
+            .contains("physical_word=0x00000002"));
+    }
     let mut large = base.clone();
     large.main_proto.constants[0].value =
         ConstantValue::ShortString(LuaString::from_bytes(&vec![b'a'; 2_000_000]));
