@@ -2,7 +2,6 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use luad_core::id::ProtoPath;
 use luad_core::model::{Chunk, ConstantValue, LuaString, Prototype};
@@ -246,8 +245,8 @@ fn diff_prototype(
         if !constant_equal(&x.value, &y.value) {
             result.constant_diffs.push(format!(
                 "K[{index}]: {} -> {}",
-                constant_preview(&x.value),
-                constant_preview(&y.value)
+                luad_core::scalar::render_constant_evidence(&x.value),
+                luad_core::scalar::render_constant_evidence(&y.value)
             ));
         }
     }
@@ -376,38 +375,5 @@ fn constant_equal(a: &ConstantValue, b: &ConstantValue) -> bool {
             x.raw_bytes == y.raw_bytes
         }
         _ => false,
-    }
-}
-
-/// Bound display size independently of input length. Digests are previews only:
-/// equality always uses the full original bytes, never a hash or escaped display.
-fn preview(bytes: &[u8]) -> String {
-    format!(
-        "len={} prefix={} sha256={:x}",
-        bytes.len(),
-        hex::encode(&bytes[..bytes.len().min(12)]),
-        Sha256::digest(bytes)
-    )
-}
-
-fn constant_preview(value: &ConstantValue) -> String {
-    match value {
-        ConstantValue::Nil => "nil".into(),
-        ConstantValue::Boolean(v) => format!("boolean({v})"),
-        ConstantValue::Integer { val, raw_hex } => {
-            format!("integer({val}, raw {})", preview(raw_hex.as_bytes()))
-        }
-        ConstantValue::Float {
-            val,
-            raw_hex,
-            is_nan,
-            is_inf,
-        } => format!(
-            "float(bits={:016x}, nan={is_nan}, inf={is_inf}, raw {})",
-            val.to_bits(),
-            preview(raw_hex.as_bytes())
-        ),
-        ConstantValue::ShortString(s) => format!("short-string({})", preview(&s.raw_bytes)),
-        ConstantValue::LongString(s) => format!("long-string({})", preview(&s.raw_bytes)),
     }
 }

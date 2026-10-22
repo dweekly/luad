@@ -12,6 +12,8 @@
 
 use std::fmt::Write as _;
 
+use sha2::{Digest, Sha256};
+
 use crate::model::ConstantValue;
 
 /// Maximum number of raw string bytes included in a human-facing scalar preview.
@@ -122,6 +124,49 @@ pub fn render_constant_full(value: &ConstantValue) -> String {
     render_constant_with(value, render_byte_string_full)
 }
 
+/// Render a bounded comparison preview with exact representation metadata.
+///
+/// The canonical scalar spelling stays readable; type, float bits, raw numeric
+/// encoding, and a digest of complete string bytes distinguish representations
+/// that can share that spelling. Digests are display evidence, never equality
+/// predicates. Raw hex is itself bounded because callers can construct models.
+#[must_use]
+pub fn render_constant_evidence(value: &ConstantValue) -> String {
+    let scalar = render_constant(value);
+    let detail = match value {
+        ConstantValue::Nil => "nil".into(),
+        ConstantValue::Boolean(_) => "boolean".into(),
+        ConstantValue::Integer { raw_hex, .. } => {
+            format!("integer raw={}", render_byte_string(raw_hex.as_bytes()))
+        }
+        ConstantValue::Float {
+            val,
+            raw_hex,
+            is_nan,
+            is_inf,
+        } => {
+            format!(
+                "float bits={:016x} nan={is_nan} inf={is_inf} raw={}",
+                val.to_bits(),
+                render_byte_string(raw_hex.as_bytes())
+            )
+        }
+        ConstantValue::ShortString(s) | ConstantValue::LongString(s) => {
+            let kind = if matches!(value, ConstantValue::ShortString(_)) {
+                "short-string"
+            } else {
+                "long-string"
+            };
+            format!(
+                "{kind} len={} sha256={:x}",
+                s.raw_bytes.len(),
+                Sha256::digest(&s.raw_bytes)
+            )
+        }
+    };
+    format!("{detail} {scalar}")
+}
+
 fn render_constant_with(value: &ConstantValue, render_string: fn(&[u8]) -> String) -> String {
     match value {
         ConstantValue::Nil => "nil".to_string(),
@@ -138,6 +183,29 @@ fn render_constant_with(value: &ConstantValue, render_string: fn(&[u8]) -> Strin
 mod tests {
     use super::*;
     use crate::model::LuaString;
+
+    #[test]
+    fn comparison_evidence_is_bounded_and_preserves_scalar_spelling() {
+        let string = ConstantValue::LongString(LuaString::from_bytes(&vec![0xff; 4096]));
+        let rendered = render_constant_evidence(&string);
+        assert!(rendered.len() < 400);
+        assert!(rendered.ends_with(&render_constant(&string)));
+        let integer = ConstantValue::Integer {
+            val: 42,
+            raw_hex: "f".repeat(4096),
+        };
+        assert!(render_constant_evidence(&integer).len() < 400);
+        let nan = |bits| ConstantValue::Float {
+            val: f64::from_bits(bits),
+            raw_hex: format!("{bits:016x}"),
+            is_nan: true,
+            is_inf: false,
+        };
+        let a = nan(0x7ff8_0000_0000_0001);
+        let b = nan(0x7ff8_0000_0000_0002);
+        assert_eq!(render_constant(&a), render_constant(&b));
+        assert_ne!(render_constant_evidence(&a), render_constant_evidence(&b));
+    }
 
     #[test]
     fn integer_boundaries_have_canonical_goldens() {

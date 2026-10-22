@@ -344,7 +344,7 @@ Text and JSON report chunk-wide changes separately. JSONL keeps the existing
 with a `Chunk: ` prefix, including when the header is the only difference. An equal
 JSONL comparison has no `diff_prototype` records and `summary.total_records == 0`.
 Per-field descriptions and constant previews are bounded; previews use length, a short
-byte prefix and SHA-256, while equality always compares complete original content.
+escaped byte preview and SHA-256, while equality always compares complete original content.
 The ordinary [library](../crates/luad-oracle/tests/test_analysis.rs) and
 [required-compiler CLI](../crates/luad-oracle/tests/test_diff_cli.rs) regressions
 exercise equal controls and isolated changes in both modes and every output format.
