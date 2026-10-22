@@ -20,7 +20,10 @@ Preserve central physical roles; descriptors/data do not act as instructions.
 After admission, reuse shared global-store value facts. Keep root stores only, choose
 the last store by PC for each exact raw name, and index it only if it is a closure.
 Direct closure aliases and a final replacement closure remain useful positives.
-Unknown/exhausted analysis refuses certainty. Do not change shared callgraph semantics.
+Unknown/exhausted analysis refuses certainty. The admitted module CALL invalidates
+its temporary register tail before any later read; crafted, structurally valid bytecode
+must not retain pre-call closure or literal facts there. Do not change shared callgraph
+semantics in this batch.
 
 ## Scope and bounded behavior
 
@@ -34,6 +37,11 @@ Use canonical artifact order before capacity selection in the corpus builder and
 index pass, so a truncated index does not select targets by input order. Deduplicate
 identical artifact identities for indexing; preserve export's existing file-stream order.
 A failed input read/parse/analysis in the CLI prepass must make completeness uncertain.
+Reject bytecode stdin with a linking convention before reading or writing: it cannot
+be replayed by this two-pass interface. Document immutable corpus snapshots as a linking
+precondition; target hashes identify index-pass bytes, not a transactional file snapshot.
+Order ties for same-path/different-content library callers by complete reported facts.
+Continue observing final unknown stores after the definition cap is reached.
 Use the existing `dynamic`/`limit_exceeded` statuses, with no target attached. Duplicate
 is justified by at least two admitted retained definitions; otherwise dynamic evidence
 wins over a cap, then a cap wins over unique/absent. Do not scope unknown declarations
@@ -49,7 +57,10 @@ never silent omission.
 
 Tests/evidence: `crates/luad-oracle/tests/test_cross_chunk_linking.rs` and
 `tests/gates/gate-cross-chunk-link.json`. Compile new public source literals at runtime
-with required official Lua 5.1.5; add no retained binary without provenance.
+with required official Lua 5.1.5. Crafted call-tail controls patch a required compiled
+chunk using its declared layout and parsed offsets, assert structural validity, and
+only parse/analyze the modified bytes; never execute them. Add no retained binary
+without provenance.
 Documentation: README, CHANGELOG, ROADMAP, MACHINE-INTERFACE, this checkpoint; update
 existing index entries. Update generated schema descriptions only if typed comments
 change, preserving shape. Shared authorities and other gate definitions remain frozen.
@@ -76,9 +87,11 @@ Required assertions, added to the existing gate:
   mixed-label cap permutations prove deterministic statuses and no false unique target.
   Unrelated dynamic inputs downgrade a singleton; two retained definitions still prove
   duplicate. Exhaustion refuses certainty.
+- Crafted call-tail controls must turn both the stale-closure and false-absence cases
+  into uncertainty, with positive reinitialization controls.
 - Public selected-fact JSONL checks the overwritten and positive pair, input-order
-  permutation (normalized link facts), missing/corrupt provider inputs, and unselected
-  convention. Existing negative/absent/duplicate/schema/limit controls remain intact.
+  permutation (normalized link facts), missing/corrupt provider inputs, bytecode-stdin refusal versus the ordinary stdin
+  positive, and unselected convention. Existing negative/absent/duplicate/schema/limit controls remain intact.
 
 Prove order invariance with a mixed-label capped corpus: status precedence alone is
 not proof. Canonical preselection and an explicit permutation regression must establish
