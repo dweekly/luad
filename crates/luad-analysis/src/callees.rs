@@ -1254,6 +1254,19 @@ pub(crate) fn analyze_root_global_stores(
             }
         }
         transfer(instruction, &mut state, &captures, frame_size);
+        if instruction.mnemonic == "CALL" {
+            if let Some(base) = register_operand(instruction, 0) {
+                // A C call may use its entire temporary stack tail, even when
+                // C=1 requests no results. Crafted bytecode may read that tail;
+                // encoded result writes do not prove pre-call values survive.
+                invalidate_from(
+                    &mut state,
+                    base,
+                    frame_size,
+                    CalleeUnresolvedReason::Overwritten,
+                );
+            }
+        }
         // Callee analysis need not retain the type of a non-callable overwrite.
         // Root export absence does: these two instructions prove non-closures.
         if matches!(instruction.mnemonic.as_str(), "LOADNIL" | "LOADBOOL") {

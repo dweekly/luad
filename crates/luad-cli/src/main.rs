@@ -2767,6 +2767,10 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
         return Ok(ExitCode::UsageError);
     }
 
+    if link_convention.is_some() && file_paths.iter().any(|p| p == "-") {
+        eprintln!("error: --link-convention requires replayable file inputs; bytecode stdin '-' cannot be indexed twice");
+        return Ok(ExitCode::UsageError);
+    }
     let mut module_export_index = luad_analysis::ModuleExportIndex::default();
     let mut any_limit_exceeded = false;
     if let Some(convention) = link_convention {

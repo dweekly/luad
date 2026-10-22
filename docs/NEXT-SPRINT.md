@@ -11,7 +11,8 @@ target or absence. This is a conditional static binding under an explicit conven
 not runtime execution or security reachability.
 
 Admit only straight-line Lua 5.1 root initialization with one directly loaded literal
-`module` declaration before global stores. Extra arguments may load `package.seeall`. Admit only nonempty printable ASCII
+`module` declaration before global stores. Extra arguments may load `package.seeall`.
+Admit only nonempty printable ASCII
 selector bytes that need no byte-escaping (exclude quotes/backslashes); the existing
 callee surface uses escaped byte labels, which must not alias literal raw names.
 An escaped caller path is uncertainty, never proof of absence or a different target.
@@ -53,7 +54,8 @@ by guessed namespace. Preserve explicit convention selection, unsupported/absent
 outcomes when evidence is complete, limits, deterministic ordering, and stdout discipline.
 
 Reuse parser bounds and linear role checks; do not introduce unbounded declaration
-lookahead or dump raw constants/subtrees. Before lifting, cap a candidate root at 16,384 physical words and 16 MiB of
+lookahead or dump raw constants/subtrees. Before lifting, cap a candidate root at
+16,384 physical words and 16 MiB of
 referenced constant representation bytes (count every use, including raw/display bytes).
 These admission work budgets prevent repeated large constants from amplifying the
 shared lifter. Each cutoff needs a limit outcome and a public negative/positive control,

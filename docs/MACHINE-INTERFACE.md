@@ -568,20 +568,29 @@ this conditional binding claim. No record proves a runtime call edge or reachabi
 Branches, skips, loops, multiple or aliased declarations, pre-declaration stores,
 root calls including `require`, table/upvalue mutations, and code after a return refuse
 admission. General table reads can invoke metamethods and are refused; the direct
-`package.seeall` option lookup is admitted before the declaration. Names use exact UTF-8
-bytes; module names with empty segments or embedded NUL are refused (the official
+`package.seeall` option lookup is admitted before the declaration. Selector bytes must
+be nonempty printable ASCII whose raw and escaped spellings agree: quotes, backslashes,
+controls and non-ASCII bytes are refused. Escaped callee paths become `dynamic`, not
+matches against a different raw name or proof of absence. Module names with empty
+segments or embedded NUL are refused (the official
 [5.1.5 module implementation](https://www.lua.org/source/5.1/loadlib.c.html#ll_module)
 uses C-string APIs). A module namespace has at most 31 segments, reserving the caller
 path's 32nd segment for the exported field.
 
 Only each name's final root store is used. A directly constructed closure, including
 its local aliases, supplies a candidate; a later nil/boolean/number/string removes it.
-An opaque value preserves uncertainty. Lexically nested function bodies never execute
+An opaque value preserves uncertainty. The module call's temporary register tail is
+invalidated; crafted bytecode cannot preserve a pre-call closure or literal there.
+Fresh post-call writes can establish values again. Initialization must end with a
+zero-result return: an explicit returned value could replace `package.loaded[name]`.
+Lexically nested function bodies never execute
 merely by being present, and their stores cannot invent or replace root exports.
 Admission stops before lifting at 16,384 root physical words or 16 MiB of referenced
 constant representation bytes, counted per use including raw/display bytes. A cutoff
-is `limit_exceeded`, not silent omission. Retained export definitions, including
-duplicates, share the 10,000-definition cap.
+is `limit_exceeded`, not silent omission. MOVE proof chains stop at 64 steps before
+lifting, bounding evidence copying. Retained export definitions, including duplicates,
+share the 10,000-definition cap and a 32 MiB label payload budget (charge both key and
+definition copies). Unknown stores are still examined after capacity is exhausted.
 
 Corpus construction and the CLI index pass select artifacts in canonical identity/path
 order before applying capacity. Repeated identical artifact identities count once for
@@ -589,7 +598,7 @@ indexing; export still processes duplicate paths per occurrence in its stream. S
 
 - `duplicate`: at least two retained admitted definitions prove a conflict.
 - `dynamic`: an initialization/final value is unproved, or a provider input could not be
-  read/parsed/validated. An unknown declaration may hide any namespace; uncertainty
+  read/parsed/validated in the index pass. An unknown declaration may hide any namespace; uncertainty
   applies globally until a narrower analysis can justify scoping it.
 - `limit_exceeded`: admission/index capacity prevents completion (or the per-chunk link
   fact budget is reached). Local fact-budget markers retain their limit status.
@@ -602,9 +611,19 @@ omitted. Known duplicates remain duplicates. The existing link scope includes li
 `luci` paths and indexed module labels; incomplete indexing also emits uncertainty for
 other multi-segment symbolic paths that could conceal an export. Default partial export
 success can still exit zero: inspect `file_end` and `export_end` as well as link statuses.
+
+Linking requires replayable file inputs; bytecode stdin `-` fails with usage exit 2
+before input is consumed or stream output begins. `--input-list -` still accepts a list
+of replayable file paths. Provide an immutable corpus snapshot: the CLI reads providers
+once for indexing and again for export, and does not create a transactional filesystem
+snapshot. Link target hashes identify index-pass bytes. Consumers must join the exact
+`(path, sha256)` target to complete exported provider facts, and refuse the join when
+those facts are missing or changed.
+
 The [cross-chunk gate tests](../crates/luad-oracle/tests/test_cross_chunk_linking.rs)
 exercise overwrites, refused declarations/clobbers, child bodies, aliases, capacity
-permutations, missing/corrupt providers and both admission cutoffs.
+permutations, missing/corrupt providers, raw/escaped selectors, call-stack scratch reads,
+replayability, and the instruction/constant/proof/label cutoffs.
 
 Every data record has a required `context` object. Successful facts carry
 `input_identity` and `interpretation`; parse-failure diagnostics carry identity with a

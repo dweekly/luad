@@ -144,6 +144,10 @@ pub const MAX_LINK_FACTS: usize = 100_000;
 pub const MAX_MODULE_INIT_WORDS: usize = 16_384;
 /// Sum of referenced constant representations, counted once per physical use.
 pub const MAX_MODULE_INIT_CONSTANT_BYTES: usize = 16 * 1024 * 1024;
+/// Bound the proof-ID sets copied by the shared root transfer authority.
+pub const MAX_MODULE_INIT_ALIAS_STEPS: usize = 64;
+/// Charge both index-key and retained-definition label payloads.
+pub const MAX_MODULE_INDEX_LABEL_BYTES: usize = 32 * 1024 * 1024;
 
 enum ModuleDeclaration {
     Literal {
@@ -165,6 +169,13 @@ fn string_bytes(value: &ConstantValue) -> Option<&[u8]> {
         ConstantValue::ShortString(s) | ConstantValue::LongString(s) => Some(&s.raw_bytes),
         _ => None,
     }
+}
+
+fn admitted_selector(bytes: &[u8]) -> bool {
+    !bytes.is_empty()
+        && bytes
+            .iter()
+            .all(|b| (0x20..=0x7e).contains(b) && !matches!(b, b'\\' | b'"'))
 }
 
 fn as_str_constant(value: &ConstantValue) -> Option<String> {
@@ -227,6 +238,7 @@ fn detect_module_declaration(chunk: &Chunk) -> Option<ModuleDeclaration> {
         Literal(&'a [u8], usize),
     }
     let mut registers = [Token::Other; 256];
+    let mut proof_steps = [0usize; 256];
     let mut module_loads = 0;
     let mut module_load_pc = 0;
     let mut declaration = None;
@@ -266,6 +278,7 @@ fn detect_module_declaration(chunk: &Chunk) -> Option<ModuleDeclaration> {
         let a = raw.a as usize;
         match raw.opcode {
             Some(Op::GetGlobal) => {
+                proof_steps[a] = 1;
                 let name = p
                     .constants
                     .get(raw.bx as usize)
@@ -284,6 +297,7 @@ fn detect_module_declaration(chunk: &Chunk) -> Option<ModuleDeclaration> {
                 }
             }
             Some(Op::LoadK) => {
+                proof_steps[a] = 1;
                 registers[a] = p
                     .constants
                     .get(raw.bx as usize)
@@ -301,6 +315,7 @@ fn detect_module_declaration(chunk: &Chunk) -> Option<ModuleDeclaration> {
                 if !seeall || declaration.is_some() {
                     return Some(refused());
                 }
+                proof_steps[a] = proof_steps[raw.b as usize] + 1;
                 registers[a] = Token::Seeall;
             }
             Some(Op::Call) => {
@@ -323,6 +338,11 @@ fn detect_module_declaration(chunk: &Chunk) -> Option<ModuleDeclaration> {
                 if name.as_bytes().contains(&0) {
                     return Some(refused());
                 }
+                // Callee segments are escaped byte labels. Restrict this
+                // convention to selectors whose raw and escaped spellings agree.
+                if !admitted_selector(name.as_bytes()) {
+                    return Some(refused());
+                }
                 // Callee symbolic paths admit at most 32 segments; reserve one
                 // for the exported field and bound allocation before collecting.
                 let parts: Vec<_> = name.split('.').take(32).collect();
@@ -340,29 +360,49 @@ fn detect_module_declaration(chunk: &Chunk) -> Option<ModuleDeclaration> {
                         word.id.clone(),
                     ],
                 });
+                registers[a..].fill(Token::Other);
+                proof_steps[a..].fill(0);
             }
             Some(Op::SetGlobal) => {
                 if declaration.is_none()
                     || p.constants
                         .get(raw.bx as usize)
                         .and_then(|c| string_bytes(&c.value))
-                        .and_then(|s| std::str::from_utf8(s).ok())
+                        .filter(|s| admitted_selector(s))
                         .is_none()
                 {
                     return Some(refused());
                 }
             }
-            Some(Op::LoadBool) if raw.c == 0 => registers[a] = Token::Other,
+            Some(Op::LoadBool) if raw.c == 0 => {
+                registers[a] = Token::Other;
+                proof_steps[a] = 1;
+            }
             Some(Op::LoadNil) => {
                 if raw.b < raw.a as u16 {
                     return Some(refused());
                 }
-                for register in &mut registers[a..=(raw.b as usize).min(255)] {
-                    *register = Token::Other;
-                }
+                let end = (raw.b as usize).min(255);
+                registers[a..=end].fill(Token::Other);
+                proof_steps[a..=end].fill(1);
             }
-            Some(Op::Move | Op::Closure) => registers[a] = Token::Other,
-            Some(Op::Return) => returned = true,
+            Some(Op::Move) => {
+                let steps = proof_steps
+                    .get(raw.b as usize)
+                    .copied()
+                    .unwrap_or(0)
+                    .saturating_add(1);
+                if steps > MAX_MODULE_INIT_ALIAS_STEPS {
+                    return Some(ModuleDeclaration::Limited);
+                }
+                proof_steps[a] = steps;
+                registers[a] = Token::Other;
+            }
+            Some(Op::Closure) => {
+                registers[a] = Token::Other;
+                proof_steps[a] = 1;
+            }
+            Some(Op::Return) if raw.b == 1 => returned = true,
             // This includes branches, skips, loops, table/upvalue mutation and
             // arbitrary calls. Even a read can invoke an unproved metamethod.
             _ => return Some(refused()),
@@ -440,6 +480,19 @@ pub fn index_chunk_module_exports_bounded(
                 }
             }
             let mut count: usize = index.exports.values().map(Vec::len).sum();
+            let mut retained_label_bytes: usize = index
+                .exports
+                .values()
+                .flatten()
+                .map(|d| {
+                    d.label_segments
+                        .iter()
+                        .map(String::len)
+                        .sum::<usize>()
+                        .saturating_mul(2)
+                })
+                .sum();
+            let namespace_bytes: usize = module_segments.iter().map(String::len).sum();
             for (_, (_, store)) in last_stores {
                 if let GlobalStoreValue::Closure {
                     prototype,
@@ -448,8 +501,18 @@ pub fn index_chunk_module_exports_bounded(
                 {
                     if count >= max_exports {
                         mark_index_limit(index, format!("Corpus module export indexing safety limit ({max_exports} definitions) exceeded; cross-chunk linking is incomplete"));
-                        break;
+                        continue;
                     }
+                    let label_cost = namespace_bytes
+                        .saturating_add(store.name_raw.len())
+                        .saturating_mul(2);
+                    if retained_label_bytes.saturating_add(label_cost)
+                        > MAX_MODULE_INDEX_LABEL_BYTES
+                    {
+                        mark_index_limit(index, "Module index label payload budget exceeded; export index is incomplete".into());
+                        continue;
+                    }
+                    retained_label_bytes += label_cost;
                     // Admission validated UTF-8; preserve raw bytes until this
                     // explicit boundary, never merge distinct lossy spellings.
                     let Ok(export_name) = String::from_utf8(store.name_raw) else {
@@ -605,9 +668,13 @@ pub fn resolve_chunk_links_bounded(
                 CalleeResolution::ResolvedPath {
                     segments, evidence, ..
                 } => {
-                    // Check if this path targets the module namespace
+                    let escaped_selector =
+                        segments.iter().any(|s| !admitted_selector(s.as_bytes()));
+                    // Check if this path targets the module namespace. Escaped
+                    // paths cannot be compared to admitted raw selectors.
                     if segments.first().is_some_and(|s| s == "luci")
                         || index.exports.contains_key(segments)
+                        || escaped_selector
                         || ((!index.dynamic_artifacts.is_empty() || index.export_limit_exceeded)
                             && segments.len() > 1)
                     {
@@ -638,6 +705,17 @@ pub fn resolve_chunk_links_bounded(
                         }
 
                         let link = match index.exports.get(segments) {
+                            _ if escaped_selector => CrossChunkLinkFact {
+                                call_id: call.call_id.clone(),
+                                caller_path: identity.path.clone(),
+                                caller_proto: call.proto_path.clone(),
+                                call_pc: call.pc,
+                                label_segments: segments.clone(),
+                                status: LinkStatus::Dynamic,
+                                target_artifact: None,
+                                target_proto: None,
+                                evidence: evidence.clone(),
+                            },
                             Some(candidates) if candidates.len() == 1 => {
                                 let candidate = &candidates[0];
                                 let mut combined_evidence = evidence.clone();
@@ -836,14 +914,7 @@ pub fn resolve_chunk_links_bounded(
             }
         }
     }
-    // Deterministic sort: caller_path, caller_proto, call_pc, call_id
-    links.sort_by(|a, b| {
-        a.caller_path
-            .cmp(&b.caller_path)
-            .then_with(|| a.caller_proto.cmp(&b.caller_proto))
-            .then_with(|| a.call_pc.cmp(&b.call_pc))
-            .then_with(|| a.call_id.cmp(&b.call_id))
-    });
+    links.sort_by(compare_links);
 
     ChunkLinkResult {
         facts: links,
@@ -881,14 +952,38 @@ pub fn analyze_corpus_links_detailed(
         }
     }
 
-    // Deterministic sort: caller_path, caller_proto, call_pc, call_id
-    all_links.sort_by(|a, b| {
-        a.caller_path
-            .cmp(&b.caller_path)
-            .then_with(|| a.caller_proto.cmp(&b.caller_proto))
-            .then_with(|| a.call_pc.cmp(&b.call_pc))
-            .then_with(|| a.call_id.cmp(&b.call_id))
-    });
+    all_links.sort_by(compare_links);
 
     (all_links, all_diagnostics)
+}
+
+fn compare_links(a: &CrossChunkLinkFact, b: &CrossChunkLinkFact) -> std::cmp::Ordering {
+    // Caller location is the primary order. All reported fields break ties, so
+    // same-path/different-content library inputs cannot inherit iteration order.
+    (
+        &a.caller_path,
+        &a.caller_proto,
+        a.call_pc,
+        &a.call_id,
+        &a.label_segments,
+        a.status as u8,
+        a.target_artifact
+            .as_ref()
+            .map(|i| (&i.path, &i.sha256, i.byte_length)),
+        &a.target_proto,
+        &a.evidence,
+    )
+        .cmp(&(
+            &b.caller_path,
+            &b.caller_proto,
+            b.call_pc,
+            &b.call_id,
+            &b.label_segments,
+            b.status as u8,
+            b.target_artifact
+                .as_ref()
+                .map(|i| (&i.path, &i.sha256, i.byte_length)),
+            &b.target_proto,
+            &b.evidence,
+        ))
 }

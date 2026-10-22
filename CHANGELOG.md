@@ -12,8 +12,12 @@ is promoted to a supported tier and no interface carries a compatibility promise
   Total retained definitions are capped in canonical artifact order; an incomplete
   index no longer turns a singleton into a unique target. Public required-compiler
   controls cover overwrites, aliases, clobbers, child bodies, input permutations,
-  cutoffs and selected JSONL composition. This narrows experimental linking and
-  promotes no supported target or runtime reachability claim.
+  cutoffs and selected JSONL composition. Crafted module-call stack reads and escaped
+  selector aliases preserve uncertainty; initialized post-call values remain useful.
+  Proof-chain and index-label copying have explicit limits. Linking rejects bytecode
+  stdin and documents the immutable-corpus precondition of its two-pass interface.
+  This narrows experimental linking and promotes no supported target or runtime
+  reachability claim.
 
 - Fix false `diff` equality for same-count constant replacements, exact float/string
   representations, capture descriptors, varargs, child changes, header/layout fields,
