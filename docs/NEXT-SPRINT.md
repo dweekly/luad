@@ -13,6 +13,10 @@ An identical decoded input is the positive control.
 selected options. It never asserts execution or behavioral equivalence. Default mode
 compares physical instruction words; `--semantic` compares decoded instruction facts
 without depending on prose explanations, source offsets, or diagnostic rendering.
+The comparison is conservative: decoded instruction descriptions retain every physical
+word, including unused fields and companion data; no normalization claims runtime
+equivalence or discards encoded differences. Avoid lifting constant payloads per
+instruction merely to compare them.
 Both modes retain exact constant representations, prototype shape/metadata, header/
 layout declarations, and trailing bytes. Comparison remains positional rather than
 an inferred alignment of reordered functions or instructions.
@@ -23,7 +27,8 @@ Allowed production paths:
 
 - `crates/luad-analysis/src/diff.rs`;
 - the diff handler in `crates/luad-cli/src/main.rs` and the diff text renderer in
-  `crates/luad-cli/src/render/text.rs`, only where the contract requires clarification.
+  `crates/luad-cli/src/render/text.rs`, and diff help in `crates/luad-cli/src/args.rs`,
+  only where the contract requires clarification.
 
 Allowed tests/evidence and documentation:
 
@@ -49,7 +54,8 @@ content in semantic mode rather than giving it independent effects.
 
 Keep descriptions and previews bounded per differing field; never serialize an entire
 large constant or instruction subtree merely to display a change. The existing parsed
-input/prototype bounds limit traversal. Preserve the public response shape and existing
+input/prototype bounds limit traversal. Preserve the public response shape (JSONL carries chunk-header changes in the root
+`diff_prototype` record rather than losing them) and existing
 analysis eligibility; no dialect or capability promotion, new dependency, decompiler,
 new gate framework, cross-build alignment algorithm, or unrelated cleanup.
 
