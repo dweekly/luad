@@ -11,7 +11,10 @@ target or absence. This is a conditional static binding under an explicit conven
 not runtime execution or security reachability.
 
 Admit only straight-line Lua 5.1 root initialization with one directly loaded literal
-`module` declaration before global stores. Extra arguments may load `package.seeall`.
+`module` declaration before global stores. Extra arguments may load `package.seeall`. Admit only nonempty printable ASCII
+selector bytes that need no byte-escaping (exclude quotes/backslashes); the existing
+callee surface uses escaped byte labels, which must not alias literal raw names.
+An escaped caller path is uncertainty, never proof of absence or a different target.
 Reject branches/skips/loops, multiple declarations, stores before the declaration,
 module aliases, unknown/root calls (including `require`), environment/table writes,
 and executable code after a root return. Child bodies are not initialization execution.
