@@ -26,6 +26,8 @@ an inferred alignment of reordered functions or instructions.
 Allowed production paths:
 
 - `crates/luad-analysis/src/diff.rs`;
+- `crates/luad-core/src/scalar.rs` only for the bounded constant-evidence renderer,
+  preserving the existing single scalar-rendering authority;
 - the diff handler in `crates/luad-cli/src/main.rs` and the diff text renderer in
   `crates/luad-cli/src/render/text.rs`, and diff help in `crates/luad-cli/src/args.rs`,
   only where the contract requires clarification.
