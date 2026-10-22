@@ -33,7 +33,12 @@ concurrency:
 jobs:
   coverage:
     name: Linux line coverage
-    runs-on: ubuntu-latest
+    # The same self-hosted runner the CI workflow uses. On a GitHub-hosted image this job
+    # measured a different environment from every other Linux job: the official Lua
+    # compilers are built from source per runner, so a different toolchain yields a
+    # compiler binary whose SHA-256 the provenance allowlist does not carry, and the
+    # slower host lost timing races that the self-hosted box wins.
+    runs-on: [self-hosted, Linux, X64, luad-linux]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
