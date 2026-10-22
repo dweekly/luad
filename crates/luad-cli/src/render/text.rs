@@ -1189,7 +1189,7 @@ pub fn render_diff(diff: &luad_analysis::ChunkDiff, writer: &mut impl Write) -> 
         "{:<16} {}",
         "Result:".dimmed(),
         if diff.is_identical {
-            "Identical (0 differences)".green().bold()
+            "Equal compared content (0 differences)".green().bold()
         } else {
             "Differences detected".yellow().bold()
         }

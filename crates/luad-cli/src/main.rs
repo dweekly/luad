@@ -2270,6 +2270,12 @@ fn handle_batch_query(
 }
 
 fn handle_diff(args: DiffArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
+    if let Some(selector) = args.ignore.as_deref() {
+        if selector != "debug" {
+            eprintln!("error: unknown --ignore selector '{selector}'; expected debug");
+            return Ok(ExitCode::UsageError);
+        }
+    }
     let old_bytes = match read_input_bytes(&args.old_file) {
         Ok(b) => b,
         Err(code) => return Ok(code),
@@ -2332,11 +2338,34 @@ fn handle_diff(args: DiffArgs, writer: &mut impl io::Write) -> io::Result<ExitCo
             )?;
             let context = JsonlRecordContext::successful(identity, interp);
             let mut record_count = 0;
-            for proto_diff in &diff.proto_diffs {
+            // The existing JSONL diff family carries chunk-wide changes in the
+            // root record, so header-only changes cannot become an empty stream.
+            let mut protos = diff.proto_diffs.clone();
+            if !diff.header_diffs.is_empty() {
+                if !protos.iter().any(|p| p.path == ProtoPath::root()) {
+                    protos.insert(
+                        0,
+                        luad_analysis::ProtoDiff {
+                            path: ProtoPath::root(),
+                            header_diffs: vec![],
+                            constant_diffs: vec![],
+                            upvalue_diffs: vec![],
+                            instruction_diffs: vec![],
+                        },
+                    );
+                }
+                let root = protos
+                    .iter_mut()
+                    .find(|p| p.path == ProtoPath::root())
+                    .expect("root inserted");
+                root.header_diffs
+                    .extend(diff.header_diffs.iter().map(|d| format!("Chunk: {d}")));
+            }
+            for proto_diff in protos {
                 let rec = JsonlDataRecord {
                     record_type: "diff_prototype".to_string(),
                     context: context.clone(),
-                    data: proto_diff.clone(),
+                    data: proto_diff,
                 };
                 writeln!(
                     writer,

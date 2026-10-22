@@ -68,7 +68,7 @@ become reviewable.
 
 | Order | Outcome | Owner | Dependency and exit condition |
 |---|---|---|---|
-| A | Trustworthy comparison and convention-based links | `luad` | First implementation work; public counterexamples and controls must distinguish changed artifacts and unsupported bindings. |
+| A | Trustworthy convention-based links | `luad` | First implementation work; public counterexamples and controls must distinguish changed artifacts and unsupported bindings. |
 | B | A reliable firmware measurement loop | Firmware consumer, with public reproductions in `luad` | May be prepared independently of A; no before/after product ranking until coverage and consumer semantics are checked. |
 | C | Useful public investigation and caller-inspection workflows | `luad`, plus a small reference consumer | Depends on A for comparison/link claims and on B for firmware benefit claims; exact answers must be obtainable without a custom decoder. |
 | D | Independent evidence of value against alternatives | Maintainer and outside users | Trial an installable C candidate before interface freeze; correct the blocking findings. |
@@ -76,23 +76,6 @@ become reviewable.
 | F | A narrow stable contract and exact target qualification | `luad` | Adopt the 1.0 program only after utility is established; promote no target by implication. |
 
 ### A. Correct false answers before expanding analysis
-
-Deliver comparison and linking as separate bounded product batches, comparison first.
-
-**Comparison.** Make `diff` detect same-count constant-value changes in both default
-and `--semantic` modes. Specify equality for every field included in the claim:
-constants and exact scalar representations, prototype additions/removals, parameters,
-vararg flags, captures, instructions, declared layout, and selected debug metadata.
-A same-length string replacement or a removed child must not produce `is_identical`.
-Use identical inputs as the positive control and isolated changes as negative controls.
-Do not describe normalized instruction comparison as proof of behavioral equivalence.
-If an advertised comparison cannot be established within the batch, report that boundary
-explicitly rather than returning an unconditional equality result.
-
-Start in `crates/luad-analysis/src/diff.rs`, the public diff handler in
-`crates/luad-cli/src/main.rs`, and `crates/luad-oracle/tests/test_analysis.rs`.
-Add public CLI assertions for the claimed modes and reuse ordinary tests; a new
-comparison framework or release gate is not a prerequisite.
 
 **Convention-based linking.** Define the admitted module-initialization shape before
 extending resolution. A function store invalidated by a later nil, non-closure,

@@ -315,12 +315,39 @@ Expose analysis results with schemas and bounded query pagination. The query gra
 is intentionally narrow and rejects malformed expressions, unsupported operators,
 trailing tokens, nonexistent targets, and invalid cursors with a usage error.
 
-`diff` is experimental and its current `is_identical` result can miss changes to
-constant values, upvalue metadata, and added/removed child prototypes when the compared
-counts or instruction descriptions do not change. Neither default nor `--semantic`
-output establishes content identity or behavioral equivalence. Use the exact artifact
-hash for byte identity. The roadmap requires an explicit comparison boundary and
-isolated-change regressions before relying on this command for build comparison.
+`diff OLD NEW` is an experimental, positional decoded-content comparison. A successful
+command exits 0 whether equal or changed; JSON `data.is_identical` is the result.
+Equality means no differences in the following compared fields under the selected
+options, never runtime or behavioral equivalence:
+
+- Constant kind and exact string bytes, integer/float values and raw representations
+  (including NaN payloads and signed zero).
+- Prototype parameters, vararg flags, stack size, capture descriptors, child counts,
+  and each physical instruction word at the same prototype path and PC.
+- Every modeled header field, resolved profile/layout, and trailing bytes.
+- Debug source-name bytes, line definitions and line tables, local names/scopes, and
+  upvalue names, unless `--ignore debug` is selected. Unknown ignore selectors fail
+  with usage exit 2.
+
+`--semantic` shows decoded instruction fields and Lua 5.1 physical roles. It retains
+raw words, including unused bits, closure-binding descriptors and SETLIST data;
+it does not normalize different encodings into a behavioral equivalence claim.
+It never compares prose explanations or expands constant payloads per instruction.
+Cross-dialect use still requires this flag and remains a comparison, not a translation.
+Source offsets, derived stable IDs, display strings, input hashes, parse/selection
+bookkeeping and diagnostics are excluded. Use exact artifact hashes for byte identity.
+Child count changes report unmatched subtrees without dumping them; matching children
+are visited by position, without inferring reordered-function alignment.
+
+Text and JSON report chunk-wide changes separately. JSONL keeps the existing
+`diff_prototype` family: chunk-wide changes appear in root path `0`'s `header_diffs`
+with a `Chunk: ` prefix, including when the header is the only difference. An equal
+JSONL comparison has no `diff_prototype` records and `summary.total_records == 0`.
+Per-field descriptions and constant previews are bounded; previews use length, a short
+byte prefix and SHA-256, while equality always compares complete original content.
+The ordinary [library](../crates/luad-oracle/tests/test_analysis.rs) and
+[required-compiler CLI](../crates/luad-oracle/tests/test_diff_cli.rs) regressions
+exercise equal controls and isolated changes in both modes and every output format.
 
 `query --where` accepts `and`, `or`, parentheses, `==`, `!=`, and the explicitly listed
 `contains` forms. Quoted operands are strings; unquoted `nil`, booleans, and numbers are

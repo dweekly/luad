@@ -314,7 +314,7 @@ pub struct DiffArgs {
     /// Path to second (new) Lua bytecode file.
     pub new_file: String,
 
-    /// Perform normalized semantic instruction comparison.
+    /// Show decoded instruction fields and roles; retains physical bits, not behavioral equivalence.
     #[arg(long)]
     pub semantic: bool,
 
