@@ -2,13 +2,13 @@
 
 **Status:** Living product requirements
 
-**Fresh as of:** 2026-09-06
+**Fresh as of:** 2026-10-22
 
 **Product roadmap:** [ROADMAP.md](ROADMAP.md)
 
 **Active sprint:** [docs/NEXT-SPRINT.md](docs/NEXT-SPRINT.md)
 **Primary deliverable:** Self-documenting command-line interface with a versioned machine-readable output contract  
-**Primary users:** Firmware reverse engineers and the scripts or agents assisting their investigations
+**Primary users:** Firmware reverse engineers and Lua tool authors; scripts and agents consume the same factual interface
 
 ## 1. Overview
 
@@ -71,9 +71,18 @@ AI agents need many of the same facts, but have additional interface requirement
 - Non-interactive operation with meaningful exit codes and no prompts.
 - The ability to request a narrow fact, such as all writes to an upvalue, without receiving an entire disassembly.
 
+#### Lua tool authors and maintainers
+
+Tool authors need typed, provenance-bound facts without implementing another binary
+parser. Maintainers comparing builds need exact constant and prototype changes, with
+the comparison boundary explicit. VM learners need explanations tied to real operands
+and bytes. Validate these workflows separately from a firmware security pipeline;
+internal agent trials do not establish independent community demand.
+
 ### 1.3 Options available today
 
-The existing ecosystem contains valuable components but no complete solution.
+The existing ecosystem contains substantial overlapping capabilities. Comparative
+utility must be established on the same task and exact tool versions.
 
 | Tool or project | Strength | Principal limitation for this product's users |
 | --- | --- | --- |
@@ -83,17 +92,17 @@ The existing ecosystem contains valuable components but no complete solution.
 | [ChunkSpy](https://github.com/viruscamp/luadec/blob/master/ChunkSpy/ChunkSpy51.lua) | Excellent historical binary-inspection model: offsets, raw bytes, profiles, rewriting, and source merging | Primarily Lua 5.0/5.1 and no longer covers modern formats |
 | [LuaDec](https://github.com/viruscamp/luadec) | Widely known Lua 5.1 decompiler with disassembly and recompilation comparison | Experimental for 5.2/5.3 and no support for modern Lua; decompiler-oriented architecture |
 | [unluac](https://sourceforge.net/projects/unluac/) (Java) and the [Jeong-Min-Cho fork](https://github.com/Jeong-Min-Cho/unluac) | Established stock-Lua decompiler lineage; honours declared header widths end to end, so it reads embedded 32-bit layouts correctly; the fork adds `--opmap` and `--typemap` for modified VMs | Decompiler-first; malformed input surfaces as a Java exception without an offset; no oracle or negative controls; source reconstruction depends on debug information |
-| [unluac-rs](https://github.com/x3zvawq/unluac-rs) | MIT, actively maintained Rust decompiler for Lua 5.1-5.5, LuaJIT, and Luau with CFG/dominator analysis, CLI, library, and Wasm; honours declared widths and names the offset and tag on malformed input | Decompiler-first; widens 4-byte floats to double before printing; no differential oracle, negative controls, or machine contract; the closest neighbour and a candidate independent second decoder |
+| [unluac-rs](https://github.com/x3zvawq/unluac-rs) | MIT Rust decompiler advertising Lua 5.1-5.5, LuaJIT and Luau, with CLI, library, Wasm, and browser functions/constants/CFG inspection | Strong overlap; exact firmware-profile compatibility, scalar fidelity, and evidence/automation behavior require pinned task comparisons. Candidate integration or second decoder where independently applicable. |
 | [luac-parser-rs](https://github.com/metaworm/luac-parser-rs) | Memory-safe parser foundation for Lua 5.1-5.4, LuaJIT, and Luau; custom parsers compile to WASM and are hot-loaded by a hosted decompiler | No license file; no Lua 5.5; requires nightly Rust; accepts embedded headers and then fails inside the body |
 | [LuaDecompiler](https://github.com/Coldzer0/LuaDecompiler) (Free Pascal) | Disassembler and decompiler claiming Lua 5.1 through 5.5 with custom opcode tables | AGPL-licensed, lightly proven, and based on a less commonly embedded stack |
 | [LuaJIT Decompiler v2](https://github.com/marsinator358/luajit-decompiler-v2) | Strong dedicated LuaJIT source-recovery candidate with stripped-bytecode support | Windows-oriented, decompiler-first, and still lists big-endian support as unfinished |
-| [rizin](https://github.com/rizinorg/rizin) | Native `luac` architecture with per-version ISA tables for Lua 5.0 through 5.5 and LuaJIT, a loader, and rizin's CFG, xref, and graph machinery | Refuses non-stock headers by name and then falls back to disassembling the bytes as native code; no oracle discipline, no machine-readable fact contract, interactive-session oriented; the platform `luad` should feed, not fight |
+| [rizin](https://github.com/rizinorg/rizin) | Native Lua loader, ISA tables and analysis; development source explicitly includes OpenWrt/TP-Link handling | Compare exact released/development builds and input profiles before asserting a gap. Source presence does not certify compatibility or correctness; existing platform and machine interfaces make integration a candidate. |
 | [Luau official tooling](https://github.com/luau-lang/luau/blob/master/CLI/src/Compile.cpp) | Rich official dump for the Luau ecosystem | Luau is a separate, rapidly evolving bytecode system and cannot stand in for stock Lua |
 
-The [prior-art and corpus survey](docs/PRIOR-ART-AND-CORPORA.md) keeps a reproduced
-matrix of these tools against the same non-stock chunks. These dated observations
-need revalidation before a recommendation; target acceptance does not depend on another
-tool failing.
+The [prior-art and corpus survey](docs/PRIOR-ART-AND-CORPORA.md) separates dated executed
+comparisons from source/documentation observations. Revalidate exact versions and
+claims before a recommendation; target acceptance does not depend on another tool
+failing. Rows without a fresh executed comparison are research leads, not rankings.
 
 ### 1.4 Why current options are deficient
 
@@ -145,6 +154,12 @@ researcher need. No target inherits support from a nearby version, profile, or l
 A public workflow and an outside firmware-researcher trial precede interface freeze;
 exact target promotion follows machine-contract and hostile-input qualification.
 
+Before an experimental announcement, correct false answers in the advertised workflows,
+qualify the firmware consumer's accounting and inference boundaries, and demonstrate
+inspection, caller navigation, and comparison/handoff on public inputs. Outside users
+must establish a concrete reason to choose or embed `luad` against existing tools.
+The root roadmap owns the sequence; the 1.0 program adds stable-release obligations.
+
 Dynamic tracing, assembly, SSA, decompilation, persistent research state, and security
 judgment remain separate layers over the factual substrate. The roadmap defines the
 dependency-ordered release train; the active sprint defines the sole executable
@@ -186,6 +201,10 @@ No GUI or TUI is planned for version 1. The CLI must not make a future UI imposs
 12. **Unresolved is a useful answer.** Derived analysis reports ambiguity, unsupported
     boundaries, cycles, and resource cutoffs explicitly instead of returning a broad
     plausible classification.
+13. **Useful composition is product work.** A typed caller view may regroup existing
+    facts when it removes an error-prone user join. Preserve per-caller context,
+    incomplete corpus coverage, and explicit limits; neither a union nor lexical
+    containment establishes a feasible execution path.
 
 ### 2.4 Terminology
 

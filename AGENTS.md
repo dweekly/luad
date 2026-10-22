@@ -32,6 +32,10 @@ inference-heavy analysis unless the active sprint explicitly owns them.
   policy; opcode conversion uses exhaustive generated or explicit matches.
 - Do not silently default an unknown dialect, target, schema, or analysis mode.
 - Keep input, allocation, traversal, recursion, diagnostics, and output bounded.
+- A set presented as complete requires an explicit completeness argument. Use exhaustive
+  effects or a known-safe allowlist; an unmodeled write, omitted input, unknown caller,
+  or cutoff cannot silently disappear from the answer. Charge repeated work to an
+  aggregate budget, not only to each individual traversal.
 - Do not update `supported` capability status without a passing named evidence gate.
 - Machine stdout must remain deterministic and free of commentary.
 - Treat fixture binaries and evidence manifests as generated evidence with recorded provenance.

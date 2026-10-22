@@ -315,6 +315,13 @@ Expose analysis results with schemas and bounded query pagination. The query gra
 is intentionally narrow and rejects malformed expressions, unsupported operators,
 trailing tokens, nonexistent targets, and invalid cursors with a usage error.
 
+`diff` is experimental and its current `is_identical` result can miss changes to
+constant values, upvalue metadata, and added/removed child prototypes when the compared
+counts or instruction descriptions do not change. Neither default nor `--semantic`
+output establishes content identity or behavioral equivalence. Use the exact artifact
+hash for byte identity. The roadmap requires an explicit comparison boundary and
+isolated-change regressions before relying on this command for build comparison.
+
 `query --where` accepts `and`, `or`, parentheses, `==`, `!=`, and the explicitly listed
 `contains` forms. Quoted operands are strings; unquoted `nil`, booleans, and numbers are
 typed literals. A quoted `"0"`, numeric `+0.0`, and numeric `-0.0` are distinct. The
@@ -524,6 +531,12 @@ emits auditable `cross_chunk_link` records connecting call-sites to their defini
 artifacts and prototypes with explicit statuses (`resolved`, `absent`, `duplicate`,
 `dynamic`, or `unsupported`). Linking is order-invariant and bounds corpus indexing.
 Records conform to `luad schema link`.
+
+The current experimental resolver can retain a closure export after a non-closure
+overwrite and can recognize a module declaration in unreachable code. `resolved`
+therefore does not prove a runtime call edge. Convention selection remains explicit;
+the roadmap's link-correctness batch must qualify the admitted initialization shapes
+before dependent caller views claim stronger resolution.
 
 Every data record has a required `context` object. Successful facts carry
 `input_identity` and `interpretation`; parse-failure diagnostics carry identity with a
