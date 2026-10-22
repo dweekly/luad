@@ -68,7 +68,7 @@ become reviewable.
 
 | Order | Outcome | Owner | Dependency and exit condition |
 |---|---|---|---|
-| A | Trustworthy convention-based links | `luad` | First implementation work; public counterexamples and controls must distinguish changed artifacts and unsupported bindings. |
+| A | Trustworthy convention-based links | `luad` | Public overwrite and unreachable-declaration counterexamples must be refused, with positive ordinary module pairs. |
 | B | A reliable firmware measurement loop | Firmware consumer, with public reproductions in `luad` | May be prepared independently of A; no before/after product ranking until coverage and consumer semantics are checked. |
 | C | Useful public investigation and caller-inspection workflows | `luad`, plus a small reference consumer | Depends on A for comparison/link claims and on B for firmware benefit claims; exact answers must be obtainable without a custom decoder. |
 | D | Independent evidence of value against alternatives | Maintainer and outside users | Trial an installable C candidate before interface freeze; correct the blocking findings. |
