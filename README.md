@@ -218,7 +218,8 @@ iterator control updates. Ordinary live locals, fresh definitions and exact lite
 `require` results retain their facts. See the [call-frame evidence](crates/luad-oracle/tests/test_symbolic_callees_lua51.rs).
 These are conditional static facts under the ordinary VM ABI and symbolic lookup
 assumptions. Arbitrary C/reflection/debug mutation and all implicit metamethod effects
-are not qualified; derived records carry no runtime call-edge guarantee.
+are not qualified; capture analysis can also lose precision after a closed cell's
+register is reused. Derived records carry no runtime call-edge guarantee.
 
 Lua 5.2, 5.3, and 5.5 are limited to structural facts and validation. Derived analysis
 commands refuse these dialects rather than presenting unqualified semantic results.

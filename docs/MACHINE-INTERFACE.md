@@ -548,7 +548,10 @@ words, physical roles or encoded result writes. Required-compiler
 [callee controls](../crates/luad-oracle/tests/test_symbolic_callees_lua51.rs) and
 [origin controls](../crates/luad-oracle/tests/test_argument_origins_lua51.rs) pin the
 refusals and preserved values. The assumptions are ordinary VM call-stack behavior,
-normal return and the existing symbolic lookup model; arbitrary C/reflection/debug
+normal return and the existing symbolic lookup model. Capture analysis can conservatively
+lose precision after CLOSE when a register slot is reused: it does not prove the
+cell was closed before a later overlapping call. Table reconstruction applies the
+same call-frame invalidation to both definition scans and retained aliases. Arbitrary C/reflection/debug
 mutation and every implicit metamethod/VM temporary effect are outside qualification.
 
 A clobbered call target has an unresolved callee fact. Cross-chunk links enumerate

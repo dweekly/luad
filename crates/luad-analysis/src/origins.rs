@@ -1339,12 +1339,16 @@ fn reconstruct_table_literal(
         let Some(inst) = instructions.get(pc) else {
             continue;
         };
-        let writes_current_reg = inst.writes.iter().any(|target| match target {
-            EffectTarget::Register { index } => *index == current_reg,
-            EffectTarget::RegisterRange { start, end } => (*start..=*end).contains(&current_reg),
-            EffectTarget::RegisterRangeToTop { start } => *start <= current_reg,
-            _ => false,
-        });
+        let writes_current_reg =
+            crate::call_frame::may_clobber(inst, &EffectTarget::Register { index: current_reg })
+                || inst.writes.iter().any(|target| match target {
+                    EffectTarget::Register { index } => *index == current_reg,
+                    EffectTarget::RegisterRange { start, end } => {
+                        (*start..=*end).contains(&current_reg)
+                    }
+                    EffectTarget::RegisterRangeToTop { start } => *start <= current_reg,
+                    _ => false,
+                });
 
         if writes_current_reg {
             if inst.mnemonic == "MOVE" {
@@ -1532,6 +1536,11 @@ fn reconstruct_table_literal(
             }
         }
 
+        // Reconstructed aliases obey the same lifetime boundary as dataflow.
+        // A discarded result does not preserve aliases in callee scratch slots.
+        if let Some(start) = crate::call_frame::invalidation_start(inst) {
+            aliases.retain(|register| *register < start);
+        }
         transfer(inst, &mut current_state, captures, frame_size);
     }
 

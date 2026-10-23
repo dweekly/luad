@@ -2139,3 +2139,84 @@ fn test_call_frame_iterator_origins_and_nonexecuting_capture_controls() {
         );
     }
 }
+
+#[test]
+fn test_call_frame_table_reconstruction_cannot_restore_stale_aliases() {
+    use call_frames::*;
+    use luad_dialect_lua51::{Opcode51 as Op, RawInstruction51 as Raw};
+    for results in [0, 1, 2, 3] {
+        for live in [false, true] {
+            let (_, chunk) = craft(|c| {
+                let table = if live { 0 } else { 5 };
+                let fixed = 256 + string_index(c, "fixed") as u16;
+                let mut w = vec![
+                    Raw::encode_iabc(Op::NewTable, table, 0, 0),
+                    Raw::encode_iabc(Op::SetTable, table, fixed, fixed),
+                ];
+                w.extend(getenv(c, 1, results));
+                if live {
+                    w.push(mov(5, 0));
+                }
+                w.extend([global(c, 4, "consume"), call(4, 2, 1), ret()]);
+                w
+            });
+            let a = analyze_chunk_origins(&chunk);
+            let CallArgumentWindow::Fixed { arguments } = &a.prototypes[0].calls[1].argument_window
+            else {
+                panic!("fixed")
+            };
+            if live {
+                let OriginExpressionKind::TableLiteral { fields, incomplete } =
+                    &arguments[0].origin.kind
+                else {
+                    panic!("live table below call base")
+                };
+                assert!(!incomplete);
+                assert_eq!(fields.len(), 1);
+                assert!(has_string_literal(&fields[0].value, "fixed"));
+            } else {
+                assert!(
+                    matches!(
+                        arguments[0].origin.kind,
+                        OriginExpressionKind::Unknown { .. }
+                    ),
+                    "reconstruction restored stale table C={results}: {:?}",
+                    arguments[0].origin
+                );
+            }
+        }
+    }
+    let (_, chunk) = craft(|c| {
+        let fixed = 256 + string_index(c, "fixed") as u16;
+        let other = 256 + string_index(c, "PATH") as u16;
+        let mut w = vec![
+            Raw::encode_iabc(Op::NewTable, 0, 0, 0),
+            Raw::encode_iabc(Op::SetTable, 0, fixed, fixed),
+            mov(5, 0),
+        ];
+        w.extend(getenv(c, 1, 1));
+        w.extend([
+            Raw::encode_iabc(Op::SetTable, 5, other, other),
+            mov(5, 0),
+            global(c, 4, "consume"),
+            call(4, 2, 1),
+            ret(),
+        ]);
+        w
+    });
+    let a = analyze_chunk_origins(&chunk);
+    let CallArgumentWindow::Fixed { arguments } = &a.prototypes[0].calls[1].argument_window else {
+        panic!("fixed")
+    };
+    let OriginExpressionKind::TableLiteral { fields, incomplete } = &arguments[0].origin.kind
+    else {
+        panic!("fresh alias to live table")
+    };
+    assert!(!incomplete);
+    assert_eq!(
+        fields.len(),
+        1,
+        "a write through a clobbered alias cannot invent a live table field"
+    );
+    assert!(has_string_literal(&fields[0].value, "fixed"));
+}

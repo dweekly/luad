@@ -24,6 +24,7 @@
     "test_call_frame_capture_origins_refuse_reused_cells_and_preserve_live_locals",
     "test_call_frame_iterator_origins_and_nonexecuting_capture_controls",
     "test_call_frame_origins_drop_stale_literals_and_keep_explicit_results",
+    "test_call_frame_table_reconstruction_cannot_restore_stale_aliases",
     "test_cfg_alternatives_emit_alternatives_expression",
     "test_closure_argument_origin_emits_prototype_expression",
     "test_constant_key_table_literal_origins_emit_table_literal_expression",
