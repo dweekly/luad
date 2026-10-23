@@ -68,26 +68,18 @@ become reviewable.
 
 | Order | Outcome | Owner | Dependency and exit condition |
 |---|---|---|---|
-| A | Complete or explicitly refused export traversal | `luad` | Fix reproduced default/instruction export panics on nested Lua 5.2/5.3/5.5 chunks without inventing unavailable derived facts. |
+| A | Complete or explicitly refused export traversal | `luad` | Closed (see CHANGELOG). A newly reproduced false answer still takes priority over feature work. |
 | B | A reliable firmware measurement loop | Firmware consumer, with public reproductions in `luad` | No before/after product ranking until coverage and consumer semantics are checked. |
 | C | Useful public investigation and caller-inspection workflows | `luad`, plus a small reference consumer | Depends on B for firmware benefit claims; exact answers must be obtainable without a custom decoder. |
 | D | Independent evidence of value against alternatives | Maintainer and outside users | Trial an installable C candidate before interface freeze; correct the blocking findings. |
 | E | A clearly scoped experimental announcement | Maintainer | B-D close for the advertised workflows; install, evidence, limits, and fresh-download checks pass. |
 | F | A narrow stable contract and exact target qualification | `luad` | Adopt the 1.0 program only after utility is established; promote no target by implication. |
 
-### A. Correct the reproduced export traversal family
+### A. Correct reproduced false answers first
 
-Before caller features, make default and instruction-selected exports on nested Lua
-5.2/5.3/5.5 chunks complete or explicitly refuse unavailable facts. Preserve child
-structure and byte evidence on supported structural selections; do not fabricate a
-qualified disassembly from an empty fallback or promote a target. Use the minimized
-public source `local function child(p) return p.name end; return child` and required
-5.1.5/5.2.4/5.3.6/5.4.8/5.5.1 compilers, debug/stripped twins and real module controls.
-
-**Exit:** no panic or misleading empty success, exact per-file and terminal accounting,
-correct child facts or explicit refusal, retained 5.1/5.4 positives, and the existing
-machine/export controls plus one aggregate pass. Preserve unknowns and the existing
-experimental boundary. Further reproduced false answers interrupt feature expansion.
+The export traversal family is closed. Any newly reproduced false answer, such as a
+wrong value, a fabricated fact or a misleading empty success, is fixed before further
+feature expansion, as its own bounded batch with a public reproducer.
 
 ### B. Make the firmware consumer a reliable product signal
 
@@ -164,14 +156,20 @@ conservative unknowns as well as structure. Reuse the existing origin and link g
 a realistic fixture is valuable only if an assertion can detect its relevant defect.
 Retain source licenses, compiler/patch identities, commands, hashes, and controls.
 
-**Make caller inspection a convenient operation with an explicitly experimental
-evidence boundary.** Choose the CLI spelling and typed response in its
-contract, reuse existing relation/link/origin analysis, and begin with bounded one-hop
-per-caller records. Do not require users to join a full instruction export for this
-question. Preserve bytecode-local parameter origins. An empty enumerated caller list
-means no observed caller in that corpus, not unreachable code or a complete negative.
-Unenumerated callers remain unknown; they cannot be listed or counted by assumption.
-Multi-hop substitution and flattening into a union require separate evidence of need.
+**Caller inspection.** The experimental `luad callers` command gives bounded one-hop
+per-caller records over accepted relation, link and origin facts, with every other call
+site counted in exactly one class. An empty list means no observed caller in that
+corpus. Multi-hop substitution and flattening into a union require separate evidence of
+need. Known limits to revisit when a real investigation hits them:
+- Origin limits inside a listed caller's argument window are shown verbatim but do not
+  set `degraded`; decide whether argument-level unknowns should weaken the answer.
+- A link cutoff degrades every unrecorded site in that file, including sites before the
+  cutoff (safe, but imprecise).
+- Canonical-path dedup does not collapse hard links to one file.
+- `unmapped_label` means "no link record under the convention", which does not show that
+  the label could have named the target.
+- No compiled shape where a call relation and a link disagree has been found; the
+  `conflicting` class is pinned only on synthetic facts.
 
 Extend the shared reference consumer with caller context and reuse its factual adapter
 across the workflows; keep firmware dispatch, sink, and authentication policy outside it.
