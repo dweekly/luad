@@ -620,7 +620,9 @@ Fact availability depends on the exact profile:
 An explicit selection containing an unavailable family fails that input before any
 facts are emitted. The stream retains its identity/interpretation, an
 `ANA-PRECOND-001` diagnostic with header byte evidence and a failed file_end with zero
-fact counts. This also applies at a zero fact cap. Default export includes instructions,
+fact counts. Existing bounded parse/validation diagnostics are retained first; the
+availability error adds at most one record. A retained diagnostic-limit sentinel keeps
+exit code 5 even in a mixed batch. This also applies at a zero fact cap. Default export includes instructions,
 so Lua 5.2/5.3/5.5 fail explicitly; default Lua 5.4 retains its available families. For a
 mixed-version structural inventory choose `--facts prototype,constant,upvalue`.
 Opt-in link records preserve their existing explicit unsupported statuses.

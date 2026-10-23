@@ -1139,6 +1139,10 @@ fn handle_explain(args: ExplainArgs, writer: &mut impl io::Write) -> io::Result<
         }
     };
 
+    if !has_structured_disassembly(&chunk.dialect) {
+        return Ok(report_unavailable_disassembly(&chunk));
+    }
+
     match target_id {
         StableId::Instruction { proto, pc } => {
             let proto_id = StableId::Proto(proto.clone());
@@ -1183,8 +1187,9 @@ fn handle_explain(args: ExplainArgs, writer: &mut impl io::Write) -> io::Result<
         _ => {
             eprintln!(
                 "{}: Explanation currently supports instruction targets (e.g. 'proto:0:pc:3')",
-                "info".cyan()
+                "error".red()
             );
+            return Ok(ExitCode::UsageError);
         }
     }
 
@@ -2462,14 +2467,9 @@ impl ExportFactSelection {
     }
 
     fn unavailable_for(&self, dialect: &str) -> Vec<ExportFactFamily> {
-        if !self.explicit {
-            // The implicit pipeline already omits Lua51-only analyses on Lua54.
-            // Instruction projection itself must exist before the default can run.
-            return if has_structured_disassembly(dialect) {
-                vec![]
-            } else {
-                vec![ExportFactFamily::Instruction]
-            };
+        if !self.explicit && has_structured_disassembly(dialect) {
+            // The implicit pipeline omits Lua51-only analyses on Lua54.
+            return vec![];
         }
         self.families
             .iter()
@@ -3072,16 +3072,23 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
                 format!("Export facts [{families}] are unavailable for profile '{}'; use inspect or export --facts prototype,constant,upvalue", chunk.dialect),
             ).with_source(chunk.header.source.clone());
             let message = diagnostic.message.clone();
-            writeln!(
-                writer,
-                "{}",
-                serde_json::to_string(&JsonlDataRecord {
-                    record_type: "diagnostic".to_string(),
-                    context: JsonlRecordContext::successful(identity.clone(), interp),
-                    data: diagnostic,
-                })
-                .unwrap_or_default()
-            )?;
+            let context = JsonlRecordContext::successful(identity.clone(), interp);
+            // Availability failure cannot conceal an earlier bounded parse cutoff.
+            for item in chunk.diagnostics.iter().chain(std::iter::once(&diagnostic)) {
+                if classify_diagnostic(item) == ExitCode::LimitExceeded {
+                    any_limit_exceeded = true;
+                }
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&JsonlDataRecord {
+                        record_type: "diagnostic".to_string(),
+                        context: context.clone(),
+                        data: item,
+                    })
+                    .unwrap_or_default()
+                )?;
+            }
             writeln!(
                 writer,
                 "{}",
@@ -3091,7 +3098,7 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
                     status: "failed".to_string(),
                     error: Some(message.clone()),
                     instruction_count: 0,
-                    diagnostic_count: 1,
+                    diagnostic_count: chunk.diagnostics.len() + 1,
                     is_truncated: false,
                     emitted_fact_count: 0,
                     available_fact_count: 0,

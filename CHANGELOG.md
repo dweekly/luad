@@ -15,6 +15,8 @@ is promoted to a supported tier and no interface carries a compatibility promise
   Existing Lua 5.1/5.4 public disassembly and implicit Lua 5.4 export stay available.
   Required official-compiler debug/stripped controls cover selectors, formats, caps,
   mixed/strict completion, raw child facts and reference-consumer failure accounting.
+  Retain existing bounded parse diagnostics and limit exit status on refused files;
+  explanation selector dispatch cannot bypass profile refusal or report empty success.
   No new decoder, schema version, archive identity or support tier is introduced.
 
 - Add a bounded export reference consumer with executable/input/schema/stream identities,
