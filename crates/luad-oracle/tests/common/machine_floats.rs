@@ -305,7 +305,8 @@ pub fn assert_exact_header_sentinels(luad: &str) {
             std::fs::write(&path, &bytes).unwrap();
             let expected = bits == base.header.luac_num.to_bits();
             let oracle = Command::new(&compiler)
-                .arg("-l")
+                .current_dir(directory.path())
+                .args(["-l", "-p"])
                 .arg(&path)
                 .output()
                 .unwrap();
