@@ -183,7 +183,10 @@ on public workloads and a privately scoped firmware replay. Prefer existing fami
 selection, targeted queries, and reuse of computed analysis. Set quantitative budgets
 from these baselines before claiming performance or implementing a new optimization.
 No persistent index, schema redesign, or uniform limit increase without a demonstrated
-bottleneck and a falsifiable improvement target.
+bottleneck and a falsifiable improvement target. First lead: `callers` and link resolution
+each re-run callee analysis per file. One generated 3.8 MB Lua 5.1 chunk (1,700 closures of 60
+upvalues, built to exhaust the capture budget) took 74 s in a debug build for one target.
+Measure release builds on real corpora before choosing a fix.
 
 **Exit:** each workflow has reproducible commands, exact expected answers and failure
 cases, applicable profile/tool versions, bounded output, and byte evidence. A user

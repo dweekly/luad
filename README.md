@@ -120,10 +120,12 @@ luad export firmware/*.lua --format jsonl   # deterministic batch export
 luad diagnostics L51-REG-SPAN-001           # look up a diagnostic code
 ```
 
-Also present, and explicitly experimental: `cfg`, `callees`, `callgraph`, `origins`,
-`xrefs`, `query`, and `diff`. These produce useful output but their schemas and
-semantics may change without notice. `callees`, `callgraph`, and `origins` currently
-require a Lua 5.1 profile and say so when given anything else.
+Also present, and explicitly experimental: `cfg`, `callees`, `callgraph`, `callers`,
+`origins`, `xrefs`, `query`, and `diff`. These produce useful output but their schemas
+and semantics may change without notice. `callees`, `callgraph`, `callers`, and `origins`
+currently require a Lua 5.1 profile and say so when given anything else. `callers` lists
+the observed one-hop callers of one prototype across a corpus, with argument origins and
+per-file coverage; an empty list is not proof that nothing calls it.
 
 Output formats are not uniform across commands:
 

@@ -259,6 +259,30 @@ luad xrefs firmware/controller.lua --to 'proto:0/5' --format json | jq -c '
 A `unique-global-store` basis means the analyzed chunk contains one compatible literal
 global store. It does not claim the global cannot be replaced by code outside the chunk.
 
+### 6a. Who calls this function, and with what arguments?
+
+`luad callers` answers this in one command across a corpus, without joining exports:
+
+```bash
+luad callers firmware/luci/sys.luac --proto 0/3 firmware/**/*.luac \
+  --link-convention luci-module-setglobal --format json | jq -c '
+  .data.callers[] |
+  {caller: .caller.path, call: .call_id,
+   via: [.bases[].source], first_argument: .argument_window.arguments[0].origin.kind}'
+```
+
+Read the answer beside its coverage before treating an empty list as meaningful:
+
+```bash
+luad callers firmware/luci/sys.luac --proto 0/3 firmware/**/*.luac \
+  --link-convention luci-module-setglobal --format json | jq '
+  .data.summary, (.data.files[] | {path, status, counts})'
+```
+
+`degraded: true` means a limit or an uncertain index may have hidden callers. The
+`unattributed`, `unmapped_label` and `degraded` counts are sites that might still reach
+the target; the command lists none of them.
+
 ---
 
 ## 7. Convention-Gated Cross-Chunk Linking (`export --link-convention`)

@@ -26,6 +26,7 @@ Which command answers which question:
   What does this call, by name?                  luad callees
   What values reach a call's arguments?          luad origins
   Which prototypes call which?                   luad callgraph
+  Who calls this function, with what arguments?  luad callers
   Where is this string or global used?           luad query --where ...
   What are the branches and blocks?              luad cfg
   What does this field or diagnostic mean?       luad explain
@@ -67,6 +68,9 @@ pub enum Commands {
 
     /// Resolve bytecode-local caller-to-prototype relations.
     Callgraph(CallgraphArgs),
+
+    /// List observed one-hop callers of one prototype with argument origins and coverage.
+    Callers(CallersArgs),
 
     /// Trace bounded value-expression origins for call arguments.
     Origins(OriginsArgs),
@@ -217,6 +221,43 @@ pub struct CallgraphArgs {
     /// Explicit Lua 5.1 dialect/profile override.
     #[arg(short, long)]
     pub dialect: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct CallersArgs {
+    /// Compiled Lua 5.1 artifact that defines the target prototype.
+    pub target: String,
+
+    /// Target prototype path, e.g. '0/1' or 'proto:0/1'.
+    #[arg(long)]
+    pub proto: String,
+
+    /// Further corpus files searched for cross-artifact callers (requires --link-convention).
+    pub corpus: Vec<String>,
+
+    /// File listing further corpus paths, one per line.
+    #[arg(long)]
+    pub input_list: Option<String>,
+
+    /// Cross-artifact linking convention (e.g. 'luci-module-setglobal').
+    #[arg(long)]
+    pub link_convention: Option<String>,
+
+    /// Output format (text, json, or jsonl).
+    #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+
+    /// Maximum caller records to emit; reaching it exits 5 with the answer truncated.
+    #[arg(long, default_value_t = 10_000)]
+    pub max_callers: usize,
+
+    /// Explicit Lua 5.1 dialect/profile override.
+    #[arg(short, long)]
+    pub dialect: Option<String>,
+
+    /// Strict fail-fast parsing mode.
+    #[arg(long)]
+    pub strict: bool,
 }
 
 #[derive(Args, Debug)]

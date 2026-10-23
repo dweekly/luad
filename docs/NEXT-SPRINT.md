@@ -95,9 +95,10 @@ interpretation context. Text is a human rendering of the same data.
 
 **`summary`**: caller count, callers omitted by truncation, files by status, link
 convention or null, `is_truncated`, `coverage_complete` (every corpus file analyzed), and
-`degraded` (any site classed degraded, or any index cutoff or dynamic provider). A dynamic
-or limited index also emits its existing diagnostic. There is no field claiming that the
-negative is complete.
+`degraded` (any site classed degraded, or any index cutoff or dynamic provider), and
+`dynamic_providers` naming the providers the index could not admit. A limited index also
+emits its existing `ANA-LIMIT-001` diagnostic. There is no field claiming that the negative
+is complete.
 
 ## Exit
 
@@ -149,8 +150,8 @@ negative is complete.
 - **Boundary controls:**
   - a never-called target on a clean corpus gives an empty list with
     `coverage_complete: true`, `degraded: false` and exit 0;
-  - the same target with `mod_dynamic` added gives `degraded: true`, the index
-    diagnostic, and output that differs from the never-called case;
+  - the same target with `mod_dynamic` added gives `degraded: true`, names it in
+    `dynamic_providers`, and differs from the never-called case;
   - a forced callee/origin budget exhaustion (a generated chunk beyond the per-prototype
     budget, parsed only) gives `degraded` sites, exit 5, and no caller from that
     prototype;

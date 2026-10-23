@@ -465,6 +465,42 @@ prototype. JSON uses the `callgraph` schema. JSONL and recursive export use
 `call_relation` records. These bytecode-local relations do not assert runtime
 reachability, execution order, or immunity from unobserved external mutation.
 
+### `callers`
+
+`luad callers TARGET --proto PATH [CORPUS...] [--input-list FILE]
+[--link-convention luci-module-setglobal]` lists the observed one-hop callers of one Lua
+5.1 prototype. It reorganizes accepted facts and adds no resolution rule. Same-artifact
+callers come from resolved `call_relation` facts. Cross-artifact callers come from
+`resolved` link records whose target identity (path, sha256, byte length) and prototype
+equal the target, and only when a convention is requested. Without one, the corpus is the
+target alone and the summary reports `cross_artifact_searched: false`. Each listed caller
+carries its bases and its verbatim `argument_window` from origin analysis.
+
+Every call site of every analyzed file falls into exactly one class, decided in order:
+`caller`, `conflicting` (sources name the target and something else), `degraded` (a
+limit-class callee or relation reason, a `dynamic` or `limit_exceeded` link, or a link
+cutoff), `attributed_elsewhere`, `unmapped_label` (a proven label that the convention did
+not map to any definition), and `unattributed`. Per file, the class counts sum to the call
+sites, and degraded and unattributed counts are keyed by their first reason. Residual
+sites are never listed or counted as callers.
+
+An empty `callers` list means no observed caller in the analyzed corpus. It is not a
+proof of unreachability. `coverage_complete` reports whether every input was analyzed.
+`degraded` reports any degraded site, index cutoff or provider the index could not admit,
+and `dynamic_providers` names those providers. No field claims the negative is complete.
+Each corpus file is read once. A file that cannot be read, parsed or validated is
+reported in `files` and, when linking, makes the index uncertain, as in `export`.
+
+Exit 0: all inputs analyzed with no limit outcome (index uncertainty alone keeps 0 and
+sets `degraded`). Exit 1: a non-target input failed or uses an unsupported profile, with
+the full answer printed. Exit 5: `--max-callers` truncation (the first callers in path,
+prototype and pc order are kept; class counts stay complete), a limit-class degraded
+site, or the aggregate corpus byte ceiling. Exits 2, 3 and 4 refuse an invalid
+selector/option, an unreadable target or a non-5.1 target with empty stdout. JSON uses
+the `callers` schema. JSONL emits `metadata`, `target`, target `diagnostic`, `caller`,
+`file_coverage` and `summary` records; each `caller` and `file_coverage` record carries
+its own artifact's context.
+
 ### `origins`
 
 Emits one call-origin fact for every physical Lua 5.1 `CALL` and `TAILCALL`. A fixed
