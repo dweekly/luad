@@ -181,10 +181,13 @@ on public workloads and a privately scoped firmware replay. Prefer existing fami
 selection, targeted queries, and reuse of computed analysis. Set quantitative budgets
 from these baselines before claiming performance or implementing a new optimization.
 No persistent index, schema redesign, or uniform limit increase without a demonstrated
-bottleneck and a falsifiable improvement target. First lead: `callers` and link resolution
-each re-run callee analysis per file. One generated 3.8 MB Lua 5.1 chunk (1,700 closures of 60
-upvalues, built to exhaust the capture budget) took 74 s in a debug build for one target.
-Measure release builds on real corpora before choosing a fix.
+bottleneck and a falsifiable improvement target. Baseline (release build, monster4, 2026-10-23): `luad callers`
+on the vendored LuCI `luci.sys` takes 0.06 s, and a linked query over the 13-module
+subset takes 0.14 s, so ordinary use needs no optimization. The lead is memory, not speed:
+a generated 3.8 MB Lua 5.1 chunk (1,700 closures of 60 upvalues, built to exhaust the
+capture budget) took 12.8 s and peaked at 807 MB resident for one query, about 200 times
+its size. Callee analysis is also re-run per file by call relations and link resolution.
+Bound the peak before optimizing time.
 
 **Exit:** each workflow has reproducible commands, exact expected answers and failure
 cases, applicable profile/tool versions, bounded output, and byte evidence. A user
