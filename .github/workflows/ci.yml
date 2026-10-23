@@ -549,17 +549,13 @@ jobs:
     - name: Run Contributor Checks
       run: ./scripts/check.sh
 
-    - name: Set up Python for Export Reference Consumer
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-
     - name: Verify Export Reference Consumer
       shell: bash
       run: |
         set -euo pipefail
+        python3 -c 'import sys; print(sys.version); assert sys.version_info >= (3, 11), "Python 3.11+ is required"'
         reader_venv="${RUNNER_TEMP}/luad-export-reader-venv"
-        python -m venv "${reader_venv}"
+        python3 -m venv "${reader_venv}"
         "${reader_venv}/bin/python" -m pip install --require-hashes -r examples/export_reader/requirements.txt
         source scripts/pins.env
         CARGO_BIN_EXE_luad="${PWD}/target/debug/luad" \

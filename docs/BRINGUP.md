@@ -325,3 +325,13 @@ the rules in
 [docs/RELEASING.md](RELEASING.md#non-production-publication-rehearsal). That prerelease
 is durable mechanics evidence; it is not a product release, not latest, not signed, and
 names no supported target.
+
+## Export reference consumer in contributor CI
+
+The reference-consumer step requires an existing Python 3.11+ interpreter with `venv`
+and `pip` on both self-hosted runners. CI prints and checks the interpreter version,
+creates a disposable job environment and installs the reader's hash-pinned requirements.
+It does not install Python into an assumed hosted-runner home directory. Python is a
+consumer-test prerequisite, not a dependency of the Rust CLI. See the
+[reference consumer](../examples/export_reader/README.md) for local setup and its named
+focused test command.
