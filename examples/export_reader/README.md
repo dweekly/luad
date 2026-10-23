@@ -88,6 +88,26 @@ Hashes bind artifacts, not authorship: an attacker can rewrite a whole bundle an
 manifest consistently. This is not a signature, containment sandbox or attestation.
 Choose a trusted `--luad` binary. Capture invokes that binary directly without a shell.
 
+## Callers from a verified bundle
+
+`callers` answers "who calls this prototype?" offline, from a verified bundle alone:
+
+```console
+"$HOME/.local/share/luad/export-reader-venv/bin/python" examples/export_reader/luad_export.py callers artifacts/reader-bundle --target /path/to/module.luac --proto 0/3
+```
+
+Capture the bundle with the `prototype`, `callee`, `origin` and `call_relation` families
+(the default selection includes them for Lua 5.1), and add `--link-convention
+luci-module-setglobal` to search other artifacts. A bundle without those families, a
+capped bundle, a target outside the inventory or not a Lua 5.1 export, and a missing
+prototype all refuse. The answer uses the same exactly-once call-site classes as `luad
+callers`: each listed caller carries its bases and verbatim argument window, and each
+analyzed file carries class counts that sum to its call sites. Every join uses the full
+record context plus the file-local call id. Import `bundle_callers(Path(bundle), target,
+proto)` for the same answer as a dictionary. The tests require it to equal `luad callers`
+on fixture corpora and on the vendored LuCI subset. An empty list means no observed caller
+in the bundle, not unreachable code.
+
 ## Bounds and integration
 
 Defaults cap each JSONL line at 8 MiB, a stream at 1 GiB/two million records, nesting

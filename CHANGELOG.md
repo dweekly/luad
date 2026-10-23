@@ -5,6 +5,12 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Add `callers` to the export reference consumer: one-hop callers of a prototype answered
+  offline from a verified bundle's records, with the same exactly-once call-site classes
+  as `luad callers`. It joins only on full record context plus the call id. Capped,
+  incomplete-family, out-of-inventory and non-5.1 targets refuse. Tests require
+  agreement with `luad callers` on the fixture corpora and the vendored LuCI subset.
+
 - Add a pinned, unmodified LuCI subset (openwrt/luci `openwrt-23.05` at 3d39e8c,
   Apache-2.0) with tests that compile it with official Lua 5.1.5 and check every listed
   same-artifact caller against its source line: the call instruction must sit on a line
