@@ -283,6 +283,23 @@ luad callers firmware/luci/sys.luac --proto 0/3 firmware/**/*.luac \
 `unattributed`, `unmapped_label` and `degraded` counts are sites that might still reach
 the target; the command lists none of them.
 
+A worked public example uses the pinned LuCI subset in `tests/corpus/luci-23.05` (see its
+NOTICE). Compile it with the official Lua 5.1.5 compiler, never executing it, and ask who
+calls `luci.sys.init_action`, the function that runs `/etc/init.d` actions:
+
+```bash
+luac5.1 -o sys.luac tests/corpus/luci-23.05/modules/luci-lua-runtime/luasrc/sys.lua
+luad callers sys.luac --proto 0/28 --format json | jq -c '
+  .data.callers[] | {call: .call_id, action: .argument_window.arguments[0].origin.value.value.display}'
+```
+
+The seven callers pass the literal actions `enabled`, `enable`, `disable`, `start`,
+`stop`, `restart` and `reload`; the second argument is each wrapper's own parameter.
+Across modules the strict `luci-module-setglobal` index admits only modules whose
+initialization is a bare `module(...)` with plain stores, so most real LuCI libraries
+make cross-file answers `degraded`; the command says so rather than returning an empty
+list.
+
 ---
 
 ## 7. Convention-Gated Cross-Chunk Linking (`export --link-convention`)
