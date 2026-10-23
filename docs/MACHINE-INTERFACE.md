@@ -88,6 +88,31 @@ Machine consumers should use JSON or JSONL. Human diagnostics are written to std
 
 Output ordering is intended to be deterministic for identical input bytes, options, tool version, and parse interpretation. Treat any nondeterminism as a defect.
 
+### Floating values
+
+Decoded floating fields use a JSON number when finite, including `-0.0`. Nonfinite
+classes use the exact strings `nan`, `inf`, `-inf`; null, other spellings and numeric
+strings are refused by the typed codec. This applies to constant `val`, header
+`luac_num`, and semantic IR immediate-float `value`. Rust field types remain `f64`.
+Finite numbers follow f64 conversion/range semantics; JSON Schema's mathematical
+`number` type does not itself enforce those numeric range or precision constraints.
+The Rust JSON dependency enables exact finite producer-to-reader float round trips.
+
+`nan` records the decoded class. It does not promise the payload, sign or signaling
+state of a host f64 after a width conversion or JSON round trip. Use `raw_hex` and
+source provenance with the selected layout's declared number width/order for those
+facts. Four- and eight-byte source patterns remain distinct even when both decoded
+classes are `nan`. Infinity signs and finite/signed-zero values retain their meanings.
+Schema checks scalar shape; it does not validate cross-field consistency in manually
+constructed JSON. Source-generated controls verify the producer's raw/class facts.
+
+This experimental representation extends previously schema-invalid nonfinite null
+output; finite output bytes and envelope/JSONL versions remain unchanged. Generated
+clients must consume the updated number/string union from the current schema. No
+compatibility promise follows before the version-1 automation contract is qualified.
+Lua 5.3-5.5 LUAC_NUM sentinels must equal their fixed format-check value, so a nonfinite
+header is refused even though a nonfinite constant remains readable.
+
 ### Stream lifecycle and early termination
 
 Output writes to stdout are checked across all CLI output formats (incremental text, JSON, streaming JSONL, Graphviz DOT, schema dumps, diagnostic catalogs, and shell completions). When downstream consumers close the receiving pipe early (e.g. `head -n 1`, `grep -q`, or an early-exiting subscriber process), `luad` handles `io::ErrorKind::BrokenPipe` (`EPIPE`) by terminating quietly with exit code 0 (`ExitCode::Success`) without printing backtraces or diagnostics to stderr. Non-pipe output write errors (such as disk full or permission errors) return exit code 3 (`ExitCode::IoError`).
@@ -661,10 +686,7 @@ Consumers may discard or interleave control records without losing fact attribut
 `export_start.schema_version` identifies the stream contract. `luad schema export`
 validates one record, including each emitted variant and its typed context/payload.
 It cannot prove sequence ordering, terminal completion, aggregate counters or identity
-joins across records. Known scalar limitation: nonfinite constant `val` fields serialize
-as null while their schema and typed Rust model expect a number. Raw bits and
-classification remain present, but affected records fail schema/typed round trips.
-This record-variant correction does not close that separate scalar family. Consumers must check those independently before using a result.
+joins across records.
 
 Each requested input produces exactly one terminal `file_end` status: `succeeded` for a
 complete recognized chunk, `skipped` for readable source or unsupported/malformed

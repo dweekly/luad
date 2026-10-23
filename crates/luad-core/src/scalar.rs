@@ -179,6 +179,83 @@ fn render_constant_with(value: &ConstantValue, render_string: fn(&[u8]) -> Strin
     }
 }
 
+/// Serde/schema policy for decoded machine floats. Exact source bits live separately.
+pub(crate) mod json_float {
+    use schemars::schema::{InstanceType, Schema, SchemaObject, SubschemaValidation};
+    use schemars::{r#gen::SchemaGenerator, JsonSchema};
+    use serde::{de, Deserializer, Serializer};
+    use std::fmt;
+
+    pub fn serialize<S: Serializer>(value: &f64, serializer: S) -> Result<S::Ok, S::Error> {
+        if value.is_finite() {
+            serializer.serialize_f64(*value)
+        } else {
+            // NaN payloads after float-width conversion need not be portable.
+            // The canonical class is portable; raw_hex retains the source bits.
+            serializer.serialize_str(&super::render_float(*value))
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
+        struct FloatVisitor;
+        impl de::Visitor<'_> for FloatVisitor {
+            type Value = f64;
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a finite number or the exact string nan, inf, or -inf")
+            }
+            fn visit_f64<E: de::Error>(self, value: f64) -> Result<f64, E> {
+                if value.is_finite() {
+                    Ok(value)
+                } else {
+                    Err(E::custom(
+                        "nonfinite machine floats require a canonical string",
+                    ))
+                }
+            }
+            fn visit_i64<E: de::Error>(self, value: i64) -> Result<f64, E> {
+                Ok(value as f64)
+            }
+            fn visit_u64<E: de::Error>(self, value: u64) -> Result<f64, E> {
+                Ok(value as f64)
+            }
+            fn visit_str<E: de::Error>(self, value: &str) -> Result<f64, E> {
+                match value {
+                    "nan" => Ok(f64::NAN),
+                    "inf" => Ok(f64::INFINITY),
+                    "-inf" => Ok(f64::NEG_INFINITY),
+                    _ => Err(E::custom("unknown machine float string")),
+                }
+            }
+        }
+        // Serde forwards owned and borrowed strings to visit_str, including its
+        // buffered internally/adjacently tagged-enum deserializers.
+        deserializer.deserialize_any(FloatVisitor)
+    }
+
+    pub fn schema(generator: &mut SchemaGenerator) -> Schema {
+        let classes = [f64::NAN, f64::INFINITY, f64::NEG_INFINITY]
+            .into_iter()
+            .map(|value| serde_json::Value::String(super::render_float(value)))
+            .collect();
+        SchemaObject {
+            subschemas: Some(Box::new(SubschemaValidation {
+                any_of: Some(vec![
+                    f64::json_schema(generator),
+                    SchemaObject {
+                        instance_type: Some(InstanceType::String.into()),
+                        enum_values: Some(classes),
+                        ..Default::default()
+                    }
+                    .into(),
+                ]),
+                ..Default::default()
+            })),
+            ..Default::default()
+        }
+        .into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -397,5 +474,51 @@ mod tests {
         assert_eq!(render_float(f64::NEG_INFINITY), "-inf");
         assert_eq!(render_float(f64::from_bits(0x7ff8_0000_0000_0001)), "nan");
         assert_eq!(render_float(f64::from_bits(0xfff0_0000_0000_0001)), "nan");
+    }
+
+    #[test]
+    fn json_finite_float_roundtrips_are_exact() {
+        let mut state = 0x243f_6a88_85a3_08d3u64;
+        let mut values = vec![
+            f64::from_bits(0xce63_36ec_9377_1f1d),
+            0.0,
+            -0.0,
+            f64::MIN,
+            f64::MAX,
+            f64::MIN_POSITIVE,
+            f64::from_bits(1),
+            f64::from_bits(0x000f_ffff_ffff_ffff),
+            1.2345678901234567,
+            2.2250738585072014e-308,
+            9007199254740992.0,
+        ];
+        for _ in 0..20_000 {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            let value = f64::from_bits(state);
+            if value.is_finite() {
+                values.push(value);
+            }
+        }
+        for value in values {
+            let original = ConstantValue::Float {
+                val: value,
+                raw_hex: hex::encode(value.to_le_bytes()),
+                is_nan: false,
+                is_inf: false,
+            };
+            let json = serde_json::to_string(&original).unwrap();
+            let decoded: ConstantValue = serde_json::from_str(&json).unwrap();
+            let ConstantValue::Float { val, raw_hex, .. } = decoded else {
+                panic!("float")
+            };
+            assert_eq!(
+                val.to_bits(),
+                value.to_bits(),
+                "finite JSON lost bits for {json}"
+            );
+            assert_eq!(raw_hex, hex::encode(value.to_le_bytes()));
+        }
     }
 }

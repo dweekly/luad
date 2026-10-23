@@ -65,11 +65,14 @@ pub enum ConstantValue {
         /// Exact hex bytes.
         raw_hex: String,
     },
-    /// IEEE-754 64-bit float with raw hex representation (preserves NaN payloads and signed zero).
+    /// Decoded Lua float with exact source bits preserved independently of its host value.
     Float {
-        /// Parsed float value.
+        /// Decoded value: finite JSON number or canonical nan/inf/-inf class string.
+        /// NaN payload and sign are available in raw_hex, not the decoded JSON class.
+        #[serde(with = "crate::scalar::json_float")]
+        #[schemars(schema_with = "crate::scalar::json_float::schema")]
         val: f64,
-        /// Exact 8-byte hex representation.
+        /// Exact encoded float bytes (4 or 8), in the declared layout's byte order.
         raw_hex: String,
         /// Special float classifications.
         is_nan: bool,
@@ -271,12 +274,14 @@ pub struct Header {
     /// Size of size_t in bytes (8 on 64-bit, 4 on 32-bit).
     #[serde(default = "default_sizeof_sizet")]
     pub sizeof_sizet: u8,
-    /// Size of lua_Number in bytes (8).
+    /// Declared size of lua_Number in bytes (4 or 8 for currently read layouts).
     pub lua_number_size: u8,
     /// LUAC_INT test integer (e.g. 0x5678).
     pub luac_int: i64,
 
     /// LUAC_NUM test float (e.g. 370.5).
+    #[serde(with = "crate::scalar::json_float")]
+    #[schemars(schema_with = "crate::scalar::json_float::schema")]
     pub luac_num: f64,
     /// Source byte location.
     pub source: SourceLocation,

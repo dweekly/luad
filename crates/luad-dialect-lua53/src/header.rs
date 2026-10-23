@@ -218,7 +218,7 @@ pub fn parse_header_lua53(reader: &mut SafeReader) -> Result<Header, Diagnostic>
 
     // 11. LUAC_NUM test value
     let luac_num = reader.read_f64_le()?;
-    if (luac_num - LUAC_NUM_53).abs() > f64::EPSILON {
+    if luac_num != LUAC_NUM_53 {
         let diag = Diagnostic::error(
             "L53-HEADER-011",
             DiagnosticCategory::Structure,

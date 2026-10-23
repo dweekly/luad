@@ -69,7 +69,11 @@ Owns test-only integration with official Lua compilers and canonical listings. I
 ### Representation and meaning remain distinct
 
 - Preserve raw instruction words.
-- Preserve exact integer values and IEEE-754 bits.
+- Preserve exact integer values and IEEE-754 source bits.
+- Keep decoded machine floats separate from encoded evidence: finite JSON numbers and
+  canonical nonfinite classes share one scalar serde/schema authority. Raw source
+  bytes retain NaN payload/sign and declared width/order; a host NaN payload is not a
+  portable decoded fact. Typed finite JSON parsing must preserve the producer's bits.
 - Preserve raw strings independently of escaped display strings.
 - Preserve encoded operands independently of interpreted signed values.
 - Preserve every physical instruction word even when the dialect assigns it a non-executable role.
