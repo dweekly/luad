@@ -33,8 +33,11 @@ An explicit --facts selection containing an unavailable family fails that input 
 whole before publishing any of its facts. Default export includes instruction facts,
 so 5.2/5.3/5.5 also fail explicitly. Default 5.4 retains its existing available families;
 it does not acquire Lua 5.1-only analysis. Do not silently switch a requested selection
-to another selection. A per-file failure has its exact identity/interpretation, one
-bounded diagnostic with byte evidence, file_end status failed and zero fact counts;
+to another selection. A per-file failure retains its exact identity/interpretation and existing bounded
+parse diagnostics, then adds one availability diagnostic with header byte evidence.
+Preserve a limit diagnostic and exit 5 even beside successful or unavailable inputs;
+the additional availability record is bounded to one beyond the parsed budget. Use
+file_end status failed and zero fact counts;
 export_end accounts for every input. Preserve existing mixed/strict exit rules and
 fact-cap behavior; a zero fact cap must not hide an unsupported request. Selected
 prototype,constant,upvalue export remains usable on all five read PUC versions.
@@ -63,6 +66,11 @@ or availability authority remains a material risk.
   default and all nine explicit family selections, zero/nonzero fact caps and mixed/
   strict batches. Assert exact availability decisions, stdout/refusal behavior, record
   context, diagnostic byte evidence, status/count completion and preserved child facts.
+- Refused inputs must preserve trailing-byte warnings and an actual bounded diagnostic-
+  limit sentinel. Test mixed-input exit 5 and exact diagnostic prefix/count retention;
+  crafted invalid words are parsed only. All valid explain selector kinds must refuse
+  on unavailable profiles; unsupported non-instruction selectors are usage errors on
+  available profiles, never empty successes.
 - Retain the previous binary's failing public counterexamples before production edits.
   A structural comparator must reject a deliberately omitted child despite rewritten
   stream counters; availability controls must reject synthetic zero-opcode success.
