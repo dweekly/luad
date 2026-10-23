@@ -981,6 +981,17 @@ fn test_callers_text_view_summarizes_each_callers_arguments() {
 }
 
 #[test]
+fn test_callers_text_view_prints_integer_literal_values() {
+    let c = compile(
+        &[("ints", "local function f(n) return n end\nf(42)\n")],
+        false,
+    );
+    let output = run(&["callers", c.path("ints"), "--proto", "0/0"]);
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("(42)"), "{text}");
+}
+
+#[test]
 fn test_callers_debug_and_stripped_twins_agree() {
     let debug = svc_corpus(false);
     let stripped = svc_corpus(true);

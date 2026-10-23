@@ -745,9 +745,11 @@ fn describe_origin(origin: &serde_json::Value) -> String {
     match origin["kind"].as_str().unwrap_or("unknown") {
         "literal" => {
             let literal = &origin["value"];
-            match literal["value"]["display"].as_str() {
-                Some(text) => format!("{text:?}"),
-                None => literal["type"].as_str().unwrap_or("literal").to_string(),
+            match (&literal["value"]["display"], &literal["value"]) {
+                (serde_json::Value::String(text), _) => format!("{text:?}"),
+                (_, serde_json::Value::Number(n)) => n.to_string(),
+                (_, serde_json::Value::Bool(b)) => b.to_string(),
+                _ => literal["type"].as_str().unwrap_or("literal").to_string(),
             }
         }
         "parameter" => format!("param#{}", origin["index"]),

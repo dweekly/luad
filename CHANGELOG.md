@@ -8,8 +8,8 @@ is promoted to a supported tier and no interface carries a compatibility promise
 ## 0.4.0 — 2026-10-23
 
 - Show a compact summary of each caller's arguments in the `luad callers` text view
-  (literals quoted, parameters as `param#N`, other expressions by kind, open windows
-  marked). JSON and JSONL keep the full origin trees.
+  (string literals quoted, numbers and booleans by value, parameters as `param#N`,
+  other expressions by kind, open windows marked). JSON and JSONL keep the full origin trees.
 
 - Add an unmodified LuCI 22.03 `util.lua` beside the 23.05 subset, and tests making the
   release comparison executable. The prototypes without a content-digest match are
