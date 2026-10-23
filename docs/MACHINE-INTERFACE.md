@@ -119,6 +119,13 @@ Output writes to stdout are checked across all CLI output formats (incremental t
 
 Callers consuming streaming JSONL output (e.g. `luad export --format jsonl`) must note that an early-closed or abandoned stream will lack its terminal completion records (`file_end` and/or `export_end`), even though the process terminated cleanly with exit code 0. Consumers that require complete batch verification must assert the presence of terminal records in the stream.
 
+Known export limitation: default or instruction-selected export can panic on nested
+prototypes in Lua 5.2/5.3/5.5, leaving an incomplete stream. Explicit
+`--facts prototype,constant,upvalue` avoids this disassembly-tree path. Completion checks
+must reject the failed attempt; those profiles do not acquire a derived-analysis promise
+from successful structural parsing. This reproduced family blocks its advertised workflow
+until the bounded export correction closes.
+
 A [small export reference consumer](../examples/export_reader/README.md) demonstrates
 bounded capture and schema/context/completion checks with a recorded input inventory
 and executable hash. Its successful verification means a consistent complete stream,

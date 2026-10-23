@@ -246,6 +246,7 @@ def run_bounded(argv, stdout: Path, stderr: Path, out_limit, err_limit, seconds)
     require(os.name == "posix", "capture currently requires Linux or macOS")
     started = time.monotonic()
     with stdout.open("xb") as out, stderr.open("xb") as err:
+        completed = False
         process = subprocess.Popen(
             argv,
             stdin=subprocess.DEVNULL,
@@ -281,13 +282,16 @@ def run_bounded(argv, stdout: Path, stderr: Path, out_limit, err_limit, seconds)
                         key.data[2] += len(chunk)
                 remaining = seconds - (time.monotonic() - started)
                 require(remaining > 0, "producer timeout")
-                return process.wait(timeout=remaining), time.monotonic() - started
+                code = process.wait(timeout=remaining)
+                completed = True
+                return code, time.monotonic() - started
         finally:
             # Descendants may retain pipes even after the main process exits.
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            if not completed:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
             process.wait()
             for pipe in [process.stdout, process.stderr]:
                 if not pipe.closed:
@@ -432,6 +436,7 @@ def read_export(
             raise Refusal("unresolvable or recursive schema") from error
         require(error is None, "record schema mismatch for " + kind)
         for field in {
+            "schema_version",
             "total_files",
             "byte_length",
             "instruction_count",
@@ -546,8 +551,8 @@ def read_export(
             file_report = {
                 "input": active["context"]["input_identity"],
                 "interpretation": active["context"]["interpretation"],
-                "export_derived_facts": (
-                    "experimental-lua51"
+                "lua51_analysis_families": (
+                    "experimental"
                     if active["context"]["interpretation"] is not None
                     and active["context"]["interpretation"]["base_dialect"] == "lua5.1"
                     else "not-produced"
@@ -589,9 +594,39 @@ def read_export(
                     active["context"]["interpretation"] is not None,
                     "fact without interpretation",
                 )
+                selected_family = "origin" if kind == "parameter_field" else kind
+                if (
+                    start.get("fact_families") is not None
+                    and kind != "cross_chunk_link"
+                ):
+                    require(
+                        selected_family in start["fact_families"],
+                        "fact outside declared selection",
+                    )
+                if kind in {
+                    "callee",
+                    "call_relation",
+                    "origin",
+                    "parameter_field",
+                    "prototype_identity",
+                }:
+                    require(
+                        active["context"]["interpretation"]["base_dialect"] == "lua5.1",
+                        "Lua51 analysis fact on another profile",
+                    )
                 active["facts"][kind] += 1
                 data = record["data"]
+                if kind == "cross_chunk_link":
+                    require(
+                        data["caller_path"] == active["start"]["path"],
+                        "link caller context mismatch",
+                    )
                 if kind == "cross_chunk_link" and data["status"] == "resolved":
+                    require(
+                        isinstance(data.get("target_artifact"), dict)
+                        and isinstance(data.get("target_proto"), str),
+                        "resolved link lacks target",
+                    )
                     targets.append(data["target_artifact"])
                 identifier = next(
                     (

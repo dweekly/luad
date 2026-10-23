@@ -68,11 +68,17 @@ inventory with an identical artifact identity. A file-local stable ID can occur 
 several artifacts; that does not join them. Repeated IDs within a fact family in one
 file are refused, except relations with multiple edges such as xrefs and links.
 
-The report marks export-derived coverage separately: Lua 5.1 profiles have experimental
-export analysis; other currently known PUC profiles do not produce those derived fact
-families through export. All available facts emitted means equality with the producer's
+The report marks `lua51_analysis_families` separately: callee, origin, parameter-field,
+call-relation and prototype-identity exports are experimental on Lua 5.1 profiles;
+other currently known PUC profiles do not produce those families through export. All available facts emitted means equality with the producer's
 count, not an independently proven enumeration of every possible VM fact. Read the
 [core analysis limits](../../docs/MACHINE-INTERFACE.md) before using the facts.
+
+A known producer limitation affects default/instruction export for Lua 5.2, 5.3 and
+5.5 chunks with nested prototypes: the producer currently panics during child traversal.
+The reference reader refuses that incomplete stream and retains the attempt. An explicit
+`--facts prototype,constant,upvalue` structural export avoids that path. This is a
+workaround, not a claim that the instruction workflow is qualified on those profiles.
 
 Keep the executable, input list and corpus immutable throughout capture. Before/after
 hash checks detect observed changes; they do not create an atomic filesystem snapshot

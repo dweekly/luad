@@ -366,6 +366,45 @@ return "\\255\\000\\\"", 3.25
         rows[-1]["files_skipped"] += 1
         self.reject(rows)
 
+    def test_review_metadata_join_controls_refuse_schema_valid_mismatches(self):
+        rows = copy.deepcopy(self.rows)
+        rows[0]["schema_version"] = 2.0
+        self.reject(rows)
+        rows = copy.deepcopy(self.rows)
+        rows[0]["fact_families"] = ["origin"]
+        self.reject(rows)
+        provider = self.compile(
+            'module("demo.review", package.seeall); function f() end',
+            "review-provider.luac",
+        )
+        caller = self.compile("demo.review.f()", "review-caller.luac")
+        paths = [str(provider), str(caller)]
+        expected = reader.inventory(paths, reader.Limits())
+        rows, code = self.export(paths, "--link-convention", "luci-module-setglobal")
+        self.read(rows, expected)
+        for field, value in [
+            ("target_artifact", None),
+            ("caller_path", "another-artifact"),
+        ]:
+            damaged = copy.deepcopy(rows)
+            next(
+                x
+                for x in damaged
+                if x["record_type"] == "cross_chunk_link"
+                and x["data"]["status"] == "resolved"
+            )["data"][field] = value
+            self.reject(damaged, expected)
+        rows = copy.deepcopy(self.rows)
+        for row in rows:
+            interp = (
+                row.get("interpretation")
+                if row["record_type"] == "file_start"
+                else row.get("context", {}).get("interpretation")
+            )
+            if interp:
+                interp["base_dialect"] = interp["profile"] = "lua5.4"
+        self.reject(rows)
+
     def test_nonfinite_class_and_raw_payload_survive_without_coercion(self):
         inspected = json.loads(
             subprocess.check_output(

@@ -68,11 +68,26 @@ become reviewable.
 
 | Order | Outcome | Owner | Dependency and exit condition |
 |---|---|---|---|
+| A | Complete or explicitly refused export traversal | `luad` | Fix reproduced default/instruction export panics on nested Lua 5.2/5.3/5.5 chunks without inventing unavailable derived facts. |
 | B | A reliable firmware measurement loop | Firmware consumer, with public reproductions in `luad` | No before/after product ranking until coverage and consumer semantics are checked. |
 | C | Useful public investigation and caller-inspection workflows | `luad`, plus a small reference consumer | Depends on B for firmware benefit claims; exact answers must be obtainable without a custom decoder. |
 | D | Independent evidence of value against alternatives | Maintainer and outside users | Trial an installable C candidate before interface freeze; correct the blocking findings. |
 | E | A clearly scoped experimental announcement | Maintainer | B-D close for the advertised workflows; install, evidence, limits, and fresh-download checks pass. |
 | F | A narrow stable contract and exact target qualification | `luad` | Adopt the 1.0 program only after utility is established; promote no target by implication. |
+
+### A. Correct the reproduced export traversal family
+
+Before caller features, make default and instruction-selected exports on nested Lua
+5.2/5.3/5.5 chunks complete or explicitly refuse unavailable facts. Preserve child
+structure and byte evidence on supported structural selections; do not fabricate a
+qualified disassembly from an empty fallback or promote a target. Use the minimized
+public source `local function child(p) return p.name end; return child` and required
+5.1.5/5.2.4/5.3.6/5.4.8/5.5.1 compilers, debug/stripped twins and real module controls.
+
+**Exit:** no panic or misleading empty success, exact per-file and terminal accounting,
+correct child facts or explicit refusal, retained 5.1/5.4 positives, and the existing
+machine/export controls plus one aggregate pass. Preserve unknowns and the existing
+experimental boundary. Further reproduced false answers interrupt feature expansion.
 
 ### B. Make the firmware consumer a reliable product signal
 
@@ -158,11 +173,10 @@ means no observed caller in that corpus, not unreachable code or a complete nega
 Unenumerated callers remain unknown; they cannot be listed or counted by assumption.
 Multi-hop substitution and flattening into a union require separate evidence of need.
 
-Ship one small reference consumer demonstrating schema checks, identity-scoped joins,
-completion checks, unknown propagation, and caller context. Share its factual adapter
+Extend the shared reference consumer with caller context and reuse its factual adapter
 across the workflows; keep firmware dispatch, sink, and authentication policy outside it.
-Test duplicate local IDs across artifacts, unusual paths/string bytes, omitted records,
-and unknown variants. Persistence and a general-purpose SDK are not prerequisites.
+Test identity-scoped caller joins, partial origins and corpus omissions at that boundary.
+Persistence and a general-purpose SDK are not prerequisites.
 
 Measure time to first answer, end-to-end time, peak memory, output bytes, and glue code
 on public workloads and a privately scoped firmware replay. Prefer existing family
