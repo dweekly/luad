@@ -15,6 +15,7 @@
     "test_all_schema_exports_return_valid_json_schema",
     "test_cross_dialect_diff_without_semantic_flag_rejected",
     "test_every_single_input_jsonl_fact_is_self_identifying",
+    "test_export_record_family_conforms_and_rejects_corruption",
     "test_jsonl_context_killer_mutations_are_rejected",
     "test_jsonl_streaming_batch_export_deterministic_and_recursive",
     "test_jsonl_streaming_cfg_format_integrity",
@@ -34,8 +35,14 @@
     "test_schema_goldens_consistency",
     "test_validate_all_generated_examples_against_schemas"
   ],
-  "required_compiler_version": null,
-  "required_compiler_sha256": null,
+  "required_compiler_version": "Lua 5.1.5",
+  "required_compiler_sha256": {
+    "linux-x86_64": "e2ba74327f3a4662689b9e58909b410af8635add51a35b951021d0b1d90c6000",
+    "macos-aarch64": [
+      "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
+      "b7f80fd88b683a3e8ebe5b98f50c57e17659b56f659a37149fd81f752bcc48e8"
+    ]
+  },
   "required_fixtures": [],
   "required_profile": null,
   "prerequisite_gates": [

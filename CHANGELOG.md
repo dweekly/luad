@@ -5,6 +5,12 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Include emitted `parameter_field` records in the typed export schema. Actual default,
+  selected-origin, mixed-failure and capped CLI streams exercise all sixteen record
+  variants; corrupted tags, field access/parameter types and missing context are rejected.
+  Record payloads and schema versions are unchanged. Individual record validation does
+  not establish stream completion or correct cross-record identity joins.
+
 - Discard stale Lua 5.1 call-frame facts across callee, argument-origin and capture
   analysis. All CALL result families invalidate the temporary tail before preserving
   explicit results; the combined generic iterator also invalidates its conditional
