@@ -676,6 +676,67 @@ fn test_callers_classifier_degrades_starved_analysis_and_separates_conflicts() {
         attribution.counts.call_sites
     );
 
+    // A same-artifact relation and a link that disagree conflict in either direction.
+    let (svc, svc_chunk) = load(c.path("mod_svc"));
+    let svc_callees = analyze_chunk_callees(&svc_chunk);
+    let internal = svc_callees
+        .prototypes
+        .iter()
+        .flat_map(|p| &p.calls)
+        .find(|call| call.call_id.to_string() == "proto:0/1:pc:2")
+        .expect("merge_profile's internal call");
+    for (relation_names, link_names) in [
+        (ProtoPath::root().child(2), proto.clone()),
+        (proto.clone(), ProtoPath::root().child(2)),
+    ] {
+        let relations = luad_analysis::ChunkCallRelationAnalysis {
+            prototypes: vec![luad_analysis::CallRelationAnalysis {
+                proto_id: StableId::Proto(internal.proto_path.clone()),
+                calls: vec![luad_analysis::CallRelationFact {
+                    call_id: internal.call_id.clone(),
+                    caller: internal.proto_path.clone(),
+                    pc: internal.pc,
+                    call_kind: internal.call_kind.clone(),
+                    resolution: CallRelationResolution::Resolved {
+                        callee: relation_names.clone(),
+                        basis: luad_analysis::CallRelationBasis::UniqueGlobalStore,
+                        evidence: vec![StableId::Chunk],
+                    },
+                }],
+            }],
+        };
+        let links = ChunkLinkResult {
+            facts: vec![CrossChunkLinkFact {
+                call_id: internal.call_id.clone(),
+                caller_path: svc.path.clone(),
+                caller_proto: internal.proto_path.clone(),
+                call_pc: internal.pc,
+                label_segments: vec!["svc".into(), "config".into(), "network_get_firm".into()],
+                status: LinkStatus::Resolved,
+                target_artifact: Some(svc.clone()),
+                target_proto: Some(link_names.clone()),
+                evidence: vec![StableId::Chunk],
+            }],
+            diagnostics: vec![],
+        };
+        let facts = CallerFileFacts {
+            identity: &svc,
+            callees: &svc_callees,
+            relations: Some(&relations),
+            links: Some((&links, LinkConvention::LuciModuleSetglobal)),
+        };
+        let attribution = attribute_file_callers(&svc, &proto, &facts);
+        assert!(
+            attribution.callers.is_empty(),
+            "relation {relation_names} vs link {link_names} must not list a caller"
+        );
+        assert_eq!(attribution.counts.conflicting, 1);
+        assert_eq!(
+            attribution.counts.classified(),
+            attribution.counts.call_sites
+        );
+    }
+
     // A limit outranks a resolution elsewhere: the starved site might still be a caller.
     let elsewhere = ChunkLinkResult {
         facts: vec![link(ProtoPath::root().child(1))],
@@ -815,12 +876,83 @@ fn test_callers_partial_unsupported_truncated_and_refused_inputs() {
         assert!(output.stdout.is_empty(), "{args:?} printed stdout");
     }
 
+    // One file spelled two ways is one provider, not a duplicate definition.
+    let target_path = Path::new(c.path("mod_svc"));
+    let respelled = target_path
+        .parent()
+        .unwrap()
+        .join(".")
+        .join(target_path.file_name().unwrap())
+        .display()
+        .to_string();
+    let (code, twice) = callers_json(
+        c.path("mod_svc"),
+        "0/0",
+        &[svc[0], svc[1], respelled.as_str()],
+        true,
+    );
+    assert_eq!(code, Some(0));
+    assert_eq!(callers_of(&twice), callers_of(&clean));
+    assert_eq!(twice["data"]["files"], clean["data"]["files"]);
+
     // The OpenWrt LNUM32 authority fixture answers on its own profile.
     let authority = luad_oracle::find_workspace_root()
         .join("tests/fixtures/authority/lua51-openwrt-lnum32/authority_lnum32.luac");
     let (code, lnum) = callers_json(authority.to_str().unwrap(), "0/0", &[], false);
     assert_eq!(code, Some(0));
     assert_eq!(lnum["interpretation"]["profile"], "lua5.1-lnum32");
+}
+
+/// A callee path one segment past the analysis bound is a real limit outcome from
+/// official compiler output (parsed only): exit 5 and `degraded`, while the genuine caller
+/// stays listed and the limited site is never one.
+#[test]
+fn test_callers_real_path_limit_exits_five_and_degrades() {
+    let chain: Vec<String> = (0..32).map(|i| format!("s{i}")).collect();
+    let source = format!(
+        "local function target(x) return x end\ntarget(1)\nroot.{}(2)\n",
+        chain.join(".")
+    );
+    for strip in [false, true] {
+        let c = compile(&[("limited", source.as_str())], strip);
+        let (identity, chunk) = load(c.path("limited"));
+        let limited: Vec<String> = analyze_chunk_callees(&chunk)
+            .prototypes
+            .iter()
+            .flat_map(|p| &p.calls)
+            .filter(|call| {
+                matches!(
+                    call.resolution,
+                    CalleeResolution::Unresolved {
+                        reason: CalleeUnresolvedReason::PathLimit
+                    }
+                )
+            })
+            .map(|call| call.call_id.to_string())
+            .collect();
+        assert_eq!(limited.len(), 1, "control must reach the real path bound");
+        let (code, document) = callers_json(&identity.path, "0/0", &[], false);
+        assert_eq!(code, Some(5));
+        let data = &document["data"];
+        assert_eq!(data["summary"]["degraded"], true);
+        assert_eq!(
+            data["files"][0]["counts"]["degraded"]["callee:path-limit"],
+            1
+        );
+        let listed: Vec<&str> = data["callers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["call_id"].as_str().unwrap())
+            .collect();
+        assert_eq!(listed, ["proto:0:pc:3"]);
+        assert!(!listed.contains(&limited[0].as_str()));
+        assert!(mismatches(
+            &oracle(&identity.path, &"0/0".parse().unwrap(), &[], false),
+            &document
+        )
+        .is_empty());
+    }
 }
 
 #[test]
@@ -835,7 +967,22 @@ fn test_callers_debug_and_stripped_twins_agree() {
             let paths: Vec<&str> = corpus.iter().map(|n| c.path(n)).collect();
             callers_json(c.path(target), proto, &paths, link).1
         };
-        assert_eq!(callers_of(&answer(&debug)), callers_of(&answer(&stripped)));
+        let shape = |d: &Value| -> Vec<(String, Value)> {
+            callers_of(d)
+                .into_iter()
+                .zip(d["data"]["callers"].as_array().unwrap())
+                .map(|((name, id), c)| {
+                    let sources: Vec<Value> = c["bases"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|b| b["source"].clone())
+                        .collect();
+                    (format!("{name} {id}"), Value::Array(sources))
+                })
+                .collect()
+        };
+        assert_eq!(shape(&answer(&debug)), shape(&answer(&stripped)));
     }
 }
 

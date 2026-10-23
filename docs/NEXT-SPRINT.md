@@ -60,9 +60,10 @@ class, decided in this order:
    `analysis-limit`, `path-limit`, the expression/node/window limits, `limit_exceeded`, or
    a link downgraded by a dynamic or limited index.
 4. `attributed_elsewhere`: resolved sources name only targets other than the target.
-5. `unmapped_label`: the callee is a proven label or lookup with no resolved source, under
-   a convention that would have linked the target's export label. This is documented as
-   "label proven, not mapped to the target by the requested convention", not as absence.
+5. `unmapped_label`: the callee is a proven label or lookup (or the relation reports only
+   the label), linking was requested, and the convention emitted no link record for it.
+   This is documented as "label proven, not mapped by the requested convention", not as
+   absence.
 6. `unattributed`: everything else (unresolved callee or relation for a non-limit reason;
    link `absent`, `duplicate` or `unsupported`), counted by its first reason in that order.
 
@@ -152,11 +153,14 @@ is complete.
     `coverage_complete: true`, `degraded: false` and exit 0;
   - the same target with `mod_dynamic` added gives `degraded: true`, names it in
     `dynamic_providers`, and differs from the never-called case;
-  - a forced callee/origin budget exhaustion (a generated chunk beyond the per-prototype
-    budget, parsed only) gives `degraded` sites, exit 5, and no caller from that
-    prototype;
-  - a site where call relation and link disagree is classed `conflicting`, or, if the
-    rules make that unreachable, a test proves it unreachable;
+  - a real limit outcome from official compiler output (a callee path one segment past
+    the 32-segment bound, parsed only) gives a `degraded` site, exit 5, and the limited
+    site is never listed, while the genuine caller is. A starved capture budget is pinned
+    on the library classifier, because a real exhaustion took 74 s in a debug build;
+  - a site where call relation and link disagree, in either direction, is classed
+    `conflicting` and not listed (pinned on synthetic facts: no compiled shape reaching it
+    was found under the current rules);
+  - the target given under two spellings of one file is indexed once;
   - a duplicate definition (`mod_sys` plus `mod_sys_dup`) lists no caller for the
     duplicated name and counts it under `unattributed.duplicate`;
   - a dynamic index (`mod_dynamic`) gives downgraded statuses that are counted, not listed;

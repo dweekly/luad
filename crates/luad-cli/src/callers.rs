@@ -234,10 +234,24 @@ pub(crate) fn handle_callers(
         return Ok(ExitCode::UsageError);
     }
 
-    let mut paths: Vec<String> = corpus;
-    paths.retain(|path| path != &args.target);
-    paths.sort();
-    paths.dedup();
+    // Deduplicate by canonical location so one artifact spelled two ways is indexed once.
+    let canonical = |path: &str| std::fs::canonicalize(path).ok();
+    let target_location = canonical(&args.target);
+    let mut seen = std::collections::BTreeSet::new();
+    let mut paths: Vec<String> = Vec::new();
+    let mut sorted = corpus;
+    sorted.sort();
+    sorted.dedup();
+    for path in sorted {
+        let location = canonical(&path);
+        if path == args.target || (location.is_some() && location == target_location) {
+            continue;
+        }
+        if location.as_ref().is_some_and(|l| !seen.insert(l.clone())) {
+            continue;
+        }
+        paths.push(path);
+    }
     let mut total_bytes = target_bytes.len();
     let mut loaded: BTreeMap<String, Loaded> = BTreeMap::new();
     for path in &paths {
