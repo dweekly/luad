@@ -1965,3 +1965,177 @@ fn test_parameter_fields_survive_the_streaming_paths_with_no_calls() {
         );
     }
 }
+
+#[path = "common/call_frames.rs"]
+mod call_frames;
+
+#[test]
+fn test_call_frame_origins_drop_stale_literals_and_keep_explicit_results() {
+    use call_frames::*;
+    for results in [0, 1, 2, 3] {
+        let (_, chunk) = craft(|c| {
+            let mut w = vec![literal(c, 0, "fixed"), literal(c, 7, "fixed")];
+            w.extend(getenv(c, 1, results));
+            w.extend([mov(8, 7), global(c, 7, "consume"), call(7, 2, 1), ret()]);
+            w
+        });
+        let a = analyze_chunk_origins(&chunk);
+        let CallArgumentWindow::Fixed { arguments } = &a.prototypes[0].calls[1].argument_window
+        else {
+            panic!("fixed")
+        };
+        assert!(
+            matches!(
+                arguments[0].origin.kind,
+                OriginExpressionKind::Unknown { .. }
+            ),
+            "C={results}: stale literal {:?}",
+            arguments[0]
+        );
+        let (_, chunk) = craft(|c| {
+            let mut w = vec![literal(c, 0, "fixed")];
+            w.extend(getenv(c, 1, results));
+            w.extend([
+                mov(5, 0),
+                mov(6, 1),
+                mov(7, 2),
+                global(c, 4, "consume"),
+                call(4, 4, 1),
+                ret(),
+            ]);
+            w
+        });
+        let a = analyze_chunk_origins(&chunk);
+        let CallArgumentWindow::Fixed { arguments } = &a.prototypes[0].calls[1].argument_window
+        else {
+            panic!("fixed")
+        };
+        assert!(
+            has_string_literal(&arguments[0].origin, "fixed"),
+            "below-base local"
+        );
+        for (i, argument) in arguments[1..].iter().enumerate() {
+            if results > 1 && i < usize::from(results - 1) {
+                assert!(
+                    matches!(&argument.origin.kind, OriginExpressionKind::CallResult { call_id, result_index } if call_id == &a.prototypes[0].calls[0].call_id && *result_index == i),
+                    "fixed result {i}: {:?}",
+                    argument.origin
+                );
+            } else {
+                assert!(
+                    matches!(argument.origin.kind, OriginExpressionKind::Unknown { .. }),
+                    "no old argument survives C={results}: {:?}",
+                    argument.origin
+                );
+            }
+        }
+    }
+    let (_, chunk) = craft(|c| {
+        let mut w = getenv(c, 1, 1);
+        w.extend([
+            literal(c, 5, "fixed"),
+            global(c, 4, "consume"),
+            call(4, 2, 1),
+            ret(),
+        ]);
+        w
+    });
+    let a = analyze_chunk_origins(&chunk);
+    let CallArgumentWindow::Fixed { arguments } = &a.prototypes[0].calls[1].argument_window else {
+        panic!("fixed")
+    };
+    assert!(
+        has_string_literal(&arguments[0].origin, "fixed"),
+        "fresh definition"
+    );
+}
+
+#[test]
+fn test_call_frame_capture_origins_refuse_reused_cells_and_preserve_live_locals() {
+    for results in [0, 1, 2, 3] {
+        for before in [false, true] {
+            for overlaps in [false, true] {
+                let chunk = call_frames::captured(results, overlaps, before, true, false);
+                let a = analyze_chunk_origins(&chunk);
+                let CallArgumentWindow::Fixed { arguments } =
+                    &a.prototypes[1].calls[0].argument_window
+                else {
+                    panic!("fixed")
+                };
+                if overlaps {
+                    assert!(
+                        matches!(
+                            arguments[0].origin.kind,
+                            OriginExpressionKind::Unknown { .. }
+                        ),
+                        "stale captured literal C={results} before={before}"
+                    );
+                } else {
+                    assert!(has_string_literal(&arguments[0].origin, "fixed"));
+                }
+            }
+        }
+    }
+    let a = analyze_chunk_origins(&call_frames::captured(1, true, false, true, true));
+    let CallArgumentWindow::Fixed { arguments } = &a.prototypes[1].calls[0].argument_window else {
+        panic!("fixed")
+    };
+    assert!(matches!(
+        arguments[0].origin.kind,
+        OriginExpressionKind::Unknown { .. }
+    ));
+}
+
+#[test]
+fn test_call_frame_iterator_origins_and_nonexecuting_capture_controls() {
+    use call_frames::*;
+    use luad_dialect_lua51::{Opcode51 as Op, RawInstruction51 as Raw};
+    for saved in [1, 2, 7] {
+        let (_, chunk) = craft(|c| {
+            vec![
+                literal(c, saved, "fixed"),
+                global(c, 0, "consume"),
+                Raw::encode_iabc(Op::TForLoop, 0, 0, 1),
+                Raw::encode_iasbx(Op::Jmp, 0, 0),
+                mov(10, saved),
+                global(c, 9, "consume"),
+                call(9, 2, 1),
+                ret(),
+            ]
+        });
+        for chunk in [chunk, captured_iterator(saved, true)] {
+            let a = analyze_chunk_origins(&chunk);
+            let prototype = if a.prototypes[0].calls.is_empty() {
+                &a.prototypes[1]
+            } else {
+                &a.prototypes[0]
+            };
+            let CallArgumentWindow::Fixed { arguments } = &prototype.calls[0].argument_window
+            else {
+                panic!("fixed")
+            };
+            if saved == 1 {
+                assert!(has_string_literal(&arguments[0].origin, "fixed"));
+            } else {
+                assert!(
+                    matches!(
+                        arguments[0].origin.kind,
+                        OriginExpressionKind::Unknown { .. }
+                    ),
+                    "iterator origin R{saved}"
+                );
+            }
+        }
+    }
+    for chunk in [captured_companion(true), captured_unreachable(true)] {
+        let a = analyze_chunk_origins(&chunk);
+        let CallArgumentWindow::Fixed { arguments } = &a.prototypes[1].calls[0].argument_window
+        else {
+            panic!("fixed")
+        };
+        assert!(
+            has_string_literal(&arguments[0].origin, "fixed"),
+            "nonexecuting call words cannot mutate a capture"
+        );
+    }
+}

@@ -1,5 +1,6 @@
 //! Analysis engine for CFG, Dominators, Xrefs, Query, Chunk Diffing, and Callee Resolution.
 
+mod call_frame;
 pub mod callees;
 pub mod callgraph;
 pub mod capture_mutation;

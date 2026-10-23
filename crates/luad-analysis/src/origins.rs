@@ -607,6 +607,15 @@ fn transfer(
 
     let before = state.clone();
     invalidate_writes(instruction, state, frame_size);
+    if let Some(start) = crate::call_frame::invalidation_start(instruction) {
+        invalidate_from(
+            state,
+            start,
+            frame_size,
+            OriginUnknownReason::Overwritten,
+            [instruction.id.clone()],
+        );
+    }
     match instruction.mnemonic.as_str() {
         "MOVE" => {
             if let (Some(destination), Some(source)) = (
@@ -2090,7 +2099,10 @@ fn effect_may_be_written_after(
     };
     let reachable = reachable_blocks_after(cfg, origin_block.index);
     instructions.iter().any(|instruction| {
-        if is_closure_binding(instruction) || !write_overlaps(&instruction.writes, target) {
+        if is_closure_binding(instruction)
+            || !(write_overlaps(&instruction.writes, target)
+                || crate::call_frame::may_clobber(instruction, target))
+        {
             return false;
         }
         let Some(writer_block) = cfg

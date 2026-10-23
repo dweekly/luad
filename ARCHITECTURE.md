@@ -47,7 +47,11 @@ Dataflow analyses are bounded and emit typed unresolved or unknown results when 
 evidence is ambiguous, unsupported, unreachable, or exceeds a declared resource limit.
 Lua 5.1 callee and origin analysis share one bounded, whole-tree capture-mutation
 summary so sibling and transitive writes to the same captured cell cannot preserve a
-stale value. Provenance evidence uses stable instruction and object identifiers; it
+stale value. Callee and origin transfer also share call-frame lifetime invalidation,
+separate from the lifter's encoded result writes. They discard temporary stack values
+before establishing returned results; capture write-after checks use the same boundary.
+Lua 5.1's combined iterator operation includes its conditional control-register update.
+Provenance evidence uses stable instruction and object identifiers; it
 does not make security, reachability, or attacker-control judgments.
 
 ### `luad-cli`

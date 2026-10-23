@@ -532,12 +532,28 @@ With no `CODE`, the command emits the complete catalog in ascending bytewise ord
 
 JSON format returns a top-level `DiagnosticCatalogResponse` (`schema_version`, `tool_version`, `diagnostic_count`, `diagnostics`), described by `luad schema diagnostics`. Text format renders each descriptor across exactly three lines (`<CODE> [<severity>/<category>]`, `  Semantics: <semantics>`, `  Next action: <suggested_action>`).
 
-General Lua 5.1 callee/origin/capture value flow remains experimental for crafted
-bytecode that reads C-call temporary stack registers after the call. A pre-call label
-or literal can survive incorrectly there. The module-initialization indexer explicitly
-invalidates its own call tail; this does not qualify the broader value-flow authority.
-The [next call-frame outcome](../ROADMAP.md#a-correct-false-answers-before-expanding-analysis)
-must close that family before broader hostile-caller claims.
+Lua 5.1 callee/origin value flow discards pre-call facts from CALL A to the frame
+end, independently of the encoded result-write window. Fixed returned origin slots
+then identify their call and result index; variable result tails remain unknown/open.
+The existing exact literal `require` form can establish its module label. Fresh
+post-call definitions and live locals below A retain their own facts. Lua 5.1
+TFORLOOP invokes its iterator from A+3 and may update A+2, so analysis conservatively
+invalidates from A+2. Iterator/state inputs A and A+1 remain available. The separate
+Lua 5.4 jump-only TFORLOOP does not acquire this call effect.
+
+A capture overlapping a reachable CALL, TFORLOOP or TAILCALL invalidation cannot retain
+its earlier value. Non-executable companion words and unreachable calls do not supply
+writes to that capture. This is analysis lifetime invalidation, not a change to raw
+words, physical roles or encoded result writes. Required-compiler
+[callee controls](../crates/luad-oracle/tests/test_symbolic_callees_lua51.rs) and
+[origin controls](../crates/luad-oracle/tests/test_argument_origins_lua51.rs) pin the
+refusals and preserved values. The assumptions are ordinary VM call-stack behavior,
+normal return and the existing symbolic lookup model; arbitrary C/reflection/debug
+mutation and every implicit metamethod/VM temporary effect are outside qualification.
+
+A clobbered call target has an unresolved callee fact. Cross-chunk links enumerate
+eligible labels, so that call can have no link record; join the callee uncertainty.
+Omitted links do not prove absent functions or unreachable code.
 
 ### `export`
 

@@ -12,6 +12,7 @@
     "--nocapture"
   ],
   "expected_tests": [
+    "test_call_frame_stale_caller_label_cannot_regain_a_module_target",
     "test_cli_export_unknown_link_convention_fails_closed",
     "test_cli_export_with_link_convention",
     "test_cli_module_linking_overwrite_and_completeness_controls",

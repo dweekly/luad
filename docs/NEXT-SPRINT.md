@@ -54,7 +54,8 @@ required official Lua 5.1.5 (missing compiler fails):
   corresponding stale literals/captures become typed unknown, fixed results retain
   exact call/result indices, open tails remain open, and ordinary locals remain exact.
 - `cargo test -p luad-oracle --test test_cross_chunk_linking test_call_frame_`:
-  the crafted caller has dynamic links while its redefined/ordinary twin resolves.
+  the crafted caller has an unresolved callee and no eligible link/target, while
+  its redefined/ordinary twin resolves. Link omission is not an absence proof.
 
 Tests compile source templates, patch declared-width/order bytes using parsed offsets,
 parse and validate each control, and assert semantic content rather than only counts.
