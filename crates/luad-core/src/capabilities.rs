@@ -125,6 +125,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
             opcode_count: 40,
             features: vec![
                 "lossless parse (experimental)".to_string(),
+                "disasm-text-unverified".to_string(),
                 "validate".to_string(),
             ],
             status: SupportTier::Experimental,
@@ -138,6 +139,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
             opcode_count: 47,
             features: vec![
                 "lossless parse (experimental)".to_string(),
+                "disasm-text-unverified".to_string(),
                 "validate".to_string(),
             ],
             status: SupportTier::Experimental,
@@ -175,6 +177,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
             opcode_count: 85,
             features: vec![
                 "lossless parse (experimental)".to_string(),
+                "disasm-text-unverified".to_string(),
                 "validate".to_string(),
             ],
             status: SupportTier::Experimental,

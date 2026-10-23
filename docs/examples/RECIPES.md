@@ -78,8 +78,8 @@ For a corpus containing Lua 5.2/5.3/5.5, select structural facts explicitly:
 luad export --input-list mixed-version-files.txt --facts prototype,constant,upvalue
 ```
 
-Those profiles retain raw words in `inspect`; disassembly and unavailable explicit fact
-families refuse. A default export includes instructions and emits complete per-file
+Those profiles retain raw words in `inspect` and unverified human text listings without
+`--effects`; structured disassembly and unavailable explicit fact families refuse. A default export includes instructions and emits complete per-file
 failure accounting for them. Lua 5.1/5.4 disassembly remains available. Always check each
 file result alongside the terminal summary.
 

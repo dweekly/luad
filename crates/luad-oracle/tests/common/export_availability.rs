@@ -265,7 +265,9 @@ pub fn assert_public_availability(luad: &str) {
                     }
                     args.extend(["--format", format]);
                     let output = run(luad, &args);
-                    if matches!(profile, "lua5.1" | "lua5.4") {
+                    if matches!(profile, "lua5.1" | "lua5.4")
+                        || (command == "disasm" && format == "text")
+                    {
                         assert!(
                             output.status.success(),
                             "available {command} {profile}: {}",
@@ -273,6 +275,12 @@ pub fn assert_public_availability(luad: &str) {
                         );
                         assert!(!output.stdout.is_empty());
                         assert!(!is_refusal(&output));
+                        if !matches!(profile, "lua5.1" | "lua5.4") {
+                            assert!(String::from_utf8_lossy(&output.stdout).contains("unverified"));
+                            let effects =
+                                run(luad, &["disasm", name, "--format", "text", "--effects"]);
+                            assert_refusal(&effects, profile);
+                        }
                     } else {
                         assert_refusal(&output, profile);
                     }
@@ -371,5 +379,11 @@ pub fn assert_public_availability(luad: &str) {
             .iter()
             .any(|f| f == "disasm");
         assert_eq!(advertises, matches!(profile, "lua5.1" | "lua5.4"));
+        let text_only = dialect["features"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f == "disasm-text-unverified");
+        assert_eq!(text_only, matches!(profile, "lua5.2" | "lua5.3" | "lua5.5"));
     }
 }

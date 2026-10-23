@@ -651,8 +651,12 @@ fn is_lua51_profile(dialect: &str) -> bool {
     matches!(dialect, "lua5.1" | "lua5.1-lnum32" | "lua5.1-stock32")
 }
 
-fn has_public_disassembly(dialect: &str) -> bool {
+fn has_structured_disassembly(dialect: &str) -> bool {
     is_lua51_profile(dialect) || dialect == "lua5.4"
+}
+
+fn has_unverified_text_disassembly(dialect: &str) -> bool {
+    matches!(dialect, "lua5.2" | "lua5.3" | "lua5.5")
 }
 
 fn get_disasm_proto(
@@ -673,7 +677,7 @@ fn unavailable_disassembly(chunk: &Chunk) -> Diagnostic {
         "ANA-PRECOND-001",
         DiagnosticCategory::Analysis,
         StableId::Chunk,
-        format!("Disassembly and instruction explanation are unavailable for profile '{}'; use inspect for raw words or export --facts prototype,constant,upvalue", chunk.dialect),
+        format!("Structured disassembly, instruction effects and explanation are unavailable for profile '{}'; use inspect for raw words or export --facts prototype,constant,upvalue", chunk.dialect),
     ).with_source(chunk.header.source.clone())
 }
 
@@ -714,6 +718,22 @@ fn handle_disasm(args: DisasmArgs, writer: &mut impl io::Write) -> io::Result<Ex
     } else {
         &chunk.main_proto
     };
+
+    if args.format == OutputFormat::Text
+        && !args.effects
+        && has_unverified_text_disassembly(&chunk.dialect)
+    {
+        writeln!(writer, "; WARNING: unverified text listing for '{}'; use inspect for exact raw words. Structured disassembly and instruction effects are unavailable.", chunk.dialect)?;
+        render::render_disasm(
+            &chunk.dialect,
+            target_proto,
+            args.raw,
+            args.debug_info,
+            false,
+            writer,
+        )?;
+        return Ok(ExitCode::Success);
+    }
 
     let Some(disasm_proto) = get_disasm_proto(&chunk.dialect, target_proto) else {
         return Ok(report_unavailable_disassembly(&chunk));
@@ -2393,7 +2413,9 @@ fn export_family_available(dialect: &str, family: ExportFactFamily) -> bool {
         ExportFactFamily::Prototype | ExportFactFamily::Constant | ExportFactFamily::Upvalue => {
             true
         }
-        ExportFactFamily::Instruction | ExportFactFamily::Xref => has_public_disassembly(dialect),
+        ExportFactFamily::Instruction | ExportFactFamily::Xref => {
+            has_structured_disassembly(dialect)
+        }
         ExportFactFamily::Callee
         | ExportFactFamily::Origin
         | ExportFactFamily::CallRelation
@@ -2443,7 +2465,7 @@ impl ExportFactSelection {
         if !self.explicit {
             // The implicit pipeline already omits Lua51-only analyses on Lua54.
             // Instruction projection itself must exist before the default can run.
-            return if has_public_disassembly(dialect) {
+            return if has_structured_disassembly(dialect) {
                 vec![]
             } else {
                 vec![ExportFactFamily::Instruction]
@@ -3352,7 +3374,8 @@ mod tests {
     #[test]
     fn unknown_profiles_never_acquire_export_or_disassembly_availability() {
         for profile in ["", "lua5.6", "lua5.1-vendor", "lua5.4-vendor", "Lua5.1"] {
-            assert!(!has_public_disassembly(profile));
+            assert!(!has_structured_disassembly(profile));
+            assert!(!has_unverified_text_disassembly(profile));
             for family in EXPORT_FACT_FAMILIES {
                 assert!(!export_family_available(profile, family));
             }

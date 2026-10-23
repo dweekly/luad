@@ -74,11 +74,12 @@ other currently known PUC profiles do not produce those families through export.
 count, not an independently proven enumeration of every possible VM fact. Read the
 [core analysis limits](../../docs/MACHINE-INTERFACE.md) before using the facts.
 
-Disassembly/instruction export is unavailable on Lua 5.2, 5.3 and 5.5. A default export
+Structured disassembly/instruction export is unavailable on Lua 5.2, 5.3 and 5.5. A default export
 reports these parsed inputs as failed with their identity and interpretation, zero facts
 and an explicit diagnostic. The reader verifies that complete failure accounting; it
 does not turn it into a successful file. Choose `--facts prototype,constant,upvalue`
-for a structural inventory across all five currently read PUC versions.
+for a structural inventory across all five currently read PUC versions. Unverified
+human text listings remain available without `--effects`; this reader never parses them.
 
 Keep the executable, input list and corpus immutable throughout capture. Before/after
 hash checks detect observed changes; they do not create an atomic filesystem snapshot

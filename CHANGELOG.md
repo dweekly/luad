@@ -5,8 +5,9 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
-- Refuse unavailable public disassembly/explanation on Lua 5.2/5.3/5.5 instead of a
-  generic projection with zero opcode fields and omitted children. Default/instruction
+- Refuse unavailable structured disassembly, effects and explanation on Lua 5.2/5.3/5.5 instead of a
+  generic projection with zero opcode fields and omitted children. Preserve unverified
+  human text listings and their existing all-version scalar-rendering proof. Default/instruction
   export now emits framed per-file failures instead of panicking on those nested inputs.
   Explicit fact selections use an exact profile allowlist and fail before publishing
   partial facts; raw structural inspection/export remains available across all five

@@ -46,6 +46,7 @@
       "opcode_count": 40,
       "features": [
         "lossless parse (experimental)",
+        "disasm-text-unverified",
         "validate"
       ],
       "status": "experimental",
@@ -59,6 +60,7 @@
       "opcode_count": 47,
       "features": [
         "lossless parse (experimental)",
+        "disasm-text-unverified",
         "validate"
       ],
       "status": "experimental",
@@ -93,6 +95,7 @@
       "opcode_count": 85,
       "features": [
         "lossless parse (experimental)",
+        "disasm-text-unverified",
         "validate"
       ],
       "status": "experimental",

@@ -115,14 +115,21 @@ fn test_cli_raw_inspection_succeeds_on_unqualified_dialects() {
     ] {
         let fixture = root.join(rel_path);
 
-        // An unavailable decoded view cannot publish a synthetic success.
+        // Human text listings remain available with explicit unverified status.
         let disasm_out = Command::new(&bin)
             .args(["disasm", fixture.to_str().unwrap()])
             .output()
             .unwrap_or_else(|e| panic!("Failed to run disasm on {dialect}: {e}"));
-        assert_eq!(disasm_out.status.code(), Some(4));
-        assert!(disasm_out.stdout.is_empty());
-        assert!(String::from_utf8_lossy(&disasm_out.stderr).contains("ANA-PRECOND-001"));
+        assert!(disasm_out.status.success());
+        assert!(!disasm_out.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&disasm_out.stdout).contains("unverified"));
+        let structured = Command::new(&bin)
+            .args(["disasm", fixture.to_str().unwrap(), "--format", "json"])
+            .output()
+            .expect("structured disasm availability");
+        assert_eq!(structured.status.code(), Some(4));
+        assert!(structured.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&structured.stderr).contains("ANA-PRECOND-001"));
 
         // Raw structural inspection remains available.
         let inspect_out = Command::new(&bin)

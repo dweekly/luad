@@ -119,10 +119,13 @@ Output writes to stdout are checked across all CLI output formats (incremental t
 
 Callers consuming streaming JSONL output (e.g. `luad export --format jsonl`) must note that an early-closed or abandoned stream will lack its terminal completion records (`file_end` and/or `export_end`), even though the process terminated cleanly with exit code 0. Consumers that require complete batch verification must assert the presence of terminal records in the stream.
 
-Disassembly and instruction explanation are available only for the known Lua 5.1
-profiles and Lua 5.4. Other currently read PUC versions return exit 4, no stdout and an
-`ANA-PRECOND-001` diagnostic; use `inspect` for raw words and child structure. This is
-an availability boundary, not a supported-tier promotion.
+Structured disassembly, instruction effects and explanation are available only for the
+known Lua 5.1 profiles and Lua 5.4. On Lua 5.2/5.3/5.5, plain text disassembly without
+`--effects` remains available and begins with an explicit unverified marker. Its scalar
+listing uses the shared scalar authority; instruction annotations are unqualified and
+text is not a machine contract. JSON/JSONL disassembly, effects and explanation return
+exit 4, no stdout and an `ANA-PRECOND-001` diagnostic. Use `inspect` for raw words and
+child structure. This is an availability boundary, not a supported-tier promotion.
 
 A [small export reference consumer](../examples/export_reader/README.md) demonstrates
 bounded capture and schema/context/completion checks with a recorded input inventory

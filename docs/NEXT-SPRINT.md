@@ -19,8 +19,7 @@ it into machine records. Their JSON/JSONL disassembly, instruction effects and a
 explanation formats must refuse with exit 4, no stdout and actionable diagnostics.
 Structured disassembly remains available on experimental known Lua 5.1 profiles and
 Lua 5.4. Raw words/child structure remain in inspect and structural export. Capabilities
-must distinguish unverified text from structured disassembly. This refined authority
-replaces the blanket text refusal before further production edits.
+must distinguish unverified text from structured disassembly.
 
 ## Export contract
 
