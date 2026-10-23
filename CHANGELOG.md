@@ -5,6 +5,15 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Add a bounded export reference consumer with executable/input/schema/stream identities,
+  offline schema and completion verification, exact record context, explicit mixed-file
+  coverage and truncation, and corruption controls. This experimental example does not
+  add a decoder, qualify analysis semantics or promote any target. Public replay also
+  reproduced default/instruction export crashes on nested Lua 5.2/5.3/5.5 inputs; the
+  reader refuses those attempts and the docs name the structural-selection workaround.
+  Replace unsafe SQL
+  interpolation guidance with verified, identity-scoped joins and bound parameters.
+
 - Encode nonfinite machine floats as canonical `nan`, `inf`, `-inf` strings, retaining
   finite JSON numbers, raw source bits and Rust f64 field types. The current schema
   number/string union replaces schema-invalid null values; envelope/JSONL versions

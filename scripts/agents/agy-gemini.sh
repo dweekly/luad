@@ -141,7 +141,6 @@ common=(
   "${conversation_args[@]}"
   --add-dir "$worktree_root"
   --model "$model"
-  --effort high
   --mode "$mode"
   --sandbox
   --log-file "$log_file"
