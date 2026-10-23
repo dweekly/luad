@@ -186,8 +186,12 @@ on the vendored LuCI `luci.sys` takes 0.06 s, and a linked query over the 13-mod
 subset takes 0.14 s, so ordinary use needs no optimization. The lead is memory, not speed:
 a generated 3.8 MB Lua 5.1 chunk (1,700 closures of 60 upvalues, built to exhaust the
 capture budget) took 12.8 s and peaked at 807 MB resident for one query, about 200 times
-its size. Callee analysis is also re-run per file by call relations and link resolution.
-Bound the peak before optimizing time.
+its size. The parsed model, not caller attribution, carries most of it: `inspect` peaks
+at 557 MB and `callees` at 322 MB on that chunk (about 300 bytes per 4-byte instruction
+word), while `callgraph` takes 13 s and `origins` 41 s there. Callee analysis is also re-run
+per file by call relations and link resolution. Before optimizing time, bound the model's
+per-instruction footprint against the input-size ceiling, since a hostile input at the
+ceiling scales the same way.
 
 **Exit:** each workflow has reproducible commands, exact expected answers and failure
 cases, applicable profile/tool versions, bounded output, and byte evidence. A user
