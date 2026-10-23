@@ -465,3 +465,156 @@ fn test_lua51_skip_opcodes_are_cfg_edges_for_callee_analysis() {
         }));
     }
 }
+
+#[path = "common/call_frames.rs"]
+mod call_frames;
+
+#[test]
+fn test_call_frame_tails_drop_stale_paths_and_preserve_live_and_fresh_values() {
+    use call_frames::*;
+    for results in [0, 1, 2, 3] {
+        for fresh in [false, true] {
+            let (_, chunk) = craft(|c| {
+                let mut w = path(c, 0);
+                w.extend(path(c, 5));
+                w.extend(getenv(c, 1, results));
+                if fresh {
+                    w.extend(path(c, 5));
+                }
+                w.extend([call(5, 1, 1), call(0, 1, 1), ret()]);
+                w
+            });
+            let a = analyze_chunk_callees(&chunk);
+            let calls = &a.prototypes[0].calls;
+            assert_eq!(calls.len(), 3);
+            if fresh {
+                assert!(
+                    matches!(&calls[1].resolution, CalleeResolution::ResolvedPath { segments, .. } if segments == &["luci", "sys", "exec"])
+                );
+            } else {
+                assert!(
+                    matches!(calls[1].resolution, CalleeResolution::Unresolved { .. }),
+                    "C={results}: stale tail {:?}",
+                    calls[1]
+                );
+            }
+            assert!(
+                matches!(&calls[2].resolution, CalleeResolution::ResolvedPath { segments, .. } if segments == &["luci", "sys", "exec"]),
+                "below-base local survives"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_call_frame_captures_refuse_overlapping_calls_and_preserve_live_locals() {
+    for results in [0, 1, 2, 3] {
+        for before in [false, true] {
+            for overlaps in [false, true] {
+                let chunk = call_frames::captured(results, overlaps, before, false, false);
+                let a = analyze_chunk_callees(&chunk);
+                let fact = a.prototypes[1].calls.last().unwrap();
+                if overlaps {
+                    assert!(
+                        matches!(fact.resolution, CalleeResolution::Unresolved { .. }),
+                        "C={results} before={before}: stale capture {fact:?}"
+                    );
+                } else {
+                    assert!(
+                        matches!(&fact.resolution, CalleeResolution::ResolvedPath { segments, .. } if segments == &["luci", "sys", "exec"])
+                    );
+                }
+            }
+        }
+    }
+    let a = analyze_chunk_callees(&call_frames::captured(1, true, false, false, true));
+    assert!(
+        matches!(
+            a.prototypes[1].calls.last().unwrap().resolution,
+            CalleeResolution::Unresolved { .. }
+        ),
+        "terminal tailcall may clobber open captured cells"
+    );
+}
+
+#[test]
+fn test_call_frame_iterator_tail_and_control_do_not_retain_old_paths() {
+    use call_frames::*;
+    use luad_dialect_lua51::{Opcode51 as Op, RawInstruction51 as Raw};
+    for saved in [1, 2, 7] {
+        let (_, chunk) = craft(|c| {
+            let mut w = path(c, saved);
+            w.push(global(c, 0, "consume"));
+            w.extend([
+                Raw::encode_iabc(Op::TForLoop, 0, 0, 1),
+                Raw::encode_iasbx(Op::Jmp, 0, 0),
+                call(saved, 1, 1),
+                ret(),
+            ]);
+            w
+        });
+        let a = analyze_chunk_callees(&chunk);
+        let res = &a.prototypes[0].calls[0].resolution;
+        if saved == 1 {
+            assert!(
+                matches!(res, CalleeResolution::ResolvedPath { segments, .. } if segments == &["luci", "sys", "exec"])
+            );
+        } else {
+            assert!(
+                matches!(res, CalleeResolution::Unresolved { .. }),
+                "iterator control/tail R{saved}: {res:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_call_frame_capture_iterator_and_nonexecuting_controls() {
+    for saved in [1, 2, 7] {
+        let a = analyze_chunk_callees(&call_frames::captured_iterator(saved, false));
+        let res = &a.prototypes[1].calls.last().unwrap().resolution;
+        if saved == 1 {
+            assert!(
+                matches!(res, CalleeResolution::ResolvedPath { segments, .. } if segments == &["luci", "sys", "exec"])
+            );
+        } else {
+            assert!(
+                matches!(res, CalleeResolution::Unresolved { .. }),
+                "iterator capture R{saved}: {res:?}"
+            );
+        }
+    }
+    for chunk in [
+        call_frames::captured_companion(false),
+        call_frames::captured_unreachable(false),
+    ] {
+        let a = analyze_chunk_callees(&chunk);
+        assert!(
+            matches!(&a.prototypes[1].calls.last().unwrap().resolution, CalleeResolution::ResolvedPath { segments, .. } if segments == &["luci", "sys", "exec"]),
+            "data/unreachable CALL words cannot clobber a capture"
+        );
+    }
+}
+
+#[test]
+fn test_call_frame_ordinary_require_result_and_live_capture_remain_exact() {
+    let chunk = luad_oracle::compile_and_parse_lua51(
+        r#"
+        local m = require("luci.sys")
+        local function child() return m.exec("fixed") end
+        consume()
+        m.exec("direct")
+        return child
+    "#,
+        true,
+    )
+    .expect("required official Lua 5.1.5");
+    let a = analyze_chunk_callees(&chunk);
+    for p in &a.prototypes {
+        let fact = p.calls.last().unwrap();
+        assert!(
+            matches!(&fact.resolution, CalleeResolution::ResolvedPath { basis: SymbolicPathBasis::ModuleLabel, segments, .. } if segments == &["luci", "sys", "exec"]),
+            "explicit require result/live capture: {fact:?}"
+        );
+    }
+}

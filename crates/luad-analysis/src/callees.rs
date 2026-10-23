@@ -549,6 +549,14 @@ fn transfer(
 
     let before = state.clone();
     invalidate_writes(inst, state, frame_size);
+    if let Some(start) = crate::call_frame::invalidation_start(inst) {
+        invalidate_from(
+            state,
+            start,
+            frame_size,
+            CalleeUnresolvedReason::Overwritten,
+        );
+    }
 
     match inst.mnemonic.as_str() {
         "LOADK" => {
@@ -1254,19 +1262,6 @@ pub(crate) fn analyze_root_global_stores(
             }
         }
         transfer(instruction, &mut state, &captures, frame_size);
-        if instruction.mnemonic == "CALL" {
-            if let Some(base) = register_operand(instruction, 0) {
-                // A C call may use its entire temporary stack tail, even when
-                // C=1 requests no results. Crafted bytecode may read that tail;
-                // encoded result writes do not prove pre-call values survive.
-                invalidate_from(
-                    &mut state,
-                    base,
-                    frame_size,
-                    CalleeUnresolvedReason::Overwritten,
-                );
-            }
-        }
         // Callee analysis need not retain the type of a non-callable overwrite.
         // Root export absence does: these two instructions prove non-closures.
         if matches!(instruction.mnemonic.as_str(), "LOADNIL" | "LOADBOOL") {
@@ -1832,7 +1827,10 @@ fn effect_may_be_written_after(
     };
     let reachable_blocks = reachable_blocks_after(cfg, origin_block.index);
     instructions.iter().any(|inst| {
-        if is_closure_binding(inst) || !write_overlaps(&inst.writes, target) {
+        if is_closure_binding(inst)
+            || !(write_overlaps(&inst.writes, target)
+                || crate::call_frame::may_clobber(inst, target))
+        {
             return false;
         }
         let Some(writer_block) = cfg

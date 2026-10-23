@@ -5,6 +5,17 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Discard stale Lua 5.1 call-frame facts across callee, argument-origin and capture
+  analysis. All CALL result families invalidate the temporary tail before preserving
+  explicit results; the combined generic iterator also invalidates its conditional
+  control update. Reachable tailcalls cannot preserve overlapping captured cells.
+  Reconstructed tables obey the same boundary in definition scans and retained aliases.
+  Ordinary live locals, fresh definitions and exact require results remain useful;
+  companion/unreachable words do not manufacture capture writes. A clobbered symbolic
+  caller no longer supplies a cross-chunk target. Raw/encoded IR facts, machine shapes
+  and capability tiers are unchanged. Required official-compiler controls exercise
+  the family without executing crafted bytecode.
+
 - Make explicit `luci-module-setglobal` links conditional on an admitted straight-line
   root initialization. Final root stores replace stale closure candidates; nested
   function bodies cannot invent exports. Unproved declarations, root calls/table

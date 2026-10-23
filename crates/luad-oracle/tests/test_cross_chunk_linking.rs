@@ -1572,3 +1572,71 @@ fn test_module_escaped_labels_are_not_raw_names() {
         .collect();
     assert_eq!(results, vec![LinkStatus::Dynamic; 3]);
 }
+
+#[path = "common/call_frames.rs"]
+mod call_frames;
+
+#[test]
+fn test_call_frame_stale_caller_label_cannot_regain_a_module_target() {
+    use call_frames::*;
+    for fresh in [false, true] {
+        let (bytes, chunk) = craft(|c| {
+            let mut w = path(c, 5);
+            w.extend(getenv(c, 0, 1));
+            if fresh {
+                w.extend(path(c, 5));
+            }
+            w.extend([call(5, 1, 1), ret()]);
+            w
+        });
+        let id = InputIdentity {
+            path: "caller.luac".into(),
+            sha256: hex::encode(Sha256::digest(&bytes)),
+            byte_length: bytes.len(),
+        };
+        let caller = tempfile::NamedTempFile::new().unwrap();
+        fs::write(caller.path(), &bytes).unwrap();
+        let output = Command::new(get_luad_bin())
+            .args([
+                "callees",
+                caller.path().to_str().unwrap(),
+                "--format",
+                "json",
+            ])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let document: luad_core::envelope::MachineDocument<luad_analysis::ChunkCalleeAnalysis> =
+            serde_json::from_slice(&output.stdout).unwrap();
+        let resolution = &document.data.prototypes[0].calls.last().unwrap().resolution;
+        if fresh {
+            assert!(
+                matches!(resolution, luad_analysis::CalleeResolution::ResolvedPath { segments, .. } if segments == &["luci", "sys", "exec"])
+            );
+        } else {
+            assert!(
+                matches!(
+                    resolution,
+                    luad_analysis::CalleeResolution::Unresolved { .. }
+                ),
+                "public CLI retained stale target"
+            );
+        }
+        let links = analyze_corpus_links(
+            &[compiled_source("provider.luac", MOD_SYS_SRC), (id, chunk)],
+            LinkConvention::LuciModuleSetglobal,
+        );
+        if fresh {
+            assert_eq!(links.len(), 1);
+            assert_eq!(links[0].status, LinkStatus::Resolved);
+            assert!(links[0].target_proto.is_some());
+        } else {
+            // Link records enumerate eligible symbolic labels, not all calls. The
+            // unresolved callee above is the uncertainty record for this site.
+            assert!(
+                links.is_empty(),
+                "an unknown label supplies no module target"
+            );
+        }
+    }
+}
