@@ -79,7 +79,8 @@ become reviewable.
 
 **Make nonfinite scalar facts usable.** Structurally valid NaN and positive/negative
 infinity constants currently serialize decoded `val` as null while their schemas and
-typed Rust model require a number. Retain exact raw bits separately, define an explicit
+typed Rust model require a number. Distinguish readable nonfinite constants from invalid
+Lua 5.3-5.5 LUAC_NUM header sentinels; the latter must match official loader refusal. Retain exact raw bits separately, define an explicit
 nonfinite decoded representation, and preserve finite values without coercion. Review
 the machine representation/compatibility boundary before implementation. Unknown or
 malformed scalar representations must refuse rather than default to a value.
