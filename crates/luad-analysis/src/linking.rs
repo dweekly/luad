@@ -15,7 +15,7 @@ use luad_core::id::{ProtoPath, StableId};
 use luad_core::model::{Chunk, ConstantValue};
 
 use crate::callees::{
-    analyze_chunk_callees, analyze_chunk_global_stores, CalleeResolution, GlobalStoreValue,
+    analyze_chunk_callees, analyze_root_global_stores, CalleeResolution, GlobalStoreValue,
 };
 
 /// Supported explicit linking conventions.
@@ -61,13 +61,13 @@ impl std::fmt::Display for LinkConvention {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LinkStatus {
-    /// Exactly one unique matching module export was proved in the corpus.
+    /// One admitted definition in a complete index under the selected convention.
     Resolved,
-    /// The target label belongs to the module namespace, but no defining export exists in the corpus.
+    /// No admitted definition for the selected label in a complete convention index.
     Absent,
-    /// Multiple conflicting definitions exist in the corpus for this export label.
+    /// At least two admitted definitions exist for this export label.
     Duplicate,
-    /// Target or module declaration involves dynamic expressions and cannot be statically resolved.
+    /// Initialization, final value, or provider completeness is uncertain.
     Dynamic,
     /// Dialect or input format is unsupported for the chosen linking convention.
     Unsupported,
@@ -127,9 +127,9 @@ pub struct ExportDefinition {
 pub struct ModuleExportIndex {
     /// Map from full symbol segments (e.g. `["luci", "sys", "exec"]`) to definitions.
     pub exports: BTreeMap<Vec<String>, Vec<ExportDefinition>>,
-    /// Artifacts with dynamic module declarations.
+    /// Artifacts with unadmitted initialization or incomplete provider input.
     pub dynamic_artifacts: BTreeSet<String>,
-    /// Evidence of dynamic module declarations in the corpus.
+    /// Evidence for initialization or provider uncertainty in the corpus.
     pub dynamic_evidence: Vec<StableId>,
     /// Whether indexing was capped by the safety limit.
     pub export_limit_exceeded: bool,
@@ -140,8 +140,15 @@ pub struct ModuleExportIndex {
 pub const MAX_INDEXED_EXPORTS: usize = 10_000;
 pub const MAX_LINK_FACTS: usize = 100_000;
 
-/// Result of scanning a chunk for `module("...")` declaration.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Physical words admitted before allocating semantic instructions.
+pub const MAX_MODULE_INIT_WORDS: usize = 16_384;
+/// Sum of referenced constant representations, counted once per physical use.
+pub const MAX_MODULE_INIT_CONSTANT_BYTES: usize = 16 * 1024 * 1024;
+/// Bound the proof-ID sets copied by the shared root transfer authority.
+pub const MAX_MODULE_INIT_ALIAS_STEPS: usize = 64;
+/// Charge both index-key and retained-definition label payloads.
+pub const MAX_MODULE_INDEX_LABEL_BYTES: usize = 32 * 1024 * 1024;
+
 enum ModuleDeclaration {
     Literal {
         segments: Vec<String>,
@@ -150,110 +157,273 @@ enum ModuleDeclaration {
     Dynamic {
         evidence: Vec<StableId>,
     },
+    Limited,
 }
 
-fn as_str_constant(val: &ConstantValue) -> Option<String> {
-    match val {
-        ConstantValue::ShortString(s) | ConstantValue::LongString(s) => {
-            Some(s.as_str().to_string())
-        }
+fn is_lua51(dialect: &str) -> bool {
+    matches!(dialect, "lua5.1" | "lua5.1-lnum32" | "lua5.1-stock32")
+}
+
+fn string_bytes(value: &ConstantValue) -> Option<&[u8]> {
+    match value {
+        ConstantValue::ShortString(s) | ConstantValue::LongString(s) => Some(&s.raw_bytes),
         _ => None,
     }
 }
 
-/// Detect a `module(...)` call in the main prototype of a Lua 5.1 chunk.
+fn admitted_selector(bytes: &[u8]) -> bool {
+    !bytes.is_empty()
+        && bytes
+            .iter()
+            .all(|b| (0x20..=0x7e).contains(b) && !matches!(b, b'\\' | b'"'))
+}
+
+fn as_str_constant(value: &ConstantValue) -> Option<String> {
+    string_bytes(value)
+        .and_then(|b| std::str::from_utf8(b).ok())
+        .map(str::to_owned)
+}
+
+fn has_module_lookup(chunk: &Chunk) -> bool {
+    use luad_dialect_lua51::{Opcode51, RawInstruction51};
+    let mut pending = vec![&chunk.main_proto];
+    while let Some(proto) = pending.pop() {
+        let roles = luad_dialect_lua51::roles::discover_roles_lua51(proto);
+        for (pc, word) in proto.instructions.iter().enumerate() {
+            let raw = RawInstruction51::decode(word.raw_word);
+            if roles.is_executable(pc)
+                && raw.opcode == Some(Opcode51::GetGlobal)
+                && proto
+                    .constants
+                    .get(raw.bx as usize)
+                    .and_then(|c| string_bytes(&c.value))
+                    == Some(b"module")
+            {
+                return true;
+            }
+        }
+        pending.extend(&proto.protos);
+    }
+    false
+}
+
+/// Admit a small declarative initialization language, not arbitrary Lua execution.
+/// Register tokens only recognize the direct module call and package.seeall;
+/// closure values and aliases remain the shared store authority's responsibility.
 fn detect_module_declaration(chunk: &Chunk) -> Option<ModuleDeclaration> {
-    if !chunk.dialect.starts_with("lua5.1") {
+    use luad_dialect_lua51::{Opcode51 as Op, RawInstruction51};
+    if !is_lua51(&chunk.dialect) {
         return None;
     }
-
-    let main_proto = &chunk.main_proto;
-    let instructions = &main_proto.instructions;
-    let constants = &main_proto.constants;
-
-    // Scan for GETGLOBAL loading "module"
-    for (pc, inst) in instructions.iter().enumerate() {
-        let raw = luad_dialect_lua51::RawInstruction51::decode(inst.raw_word);
-        if raw.opcode != Some(luad_dialect_lua51::Opcode51::GetGlobal) {
+    let refused = || ModuleDeclaration::Dynamic {
+        evidence: vec![chunk.main_proto.id.clone()],
+    };
+    if crate::validate_for_analysis(chunk).is_err() {
+        return Some(refused());
+    }
+    if !has_module_lookup(chunk) {
+        return None;
+    }
+    let p = &chunk.main_proto;
+    if p.instructions.len() > MAX_MODULE_INIT_WORDS {
+        return Some(ModuleDeclaration::Limited);
+    }
+    let roles = luad_dialect_lua51::roles::discover_roles_lua51(p);
+    #[derive(Clone, Copy)]
+    enum Token<'a> {
+        Other,
+        Module,
+        Package,
+        Seeall,
+        Literal(&'a [u8], usize),
+    }
+    let mut registers = [Token::Other; 256];
+    let mut proof_steps = [0usize; 256];
+    let mut module_loads = 0;
+    let mut module_load_pc = 0;
+    let mut declaration = None;
+    let mut returned = false;
+    let mut constant_bytes = 0usize;
+    for (pc, word) in p.instructions.iter().enumerate() {
+        if !roles.is_executable(pc) {
             continue;
         }
-
-        let k_idx = raw.bx as usize;
-        let is_module_global = constants
-            .get(k_idx)
-            .and_then(|c| as_str_constant(&c.value))
-            .is_some_and(|name| name == "module");
-
-        if !is_module_global {
-            continue;
+        if returned {
+            return Some(refused());
         }
-
-        let module_reg = raw.a;
-        let getglobal_id = inst.id.clone();
-
-        // Find the subsequent CALL on module_reg
-        let mut arg_reg_val: Option<(Result<String, ()>, StableId)> = None;
-
-        for next_inst in instructions.iter().skip(pc + 1) {
-            let next_raw = luad_dialect_lua51::RawInstruction51::decode(next_inst.raw_word);
-
-            // If module_reg is overwritten by an instruction other than CALL R(module_reg), abort
-            if next_raw.a == module_reg
-                && next_raw.opcode != Some(luad_dialect_lua51::Opcode51::Call)
-            {
-                break;
+        let raw = RawInstruction51::decode(word.raw_word);
+        let key = match raw.opcode {
+            Some(Op::LoadK | Op::GetGlobal | Op::SetGlobal) => Some(raw.bx as usize),
+            Some(Op::GetTable) if raw.c >= 256 => Some((raw.c - 256) as usize),
+            _ => None,
+        };
+        if let Some(key) = key {
+            let Some(c) = p.constants.get(key) else {
+                return Some(refused());
+            };
+            let size = match &c.value {
+                ConstantValue::ShortString(s) | ConstantValue::LongString(s) => {
+                    s.raw_bytes.len().saturating_add(s.display.len())
+                }
+                ConstantValue::Float { raw_hex, .. } | ConstantValue::Integer { raw_hex, .. } => {
+                    raw_hex.len()
+                }
+                _ => 1,
+            };
+            constant_bytes = constant_bytes.saturating_add(size);
+            if constant_bytes > MAX_MODULE_INIT_CONSTANT_BYTES {
+                return Some(ModuleDeclaration::Limited);
             }
-
-            // Track definitions of module_reg + 1 (first argument to module)
-            if next_raw.a == module_reg.saturating_add(1) {
-                if next_raw.opcode == Some(luad_dialect_lua51::Opcode51::LoadK) {
-                    let name_k_idx = next_raw.bx as usize;
-                    if let Some(c) = constants.get(name_k_idx) {
-                        if let Some(s) = as_str_constant(&c.value) {
-                            arg_reg_val = Some((Ok(s), next_inst.id.clone()));
-                        } else {
-                            arg_reg_val = Some((Err(()), next_inst.id.clone()));
-                        }
-                    } else {
-                        arg_reg_val = Some((Err(()), next_inst.id.clone()));
+        }
+        let a = raw.a as usize;
+        match raw.opcode {
+            Some(Op::GetGlobal) => {
+                proof_steps[a] = 1;
+                let name = p
+                    .constants
+                    .get(raw.bx as usize)
+                    .and_then(|c| string_bytes(&c.value));
+                registers[a] = match name {
+                    Some(b"module") => {
+                        module_loads += 1;
+                        module_load_pc = pc;
+                        Token::Module
                     }
-                } else {
-                    // Non-LoadK write to argument register -> dynamic
-                    arg_reg_val = Some((Err(()), next_inst.id.clone()));
+                    Some(b"package") => Token::Package,
+                    _ => Token::Other,
+                };
+                if module_loads > 1 {
+                    return Some(refused());
                 }
             }
-
-            // Check for CALL R(module_reg)
-            if next_raw.opcode == Some(luad_dialect_lua51::Opcode51::Call)
-                && next_raw.a == module_reg
-            {
-                let call_id = next_inst.id.clone();
-                match arg_reg_val {
-                    Some((Ok(name), loadk_id)) => {
-                        let segments: Vec<String> =
-                            name.split('.').map(|s| s.to_string()).collect();
-                        let mut evidence = vec![getglobal_id, loadk_id, call_id];
-                        evidence.sort();
-                        evidence.dedup();
-                        return Some(ModuleDeclaration::Literal { segments, evidence });
-                    }
-                    Some((Err(()), load_id)) => {
-                        let mut evidence = vec![getglobal_id, load_id, call_id];
-                        evidence.sort();
-                        evidence.dedup();
-                        return Some(ModuleDeclaration::Dynamic { evidence });
-                    }
-                    None => {
-                        return Some(ModuleDeclaration::Dynamic {
-                            evidence: vec![getglobal_id, call_id],
-                        });
-                    }
+            Some(Op::LoadK) => {
+                proof_steps[a] = 1;
+                registers[a] = p
+                    .constants
+                    .get(raw.bx as usize)
+                    .and_then(|c| string_bytes(&c.value))
+                    .map_or(Token::Other, |s| Token::Literal(s, pc));
+            }
+            Some(Op::GetTable) => {
+                let seeall = raw.b < 256
+                    && matches!(registers[raw.b as usize], Token::Package)
+                    && raw.c >= 256
+                    && p.constants
+                        .get((raw.c - 256) as usize)
+                        .and_then(|c| string_bytes(&c.value))
+                        == Some(b"seeall");
+                if !seeall || declaration.is_some() {
+                    return Some(refused());
+                }
+                proof_steps[a] = proof_steps[raw.b as usize] + 1;
+                registers[a] = Token::Seeall;
+            }
+            Some(Op::Call) => {
+                if declaration.is_some()
+                    || !matches!(registers[a], Token::Module)
+                    || raw.c != 1
+                    || !(raw.b == 2
+                        || (raw.b == 3 && a + 2 < 256 && matches!(registers[a + 2], Token::Seeall)))
+                {
+                    return Some(refused());
+                }
+                let Some(Token::Literal(name, load_pc)) = registers.get(a + 1) else {
+                    return Some(refused());
+                };
+                let Ok(name) = std::str::from_utf8(name) else {
+                    return Some(refused());
+                };
+                // Lua 5.1.5 loadlib.c::ll_module passes the name through C-string
+                // APIs. Never map an embedded NUL as a complete Lua namespace.
+                if name.as_bytes().contains(&0) {
+                    return Some(refused());
+                }
+                // Callee segments are escaped byte labels. Restrict this
+                // convention to selectors whose raw and escaped spellings agree.
+                if !admitted_selector(name.as_bytes()) {
+                    return Some(refused());
+                }
+                // Callee symbolic paths admit at most 32 segments; reserve one
+                // for the exported field and bound allocation before collecting.
+                let parts: Vec<_> = name.split('.').take(32).collect();
+                if parts.len() >= 32 {
+                    return Some(ModuleDeclaration::Limited);
+                }
+                if parts.iter().any(|s| s.is_empty()) {
+                    return Some(refused());
+                }
+                declaration = Some(ModuleDeclaration::Literal {
+                    segments: parts.into_iter().map(str::to_owned).collect(),
+                    evidence: vec![
+                        p.instructions[module_load_pc].id.clone(),
+                        p.instructions[*load_pc].id.clone(),
+                        word.id.clone(),
+                    ],
+                });
+                registers[a..].fill(Token::Other);
+                proof_steps[a..].fill(0);
+            }
+            Some(Op::SetGlobal) => {
+                if declaration.is_none()
+                    || p.constants
+                        .get(raw.bx as usize)
+                        .and_then(|c| string_bytes(&c.value))
+                        .filter(|s| admitted_selector(s))
+                        .is_none()
+                {
+                    return Some(refused());
                 }
             }
+            Some(Op::LoadBool) if raw.c == 0 => {
+                registers[a] = Token::Other;
+                proof_steps[a] = 1;
+            }
+            Some(Op::LoadNil) => {
+                if raw.b < raw.a as u16 {
+                    return Some(refused());
+                }
+                let end = (raw.b as usize).min(255);
+                registers[a..=end].fill(Token::Other);
+                proof_steps[a..=end].fill(1);
+            }
+            Some(Op::Move) => {
+                let steps = proof_steps
+                    .get(raw.b as usize)
+                    .copied()
+                    .unwrap_or(0)
+                    .saturating_add(1);
+                if steps > MAX_MODULE_INIT_ALIAS_STEPS {
+                    return Some(ModuleDeclaration::Limited);
+                }
+                proof_steps[a] = steps;
+                registers[a] = Token::Other;
+            }
+            Some(Op::Closure) => {
+                registers[a] = Token::Other;
+                proof_steps[a] = 1;
+            }
+            Some(Op::Return) if raw.b == 1 => returned = true,
+            // This includes branches, skips, loops, table/upvalue mutation and
+            // arbitrary calls. Even a read can invoke an unproved metamethod.
+            _ => return Some(refused()),
         }
     }
+    if !returned {
+        return Some(refused());
+    }
+    declaration.or_else(|| Some(refused()))
+}
 
-    None
+fn mark_index_limit(index: &mut ModuleExportIndex, message: String) {
+    index.export_limit_exceeded = true;
+    if !index.diagnostics.iter().any(|d| d.code == "ANA-LIMIT-001") {
+        index.diagnostics.push(Diagnostic::error(
+            "ANA-LIMIT-001",
+            DiagnosticCategory::Analysis,
+            StableId::Chunk,
+            message,
+        ));
+    }
 }
 
 /// Index module exports from one chunk under the chosen convention.
@@ -278,7 +448,7 @@ pub fn index_chunk_module_exports_bounded(
         return;
     }
 
-    if !chunk.dialect.starts_with("lua5.1") {
+    if !is_lua51(&chunk.dialect) {
         return;
     }
 
@@ -287,38 +457,74 @@ pub fn index_chunk_module_exports_bounded(
             segments: module_segments,
             evidence: mod_evidence,
         }) => {
-            let global_stores = analyze_chunk_global_stores(chunk);
-            for store in global_stores {
-                if index.exports.len() >= max_exports {
-                    index.export_limit_exceeded = true;
-                    if !index.diagnostics.iter().any(|d| d.code == "ANA-LIMIT-001") {
-                        index.diagnostics.push(Diagnostic::error(
-                            "ANA-LIMIT-001",
-                            DiagnosticCategory::Analysis,
-                            StableId::Chunk,
-                            format!(
-                                "Corpus module export indexing safety limit ({max_exports}) exceeded; cross-chunk linking is incomplete"
-                            ),
-                        ));
+            let Ok(stores) = analyze_root_global_stores(chunk) else {
+                mark_index_limit(
+                    index,
+                    "Module initialization analysis exhausted; export index is incomplete".into(),
+                );
+                return;
+            };
+            let mut last_stores = BTreeMap::new();
+            for store in stores {
+                // Store facts are rooted in physical instruction identities, not
+                // lexical child bodies. Sort by numeric PC rather than ID text.
+                if let StableId::Instruction { proto, pc } = &store.store_id {
+                    if proto == &ProtoPath::root() {
+                        let entry = last_stores
+                            .entry(store.name_raw.clone())
+                            .or_insert((*pc, store.clone()));
+                        if *pc >= entry.0 {
+                            *entry = (*pc, store);
+                        }
                     }
-                    break;
                 }
-
+            }
+            let mut count: usize = index.exports.values().map(Vec::len).sum();
+            let mut retained_label_bytes: usize = index
+                .exports
+                .values()
+                .flatten()
+                .map(|d| {
+                    d.label_segments
+                        .iter()
+                        .map(String::len)
+                        .sum::<usize>()
+                        .saturating_mul(2)
+                })
+                .sum();
+            let namespace_bytes: usize = module_segments.iter().map(String::len).sum();
+            for (_, (_, store)) in last_stores {
                 if let GlobalStoreValue::Closure {
                     prototype,
                     evidence,
                 } = store.value
                 {
-                    let export_name = String::from_utf8_lossy(&store.name_raw).to_string();
+                    if count >= max_exports {
+                        mark_index_limit(index, format!("Corpus module export indexing safety limit ({max_exports} definitions) exceeded; cross-chunk linking is incomplete"));
+                        continue;
+                    }
+                    let label_cost = namespace_bytes
+                        .saturating_add(store.name_raw.len())
+                        .saturating_mul(2);
+                    if retained_label_bytes.saturating_add(label_cost)
+                        > MAX_MODULE_INDEX_LABEL_BYTES
+                    {
+                        mark_index_limit(index, "Module index label payload budget exceeded; export index is incomplete".into());
+                        continue;
+                    }
+                    retained_label_bytes += label_cost;
+                    // Admission validated UTF-8; preserve raw bytes until this
+                    // explicit boundary, never merge distinct lossy spellings.
+                    let Ok(export_name) = String::from_utf8(store.name_raw) else {
+                        unreachable!("admitted export name")
+                    };
                     let mut full_segments = module_segments.clone();
                     full_segments.push(export_name);
-
                     let mut combined_evidence = mod_evidence.clone();
                     combined_evidence.extend(evidence);
                     combined_evidence.push(store.store_id);
                     combined_evidence.sort();
                     combined_evidence.dedup();
-
                     index
                         .exports
                         .entry(full_segments.clone())
@@ -329,9 +535,17 @@ pub fn index_chunk_module_exports_bounded(
                             label_segments: full_segments,
                             evidence: combined_evidence,
                         });
+                    count += 1;
+                } else if matches!(store.value, GlobalStoreValue::Unknown { .. }) {
+                    index.dynamic_artifacts.insert(identity.path.clone());
+                    index.dynamic_evidence.push(store.store_id);
                 }
             }
         }
+        Some(ModuleDeclaration::Limited) => mark_index_limit(
+            index,
+            "Module initialization admission budget exceeded; export index is incomplete".into(),
+        ),
         Some(ModuleDeclaration::Dynamic { evidence }) => {
             index.dynamic_artifacts.insert(identity.path.clone());
             index.dynamic_evidence.extend(evidence);
@@ -359,6 +573,13 @@ pub fn build_module_export_index_bounded<'a>(
     max_exports: usize,
 ) -> ModuleExportIndex {
     let mut index = ModuleExportIndex::default();
+    // The caller supplies a bounded corpus. Stable preselection keeps a cap from
+    // choosing a different apparent target when input arguments are permuted.
+    let mut chunks: Vec<_> = chunks.into_iter().collect();
+    chunks.sort_by(|(a, _), (b, _)| {
+        (&a.path, &a.sha256, a.byte_length).cmp(&(&b.path, &b.sha256, b.byte_length))
+    });
+    chunks.dedup_by(|(a, _), (b, _)| *a == *b);
     for (identity, chunk) in chunks {
         index_chunk_module_exports_bounded(identity, chunk, convention, &mut index, max_exports);
     }
@@ -411,7 +632,7 @@ pub fn resolve_chunk_links_bounded(
         return ChunkLinkResult::default();
     }
 
-    if !chunk.dialect.starts_with("lua5.1") {
+    if !is_lua51(&chunk.dialect) {
         return ChunkLinkResult {
             facts: vec![CrossChunkLinkFact {
                 call_id: StableId::Chunk,
@@ -447,9 +668,15 @@ pub fn resolve_chunk_links_bounded(
                 CalleeResolution::ResolvedPath {
                     segments, evidence, ..
                 } => {
-                    // Check if this path targets the module namespace
+                    let escaped_selector =
+                        segments.iter().any(|s| !admitted_selector(s.as_bytes()));
+                    // Check if this path targets the module namespace. Escaped
+                    // paths cannot be compared to admitted raw selectors.
                     if segments.first().is_some_and(|s| s == "luci")
                         || index.exports.contains_key(segments)
+                        || escaped_selector
+                        || ((!index.dynamic_artifacts.is_empty() || index.export_limit_exceeded)
+                            && segments.len() > 1)
                     {
                         if links.len() >= max_links {
                             diagnostics.push(Diagnostic::error(
@@ -478,6 +705,17 @@ pub fn resolve_chunk_links_bounded(
                         }
 
                         let link = match index.exports.get(segments) {
+                            _ if escaped_selector => CrossChunkLinkFact {
+                                call_id: call.call_id.clone(),
+                                caller_path: identity.path.clone(),
+                                caller_proto: call.proto_path.clone(),
+                                call_pc: call.pc,
+                                label_segments: segments.clone(),
+                                status: LinkStatus::Dynamic,
+                                target_artifact: None,
+                                target_proto: None,
+                                evidence: evidence.clone(),
+                            },
                             Some(candidates) if candidates.len() == 1 => {
                                 let candidate = &candidates[0];
                                 let mut combined_evidence = evidence.clone();
@@ -657,14 +895,26 @@ pub fn resolve_chunk_links_bounded(
         }
     }
 
-    // Deterministic sort: caller_path, caller_proto, call_pc, call_id
-    links.sort_by(|a, b| {
-        a.caller_path
-            .cmp(&b.caller_path)
-            .then_with(|| a.caller_proto.cmp(&b.caller_proto))
-            .then_with(|| a.call_pc.cmp(&b.call_pc))
-            .then_with(|| a.call_id.cmp(&b.call_id))
-    });
+    for link in &mut links {
+        if matches!(link.status, LinkStatus::Resolved | LinkStatus::Absent) {
+            let uncertain = if !index.dynamic_artifacts.is_empty() {
+                Some(LinkStatus::Dynamic)
+            } else if index.export_limit_exceeded {
+                Some(LinkStatus::LimitExceeded)
+            } else {
+                None
+            };
+            if let Some(status) = uncertain {
+                link.status = status;
+                link.target_artifact = None;
+                link.target_proto = None;
+                link.evidence.extend(index.dynamic_evidence.iter().cloned());
+                link.evidence.sort();
+                link.evidence.dedup();
+            }
+        }
+    }
+    links.sort_by(compare_links);
 
     ChunkLinkResult {
         facts: links,
@@ -702,14 +952,38 @@ pub fn analyze_corpus_links_detailed(
         }
     }
 
-    // Deterministic sort: caller_path, caller_proto, call_pc, call_id
-    all_links.sort_by(|a, b| {
-        a.caller_path
-            .cmp(&b.caller_path)
-            .then_with(|| a.caller_proto.cmp(&b.caller_proto))
-            .then_with(|| a.call_pc.cmp(&b.call_pc))
-            .then_with(|| a.call_id.cmp(&b.call_id))
-    });
+    all_links.sort_by(compare_links);
 
     (all_links, all_diagnostics)
+}
+
+fn compare_links(a: &CrossChunkLinkFact, b: &CrossChunkLinkFact) -> std::cmp::Ordering {
+    // Caller location is the primary order. All reported fields break ties, so
+    // same-path/different-content library inputs cannot inherit iteration order.
+    (
+        &a.caller_path,
+        &a.caller_proto,
+        a.call_pc,
+        &a.call_id,
+        &a.label_segments,
+        a.status as u8,
+        a.target_artifact
+            .as_ref()
+            .map(|i| (&i.path, &i.sha256, i.byte_length)),
+        &a.target_proto,
+        &a.evidence,
+    )
+        .cmp(&(
+            &b.caller_path,
+            &b.caller_proto,
+            b.call_pc,
+            &b.call_id,
+            &b.label_segments,
+            b.status as u8,
+            b.target_artifact
+                .as_ref()
+                .map(|i| (&i.path, &i.sha256, i.byte_length)),
+            &b.target_proto,
+            &b.evidence,
+        ))
 }

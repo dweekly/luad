@@ -68,7 +68,7 @@ become reviewable.
 
 | Order | Outcome | Owner | Dependency and exit condition |
 |---|---|---|---|
-| A | Trustworthy convention-based links | `luad` | Public overwrite and unreachable-declaration counterexamples must be refused, with positive ordinary module pairs. |
+| A | Trustworthy Lua 5.1 call-frame value lifetimes | `luad` | Structurally valid call-tail controls must lose stale values while ordinary compiler-produced callers retain their answers. |
 | B | A reliable firmware measurement loop | Firmware consumer, with public reproductions in `luad` | May be prepared independently of A; no before/after product ranking until coverage and consumer semantics are checked. |
 | C | Useful public investigation and caller-inspection workflows | `luad`, plus a small reference consumer | Depends on A for comparison/link claims and on B for firmware benefit claims; exact answers must be obtainable without a custom decoder. |
 | D | Independent evidence of value against alternatives | Maintainer and outside users | Trial an installable C candidate before interface freeze; correct the blocking findings. |
@@ -77,24 +77,31 @@ become reviewable.
 
 ### A. Correct false answers before expanding analysis
 
-**Convention-based linking.** Define the admitted module-initialization shape before
-extending resolution. A function store invalidated by a later nil, non-closure,
-ambiguous, or potentially clobbering store must not prove an export. A module declaration
-in a statically unreachable branch must not establish the module environment. Exercise
-conditional declarations, multiple declarations, aliases, and resource cutoffs with
-positive ordinary module pairs. Refuse shapes outside the proved subset rather than
-building a whole-program interpreter.
+**Call-frame lifetimes.** Make Lua 5.1 callee, argument-origin and capture analysis
+invalidate pre-call facts in the call's temporary register tail. A discarded C result
+must not leave a prior closure/path or literal classified as the current value. Preserve
+live locals below the call base, explicit returned results, exact literal-`require`
+labels where established, and values redefined after the call. Captured stack cells
+overlapping that tail need the same conservative treatment. State the ordinary ABI and
+reflection/opaque-call assumptions; do not turn an unknown call result into a value proof.
 
-Start in `crates/luad-analysis/src/linking.rs`, its shared global-store analysis in
-`callees.rs`, and `crates/luad-oracle/tests/test_cross_chunk_linking.rs`. Extend
-`gate-cross-chunk-link` for the new interaction and preserve duplicate, absent, and
-limit outcomes. Keep convention selection explicit. Never silently auto-enable it
-because a path looks like LuCI.
+Exercise all CALL result-window families, direct values and captured cells, redefinitions,
+and ordinary compiler-produced positive controls in one bounded batch. Public controls
+may patch required official compiled chunks using declared layout and parsed offsets;
+parse/analyze those bytes without executing them. Include the cross-chunk interaction:
+a caller that reads a clobbered symbolic path must not regain a unique module target.
+Keep physical words and companion roles separate from analysis invalidation semantics.
 
-**Exit:** the counterexamples are retained as public source with generated-fixture
-provenance where binaries are retained; the relevant public assertions, existing gate,
-and one aggregate check pass. Correctness fixes receive a new experimental patch
-release when packaged; no tag is moved. Do not promote `diff` or linking to stable.
+Start in `crates/luad-analysis/src/callees.rs`, `origins.rs` and `capture_mutation.rs`,
+their ordinary tests, and the existing symbolic-callee, argument-origin, capture and
+cross-chunk gates that own those interactions. Reuse accepted prerequisites rather than
+rebuilding a VM or a comparison framework. This false-answer family precedes a broader
+hostile-caller workflow claim and new consumer improvement counts.
+
+**Exit:** the public counterexamples and positive controls, named gates, and one clean
+aggregate pass, with compiler identity and no required skips. Correctness fixes receive
+an experimental patch release when packaged. No supported-target or runtime-equivalence
+claim follows from this batch.
 
 ### B. Make the firmware consumer a reliable product signal
 

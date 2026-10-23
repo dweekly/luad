@@ -1221,6 +1221,75 @@ fn fail_closed_callees(
     }
 }
 
+/// Root initialization stores only; creating a closure does not execute its body.
+/// The linker admits a bounded linear initialization before using this authority.
+pub(crate) fn analyze_root_global_stores(
+    chunk: &luad_core::model::Chunk,
+) -> Result<Vec<GlobalStoreFact>, CalleeUnresolvedReason> {
+    let proto = &chunk.main_proto;
+    let instructions = crate::lift_proto_for_dialect(&chunk.dialect, proto);
+    let captures = CaptureEnvironment::new();
+    let frame_size = proto.maxstacksize as usize;
+    let mut state = vec![FlowValue::Bottom; frame_size];
+    let mut stores = Vec::new();
+    // The linker has proved this root is linear. Reuse ordinary value transfer,
+    // without visiting lexical children or constructing a separate interpreter.
+    for (step, instruction) in instructions.iter().enumerate() {
+        if step >= MAX_TRANSFER_STEPS {
+            return Err(CalleeUnresolvedReason::AnalysisLimit);
+        }
+        if is_closure_binding(instruction) {
+            continue;
+        }
+        if instruction.mnemonic == "SETGLOBAL" {
+            if let (Some(name), Some(source)) = (
+                lua_string_operand(instruction),
+                register_operand(instruction, 0),
+            ) {
+                stores.push(GlobalStoreFact {
+                    name_raw: name.raw_bytes.clone(),
+                    store_id: instruction.id.clone(),
+                    value: initialization_store_value(get_register(&state, source), instruction),
+                });
+            }
+        }
+        transfer(instruction, &mut state, &captures, frame_size);
+        if instruction.mnemonic == "CALL" {
+            if let Some(base) = register_operand(instruction, 0) {
+                // A C call may use its entire temporary stack tail, even when
+                // C=1 requests no results. Crafted bytecode may read that tail;
+                // encoded result writes do not prove pre-call values survive.
+                invalidate_from(
+                    &mut state,
+                    base,
+                    frame_size,
+                    CalleeUnresolvedReason::Overwritten,
+                );
+            }
+        }
+        // Callee analysis need not retain the type of a non-callable overwrite.
+        // Root export absence does: these two instructions prove non-closures.
+        if matches!(instruction.mnemonic.as_str(), "LOADNIL" | "LOADBOOL") {
+            for target in &instruction.writes {
+                let (start, end) = match target {
+                    EffectTarget::Register { index } => (*index, *index),
+                    EffectTarget::RegisterRange { start, end } => (*start, *end),
+                    _ => continue,
+                };
+                for register in start..=end {
+                    set_known(
+                        &mut state,
+                        register,
+                        ValueKind::NonClosure,
+                        [instruction.id.clone()],
+                    );
+                }
+            }
+        }
+    }
+    Ok(stores)
+}
+
 pub(crate) fn analyze_chunk_global_stores(chunk: &luad_core::model::Chunk) -> Vec<GlobalStoreFact> {
     let summary = crate::capture_mutation::CaptureMutationSummary::build(
         chunk,
@@ -1345,6 +1414,23 @@ fn collect_reachable_global_stores(
             );
         }
     }
+}
+
+fn initialization_store_value(value: FlowValue, store: &SemanticInstruction) -> GlobalStoreValue {
+    // A symbolic lookup labels a value; it does not prove that value is a
+    // non-closure. A final opaque assignment must not prove export absence.
+    if matches!(
+        &value,
+        FlowValue::Known(KnownValue {
+            kind: ValueKind::LookupLabel { .. } | ValueKind::SymbolicPath { .. },
+            ..
+        })
+    ) {
+        return GlobalStoreValue::Unknown {
+            reason: CalleeUnresolvedReason::UnsupportedValue,
+        };
+    }
+    global_store_value(value, store)
 }
 
 fn global_store_value(value: FlowValue, store: &SemanticInstruction) -> GlobalStoreValue {

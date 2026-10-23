@@ -204,10 +204,18 @@ or byte identity; use the artifact hash for byte identity. See the
 [machine interface](docs/MACHINE-INTERFACE.md#cfg-xrefs-query-and-diff) and
 [public comparison regressions](crates/luad-oracle/tests/test_diff_cli.rs).
 
-Known experimental-analysis limit: convention-based links can name an export after it
-is overwritten or use an unreachable module declaration. Do not treat links as proof
-of runtime reachability. Correcting these cases is the next work in
-[the roadmap](ROADMAP.md#a-correct-false-answers-before-expanding-analysis).
+Convention-based linking requires explicit `--link-convention luci-module-setglobal`
+and admits straight-line root initialization with one literal module declaration.
+It uses final root closure stores, refuses ambiguous initialization and clobbering
+operations, and cannot claim a unique target from an incomplete index. A binding is
+conditional on that convention, not runtime reachability. See the
+[exact admitted shapes, statuses and budgets](docs/MACHINE-INTERFACE.md#export)
+and [executable controls](crates/luad-oracle/tests/test_cross_chunk_linking.rs).
+
+Known experimental limit: general callee/origin analysis can retain pre-call values in
+C-call temporary registers read by crafted bytecode. The module-initialization helper
+handles its own call window; the broader [call-frame repair](ROADMAP.md#a-correct-false-answers-before-expanding-analysis)
+is the next core outcome. These derived records carry no runtime call-edge guarantee.
 
 Lua 5.2, 5.3, and 5.5 are limited to structural facts and validation. Derived analysis
 commands refuse these dialects rather than presenting unqualified semantic results.
@@ -272,7 +280,7 @@ delete the document in the same change and update this index.
 | [`docs/ROADMAP-1.0.md`](docs/ROADMAP-1.0.md) | Stable-release qualification obligations, exact targets, minimal machine contract, hostile-input evidence, and transfer. | 2026-10-22 | The stable target set, qualified surface, acceptance obligations, or qualification lifecycle changes. |
 | [`docs/BRINGUP.md`](docs/BRINGUP.md) | Setup for a developer machine, a self-hosted Actions runner, and a release builder, with the owning file for every tool pin. | 2026-09-02 | A tool pin, its owning file, the doctor's checks, runner labels or security boundary, or the release dry-run and rehearsal entry points change. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, evidence-based selection, proportional verification, qualification lanes, and orchestration. | 2026-10-22 | Selection criteria, planning ownership, CI lanes, roles, evidence policy, or sprint mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Neutral delivery checkpoint; selects the next bounded linking contract before implementation. | 2026-10-22 | A bounded contract replaces the checkpoint or the first roadmap outcome changes. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Neutral checkpoint before the next bounded call-frame lifetime contract; private consumer track remains separately owned. | 2026-10-22 | A bounded contract replaces the checkpoint or the first roadmap outcome changes. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-10-20 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/PRIOR-ART-AND-CORPORA.md`](docs/PRIOR-ART-AND-CORPORA.md) | Dated executed comparisons and source observations, corpus candidates, provenance, and research leads. | 2026-10-22 | A comparison is executed, a cited project/profile changes, or a candidate corpus is selected; source checks do not refresh older experiments. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, identities, schemas, limits, completion, current analysis caveats, and exit behavior. | 2026-10-22 | Public commands, schemas, known limitations, identities, diagnostics, or completion/exit contracts change. |

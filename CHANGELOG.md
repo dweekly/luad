@@ -5,6 +5,20 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Make explicit `luci-module-setglobal` links conditional on an admitted straight-line
+  root initialization. Final root stores replace stale closure candidates; nested
+  function bodies cannot invent exports. Unproved declarations, root calls/table
+  mutation, missing/corrupt providers and exhausted admission preserve uncertainty.
+  Total retained definitions are capped in canonical artifact order; an incomplete
+  index no longer turns a singleton into a unique target. Public required-compiler
+  controls cover overwrites, aliases, clobbers, child bodies, input permutations,
+  cutoffs and selected JSONL composition. Crafted module-call stack reads and escaped
+  selector aliases preserve uncertainty; initialized post-call values remain useful.
+  Proof-chain and index-label copying have explicit limits. Linking rejects bytecode
+  stdin and documents the immutable-corpus precondition of its two-pass interface.
+  This narrows experimental linking and promotes no supported target or runtime
+  reachability claim.
+
 - Fix false `diff` equality for same-count constant replacements, exact float/string
   representations, capture descriptors, varargs, child changes, header/layout fields,
   trailing bytes and same-length debug changes. Comparison is positional decoded

@@ -1669,28 +1669,28 @@
       "description": "Status of cross-chunk linking for a specific call-site.",
       "oneOf": [
         {
-          "description": "Exactly one unique matching module export was proved in the corpus.",
+          "description": "One admitted definition in a complete index under the selected convention.",
           "type": "string",
           "enum": [
             "resolved"
           ]
         },
         {
-          "description": "The target label belongs to the module namespace, but no defining export exists in the corpus.",
+          "description": "No admitted definition for the selected label in a complete convention index.",
           "type": "string",
           "enum": [
             "absent"
           ]
         },
         {
-          "description": "Multiple conflicting definitions exist in the corpus for this export label.",
+          "description": "At least two admitted definitions exist for this export label.",
           "type": "string",
           "enum": [
             "duplicate"
           ]
         },
         {
-          "description": "Target or module declaration involves dynamic expressions and cannot be statically resolved.",
+          "description": "Initialization, final value, or provider completeness is uncertain.",
           "type": "string",
           "enum": [
             "dynamic"
