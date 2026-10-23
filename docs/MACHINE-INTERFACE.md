@@ -174,7 +174,7 @@ aggregate rule and emits a terminal record for every requested input.
 
 `--strict` requests fail-fast parsing or stricter validation where exposed. Without `--strict`, parsing is permissive where recovery is implemented. Strict and permissive interpretations can produce different object trees; persistent references must therefore include parse interpretation, not only input SHA-256.
 
-Default resource ceilings are part of `ResourceLimits` and may evolve before 1.0. Limit failures return exit code 5 rather than attempting an unbounded allocation or traversal.
+Default resource ceilings are part of `ResourceLimits` and may evolve before 1.0. Limit failures return exit code 5 rather than attempting an unbounded allocation or traversal. Besides per-prototype bounds, `max_total_instructions` (default 2,000,000) charges every prototype's declared code size to one chunk-wide budget before allocation; crossing it is `CORE-LIMIT-004`.
 
 ## Stable IDs
 

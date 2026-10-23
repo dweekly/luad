@@ -6,13 +6,14 @@ use std::process::{Command, Output};
 
 use serde_json::{json, Value};
 
-const PINNED_CODES: [&str; 160] = [
+const PINNED_CODES: [&str; 161] = [
     "ANA-LIMIT-001",
     "ANA-LIMIT-002",
     "ANA-PRECOND-001",
     "CORE-LIMIT-001",
     "CORE-LIMIT-002",
     "CORE-LIMIT-003",
+    "CORE-LIMIT-004",
     "CORE-OVERFLOW-001",
     "CORE-SLICE-001",
     "CORE-TRUNC-001",

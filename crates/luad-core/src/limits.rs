@@ -14,6 +14,9 @@ pub struct ResourceLimits {
     pub max_total_prototypes: usize,
     /// Maximum instruction count per prototype (default 1,000,000).
     pub max_instructions_per_proto: usize,
+    /// Maximum instruction count across the whole chunk (default 2,000,000). Each parsed
+    /// instruction word costs a few hundred bytes, so this bounds the model's footprint.
+    pub max_total_instructions: usize,
     /// Maximum constant count per prototype (default 262,144).
     pub max_constants_per_proto: usize,
     /// Maximum upvalue count per prototype (default 1,024).
@@ -31,6 +34,7 @@ impl Default for ResourceLimits {
             max_nesting_depth: 128,
             max_total_prototypes: 10_000,
             max_instructions_per_proto: 1_000_000,
+            max_total_instructions: 2_000_000,
             max_constants_per_proto: 262_144,
             max_upvalues_per_proto: 1_024,
             max_string_bytes: 16 * 1024 * 1024,

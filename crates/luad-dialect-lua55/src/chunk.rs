@@ -191,6 +191,7 @@ fn load_proto_55(
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
+    reader.charge_instructions(code_len, path, sizecode_loc.clone())?;
     reader.align_to(4)?;
 
     let mut instructions = Vec::with_capacity(reader.safe_capacity(code_len, 4));

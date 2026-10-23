@@ -7,6 +7,15 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## 0.4.0 — 2026-10-23
 
+- Bound the parsed model with a chunk-wide instruction budget (#117).
+  `max_total_instructions` (default 2,000,000) is charged when each prototype's code size
+  is read, before allocation, in all five dialect parsers. Crossing it fails with
+  `CORE-LIMIT-004` and exit 5. Machine documents' `analysis_configuration.limits` gain
+  the field. That is a structural addition within schema major 1: a strict consumer
+  validating against an older schema snapshot will reject it, so refresh the snapshot
+  (`luad schema <name>`). The pinned public disassembly schema hash is updated
+  accordingly.
+
 - Show a compact summary of each caller's arguments in the `luad callers` text view
   (string literals quoted, numbers and booleans by value, parameters as `param#N`,
   other expressions by kind, open windows marked). JSON and JSONL keep the full origin trees.
