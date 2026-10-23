@@ -139,6 +139,7 @@ pub fn decode_proto_lua54(
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
+    reader.charge_instructions(code_size, proto_path, code_size_loc.clone())?;
 
     let mut instructions = Vec::with_capacity(reader.safe_capacity(code_size, 4));
     for pc in 0..code_size {

@@ -63,6 +63,7 @@ proptest! {
             max_nesting_depth: max_depth,
             max_total_prototypes: 10,
             max_instructions_per_proto: 50,
+            max_total_instructions: 500,
             max_constants_per_proto: 50,
             max_upvalues_per_proto: 20,
             max_string_bytes: 100,

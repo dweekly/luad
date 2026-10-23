@@ -15,6 +15,7 @@ pub struct SafeReader<'a> {
     mode: ParseMode,
     current_proto_path: ProtoPath,
     total_prototypes: usize,
+    total_instructions: usize,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -41,6 +42,7 @@ impl<'a> SafeReader<'a> {
             mode,
             current_proto_path: ProtoPath::root(),
             total_prototypes: 0,
+            total_instructions: 0,
             diagnostics: Vec::new(),
         }
     }
@@ -131,6 +133,34 @@ impl<'a> SafeReader<'a> {
     #[must_use]
     pub fn total_prototypes(&self) -> usize {
         self.total_prototypes
+    }
+
+    /// Charge one prototype's declared instruction count to the chunk-wide budget.
+    ///
+    /// Call this when the code size is read, before the instruction vector is
+    /// allocated, so a hostile size is refused instead of reserved.
+    pub fn charge_instructions(
+        &mut self,
+        count: usize,
+        proto: &ProtoPath,
+        location: SourceLocation,
+    ) -> Result<(), Diagnostic> {
+        self.total_instructions = self.total_instructions.saturating_add(count);
+        if self.total_instructions > self.limits.max_total_instructions {
+            let diag = Diagnostic::error(
+                "CORE-LIMIT-004",
+                DiagnosticCategory::Parse,
+                StableId::Proto(proto.clone()),
+                format!(
+                    "Total instruction count {} exceeds configured limit of {}",
+                    self.total_instructions, self.limits.max_total_instructions
+                ),
+            )
+            .with_source(location);
+            self.record_diagnostic(diag.clone())?;
+            return Err(diag);
+        }
+        Ok(())
     }
 
     /// Access current collected diagnostics.

@@ -187,6 +187,7 @@ fn load_proto_51(
         reader.record_diagnostic(diag.clone())?;
         return Err(diag);
     }
+    reader.charge_instructions(sizecode, path, sizecode_loc.clone())?;
     let mut instructions = Vec::with_capacity(reader.safe_capacity(sizecode, 4));
     for pc in 0..sizecode {
         let inst_pos = reader.position();
