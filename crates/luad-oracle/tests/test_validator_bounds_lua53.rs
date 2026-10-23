@@ -191,3 +191,66 @@ fn test_lua53_register_spans() {
     assert_eq!(verdict2, Verdict::Invalid);
     assert!(diags2.iter().any(|d| d.code == "L53-REG-SPAN-001"));
 }
+
+/// Upvalue writes whose B index exceeds the writing function's stack (issue #108).
+const SETUPVAL_SOURCE: &str =
+    "local a, b, c, d, e = 1, 2, 3, 4, 5\nreturn function() a = 0 b = 0 c = 0 d = 0 e = 0 end\n";
+
+fn setupval_b_beyond_stack(proto: &luad_core::model::Prototype) -> usize {
+    let own = proto
+        .instructions
+        .iter()
+        .map(|word| RawInstruction53::decode(word.raw_word))
+        .filter(|raw| {
+            raw.opcode == Some(Opcode53::SetUpval) && raw.b >= u16::from(proto.maxstacksize)
+        })
+        .count();
+    own + proto
+        .protos
+        .iter()
+        .map(setupval_b_beyond_stack)
+        .sum::<usize>()
+}
+
+#[test]
+fn test_lua53_compiler_setupval_upvalue_index_is_not_a_register() {
+    let _ = luad_oracle::require_luac53();
+    for strip in [false, true] {
+        let bytes =
+            luad_oracle::compile_source_lua53(SETUPVAL_SOURCE, strip).expect("official luac 5.3");
+        let mut reader = SafeReader::new(&bytes);
+        let chunk = luad_dialect_lua53::decode_chunk_lua53(&mut reader).expect("clean decode");
+        assert!(
+            setupval_b_beyond_stack(&chunk.main_proto) > 0,
+            "control must contain SETUPVAL words whose B exceeds maxstacksize"
+        );
+        let (verdict, diags) = validate_chunk_lua53(&chunk);
+        assert!(
+            !diags.iter().any(|d| d.severity == Severity::Error),
+            "official compiler output must not yield errors: {diags:?}"
+        );
+        assert_eq!(verdict, Verdict::ValidForParser);
+    }
+}
+
+#[test]
+fn test_lua53_setupval_register_a_and_upvalue_b_stay_bounded() {
+    let mut chunk = create_valid_chunk_53();
+    chunk.main_proto.maxstacksize = 2;
+    let upvalues = chunk.main_proto.upvalues.len() as u16;
+    assert!(upvalues > 0);
+    // SETUPVAL R(2) -> Upvalue[0]: A is the source register and exceeds maxstacksize 2.
+    let bad_a = RawInstruction53::encode_iabc(Opcode53::SetUpval, 2, 0, 0);
+    chunk.main_proto.instructions = vec![make_inst(0, bad_a)];
+    let (verdict, diags) = validate_chunk_lua53(&chunk);
+    assert_eq!(verdict, Verdict::Invalid);
+    assert!(diags.iter().any(|d| d.code == "L53-REG-001"));
+    assert!(!diags.iter().any(|d| d.code == "L53-REG-002"));
+
+    // SETUPVAL R(0) -> Upvalue[n]: B is outside the declared upvalues.
+    let bad_b = RawInstruction53::encode_iabc(Opcode53::SetUpval, 0, upvalues, 0);
+    chunk.main_proto.instructions = vec![make_inst(0, bad_b)];
+    let (verdict, diags) = validate_chunk_lua53(&chunk);
+    assert_eq!(verdict, Verdict::Invalid);
+    assert!(diags.iter().any(|d| d.code == "L53-UPVAL-002"));
+}
