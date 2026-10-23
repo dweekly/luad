@@ -565,7 +565,7 @@ JSON format returns a top-level `DiagnosticCatalogResponse` (`schema_version`, `
 Batch exports firmware artifacts in streaming JSONL format.
 `--max-facts-per-file N` bounds the number of counted fact records (`prototype`,
 `instruction`, `constant`, `upvalue`, `prototype_identity`, `xref`, `callee`, `origin`,
-`call_relation`)
+`parameter_field`, `call_relation`)
 emitted per input file while preserving stream framing, diagnostics, and per-file
 truncation metadata.
 
@@ -573,7 +573,8 @@ truncation metadata.
 are exact and may appear only once; an unknown, duplicate, or empty name is a usage
 error with empty stdout, and unknown names list the sorted valid families. Discover the
 valid set at runtime via `luad capabilities --format json` under `export.fact_families`
-or `luad export --help`. Control records and diagnostics are always emitted. Omitting
+or `luad export --help`. The `origin` family emits both `origin` call facts and `parameter_field` access facts;
+there is no separate field-access selector. Control records and diagnostics are always emitted. Omitting
 the option preserves the default all-family stream. When selection is explicit,
 `export_start.fact_families` records the canonical family order regardless of argument
 order; the field is absent from an unfiltered export.
@@ -657,7 +658,13 @@ Every data record has a required `context` object. Successful facts carry
 `input_identity` and `interpretation`; parse-failure diagnostics carry identity with a
 null interpretation; read-failure diagnostics carry null identity and interpretation.
 Consumers may discard or interleave control records without losing fact attribution.
-`export_start.schema_version` identifies the stream contract.
+`export_start.schema_version` identifies the stream contract. `luad schema export`
+validates one record, including each emitted variant and its typed context/payload.
+It cannot prove sequence ordering, terminal completion, aggregate counters or identity
+joins across records. Known scalar limitation: nonfinite constant `val` fields serialize
+as null while their schema and typed Rust model expect a number. Raw bits and
+classification remain present, but affected records fail schema/typed round trips.
+This record-variant correction does not close that separate scalar family. Consumers must check those independently before using a result.
 
 Each requested input produces exactly one terminal `file_end` status: `succeeded` for a
 complete recognized chunk, `skipped` for readable source or unsupported/malformed

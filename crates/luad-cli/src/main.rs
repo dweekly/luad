@@ -2525,6 +2525,10 @@ enum ExportRecord {
         context: JsonlRecordContext,
         data: luad_analysis::PrototypeIdentityFact,
     },
+    ParameterField {
+        context: JsonlRecordContext,
+        data: luad_analysis::ParameterFieldFact,
+    },
     Origin {
         context: JsonlRecordContext,
         data: luad_analysis::CallOriginFact,
