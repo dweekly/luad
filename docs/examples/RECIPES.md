@@ -396,6 +396,45 @@ The scheme commits exact constant bytes and is intended for joins within the sam
 5.1 profile. Equivalent source compiled for stock and LNUM32 number layouts is not
 expected to produce equal digests.
 
+### 10a. Worked example: two LuCI releases, then a checked handoff
+
+`tests/corpus` holds `luci.util` from openwrt/luci 22.03 and 23.05. Between them, the
+`tl_meta` thread-local metatable and its two closures were removed, `threadlocal` was
+simplified, and one line left the coroutine wrapper. Deleting two closures shifts every
+later prototype index, so a positional `luad diff` reports a cascade of shifted
+constants. Join by content instead:
+
+```bash
+luac5.1 -s -o util-22.03.luac tests/corpus/luci-22.03/libs/luci-lib-base/luasrc/util.lua
+luac5.1 -s -o util-23.05.luac tests/corpus/luci-23.05/libs/luci-lib-base/luasrc/util.lua
+for release in 22.03 23.05; do
+  luad export util-$release.luac --facts prototype_identity | jq -r '
+    select(.record_type == "prototype_identity") | [.data.digest, .data.proto_id] | @tsv' |
+    sort > $release.tsv
+done
+join -t $'\t' -v 1 22.03.tsv 23.05.tsv | cut -f2 | sort -V   # only in 22.03
+join -t $'\t' -v 2 22.03.tsv 23.05.tsv | cut -f2 | sort -V   # only in 23.05
+```
+
+Only `proto:0`, `0/4`, `0/5`, `0/6` and `0/48` (22.03) and `proto:0`, `0/4` and `0/46`
+(23.05) lack a counterpart: the root, `threadlocal`, the two removed metamethods and the
+edited wrapper. Debug builds give the same sets. The test suite checks this against the
+textual source diff. This is a content difference, not a claim about behavior.
+
+Before handing an artifact to another tool, compare its validated layout with the
+layout that tool writes itself, and hand off only on equality:
+
+```bash
+luac5.1 -o probe.luac - <<<'return 1'
+tool=$(luad inspect probe.luac --format json | jq -r .interpretation.validated_layout)
+mine=$(luad inspect util-23.05.luac --format json | jq -r .interpretation.validated_layout)
+[ "$tool" = "$mine" ] && luac5.1 -l -p util-23.05.luac | sed -n 2p
+```
+
+The tests require this prediction to match the official lister's acceptance on stock
+and OpenWrt LNUM32 artifacts. A stock 64-bit `luac` refuses the LNUM32 ones, and luad's
+layout says so in advance.
+
 Inventory the interpretation beside each digest before comparing artifacts:
 
 ```bash
