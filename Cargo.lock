@@ -727,6 +727,7 @@ dependencies = [
  "luad-dialect-lua54",
  "luad-dialect-lua55",
  "proptest",
+ "schemars",
  "serde",
  "serde_json",
  "sha2",

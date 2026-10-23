@@ -145,6 +145,7 @@ fn test_schema_goldens_consistency() {
 
 #[test]
 fn test_live_inspect_json_envelope_and_schema_validation() {
+    machine_floats::assert_json_float_facts(&get_luad_bin());
     let luad = get_luad_bin();
     let root = luad_oracle::find_workspace_root();
     let fixture = root.join("tests/fixtures/precompiled/lua54/hello.luac");
@@ -189,6 +190,7 @@ fn test_live_disasm_json_envelope_and_schema_validation() {
 
 #[test]
 fn test_live_validate_json_envelope_and_schema_validation() {
+    machine_floats::assert_exact_header_sentinels(&get_luad_bin());
     let luad = get_luad_bin();
     let root = luad_oracle::find_workspace_root();
     let fixture = root.join("tests/fixtures/precompiled/lua54/hello.luac");
@@ -957,3 +959,6 @@ fn assert_export_record_family_conforms_and_rejects_corruption() {
         }
     }
 }
+
+#[path = "common/machine_floats.rs"]
+mod machine_floats;

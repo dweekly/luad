@@ -35,6 +35,7 @@ thiserror = { workspace = true }
 clap = { workspace = true }
 
 [dev-dependencies]
+schemars = { workspace = true }
 jsonschema = { version = "0.51.0", default-features = false }
 
 [[bin]]

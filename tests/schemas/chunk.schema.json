@@ -319,7 +319,7 @@
           }
         },
         {
-          "description": "IEEE-754 64-bit float with raw hex representation (preserves NaN payloads and signed zero).",
+          "description": "Decoded Lua float with exact source bits preserved independently of its host value.",
           "type": "object",
           "required": [
             "type",
@@ -350,13 +350,25 @@
                   "type": "boolean"
                 },
                 "raw_hex": {
-                  "description": "Exact 8-byte hex representation.",
+                  "description": "Exact encoded float bytes (4 or 8), in the declared layout's byte order.",
                   "type": "string"
                 },
                 "val": {
-                  "description": "Parsed float value.",
-                  "type": "number",
-                  "format": "double"
+                  "description": "Decoded value: finite JSON number or canonical nan/inf/-inf class string. NaN payload and sign are available in raw_hex, not the decoded JSON class.",
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "nan",
+                        "inf",
+                        "-inf"
+                      ]
+                    }
+                  ]
                 }
               }
             }
@@ -561,7 +573,7 @@
           "minimum": 0.0
         },
         "lua_number_size": {
-          "description": "Size of lua_Number in bytes (8).",
+          "description": "Declared size of lua_Number in bytes (4 or 8 for currently read layouts).",
           "type": "integer",
           "format": "uint8",
           "minimum": 0.0
@@ -577,8 +589,20 @@
         },
         "luac_num": {
           "description": "LUAC_NUM test float (e.g. 370.5).",
-          "type": "number",
-          "format": "double"
+          "anyOf": [
+            {
+              "type": "number",
+              "format": "double"
+            },
+            {
+              "type": "string",
+              "enum": [
+                "nan",
+                "inf",
+                "-inf"
+              ]
+            }
+          ]
         },
         "signature": {
           "description": "Format signature (`\\x1bLua`).",

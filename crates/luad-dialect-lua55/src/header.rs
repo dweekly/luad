@@ -217,7 +217,7 @@ pub fn parse_header_lua55(reader: &mut SafeReader) -> Result<Header, Diagnostic>
         return Err(diag);
     }
     let luac_num = reader.read_f64_le()?;
-    if (luac_num - (-370.5)).abs() > f64::EPSILON {
+    if luac_num != -370.5 {
         let diag = Diagnostic::error(
             "L55-HEADER-012",
             DiagnosticCategory::Structure,

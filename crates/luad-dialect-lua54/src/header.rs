@@ -175,7 +175,7 @@ pub fn parse_header_lua54(reader: &mut SafeReader) -> Result<Header, Diagnostic>
 
     // 9. LUAC_NUM test float (8 bytes, expected 370.5)
     let luac_num = reader.read_f64_le()?;
-    if (luac_num - LUAC_NUM_54).abs() > f64::EPSILON {
+    if luac_num != LUAC_NUM_54 {
         let diag = Diagnostic::error(
             "L54-HEADER-009",
             DiagnosticCategory::Structure,

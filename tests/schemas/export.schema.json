@@ -1007,7 +1007,7 @@
           }
         },
         {
-          "description": "IEEE-754 64-bit float with raw hex representation (preserves NaN payloads and signed zero).",
+          "description": "Decoded Lua float with exact source bits preserved independently of its host value.",
           "type": "object",
           "required": [
             "type",
@@ -1038,13 +1038,25 @@
                   "type": "boolean"
                 },
                 "raw_hex": {
-                  "description": "Exact 8-byte hex representation.",
+                  "description": "Exact encoded float bytes (4 or 8), in the declared layout's byte order.",
                   "type": "string"
                 },
                 "val": {
-                  "description": "Parsed float value.",
-                  "type": "number",
-                  "format": "double"
+                  "description": "Decoded value: finite JSON number or canonical nan/inf/-inf class string. NaN payload and sign are available in raw_hex, not the decoded JSON class.",
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "nan",
+                        "inf",
+                        "-inf"
+                      ]
+                    }
+                  ]
                 }
               }
             }

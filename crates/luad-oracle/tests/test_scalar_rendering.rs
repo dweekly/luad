@@ -141,6 +141,7 @@ fn target_golden(target: ExactTarget) -> String {
 
 #[test]
 fn exact_targets_match_the_same_byte_for_byte_scalar_golden() {
+    assert_json_float_owners();
     let root = luad_oracle::find_workspace_root();
     let expected = fs::read_to_string(root.join("tests/goldens/scalars/exact-targets.golden"))
         .expect("read scalar golden");
@@ -671,4 +672,114 @@ fn origins_text_renders_four_byte_lua51_floats_through_the_authority() {
         !text.contains("float("),
         "the raw-bytes fallback must not appear for a declared number width:\n{text}"
     );
+}
+
+fn assert_json_float_owners() {
+    use luad_core::{Header, SourceLocation, TypedOperand};
+    fn check<T>(owner: &T, pointer: &str, value: f64, extract: fn(&T) -> f64)
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned + schemars::JsonSchema,
+    {
+        let json = serde_json::to_value(owner).unwrap();
+        let schema = schemars::schema_for!(T);
+        let schema = serde_json::to_value(schema).unwrap();
+        let validator = jsonschema::validator_for(&schema).unwrap();
+        assert!(
+            validator.is_valid(&json),
+            "scalar owner schema rejects {json}"
+        );
+        let field = json.pointer(pointer).unwrap();
+        if value.is_nan() {
+            assert_eq!(field, "nan");
+        } else if value == f64::INFINITY {
+            assert_eq!(field, "inf");
+        } else if value == f64::NEG_INFINITY {
+            assert_eq!(field, "-inf");
+        } else {
+            assert!(field.is_number());
+        }
+        let decoded: T = serde_json::from_value(json.clone()).unwrap();
+        let actual = extract(&decoded);
+        if value.is_nan() {
+            assert!(actual.is_nan());
+        } else {
+            assert_eq!(actual.to_bits(), value.to_bits());
+        }
+        for invalid in [
+            serde_json::Value::Null,
+            serde_json::json!(false),
+            serde_json::json!({}),
+            serde_json::json!("NaN"),
+            serde_json::json!("Infinity"),
+            serde_json::json!("+inf"),
+            serde_json::json!("-nan"),
+            serde_json::json!("1.25"),
+            serde_json::json!("nan:0x7ff8000000000042"),
+        ] {
+            let mut corrupt = json.clone();
+            *corrupt.pointer_mut(pointer).unwrap() = invalid;
+            assert!(
+                !validator.is_valid(&corrupt),
+                "unknown scalar must fail schema: {corrupt}"
+            );
+            assert!(serde_json::from_value::<T>(corrupt).is_err());
+        }
+    }
+    fn constant(value: &ConstantValue) -> f64 {
+        let ConstantValue::Float { val, .. } = value else {
+            panic!("float")
+        };
+        *val
+    }
+    fn operand(value: &TypedOperand) -> f64 {
+        match value {
+            TypedOperand::ImmediateFloat { value } => *value,
+            TypedOperand::Constant { value, .. } => constant(value),
+            _ => panic!("float operand"),
+        }
+    }
+    for bits in [
+        0,
+        (-0.0f64).to_bits(),
+        f64::MAX.to_bits(),
+        1,
+        f64::INFINITY.to_bits(),
+        f64::NEG_INFINITY.to_bits(),
+        0x7ff8_0000_0000_0042,
+        0xfff0_0000_0000_0043,
+    ] {
+        let value = f64::from_bits(bits);
+        let fact = float_value(bits);
+        check(&fact, "/value/val", value, constant);
+        check(
+            &TypedOperand::Constant {
+                index: 0,
+                value: fact,
+            },
+            "/value/value/val",
+            value,
+            operand,
+        );
+        check(
+            &TypedOperand::ImmediateFloat { value },
+            "/value",
+            value,
+            operand,
+        );
+        // Direct model/serde control; it does not claim a nonfinite sentinel is a valid header.
+        let header = Header {
+            signature: "test-model".into(),
+            version: 0x54,
+            format: 0,
+            luac_data: String::new(),
+            instruction_size: 4,
+            lua_integer_size: 8,
+            sizeof_sizet: 8,
+            lua_number_size: 8,
+            luac_int: 0x5678,
+            luac_num: value,
+            source: SourceLocation::new(0, &[]),
+        };
+        check(&header, "/luac_num", value, |h| h.luac_num);
+    }
 }

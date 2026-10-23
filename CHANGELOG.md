@@ -5,6 +5,18 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Encode nonfinite machine floats as canonical `nan`, `inf`, `-inf` strings, retaining
+  finite JSON numbers, raw source bits and Rust f64 field types. The current schema
+  number/string union replaces schema-invalid null values; envelope/JSONL versions
+  stay unchanged in the experimental interface. Decoded NaNs carry a class, while
+  payload/sign remain in raw evidence. Exact JSON float parsing fixes a reproduced
+  one-bit finite round-trip loss. Required source-generated controls cover all five
+  PUC dialects, four/eight-byte source floats, tagged model owners and malformed tokens.
+- Reject nonmatching Lua 5.3-5.5 LUAC_NUM header sentinels exactly, including NaNs that
+  an epsilon comparison accepted. Official loader/listing controls reject the same
+  header mutations; valid header twins pass. No crafted bytecode is executed and no
+  target/support tier is promoted.
+
 - Include emitted `parameter_field` records in the typed export schema. Actual default,
   selected-origin, mixed-failure and capped CLI streams exercise all sixteen record
   variants; corrupted tags, field access/parameter types and missing context are rejected.

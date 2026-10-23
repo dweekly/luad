@@ -44,7 +44,11 @@ pub enum TypedOperand {
     /// Immediate integer literal (signed 64-bit).
     ImmediateInt { value: i64 },
     /// Immediate float literal.
-    ImmediateFloat { value: f64 },
+    ImmediateFloat {
+        #[serde(with = "crate::scalar::json_float")]
+        #[schemars(schema_with = "crate::scalar::json_float::schema")]
+        value: f64,
+    },
     /// Resolved relative branch or jump destination.
     Jump {
         offset: i32,
