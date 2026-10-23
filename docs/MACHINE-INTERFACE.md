@@ -532,6 +532,13 @@ With no `CODE`, the command emits the complete catalog in ascending bytewise ord
 
 JSON format returns a top-level `DiagnosticCatalogResponse` (`schema_version`, `tool_version`, `diagnostic_count`, `diagnostics`), described by `luad schema diagnostics`. Text format renders each descriptor across exactly three lines (`<CODE> [<severity>/<category>]`, `  Semantics: <semantics>`, `  Next action: <suggested_action>`).
 
+General Lua 5.1 callee/origin/capture value flow remains experimental for crafted
+bytecode that reads C-call temporary stack registers after the call. A pre-call label
+or literal can survive incorrectly there. The module-initialization indexer explicitly
+invalidates its own call tail; this does not qualify the broader value-flow authority.
+The [next call-frame outcome](../ROADMAP.md#a-correct-false-answers-before-expanding-analysis)
+must close that family before broader hostile-caller claims.
+
 ### `export`
 
 Batch exports firmware artifacts in streaming JSONL format.
