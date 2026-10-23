@@ -781,7 +781,7 @@ fn float_from_raw_hex(raw_hex: &str) -> Option<f64> {
 }
 
 /// Render one preserved origin literal in the text form the origin expressions use.
-fn format_origin_literal(value: &luad_analysis::OriginLiteral) -> String {
+pub(crate) fn format_origin_literal(value: &luad_analysis::OriginLiteral) -> String {
     use luad_analysis::OriginLiteral;
     match value {
         OriginLiteral::Nil => "nil".to_string(),

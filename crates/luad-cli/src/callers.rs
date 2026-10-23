@@ -718,21 +718,17 @@ fn render_text(answer: &CallersAnswer, writer: &mut impl io::Write) -> io::Resul
 
 /// A compact human summary of an argument window; machine formats keep the full tree.
 fn describe_arguments(window: &luad_analysis::CallArgumentWindow) -> String {
-    let value = serde_json::to_value(window).unwrap_or_default();
-    let mut parts: Vec<String> = value["arguments"]
-        .as_array()
-        .map(|arguments| {
-            arguments
-                .iter()
-                .map(|argument| describe_origin(&argument["origin"]))
-                .collect()
-        })
-        .unwrap_or_default();
-    if value["kind"] == "open" {
-        parts.push(format!(
-            "open: {}",
-            value["reason"].as_str().unwrap_or("unknown")
-        ));
+    use luad_analysis::CallArgumentWindow;
+    let (arguments, open) = match window {
+        CallArgumentWindow::Fixed { arguments } => (arguments, None),
+        CallArgumentWindow::Open { reason, arguments } => (arguments, Some(serde_plain(reason))),
+    };
+    let mut parts: Vec<String> = arguments
+        .iter()
+        .map(|argument| describe_origin(&argument.origin))
+        .collect();
+    if let Some(reason) = open {
+        parts.push(format!("open: {reason}"));
     }
     if parts.is_empty() {
         "no arguments".to_string()
@@ -741,20 +737,17 @@ fn describe_arguments(window: &luad_analysis::CallArgumentWindow) -> String {
     }
 }
 
-fn describe_origin(origin: &serde_json::Value) -> String {
-    match origin["kind"].as_str().unwrap_or("unknown") {
-        "literal" => {
-            let literal = &origin["value"];
-            match (&literal["value"]["display"], &literal["value"]) {
-                (serde_json::Value::String(text), _) => format!("{text:?}"),
-                (_, serde_json::Value::Number(n)) => n.to_string(),
-                (_, serde_json::Value::Bool(b)) => b.to_string(),
-                _ => literal["type"].as_str().unwrap_or("literal").to_string(),
-            }
-        }
-        "parameter" => format!("param#{}", origin["index"]),
-        "unknown" => format!("unknown: {}", origin["reason"].as_str().unwrap_or("?")),
-        kind => kind.to_string(),
+fn describe_origin(origin: &luad_analysis::OriginExpression) -> String {
+    use luad_analysis::OriginExpressionKind as Kind;
+    match &origin.kind {
+        // Scalars go through the shared text renderer, which uses the scalar authority.
+        Kind::Literal { value, .. } => crate::render::text::format_origin_literal(value),
+        Kind::Parameter { index, .. } => format!("param#{index}"),
+        Kind::Unknown { reason } => format!("unknown: {}", serde_plain(reason)),
+        other => serde_json::to_value(other)
+            .ok()
+            .and_then(|v| v["kind"].as_str().map(str::to_string))
+            .unwrap_or_else(|| "expression".to_string()),
     }
 }
 

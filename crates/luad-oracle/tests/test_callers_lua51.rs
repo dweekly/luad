@@ -981,14 +981,15 @@ fn test_callers_text_view_summarizes_each_callers_arguments() {
 }
 
 #[test]
-fn test_callers_text_view_prints_integer_literal_values() {
-    let c = compile(
-        &[("ints", "local function f(n) return n end\nf(42)\n")],
-        false,
-    );
-    let output = run(&["callers", c.path("ints"), "--proto", "0/0"]);
+fn test_callers_text_view_prints_literal_values_through_the_scalar_authority() {
+    let source = "local function f(n) return n end\nf(42)\nf(1.5)\nf(true)\n";
+    let c = compile(&[("literals", source)], false);
+    let output = run(&["callers", c.path("literals"), "--proto", "0/0"]);
     let text = String::from_utf8(output.stdout).unwrap();
-    assert!(text.contains("(42)"), "{text}");
+    // Stock Lua 5.1 numbers are binary64, rendered visibly as floats.
+    for expected in ["(42.0)", "(1.5)", "(true)"] {
+        assert!(text.contains(expected), "{expected} missing: {text}");
+    }
 }
 
 #[test]
