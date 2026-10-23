@@ -555,6 +555,7 @@ fn test_jsonl_context_killer_mutations_are_rejected() {
 
 #[test]
 fn test_jsonl_streaming_batch_export_deterministic_and_recursive() {
+    assert_export_record_family_conforms_and_rejects_corruption();
     let luad = get_luad_bin();
     let root = luad_oracle::find_workspace_root();
     let f1 = root.join("tests/fixtures/precompiled/lua51/closures.luac");
@@ -809,8 +810,7 @@ fn test_negative_control_trailing_garbage_fails_json_parser() {
     );
 }
 
-#[test]
-fn test_export_record_family_conforms_and_rejects_corruption() {
+fn assert_export_record_family_conforms_and_rejects_corruption() {
     use std::collections::BTreeSet;
     let root = luad_oracle::find_workspace_root();
     let luad = get_luad_bin();

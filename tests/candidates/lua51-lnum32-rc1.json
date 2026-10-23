@@ -49,7 +49,7 @@
     {
       "gate_id": "gate-machine-contract",
       "spec_path": "tests/gates/gate-machine-contract.json",
-      "file_sha256": "d9e34e3efe8ea827c2b1128e93ab4169ce14af0101a2c382ea2e25a69ddd90ba"
+      "file_sha256": "07879b1833a07ec714ba353dd6780ebdf34f4ed6f02c3c32f5ac52e1a0413e05"
     },
     {
       "gate_id": "gate-public-disasm-lua51",
