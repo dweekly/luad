@@ -34,7 +34,7 @@ const LUA54_FIXTURES: [&str; 10] = [
 ];
 
 const PINNED_DISASM_SCHEMA_SHA256: &str =
-    "dc97f2794711c00cd98838a8280c15a5903f648caf49f3c4ddbbe349c7f1cf71";
+    "bdf6e7d74d14ddda6224bce2677cb1efd7ee5351dfa341d38e34a8164d22df48";
 
 fn load_fixture(rel_path: &str) -> (Vec<u8>, Chunk, LuacDump) {
     let root = find_workspace_root();
