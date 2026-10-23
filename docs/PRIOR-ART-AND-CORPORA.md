@@ -429,6 +429,59 @@ Reproduction: the inputs, outputs, `SHA256SUMS`, and each tool's build log are s
 artifacts under the spike directory; every tool was built from the named revision or
 installed from the named package on 2026-09-02.
 
+## 5b. Task comparison on LuCI `luci.sys`, 2026-10-23
+
+This comparison asks one investigator's question per task and scores each tool's answer
+against the Lua source, not against luad. The task: given only a distinctive constant in
+a function's body (what an analyst searching a stripped image has), find the function
+and list every call site with its first argument (a literal, or "an expression").
+
+- **Targets.** `init_action`, found by its command format string `"env -i %s%s %s
+  >/dev/null"`, has seven callers passing literal actions. `xclose`, found by its
+  `"fileno"` method name, has seven callers passing variables.
+- **Input.** `tests/corpus/luci-23.05/.../luasrc/sys.lua` (openwrt/luci 3d39e8c), compiled
+  without execution. Stock builds use official Lua 5.1.5 on a 64-bit host; LNUM32 builds
+  use the OpenWrt compiler from `scripts/build_lua51_openwrt_lnum32.sh` (32-bit
+  `size_t`, LNUM integers, as on OpenWrt devices). Each layout has debug and stripped
+  builds.
+- **Glue.** Each tool gets the smallest scripted glue that answers from its own output,
+  written to search the way an analyst would (constant tables for `luac`, the handle as
+  a string or member name for decompiled text). Glue size is counted from the code. The
+  harness is `scripts/compare/luci_caller_tasks.py`.
+
+| Tool | Stock debug | Stock stripped | LNUM32 debug | LNUM32 stripped | Glue lines |
+|---|---|---|---|---|---|
+| luad (`callers`, main `0483b56`) | **Both correct** | **Both correct** | **Both correct** | **Both correct** | 23 |
+| unluac-rs 1.4.4 (`3186d2e`), decompile then search | **Both correct** | **Both correct** | Refuses: `invalid constant tag 9` | Same | 26 |
+| Official `luac` 5.1.5 `-l -l`, stock 64-bit | **Both correct** | **Both correct** | Refuses: `bad header in precompiled chunk` | Same | 76 |
+| OpenWrt LNUM32 `luac -l -l` (same glue) | Refuses: bad header | Same | **Both correct** | **Both correct** | 76 |
+| rizin 0.9.1 and 0.10.0-dev (`3c8ff12`) | Refuses: `invalid upvalue`, `Invalid luac proto` | Refuses: `Truncated Code at [0x1f]` | Refuses: `Truncated Code at [0x1d]` | Loads; finds the string with 0 xrefs; no tested method maps it to call sites | 17 |
+
+"Both correct" means both tasks matched the source: seven call sites each, with the
+seven literal actions for `init_action` and seven expressions for `xclose`. Elapsed
+times were under 0.4 s for every tool that answered.
+
+What this does and does not show:
+
+- **On stock 5.1, luad has no capability advantage for this question.** A decompiler with
+  a small search, or the official lister with a larger but mechanical script, gets the
+  same answer from both debug and stripped builds.
+- **Each layout's own lister also answers, but only for that layout.** Answering both
+  layouts that way needs two matching toolchains, one of them a patched OpenWrt build.
+  luad answers all four builds from one binary, and its answer is structured: call ids,
+  argument origins, per-file coverage, and an explicit `degraded` flag.
+- **Rizin's refusals are recorded exactly as observed** on these inputs and revisions.
+  The stripped LNUM32 build loads, and only the attempted caller mapping is unresolved;
+  that is untested, not a demonstrated failure. Nothing here generalizes to other
+  inputs, other Rizin revisions, or other tasks.
+- **Scope.** These are two tasks on one module. They say nothing about decompilation
+  quality, runtime behavior, or cross-file questions, where luad's strict link index is
+  currently conservative (see `luad callers` and ROADMAP C). Outside users have not
+  repeated them.
+
+Reproduce with the harness above. Its JSON output records every answer, the truth and
+the glue sizes.
+
 ## 6. Gaps this survey exposes in `luad`
 
 Stated as present constraints on the tool, each traceable to a source above.
