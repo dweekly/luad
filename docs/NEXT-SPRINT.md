@@ -20,7 +20,8 @@ Callee and origin transfers must invalidate the temporary tail at CALL A (all re
 families: C=0, C=1, C>1), then establish explicit fixed result origins and the existing
 exact literal-require label where proven. A later definition restores its own fact;
 live registers below A survive. The Lua 5.1 generic iterator call uses the same rule
-from A+3, preserving iterator/state/control inputs below that call base. Captures of
+from A+3; the conditional control update also invalidates A+2. Iterator/state
+inputs A and A+1 survive. Captures of
 stack cells overlapping a reachable call tail must not retain their pre-call value,
 including calls after closure creation and terminal tailcalls. Closure descriptors and
 SETLIST data words remain non-executable; encoded IR writes/raw facts remain unchanged.
