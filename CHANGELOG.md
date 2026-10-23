@@ -9,6 +9,7 @@ is promoted to a supported tier and no interface carries a compatibility promise
   analysis. All CALL result families invalidate the temporary tail before preserving
   explicit results; the combined generic iterator also invalidates its conditional
   control update. Reachable tailcalls cannot preserve overlapping captured cells.
+  Reconstructed tables obey the same boundary in definition scans and retained aliases.
   Ordinary live locals, fresh definitions and exact require results remain useful;
   companion/unreachable words do not manufacture capture writes. A clobbered symbolic
   caller no longer supplies a cross-chunk target. Raw/encoded IR facts, machine shapes

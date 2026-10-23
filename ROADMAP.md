@@ -68,40 +68,29 @@ become reviewable.
 
 | Order | Outcome | Owner | Dependency and exit condition |
 |---|---|---|---|
-| A | Trustworthy Lua 5.1 call-frame value lifetimes | `luad` | Structurally valid call-tail controls must lose stale values while ordinary compiler-produced callers retain their answers. |
+| A | A self-consistent public export schema | `luad` | Every emitted record variant must validate against the advertised schema, with corruption controls and no payload loosening. |
 | B | A reliable firmware measurement loop | Firmware consumer, with public reproductions in `luad` | May be prepared independently of A; no before/after product ranking until coverage and consumer semantics are checked. |
-| C | Useful public investigation and caller-inspection workflows | `luad`, plus a small reference consumer | Depends on A for comparison/link claims and on B for firmware benefit claims; exact answers must be obtainable without a custom decoder. |
+| C | Useful public investigation and caller-inspection workflows | `luad`, plus a small reference consumer | Depends on A for schema-backed composition and on B for firmware benefit claims; exact answers must be obtainable without a custom decoder. |
 | D | Independent evidence of value against alternatives | Maintainer and outside users | Trial an installable C candidate before interface freeze; correct the blocking findings. |
 | E | A clearly scoped experimental announcement | Maintainer | A-D close for the advertised workflows; install, evidence, limits, and fresh-download checks pass. |
 | F | A narrow stable contract and exact target qualification | `luad` | Adopt the 1.0 program only after utility is established; promote no target by implication. |
 
 ### A. Correct false answers before expanding analysis
 
-**Call-frame lifetimes.** Make Lua 5.1 callee, argument-origin and capture analysis
-invalidate pre-call facts in the call's temporary register tail. A discarded C result
-must not leave a prior closure/path or literal classified as the current value. Preserve
-live locals below the call base, explicit returned results, exact literal-`require`
-labels where established, and values redefined after the call. Captured stack cells
-overlapping that tail need the same conservative treatment. State the ordinary ABI and
-reflection/opaque-call assumptions; do not turn an unknown call result into a value proof.
+**Make export facts conform to their advertised schema.** The CLI emits
+`parameter_field` records which `luad schema export` rejects. A strict reader therefore
+cannot consume an otherwise valid current stream. Cover the complete emitted record
+family, including selected origin facts, cross-chunk links, diagnostics and terminal
+records, through actual CLI output. Preserve record payloads and context requirements;
+add the missing typed schema variant instead of allowing arbitrary JSON. Require a
+negative control that corrupts the variant or its typed payload and is rejected.
+Regenerate the schema golden and use the existing machine-interface gate.
 
-Exercise all CALL result-window families, direct values and captured cells, redefinitions,
-and ordinary compiler-produced positive controls in one bounded batch. Public controls
-may patch required official compiled chunks using declared layout and parsed offsets;
-parse/analyze those bytes without executing them. Include the cross-chunk interaction:
-a caller that reads a clobbered symbolic path must not regain a unique module target.
-Keep physical words and companion roles separate from analysis invalidation semantics.
-
-Start in `crates/luad-analysis/src/callees.rs`, `origins.rs` and `capture_mutation.rs`,
-their ordinary tests, and the existing symbolic-callee, argument-origin, capture and
-cross-chunk gates that own those interactions. Reuse accepted prerequisites rather than
-rebuilding a VM or a comparison framework. This false-answer family precedes a broader
-hostile-caller workflow claim and new consumer improvement counts.
-
-**Exit:** the public counterexamples and positive controls, named gates, and one clean
-aggregate pass, with compiler identity and no required skips. Correctness fixes receive
-an experimental patch release when packaged. No supported-target or runtime-equivalence
-claim follows from this batch.
+**Exit:** real filtered/default streams validate, unknown/corrupted required variants
+fail, and the named gate plus one clean aggregate pass. A schema coverage correction
+does not promote target support, freeze an interface, or prove stream completion for a
+consumer. Fix any further reproduced false answers before feature expansion; keep
+unverified concerns out of the implementation contract.
 
 ### B. Make the firmware consumer a reliable product signal
 

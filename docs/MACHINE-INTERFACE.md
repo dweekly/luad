@@ -519,18 +519,7 @@ Prototype paths and enclosing fields are context, not replacements for that offs
 Lua 5.1 profile identity and header-field meaning are present in machine output but
 remain experimental until an exact target release is promoted.
 
-### `diagnostics`
-
-Discovers and queries the canonical catalog of all production-emittable diagnostic codes
-without requiring an input artifact.
-
-```console
-luad diagnostics [CODE] --format text|json
-```
-
-With no `CODE`, the command emits the complete catalog in ascending bytewise order. With an exact `CODE`, it returns exactly one matching descriptor. An unknown, partial, or case-mismatched code exits with code 2, empty stdout, and stderr `error: Unknown diagnostic code '<CODE>'`.
-
-JSON format returns a top-level `DiagnosticCatalogResponse` (`schema_version`, `tool_version`, `diagnostic_count`, `diagnostics`), described by `luad schema diagnostics`. Text format renders each descriptor across exactly three lines (`<CODE> [<severity>/<category>]`, `  Semantics: <semantics>`, `  Next action: <suggested_action>`).
+#### Call-frame lifetimes
 
 Lua 5.1 callee/origin value flow discards pre-call facts from CALL A to the frame
 end, independently of the encoded result-write window. Fixed returned origin slots
@@ -557,6 +546,19 @@ mutation and every implicit metamethod/VM temporary effect are outside qualifica
 A clobbered call target has an unresolved callee fact. Cross-chunk links enumerate
 eligible labels, so that call can have no link record; join the callee uncertainty.
 Omitted links do not prove absent functions or unreachable code.
+
+### `diagnostics`
+
+Discovers and queries the canonical catalog of all production-emittable diagnostic codes
+without requiring an input artifact.
+
+```console
+luad diagnostics [CODE] --format text|json
+```
+
+With no `CODE`, the command emits the complete catalog in ascending bytewise order. With an exact `CODE`, it returns exactly one matching descriptor. An unknown, partial, or case-mismatched code exits with code 2, empty stdout, and stderr `error: Unknown diagnostic code '<CODE>'`.
+
+JSON format returns a top-level `DiagnosticCatalogResponse` (`schema_version`, `tool_version`, `diagnostic_count`, `diagnostics`), described by `luad schema diagnostics`. Text format renders each descriptor across exactly three lines (`<CODE> [<severity>/<category>]`, `  Semantics: <semantics>`, `  Next action: <suggested_action>`).
 
 ### `export`
 
