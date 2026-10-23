@@ -956,6 +956,31 @@ fn test_callers_real_path_limit_exits_five_and_degrades() {
 }
 
 #[test]
+fn test_callers_text_view_summarizes_each_callers_arguments() {
+    let c = svc_corpus(false);
+    let output = run(&[
+        "callers",
+        c.path("mod_svc"),
+        "--proto",
+        "0/0",
+        c.path("caller_svc_a"),
+        c.path("caller_svc_b"),
+        "--link-convention",
+        CONVENTION,
+    ]);
+    assert_eq!(output.status.code(), Some(0));
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("(field)"), "{text}");
+    assert!(text.contains("(\"eth0\")"), "{text}");
+    assert!(text.contains("(concat)"), "{text}");
+    assert!(text.contains("(param#0)"), "{text}");
+    assert!(
+        text.contains("not proof") || text.contains("4 caller(s)"),
+        "{text}"
+    );
+}
+
+#[test]
 fn test_callers_debug_and_stripped_twins_agree() {
     let debug = svc_corpus(false);
     let stripped = svc_corpus(true);

@@ -22,7 +22,7 @@ non-standard ones that turn up inside extracted router and embedded firmware.
 It does not decompile. When you want source back, `luad` tells you exactly which profile
 the chunk uses so you can hand it to a decompiler that reads that profile.
 
-## Status: 0.3.1, experimental
+## Status: 0.4.0, experimental
 
 This is an early release of a tool built for fun. It works, and it gives real answers on
 real firmware, but no dialect is promoted to a supported tier and nothing here is
@@ -235,9 +235,10 @@ instruction effects and explanation refuse these profiles. Default export includ
 failure; explicit unavailable families also fail before emitting any facts. Use the
 selected structural path when inventorying a mixed-version corpus. Derived analysis
 commands retain their explicit refusal boundary.
-Layout, operand, analysis-eligibility, and malformed-input regressions cover the fixes
-in 0.3.1; they do not establish complete semantic correctness or support for every
-vendor layout. See [the changelog](CHANGELOG.md#031--2026-09-18) for release details.
+Layout, operand, analysis-eligibility, caller-attribution and malformed-input
+regressions cover the fixes in 0.4.0; they do not establish complete semantic correctness
+or support for every vendor layout. See [the changelog](CHANGELOG.md#040--2026-10-23) for
+release details.
 
 `luad` also does not do firmware extraction, decompilation, source reconstruction,
 exploitability judgment, or persistent research state. Those belong in other tools, and
@@ -259,7 +260,7 @@ luad schema chunk
 
 Consumers should read [docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md) for exit
 codes, stable-ID scope, truncation behavior, and the stdout/stderr contract. Schemas are
-versioned, but at 0.3.1 nothing carries a compatibility promise yet.
+versioned, but at 0.4.0 nothing carries a compatibility promise yet.
 
 [docs/examples/RECIPES.md](docs/examples/RECIPES.md) has practical composition recipes.
 

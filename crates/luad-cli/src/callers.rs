@@ -662,10 +662,11 @@ fn render_text(answer: &CallersAnswer, writer: &mut impl io::Write) -> io::Resul
             .collect();
         writeln!(
             writer,
-            "  {} {} [{}]",
+            "  {} {} [{}] ({})",
             caller.caller.path,
             caller.call_id,
-            sources.join(", ")
+            sources.join(", "),
+            describe_arguments(&caller.argument_window)
         )?;
     }
     if !summary.dynamic_providers.is_empty() {
@@ -713,6 +714,46 @@ fn render_text(answer: &CallersAnswer, writer: &mut impl io::Write) -> io::Resul
             "attribution not degraded"
         }
     )
+}
+
+/// A compact human summary of an argument window; machine formats keep the full tree.
+fn describe_arguments(window: &luad_analysis::CallArgumentWindow) -> String {
+    let value = serde_json::to_value(window).unwrap_or_default();
+    let mut parts: Vec<String> = value["arguments"]
+        .as_array()
+        .map(|arguments| {
+            arguments
+                .iter()
+                .map(|argument| describe_origin(&argument["origin"]))
+                .collect()
+        })
+        .unwrap_or_default();
+    if value["kind"] == "open" {
+        parts.push(format!(
+            "open: {}",
+            value["reason"].as_str().unwrap_or("unknown")
+        ));
+    }
+    if parts.is_empty() {
+        "no arguments".to_string()
+    } else {
+        parts.join(", ")
+    }
+}
+
+fn describe_origin(origin: &serde_json::Value) -> String {
+    match origin["kind"].as_str().unwrap_or("unknown") {
+        "literal" => {
+            let literal = &origin["value"];
+            match literal["value"]["display"].as_str() {
+                Some(text) => format!("{text:?}"),
+                None => literal["type"].as_str().unwrap_or("literal").to_string(),
+            }
+        }
+        "parameter" => format!("param#{}", origin["index"]),
+        "unknown" => format!("unknown: {}", origin["reason"].as_str().unwrap_or("?")),
+        kind => kind.to_string(),
+    }
 }
 
 fn serde_plain<T: Serialize>(value: &T) -> String {

@@ -5,6 +5,12 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+## 0.4.0 — 2026-10-23
+
+- Show a compact summary of each caller's arguments in the `luad callers` text view
+  (literals quoted, parameters as `param#N`, other expressions by kind, open windows
+  marked). JSON and JSONL keep the full origin trees.
+
 - Add an unmodified LuCI 22.03 `util.lua` beside the 23.05 subset, and tests making the
   release comparison executable. The prototypes without a content-digest match are
   pinned and checked against the textual source diff in debug and stripped builds, a
