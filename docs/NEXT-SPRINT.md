@@ -40,7 +40,8 @@ existing diagnostics and preserve their raw input evidence.
 
 Production paths: Cargo.toml (serde_json feature), core scalar.rs/model.rs/ir.rs, and
 Lua 5.3/5.4/5.5 header.rs. Ordinary tests: core scalar tests,
-test_scalar_rendering.rs, test_machine_interface.rs and an optional shared helper in
+test_scalar_rendering.rs, test_machine_interface.rs, the independent constant-key wire
+expectations in test_constant_key_labels_lua51.rs, and an optional shared helper in
 crates/luad-oracle/tests/common/. Regenerate affected tests/schemas goldens; use the existing workspace schemars crate as an oracle-only
 dev dependency for direct model-schema assertions; update
 indexed README, architecture, machine reference, CHANGELOG/ROADMAP/checkpoint.

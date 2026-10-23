@@ -190,20 +190,25 @@ impl KeyConst {
             Self::Boolean(value) => json!({ "type": "boolean", "value": value }),
             Self::Number(bytes) => {
                 let value = f64::from_le_bytes(*bytes);
-                // Non-finite doubles have no JSON number form and serialize as `null`;
-                // `raw_hex` is what preserves the exact payload and the sign bit.
-                let rendered = if value.is_finite() {
-                    Value::from(value)
+                // Decode the nonfinite class independently from source bits; raw_hex
+                // retains the payload/sign while the machine value names its class.
+                let bits = u64::from_le_bytes(*bytes);
+                let is_nan = self.is_nan();
+                let is_inf = bits & 0x7fff_ffff_ffff_ffff == 0x7ff0_0000_0000_0000;
+                let rendered = if is_nan {
+                    json!("nan")
+                } else if is_inf {
+                    json!(if bits >> 63 == 0 { "inf" } else { "-inf" })
                 } else {
-                    Value::Null
+                    Value::from(value)
                 };
                 json!({
                     "type": "float",
                     "value": {
                         "val": rendered,
                         "raw_hex": hex_lower(bytes),
-                        "is_nan": value.is_nan(),
-                        "is_inf": value.is_infinite(),
+                        "is_nan": is_nan,
+                        "is_inf": is_inf,
                     }
                 })
             }
