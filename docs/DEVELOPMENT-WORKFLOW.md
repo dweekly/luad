@@ -292,7 +292,8 @@ scripts/agents/agy-gemini.sh resume CONVERSATION_ID CORRECTION_PROMPT_FILE
 ```
 
 The wrapper selects `gemini-3.7-flash-high`, the High model variant, the current Git
-worktree, sandboxing, edit-only execution, and structured output. `access` reports the
+worktree, sandboxing, edit-only execution, and structured output. High reasoning comes
+from that model variant; do not also pass `--effort`, which the variant refuses. `access` reports the
 effective workspace and permissions without starting a model task. Broad home-directory
 grants and `--dangerously-skip-permissions` are prohibited.
 

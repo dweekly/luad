@@ -119,6 +119,13 @@ Output writes to stdout are checked across all CLI output formats (incremental t
 
 Callers consuming streaming JSONL output (e.g. `luad export --format jsonl`) must note that an early-closed or abandoned stream will lack its terminal completion records (`file_end` and/or `export_end`), even though the process terminated cleanly with exit code 0. Consumers that require complete batch verification must assert the presence of terminal records in the stream.
 
+A [small export reference consumer](../examples/export_reader/README.md) demonstrates
+bounded capture and schema/context/completion checks with a recorded input inventory
+and executable hash. Its successful verification means a consistent complete stream,
+not successful processing of every file or complete VM analysis. Inspect its separate
+file-status, truncation and producer-exit fields. Hashes are not attestations; keep the
+corpus immutable during capture.
+
 ## Exit codes
 
 | Code | Meaning |

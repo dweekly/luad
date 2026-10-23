@@ -549,6 +549,23 @@ jobs:
     - name: Run Contributor Checks
       run: ./scripts/check.sh
 
+    - name: Set up Python for Export Reference Consumer
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Verify Export Reference Consumer
+      shell: bash
+      run: |
+        set -euo pipefail
+        reader_venv="${RUNNER_TEMP}/luad-export-reader-venv"
+        python -m venv "${reader_venv}"
+        "${reader_venv}/bin/python" -m pip install --require-hashes -r examples/export_reader/requirements.txt
+        source scripts/pins.env
+        CARGO_BIN_EXE_luad="${PWD}/target/debug/luad" \
+        LUAD_LUAC51="${LUAD_COMPILER_DIR_DEFAULT}/luac5.1" \
+          "${reader_venv}/bin/python" -m unittest discover -s examples/export_reader/tests -v
+
     - name: Run OpenWrt Lua 5.1 LNUM32 Authority Gate
       if: runner.os == 'Linux'
       run: ./scripts/gates/gate-authority-lua51-openwrt-lnum32.sh /tmp/gate-authority-lua51-openwrt-lnum32

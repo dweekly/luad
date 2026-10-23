@@ -37,6 +37,16 @@ update package metadata, CI evidence, release documentation, and the changelog t
 
 `scripts/check.sh` runs the aggregate repository checks. It is necessary before handoff, but it is not proof that oracle-backed claims are correct; each work package must also pass its canonical gate.
 
+### Export reference consumer
+
+The optional Python reference consumer has separate focused checks in both Linux and
+macOS contributor CI. Install its hash-pinned dependencies in an isolated Python 3.11+
+environment and run the exact command in [its README](examples/export_reader/README.md).
+Changes to that consumer require those checks as well as `scripts/check.sh`; the Rust
+aggregate does not silently substitute for its stream/composition tests. Required
+compiler and fixture absence fails rather than skipping. Python dependencies are not
+required to build or use the Rust CLI.
+
 ### Line coverage
 
 The separate [Coverage workflow](.github/workflows/coverage.yml) runs on hosted Linux

@@ -4,6 +4,16 @@ This document contains practical command-line recipes for downstream tools, secu
 
 ---
 
+## 0. Verify a corpus before joining its facts
+
+Use the [export reference consumer](../../examples/export_reader/README.md) to capture
+an explicit input set, pin producer/schema/input hashes, and require file/export
+completion before returning facts. The filters below are views, not completion checks.
+A zero producer exit code alone cannot detect a dropped file or an interrupted pipe.
+Keep artifact identity and full interpretation beside every local fact ID.
+
+---
+
 ## 1. Extracting SHA-256 Provenance and Input Metadata
 
 To extract the cryptographic identity envelope from any JSON command:
@@ -291,27 +301,14 @@ luad xrefs closures.luac --from 'proto:0:pc:18' --format json | jq -c \
 
 ---
 
-## 9. Indexing Batch Exports in an External Database (e.g. SQLite)
+## 9. Passing verified facts to a database
 
-Stream fact records directly into an SQLite database for SQL-based graph queries:
-
-```bash
-# Initialize tables
-sqlite3 luad_index.db "
-  CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, sha256 TEXT, byte_length INT);
-  CREATE TABLE IF NOT EXISTS instructions (proto TEXT, pc INT, mnemonic TEXT, role TEXT, raw_hex TEXT);
-  CREATE TABLE IF NOT EXISTS xrefs (source TEXT, target TEXT, relation TEXT);
-"
-
-# Ingest JSONL stream
-luad export firmware/*.luac --format jsonl | jq -r '
-  if .record_type == "instruction" then
-    "INSERT OR REPLACE INTO files VALUES (\x27" + .context.input_identity.path + "\x27, \x27" + .context.input_identity.sha256 + "\x27, " + (.context.input_identity.byte_length|tostring) + ");" +
-    " INSERT INTO instructions VALUES (\x27" + (.data.id | sub(":pc:[0-9]+$"; "")) + "\x27, " + (.data.pc|tostring) + ", \x27" + .data.mnemonic + "\x27, \x27" + .data.role + "\x27, \x27" + .data.raw_hex + "\x27);"
-  elif .record_type == "xref" then
-    "INSERT INTO xrefs VALUES (\x27" + (.data.source|tostring) + "\x27, \x27" + (.data.target|tostring) + "\x27, \x27" + .data.relation + "\x27);"
-  else empty end' | sqlite3 luad_index.db
-```
+Verify the bundle first with the reference consumer, then use a database driver's bound
+parameters to insert retained records. Include full artifact identity and interpretation
+in every local-ID key. Never build SQL by interpolating paths, decoded byte strings or
+IDs into statements: these are input-derived strings and may contain quotes or arbitrary
+bytes. Database schema, persistence and investigation policy belong to the consuming
+application; this reference example does not supply a database.
 
 ---
 

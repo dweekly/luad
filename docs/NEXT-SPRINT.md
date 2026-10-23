@@ -46,7 +46,8 @@ rewriting of an entire self-consistent bundle; executable identity is not attest
 
 Add examples/export_reader/ (reader, pinned Python requirements, focused tests and
 indexed README); integrate those tests in existing Linux/macOS contributor CI. Update
-README, CONTRIBUTING, machine reference, composition recipes, CHANGELOG and this
+README, CONTRIBUTING, machine reference, composition recipes, workflow provider notes,
+CHANGELOG and this
 checkpoint when their freshness triggers fire. A direct provider-wrapper preflight
 repair may remove the rejected redundant effort flag without changing the pinned High
 model; record the failure/repair, keep tools/workspace narrowly scoped. No Rust analysis,
