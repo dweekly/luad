@@ -42,7 +42,8 @@ Production: CLI main.rs shared disassembly, explain and export routing; CI only 
 supply the required Lua5.2 compiler to the new reader interaction control; core
 capabilities.rs; analysis lib.rs only to correct obsolete availability guidance. Tests:
 an ordinary test_export_availability.rs and/or shared oracle helper, existing canonical
-machine entrypoints, common/machine_floats.rs, and reference-consumer tests. Update
+machine entrypoints, common/machine_floats.rs, the raw-inspection boundary in
+test_analysis_eligibility.rs, and reference-consumer tests. Update
 README, machine/recipe/reference-reader docs, current capability example, CHANGELOG,
 ROADMAP/checkpoint and the site's target wording where required for honesty. No dialect
 parser/lifter, semantic algorithm, schema/envelope, archived gate/candidate or support
