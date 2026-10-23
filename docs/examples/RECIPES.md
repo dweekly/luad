@@ -279,6 +279,11 @@ luad callers firmware/luci/sys.luac --proto 0/3 firmware/**/*.luac \
   .data.summary, (.data.files[] | {path, status, counts})'
 ```
 
+To answer the same question later without re-running analyses, keep a verified export
+bundle and ask the reference consumer instead (`luad_export.py callers BUNDLE --target
+PATH --proto 0/3`). It gives the same callers, windows and class counts from the bundle's
+records alone.
+
 `degraded: true` means a limit or an uncertain index may have hidden callers. The
 `unattributed`, `unmapped_label` and `degraded` counts are sites that might still reach
 the target; the command lists none of them.

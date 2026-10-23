@@ -747,6 +747,272 @@ def verify_bundle(directory: Path, limits=DEFAULT_LIMITS, retain=frozenset()):
     return report, selected
 
 
+CALLER_FAMILIES = frozenset({"prototype", "callee", "origin", "call_relation"})
+LUA51_PROFILES = frozenset({"lua5.1", "lua5.1-lnum32", "lua5.1-stock32"})
+LIMIT_REASONS = frozenset({"path-limit", "analysis-limit"})
+LABEL_ONLY_RELATIONS = frozenset({"symbolic-path-only", "lookup-label-only"})
+CALLER_RECORDS = frozenset(
+    {"prototype", "callee", "origin", "call_relation", "cross_chunk_link", "diagnostic"}
+)
+
+
+def _proto_key(path):
+    return tuple(int(part) for part in path.split("/"))
+
+
+def _context_key(context):
+    return json_bytes(context)
+
+
+def _classify_site(
+    target, proto, identity, callee, relation, links, convention, cutoff
+):
+    """Place one call site in exactly one class, mirroring the core caller contract."""
+    bases, names_other = [], False
+    if relation and relation["status"] == "resolved":
+        if identity == target and relation["callee"] == proto:
+            bases.append(
+                {
+                    "source": "call_relation",
+                    "basis": relation["basis"],
+                    "evidence": relation["evidence"],
+                }
+            )
+        else:
+            names_other = True
+    if relation is None and callee["status"] == "resolved-prototype":
+        names_other = names_other or identity != target
+    for link in links:
+        if link["status"] != "resolved":
+            continue
+        if link.get("target_artifact") == target and link.get("target_proto") == proto:
+            bases.append(
+                {
+                    "source": "cross_chunk_link",
+                    "convention": convention or "",
+                    "label_segments": link["label_segments"],
+                    "evidence": link["evidence"],
+                }
+            )
+        else:
+            names_other = True
+    if bases:
+        return ("conflicting", None) if names_other else ("caller", bases)
+    if callee["status"] == "unresolved" and callee["reason"] in LIMIT_REASONS:
+        return "degraded", "callee:" + callee["reason"]
+    if (
+        relation
+        and relation["status"] == "unresolved"
+        and relation["reason"] in LIMIT_REASONS
+    ):
+        return "degraded", "call_relation:" + relation["reason"]
+    for link in links:
+        if link["status"] in {"dynamic", "limit_exceeded"}:
+            return "degraded", "link:" + link["status"]
+    if convention and not links and cutoff:
+        return "degraded", "link:cutoff"
+    if names_other:
+        return "attributed_elsewhere", None
+    label = callee["status"] in {"resolved-path", "lookup-label"}
+    label_only = relation is None or (
+        relation["status"] == "unresolved"
+        and relation["reason"] in LABEL_ONLY_RELATIONS
+    )
+    if convention and not links and label and label_only:
+        return "unmapped_label", None
+    if callee["status"] == "unresolved":
+        return "unattributed", "callee:" + callee["reason"]
+    if relation and relation["status"] == "unresolved":
+        return "unattributed", "call_relation:" + relation["reason"]
+    if links:
+        return "unattributed", "link:" + links[0]["status"]
+    return "unattributed", "cross_artifact:not-requested"
+
+
+def bundle_callers(directory: Path, target_path, proto, limits=DEFAULT_LIMITS):
+    """One-hop callers of one prototype, answered from a verified bundle's records only.
+
+    Every join uses the full record context plus the file-local call id. An empty list
+    means no observed caller in the bundle, never unreachable code.
+    """
+    report, records = verify_bundle(directory, limits, retain=CALLER_RECORDS)
+    manifest = load_json(
+        read_small(directory / "capture.json", 4 * 1024 * 1024), 4 * 1024 * 1024
+    )
+    require(
+        manifest["outputs"]["export.jsonl"]["sha256"] == report["stream_sha256"],
+        "manifest changed during caller analysis",
+    )
+    return callers_from_records(report, records, manifest["argv"], target_path, proto)
+
+
+def callers_from_records(report, records, argv, target_path, proto):
+    """Caller answer from an already verified report, its retained records and argv."""
+    families = report["fact_families"]
+    require(
+        families is None or CALLER_FAMILIES <= set(families),
+        "bundle lacks the prototype, callee, origin and call_relation families",
+    )
+    require(
+        report["all_available_facts_emitted"],
+        "a capped export cannot classify every call site",
+    )
+    convention = (
+        argv[argv.index("--link-convention") + 1]
+        if "--link-convention" in argv[:-1]
+        else None
+    )
+    proto = proto.removeprefix("proto:")
+    require(re.fullmatch(r"\d+(/\d+)*", proto) is not None, "invalid prototype path")
+
+    by_context = {}
+    for record in records:
+        by_context.setdefault(_context_key(record["context"]), []).append(record)
+    files = {f["completion"]["path"]: f for f in report["files"]}
+    target_file = files.get(target_path)
+    require(target_file is not None, "target is not in the bundle inventory")
+    interpretation = target_file["interpretation"]
+    require(
+        target_file["completion"]["status"] == "succeeded"
+        and interpretation is not None
+        and interpretation["profile"] in LUA51_PROFILES,
+        "target is not a successfully exported Lua 5.1 artifact",
+    )
+    target = target_file["input"]
+    target_context = {"input_identity": target, "interpretation": interpretation}
+    target_records = by_context.get(_context_key(target_context), [])
+    require(
+        any(
+            r["record_type"] == "prototype" and r["data"]["path"] == proto
+            for r in target_records
+        ),
+        "prototype not found in target",
+    )
+
+    callers, coverage = [], []
+    for path in sorted(files):
+        entry = files[path]
+        is_target = path == target_path
+        if convention is None and not is_target:
+            continue
+        status = "analyzed"
+        if entry["input"] is None:
+            status = "unreadable"
+        elif entry["interpretation"] is None:
+            status = "failed"
+        elif entry["interpretation"]["profile"] not in LUA51_PROFILES:
+            status = "unsupported_profile"
+        elif entry["completion"]["status"] != "succeeded":
+            status = "failed"
+        row = {"path": path, "status": status, "is_target": is_target}
+        if status != "analyzed":
+            coverage.append(row)
+            continue
+        context = {
+            "input_identity": entry["input"],
+            "interpretation": entry["interpretation"],
+        }
+        own = by_context.get(_context_key(context), [])
+        relations = (
+            {
+                r["data"]["call_id"]: r["data"]["resolution"]
+                for r in own
+                if r["record_type"] == "call_relation"
+            }
+            if is_target
+            else {}
+        )
+        links = {}
+        for r in own:
+            if r["record_type"] == "cross_chunk_link":
+                links.setdefault(r["data"]["call_id"], []).append(r["data"])
+        cutoff = any(
+            r["record_type"] == "diagnostic" and r["data"]["code"] == "ANA-LIMIT-002"
+            for r in own
+        )
+        windows = {
+            r["data"]["call_id"]: r["data"]["argument_window"]
+            for r in own
+            if r["record_type"] == "origin"
+        }
+        counts = {
+            "call_sites": 0,
+            "caller": 0,
+            "conflicting": 0,
+            "degraded": {},
+            "attributed_elsewhere": 0,
+            "unmapped_label": 0,
+            "unattributed": {},
+        }
+        for record in own:
+            if record["record_type"] != "callee":
+                continue
+            call = record["data"]
+            counts["call_sites"] += 1
+            relation = relations.get(call["call_id"]) if is_target else None
+            require(
+                not is_target or relation is not None, "call without a call relation"
+            )
+            kind, detail = _classify_site(
+                target,
+                proto,
+                entry["input"],
+                call["resolution"],
+                relation,
+                links.get(call["call_id"], []),
+                convention,
+                cutoff,
+            )
+            if kind == "caller":
+                require(
+                    call["call_id"] in windows, "listed caller has no origin record"
+                )
+                callers.append(
+                    {
+                        "caller": entry["input"],
+                        "interpretation": entry["interpretation"],
+                        "caller_proto": call["proto_path"],
+                        "pc": call["pc"],
+                        "call_id": call["call_id"],
+                        "call_kind": call["call_kind"],
+                        "bases": detail,
+                        "argument_window": windows[call["call_id"]],
+                    }
+                )
+                counts["caller"] += 1
+            elif kind in {"degraded", "unattributed"}:
+                counts[kind][detail] = counts[kind].get(detail, 0) + 1
+            else:
+                counts[kind] += 1
+        row["counts"] = counts
+        coverage.append(row)
+    callers.sort(
+        key=lambda c: (c["caller"]["path"], _proto_key(c["caller_proto"]), c["pc"])
+    )
+    degraded = any(row.get("counts", {}).get("degraded") for row in coverage)
+    return {
+        "report_version": 1,
+        "analysis_precision": "not-assessed",
+        "bundle_stream_sha256": report["stream_sha256"],
+        "target": {
+            "path": target_path,
+            "input_identity": target,
+            "interpretation": interpretation,
+            "proto": proto,
+        },
+        "callers": callers,
+        "files": coverage,
+        "summary": {
+            "caller_count": len(callers),
+            "link_convention": convention,
+            "cross_artifact_searched": convention is not None,
+            "coverage_complete": all(row["status"] == "analyzed" for row in coverage),
+            "degraded": degraded,
+            "empty_means": "no observed caller in this bundle, not unreachable code",
+        },
+    }
+
+
 def capture(args, limits):
     checked_limits(limits)
     directory = Path(args.out)
@@ -853,7 +1119,13 @@ def main():
         "verify", help="verify a retained bundle without running its producer"
     )
     verify.add_argument("bundle", type=Path)
-    for command in [cap, verify]:
+    who = commands.add_parser(
+        "callers", help="answer one-hop callers of a prototype from a verified bundle"
+    )
+    who.add_argument("bundle", type=Path)
+    who.add_argument("--target", required=True)
+    who.add_argument("--proto", required=True)
+    for command in [cap, verify, who]:
         for name, default in asdict(Limits()).items():
             command.add_argument(
                 "--max-" + name.replace("_", "-"), type=int, default=default
@@ -866,11 +1138,12 @@ def main():
             "invalid or excessive limit",
         )
         limits = Limits(**values)
-        report = (
-            capture(args, limits)
-            if args.command == "capture"
-            else verify_bundle(args.bundle, limits)[0]
-        )
+        if args.command == "capture":
+            report = capture(args, limits)
+        elif args.command == "callers":
+            report = bundle_callers(args.bundle, args.target, args.proto, limits)
+        else:
+            report = verify_bundle(args.bundle, limits)[0]
         output = json_bytes(report)
         require(len(output) <= 16 * 1024 * 1024, "report byte limit exceeded")
         sys.stdout.buffer.write(output)
