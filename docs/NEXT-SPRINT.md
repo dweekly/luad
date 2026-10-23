@@ -1,4 +1,4 @@
-# Honest disassembly and export availability
+# Honest structured disassembly and export availability
 
 Fresh as of: 2026-10-22. Lane: bounded product family; no target promotion.
 
@@ -11,12 +11,16 @@ family; Lua 5.1/5.4 positives and explicit structural exports complete. Source a
 is the declared PUC opcode layout (official 5.2.4/5.3.6/5.5.1 lopcodes.h), the existing
 5.1/5.4 public disassemblers and the repository's analysis-availability boundary.
 
-Remove the synthesized fallback from public disassembly/explanation. This batch does
-not implement three new disassemblers. Keep raw words, constants and child structure
-available through inspect and selected structural export. Available public disassembly
-paths remain experimental Lua 5.1 profiles and Lua 5.4. Disasm/explain on 5.2/5.3/5.5
-must explicitly refuse with exit 4, no machine stdout and an actionable diagnostic.
-Capabilities and documentation must describe that actual boundary.
+Remove the synthesized fallback from structured public disassembly/explanation. This
+batch does not implement three new backends. Preserve existing text listings without
+--effects on all five PUC versions: the unchanged scalar-authority suite proves useful
+constant rendering there. Mark 5.2/5.3/5.5 text explicitly unverified and do not project
+it into machine records. Their JSON/JSONL disassembly, instruction effects and all
+explanation formats must refuse with exit 4, no stdout and actionable diagnostics.
+Structured disassembly remains available on experimental known Lua 5.1 profiles and
+Lua 5.4. Raw words/child structure remain in inspect and structural export. Capabilities
+must distinguish unverified text from structured disassembly. This refined authority
+replaces the blanket text refusal before further production edits.
 
 ## Export contract
 
@@ -55,7 +59,8 @@ or availability authority remains a material risk.
 ## Executable acceptance fixed before production
 
 - Required official Lua 5.1.5/5.2.4/5.3.6/5.4.8/5.5.1 compile nested/decoy and stripped/
-  debug public twins; no source/chunk execution. Test actual disasm/explain formats,
+  debug public twins; no source/chunk execution. Test actual disasm/explain formats (preserve unverified plain text, refuse
+  unavailable structured/effects/explanation views),
   default and all nine explicit family selections, zero/nonzero fact caps and mixed/
   strict batches. Assert exact availability decisions, stdout/refusal behavior, record
   context, diagnostic byte evidence, status/count completion and preserved child facts.
@@ -66,7 +71,8 @@ or availability authority remains a material risk.
   Float controls continue inspect/constant export and typed raw/class checks on all
   five versions. On unavailable disassembly assert refusal instead of skipping; retain
   schema/typed checks on every available path.
-- Run focused availability/reference-consumer checks, unchanged machine-contract gate,
+- Retain the unchanged all-version scalar text-rendering assertions. Run focused
+  availability/reference-consumer checks, unchanged machine-contract gate,
   one pinned-Rust scripts/check.sh and final Linux/macOS CI. Required compiler/fixture
   absence fails. Record exact compiler identities and every skip count.
 - Replay the pinned LuaSocket/Penlight inputs: structural selection completes all20;
