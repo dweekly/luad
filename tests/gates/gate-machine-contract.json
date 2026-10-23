@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "gate_id": "gate-machine-contract",
   "command_argv": [
     "cargo",

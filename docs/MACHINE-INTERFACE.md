@@ -661,7 +661,10 @@ Consumers may discard or interleave control records without losing fact attribut
 `export_start.schema_version` identifies the stream contract. `luad schema export`
 validates one record, including each emitted variant and its typed context/payload.
 It cannot prove sequence ordering, terminal completion, aggregate counters or identity
-joins across records. Consumers must check those independently before using a result.
+joins across records. Known scalar limitation: nonfinite constant `val` fields serialize
+as null while their schema and typed Rust model expect a number. Raw bits and
+classification remain present, but affected records fail schema/typed round trips.
+This record-variant correction does not close that separate scalar family. Consumers must check those independently before using a result.
 
 Each requested input produces exactly one terminal `file_end` status: `succeeded` for a
 complete recognized chunk, `skipped` for readable source or unsupported/malformed

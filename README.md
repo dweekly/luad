@@ -221,6 +221,10 @@ assumptions. Arbitrary C/reflection/debug mutation and all implicit metamethod e
 are not qualified; capture analysis can also lose precision after a closed cell's
 register is reused. Derived records carry no runtime call-edge guarantee.
 
+Nonfinite constant `val` fields currently serialize as null against a numeric schema;
+raw bits remain available, but schema and typed round trips fail for those records.
+That machine-scalar defect is the next correctness boundary before a strict reader.
+
 Lua 5.2, 5.3, and 5.5 are limited to structural facts and validation. Derived analysis
 commands refuse these dialects rather than presenting unqualified semantic results.
 Layout, operand, analysis-eligibility, and malformed-input regressions cover the fixes
