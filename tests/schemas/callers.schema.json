@@ -1318,6 +1318,7 @@
         "max_instructions_per_proto",
         "max_nesting_depth",
         "max_string_bytes",
+        "max_total_instructions",
         "max_total_prototypes",
         "max_upvalues_per_proto"
       ],
@@ -1354,6 +1355,12 @@
         },
         "max_string_bytes": {
           "description": "Maximum single string byte length (default 16 MiB).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_total_instructions": {
+          "description": "Maximum instruction count across the whole chunk (default 2,000,000). Each parsed instruction word costs a few hundred bytes, so this bounds the model's footprint.",
           "type": "integer",
           "format": "uint",
           "minimum": 0.0

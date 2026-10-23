@@ -234,6 +234,7 @@ fn is_resource_limit_code(code: &str) -> bool {
         "CORE-LIMIT-001"
             | "CORE-LIMIT-002"
             | "CORE-LIMIT-003"
+            | "CORE-LIMIT-004"
             | "CORE-OVERFLOW-001"
             | "CORE-DEPTH-001"
             | "CORE-COUNT-001"

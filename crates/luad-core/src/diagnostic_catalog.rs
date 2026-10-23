@@ -103,6 +103,13 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         suggested_action: "Examine earlier diagnostics; validation halted due to safety limit and subsequent structures were not verified.",
     },
     StaticDiagnosticDescriptor {
+        code: "CORE-LIMIT-004",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Total declared instruction count across the chunk exceeds the reader safety limit; the chunk was refused before its instruction vectors were allocated.",
+        suggested_action: "Raise the total instruction limit only for trusted inputs, or inspect the chunk for inflated code-size fields.",
+    },
+    StaticDiagnosticDescriptor {
         code: "CORE-OVERFLOW-001",
         severity: Severity::Error,
         category: DiagnosticCategory::Parse,

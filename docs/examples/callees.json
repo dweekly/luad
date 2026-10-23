@@ -21,6 +21,7 @@
       "max_nesting_depth": 128,
       "max_total_prototypes": 10000,
       "max_instructions_per_proto": 1000000,
+      "max_total_instructions": 2000000,
       "max_constants_per_proto": 262144,
       "max_upvalues_per_proto": 1024,
       "max_string_bytes": 16777216,

@@ -5,6 +5,15 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Bound the parsed model with a chunk-wide instruction budget (#117).
+  `max_total_instructions` (default 2,000,000) is charged when each prototype's code size
+  is read, before allocation, in all five dialect parsers. Crossing it fails with
+  `CORE-LIMIT-004` and exit 5. Machine documents' `analysis_configuration.limits` gain
+  the field. That is a structural addition within schema major 1: a strict consumer
+  validating against an older schema snapshot will reject it, so refresh the snapshot
+  (`luad schema <name>`). The pinned public disassembly schema hash is updated
+  accordingly.
+
 - Add an unmodified LuCI 22.03 `util.lua` beside the 23.05 subset, and tests making the
   release comparison executable. The prototypes without a content-digest match are
   pinned and checked against the textual source diff in debug and stripped builds, a
