@@ -5,6 +5,12 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Add a pinned, unmodified LuCI subset (openwrt/luci `openwrt-23.05` at 3d39e8c,
+  Apache-2.0) with tests that compile it with official Lua 5.1.5 and check every listed
+  same-artifact caller against its source line: the call instruction must sit on a line
+  that calls the target by its declared name. Pins a few caller answers with their
+  argument evidence and the strict link index's current admission boundary.
+
 - Add experimental `luad callers`: the observed one-hop callers of one Lua 5.1 prototype
   across an explicit corpus. It combines accepted same-artifact call relations,
   convention-gated cross-chunk links and verbatim argument origins, with no new
