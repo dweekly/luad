@@ -68,35 +68,11 @@ become reviewable.
 
 | Order | Outcome | Owner | Dependency and exit condition |
 |---|---|---|---|
-| A | Faithful nonfinite machine values | `luad` | NaN/infinity facts must have an explicit schema-valid representation and typed round trips while retaining exact raw bits. |
-| B | A reliable firmware measurement loop | Firmware consumer, with public reproductions in `luad` | May be prepared independently of A; no before/after product ranking until coverage and consumer semantics are checked. |
-| C | Useful public investigation and caller-inspection workflows | `luad`, plus a small reference consumer | Depends on A for schema-backed composition and on B for firmware benefit claims; exact answers must be obtainable without a custom decoder. |
+| B | A reliable firmware measurement loop | Firmware consumer, with public reproductions in `luad` | No before/after product ranking until coverage and consumer semantics are checked. |
+| C | Useful public investigation and caller-inspection workflows | `luad`, plus a small reference consumer | Depends on B for firmware benefit claims; exact answers must be obtainable without a custom decoder. |
 | D | Independent evidence of value against alternatives | Maintainer and outside users | Trial an installable C candidate before interface freeze; correct the blocking findings. |
-| E | A clearly scoped experimental announcement | Maintainer | A-D close for the advertised workflows; install, evidence, limits, and fresh-download checks pass. |
+| E | A clearly scoped experimental announcement | Maintainer | B-D close for the advertised workflows; install, evidence, limits, and fresh-download checks pass. |
 | F | A narrow stable contract and exact target qualification | `luad` | Adopt the 1.0 program only after utility is established; promote no target by implication. |
-
-### A. Correct false answers before expanding analysis
-
-**Make nonfinite scalar facts usable.** Structurally valid NaN and positive/negative
-infinity constants currently serialize decoded `val` as null while their schemas and
-typed Rust model require a number. Distinguish readable nonfinite constants from invalid
-Lua 5.3-5.5 LUAC_NUM header sentinels; the latter must match official loader refusal. Retain exact raw bits separately, define an explicit
-nonfinite decoded representation, and preserve finite values without coercion. Review
-the machine representation/compatibility boundary before implementation. Unknown or
-malformed scalar representations must refuse rather than default to a value.
-
-Use source-generated and declared-layout-patched public controls without executing
-crafted bytes. Cover currently read PUC versions and floating widths, signed zero,
-finite extremes, infinities and distinct NaN payloads. Exercise JSON/JSONL surfaces,
-schema validation and typed round trips; corrupt the scalar representation and raw-bit
-expectations independently. Reuse the existing scalar/machine tests and canonical codec;
-do not infer layout from the host, rewrite archived candidate/gate identities, add a
-new target, or introduce a parallel renderer.
-
-**Exit:** the named machine/scalar controls and one clean aggregate pass, raw float
-identity remains exact, and every advertised scalar representation is explicit. This
-correctness fix freezes no interface or target status. Fix further reproduced false
-answers before feature expansion; keep unverified concerns out of implementation.
 
 ### B. Make the firmware consumer a reliable product signal
 
