@@ -74,11 +74,12 @@ other currently known PUC profiles do not produce those families through export.
 count, not an independently proven enumeration of every possible VM fact. Read the
 [core analysis limits](../../docs/MACHINE-INTERFACE.md) before using the facts.
 
-A known producer limitation affects default/instruction export for Lua 5.2, 5.3 and
-5.5 chunks with nested prototypes: the producer currently panics during child traversal.
-The reference reader refuses that incomplete stream and retains the attempt. An explicit
-`--facts prototype,constant,upvalue` structural export avoids that path. This is a
-workaround, not a claim that the instruction workflow is qualified on those profiles.
+Structured disassembly/instruction export is unavailable on Lua 5.2, 5.3 and 5.5. A default export
+reports these parsed inputs as failed with their identity and interpretation, zero facts
+and an explicit diagnostic. The reader verifies that complete failure accounting; it
+does not turn it into a successful file. Choose `--facts prototype,constant,upvalue`
+for a structural inventory across all five currently read PUC versions. Unverified
+human text listings remain available without `--effects`; this reader never parses them.
 
 Keep the executable, input list and corpus immutable throughout capture. Before/after
 hash checks detect observed changes; they do not create an atomic filesystem snapshot
@@ -105,13 +106,14 @@ Every retained record keeps its context; join on artifact identity **and** full
 interpretation plus the local ID, never only a local ID or path. No origin flattening,
 endpoint/sink policy, database or multi-hop substitution is included.
 
-Focused verification, with the required official compiler already installed:
+Focused verification, with required official Lua 5.1.5 and 5.2.4 compilers already installed:
 
 ```console
-CARGO_BIN_EXE_luad="$PWD/target/debug/luad" LUAD_LUAC51="$HOME/.cache/luad/lua-tools/bin/luac5.1" "$HOME/.local/share/luad/export-reader-venv/bin/python" -m unittest discover -s examples/export_reader/tests -v
+CARGO_BIN_EXE_luad="$PWD/target/debug/luad" LUAD_LUAC51="$HOME/.cache/luad/lua-tools/bin/luac5.1" LUAD_LUAC52="$HOME/.cache/luad/lua-tools/bin/luac5.2" "$HOME/.local/share/luad/export-reader-venv/bin/python" -m unittest discover -s examples/export_reader/tests -v
 ```
 
-The tests generate stock Lua 5.1.5 inputs, consume the pinned OpenWrt LNUM32 fixture,
+The tests generate stock Lua 5.1.5 inputs and a Lua 5.2.4 refusal control, consume the
+pinned OpenWrt LNUM32 fixture,
 and damage actual streams and bundles. They check omitted inputs even after counters
 are rewritten consistently, exact raw/argument facts, identity and variant corruption,
 limits, changed inputs, producer interruption and explicit coverage. Required tools and

@@ -5,6 +5,20 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Refuse unavailable structured disassembly, effects and explanation on Lua 5.2/5.3/5.5 instead of a
+  generic projection with zero opcode fields and omitted children. Preserve unverified
+  human text listings and their existing all-version scalar-rendering proof. Default/instruction
+  export now emits framed per-file failures instead of panicking on those nested inputs.
+  Explicit fact selections use an exact profile allowlist and fail before publishing
+  partial facts; raw structural inspection/export remains available across all five
+  currently read PUC versions. Unknown profiles acquire no availability by default.
+  Existing Lua 5.1/5.4 public disassembly and implicit Lua 5.4 export stay available.
+  Required official-compiler debug/stripped controls cover selectors, formats, caps,
+  mixed/strict completion, raw child facts and reference-consumer failure accounting.
+  Retain existing bounded parse diagnostics and limit exit status on refused files;
+  explanation selector dispatch cannot bypass profile refusal or report empty success.
+  No new decoder, schema version, archive identity or support tier is introduced.
+
 - Add a bounded export reference consumer with executable/input/schema/stream identities,
   offline schema and completion verification, exact record context, explicit mixed-file
   coverage and truncation, and corruption controls. This experimental example does not

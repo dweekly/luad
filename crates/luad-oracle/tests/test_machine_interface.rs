@@ -557,6 +557,7 @@ fn test_jsonl_context_killer_mutations_are_rejected() {
 
 #[test]
 fn test_jsonl_streaming_batch_export_deterministic_and_recursive() {
+    export_availability::assert_public_availability(&get_luad_bin());
     assert_export_record_family_conforms_and_rejects_corruption();
     let luad = get_luad_bin();
     let root = luad_oracle::find_workspace_root();
@@ -962,3 +963,6 @@ fn assert_export_record_family_conforms_and_rejects_corruption() {
 
 #[path = "common/machine_floats.rs"]
 mod machine_floats;
+
+#[path = "common/export_availability.rs"]
+mod export_availability;

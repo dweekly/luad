@@ -256,7 +256,7 @@ Verdict:           ValidForParser</pre>
 <section class="shell" id="limits">
   <h2>What doesn't work yet</h2>
   <p>
-    luad is version 0.3.1 and experimental. No dialect is promoted to a supported tier,
+    The latest published release is 0.3.1; this development boundary includes unreleased fixes. luad is experimental. No dialect is promoted to a supported tier,
     the supported set is empty, and no interface carries a compatibility promise.
   </p>
   <div class="table-scroll">
@@ -265,10 +265,10 @@ Verdict:           ValidForParser</pre>
     <thead><tr><th scope="col">Dialect</th><th scope="col">Opcodes</th><th scope="col">State</th></tr></thead>
     <tbody>
       <tr><td>lua5.1</td><td>38</td><td class="ok">Best exercised. LNUM32 and stock layouts both read.</td></tr>
-      <tr><td>lua5.2</td><td>40</td><td>Declared widths validated; implemented layouts decoded, other layouts refused. Derived analysis unavailable.</td></tr>
-      <tr><td>lua5.3</td><td>47</td><td>Declared widths and numeric canaries validated. Unsupported numeric layouts refused; no EdgeTX profile or derived analysis.</td></tr>
+      <tr><td>lua5.2</td><td>40</td><td>Structural inspection/export and unverified text listing. Structured disassembly, effects and explanation unavailable.</td></tr>
+      <tr><td>lua5.3</td><td>47</td><td>Structural inspection/export and unverified text listing. No EdgeTX profile; structured disassembly and explanation unavailable.</td></tr>
       <tr><td>lua5.4</td><td>83</td><td>Reads well; exact-disassembly evidence exists for 5.4.8.</td></tr>
-      <tr><td>lua5.5</td><td>85</td><td>Header/count bounds and operands checked. Derived analysis unavailable.</td></tr>
+      <tr><td>lua5.5</td><td>85</td><td>Structural inspection/export and unverified text listing. Structured disassembly, effects and explanation unavailable.</td></tr>
       <tr><td>LuaJIT, Luau</td><td>—</td><td class="dim">Separate bytecode systems. Out of scope.</td></tr>
     </tbody>
   </table>
@@ -277,8 +277,10 @@ Verdict:           ValidForParser</pre>
   <div class="callout">
     <p>
       <strong>Structural facts and analysis have different boundaries.</strong>
-      Lua 5.2, 5.3, and 5.5 provide inspection and validation; derived analysis commands
-      refuse these dialects. Layout and malformed-input regression coverage does not
+      Lua 5.2, 5.3, and 5.5 retain raw words and child structure through inspection and
+      <code>export --facts prototype,constant,upvalue</code>. Unverified human text listings remain available without
+      <code>--effects</code>; structured disassembly, effects, explanation and unavailable
+      fact selections explicitly refuse these profiles. Layout and malformed-input regression coverage does not
       establish complete semantic correctness or support for every vendor layout.
     </p>
     <p>

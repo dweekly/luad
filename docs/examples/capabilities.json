@@ -1,6 +1,6 @@
 {
   "tool_name": "luad",
-  "tool_version": "0.1.0",
+  "tool_version": "0.3.1",
   "schema_version": 2,
   "supported_dialects": [],
   "experimental_dialects": [
@@ -10,9 +10,7 @@
     "lua5.4",
     "lua5.5"
   ],
-  "planned_dialects": [
-    "luajit"
-  ],
+  "planned_dialects": [],
   "dialects": [
     {
       "id": "lua5.1",
@@ -24,7 +22,9 @@
         "validate",
         "symbolic callees (experimental)",
         "call-argument origins (experimental)",
-        "provable call relations (experimental)"
+        "provable call relations (experimental)",
+        "prototype subtree identity (experimental)",
+        "typed structured retrieval (experimental)"
       ],
       "status": "experimental",
       "required_gates": [
@@ -34,7 +34,8 @@
         "gate-resolved-constants-lua51",
         "gate-symbolic-callees-lua51",
         "gate-argument-origins-lua51",
-        "gate-call-relations-lua51"
+        "gate-call-relations-lua51",
+        "gate-prototype-identity-lua51"
       ],
       "completed_gates": [],
       "evidence": []
@@ -45,7 +46,7 @@
       "opcode_count": 40,
       "features": [
         "lossless parse (experimental)",
-        "disasm",
+        "disasm-text-unverified",
         "validate"
       ],
       "status": "experimental",
@@ -59,7 +60,7 @@
       "opcode_count": 47,
       "features": [
         "lossless parse (experimental)",
-        "disasm",
+        "disasm-text-unverified",
         "validate"
       ],
       "status": "experimental",
@@ -94,25 +95,11 @@
       "opcode_count": 85,
       "features": [
         "lossless parse (experimental)",
-        "disasm",
+        "disasm-text-unverified",
         "validate"
       ],
       "status": "experimental",
       "required_gates": [],
-      "completed_gates": [],
-      "evidence": []
-    },
-    {
-      "id": "luajit",
-      "display_name": "LuaJIT 2.0 / 2.1",
-      "opcode_count": 0,
-      "features": [
-        "planned"
-      ],
-      "status": "planned",
-      "required_gates": [
-        "gate-luajit-parser"
-      ],
       "completed_gates": [],
       "evidence": []
     }

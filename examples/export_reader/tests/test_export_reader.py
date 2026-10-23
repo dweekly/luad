@@ -405,6 +405,46 @@ return "\\255\\000\\\"", 3.25
                 interp["base_dialect"] = interp["profile"] = "lua5.4"
         self.reject(rows)
 
+    def test_unavailable_parsed_input_has_failed_complete_context(self):
+        compiler = Path(os.environ["LUAD_LUAC52"]).resolve()
+        banner = subprocess.check_output(
+            [str(compiler), "-v"], stderr=subprocess.STDOUT
+        )
+        self.assertTrue(banner.startswith(b"Lua 5.2.4 "))
+        with tempfile.TemporaryDirectory(dir=self.directory) as scratch:
+            root = Path(scratch)
+            source = root / "source.lua"
+            source.write_text(
+                "local function child(p) return p.name end; return child\n"
+            )
+            chunk = root / "input.luac"
+            subprocess.run(
+                [str(compiler), "-o", str(chunk), str(source)],
+                check=True,
+                capture_output=True,
+                timeout=10,
+            )
+            out = root / "bundle"
+            report = reader.capture(
+                self.args([str(chunk)], out, facts="prototype,instruction"),
+                reader.Limits(),
+            )
+            self.assertTrue(report["stream_complete"])
+            self.assertFalse(report["producer_succeeded"])
+            self.assertFalse(report["all_files_succeeded"])
+            file = report["files"][0]
+            self.assertEqual(file["interpretation"]["profile"], "lua5.2")
+            self.assertEqual(file["completion"]["status"], "failed")
+            self.assertEqual(file["completion"]["emitted_fact_count"], 0)
+            self.assertEqual(
+                file["input"]["sha256"], hashlib.sha256(chunk.read_bytes()).hexdigest()
+            )
+            verified, facts = reader.verify_bundle(
+                out, retain={"prototype", "instruction"}
+            )
+            self.assertEqual(verified, report)
+            self.assertEqual(facts, [])
+
     def test_nonfinite_class_and_raw_payload_survive_without_coercion(self):
         inspected = json.loads(
             subprocess.check_output(

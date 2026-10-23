@@ -115,18 +115,23 @@ fn test_cli_raw_inspection_succeeds_on_unqualified_dialects() {
     ] {
         let fixture = root.join(rel_path);
 
-        // disasm succeeds with exit code 0
+        // Human text listings remain available with explicit unverified status.
         let disasm_out = Command::new(&bin)
             .args(["disasm", fixture.to_str().unwrap()])
             .output()
             .unwrap_or_else(|e| panic!("Failed to run disasm on {dialect}: {e}"));
-        assert!(
-            disasm_out.status.success(),
-            "disasm on {dialect} must succeed (exit 0): stderr={}",
-            String::from_utf8_lossy(&disasm_out.stderr)
-        );
+        assert!(disasm_out.status.success());
+        assert!(!disasm_out.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&disasm_out.stdout).contains("unverified"));
+        let structured = Command::new(&bin)
+            .args(["disasm", fixture.to_str().unwrap(), "--format", "json"])
+            .output()
+            .expect("structured disasm availability");
+        assert_eq!(structured.status.code(), Some(4));
+        assert!(structured.stdout.is_empty());
+        assert!(String::from_utf8_lossy(&structured.stderr).contains("ANA-PRECOND-001"));
 
-        // inspect succeeds with exit code 0
+        // Raw structural inspection remains available.
         let inspect_out = Command::new(&bin)
             .args(["inspect", fixture.to_str().unwrap()])
             .output()
@@ -136,6 +141,27 @@ fn test_cli_raw_inspection_succeeds_on_unqualified_dialects() {
             "inspect on {dialect} must succeed (exit 0): stderr={}",
             String::from_utf8_lossy(&inspect_out.stderr)
         );
+        let json_out = Command::new(&bin)
+            .args(["inspect", fixture.to_str().unwrap(), "--format", "json"])
+            .output()
+            .expect("inspect raw facts");
+        assert!(json_out.status.success());
+        let document: serde_json::Value = serde_json::from_slice(&json_out.stdout).unwrap();
+        let bytes = std::fs::read(&fixture).unwrap();
+        let words = document["data"]["main_proto"]["instructions"]
+            .as_array()
+            .unwrap();
+        assert!(!words.is_empty());
+        for word in words {
+            let source = &word["source"];
+            let offset = source["byte_offset"].as_u64().unwrap() as usize;
+            let length = source["byte_length"].as_u64().unwrap() as usize;
+            assert_eq!(length, 4);
+            assert_eq!(
+                source["raw_hex"],
+                hex::encode(&bytes[offset..offset + length])
+            );
+        }
     }
 }
 

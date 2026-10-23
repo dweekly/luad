@@ -647,50 +647,44 @@ fn handle_inspect(args: InspectArgs, writer: &mut impl io::Write) -> io::Result<
     Ok(ExitCode::Success)
 }
 
-fn get_disasm_proto(dialect: &str, proto: &luad_core::model::Prototype) -> DisassembledPrototype {
-    const LUA51_PROFILES: &[&str] = &["lua5.1", "lua5.1-lnum32", "lua5.1-stock32"];
-    if dialect == "lua5.4" {
-        luad_dialect_lua54::disassemble_proto_lua54(proto)
-    } else if LUA51_PROFILES.contains(&dialect) {
-        luad_dialect_lua51::disassemble_proto_lua51(proto)
-    } else {
-        let lifted = luad_analysis::lift_proto_for_dialect(dialect, proto);
-        let instructions: Vec<_> = lifted
-            .into_iter()
-            .map(|sem| luad_core::DisassembledInstruction {
-                id: sem.id,
-                pc: sem.pc,
-                raw_word: sem.raw_word,
-                raw_hex: sem.raw_hex,
-                mnemonic: sem.mnemonic,
-                opcode_num: 0,
-                role: "instruction".to_string(),
-                encoded_operands: luad_core::EncodedOperands::default(),
-                line: None,
-                operands: vec![],
-                jump_target: sem.jump_target,
-                companion_pc: sem.companion_pc,
-                metamethod: None,
-                comment: None,
-                confidence: sem.confidence,
-                source: sem.source,
-                diagnostics: vec![],
-            })
-            .collect();
+fn is_lua51_profile(dialect: &str) -> bool {
+    matches!(dialect, "lua5.1" | "lua5.1-lnum32" | "lua5.1-stock32")
+}
 
-        DisassembledPrototype {
-            id: proto.id.clone(),
-            source_name: proto.source_name.as_ref().map(|s| s.display.clone()),
-            line_defined: proto.line_defined,
-            last_line_defined: proto.last_line_defined,
-            numparams: proto.numparams,
-            is_vararg: proto.is_vararg != 0,
-            maxstacksize: proto.maxstacksize,
-            instructions,
-            diagnostics: vec![],
-            child_protos: vec![],
+fn has_structured_disassembly(dialect: &str) -> bool {
+    is_lua51_profile(dialect) || dialect == "lua5.4"
+}
+
+fn has_unverified_text_disassembly(dialect: &str) -> bool {
+    matches!(dialect, "lua5.2" | "lua5.3" | "lua5.5")
+}
+
+fn get_disasm_proto(
+    dialect: &str,
+    proto: &luad_core::model::Prototype,
+) -> Option<DisassembledPrototype> {
+    match dialect {
+        "lua5.4" => Some(luad_dialect_lua54::disassemble_proto_lua54(proto)),
+        profile if is_lua51_profile(profile) => {
+            Some(luad_dialect_lua51::disassemble_proto_lua51(proto))
         }
+        _ => None,
     }
+}
+
+fn unavailable_disassembly(chunk: &Chunk) -> Diagnostic {
+    Diagnostic::error(
+        "ANA-PRECOND-001",
+        DiagnosticCategory::Analysis,
+        StableId::Chunk,
+        format!("Structured disassembly, instruction effects and explanation are unavailable for profile '{}'; use inspect for raw words or export --facts prototype,constant,upvalue", chunk.dialect),
+    ).with_source(chunk.header.source.clone())
+}
+
+fn report_unavailable_disassembly(chunk: &Chunk) -> ExitCode {
+    let diagnostic = unavailable_disassembly(chunk);
+    eprintln!("error: {}: {}", diagnostic.code, diagnostic.message);
+    ExitCode::UnsupportedFormat
 }
 
 fn handle_disasm(args: DisasmArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
@@ -725,16 +719,28 @@ fn handle_disasm(args: DisasmArgs, writer: &mut impl io::Write) -> io::Result<Ex
         &chunk.main_proto
     };
 
-    let disasm_proto = get_disasm_proto(&chunk.dialect, target_proto);
+    if args.format == OutputFormat::Text
+        && !args.effects
+        && has_unverified_text_disassembly(&chunk.dialect)
+    {
+        writeln!(writer, "; WARNING: unverified text listing for '{}'; use inspect for exact raw words. Structured disassembly and instruction effects are unavailable.", chunk.dialect)?;
+        render::render_disasm(
+            &chunk.dialect,
+            target_proto,
+            args.raw,
+            args.debug_info,
+            false,
+            writer,
+        )?;
+        return Ok(ExitCode::Success);
+    }
+
+    let Some(disasm_proto) = get_disasm_proto(&chunk.dialect, target_proto) else {
+        return Ok(report_unavailable_disassembly(&chunk));
+    };
 
     match args.format {
         OutputFormat::Text => {
-            if chunk.dialect == "lua5.5" {
-                eprintln!(
-                    "{}: Dialect 'lua5.5' disassembly is experimental and unverified",
-                    "warning".yellow().bold()
-                );
-            }
             render::render_disasm(
                 &chunk.dialect,
                 target_proto,
@@ -1133,6 +1139,10 @@ fn handle_explain(args: ExplainArgs, writer: &mut impl io::Write) -> io::Result<
         }
     };
 
+    if !has_structured_disassembly(&chunk.dialect) {
+        return Ok(report_unavailable_disassembly(&chunk));
+    }
+
     match target_id {
         StableId::Instruction { proto, pc } => {
             let proto_id = StableId::Proto(proto.clone());
@@ -1145,7 +1155,9 @@ fn handle_explain(args: ExplainArgs, writer: &mut impl io::Write) -> io::Result<
                 return Ok(ExitCode::UsageError);
             };
 
-            let disasm_proto = get_disasm_proto(&chunk.dialect, target_proto);
+            let Some(disasm_proto) = get_disasm_proto(&chunk.dialect, target_proto) else {
+                return Ok(report_unavailable_disassembly(&chunk));
+            };
             let disasm_inst = disasm_proto.instructions.get(pc);
 
             let lifted = luad_analysis::lift_proto_for_dialect(&chunk.dialect, target_proto);
@@ -1175,8 +1187,9 @@ fn handle_explain(args: ExplainArgs, writer: &mut impl io::Write) -> io::Result<
         _ => {
             eprintln!(
                 "{}: Explanation currently supports instruction targets (e.g. 'proto:0:pc:3')",
-                "info".cyan()
+                "error".red()
             );
+            return Ok(ExitCode::UsageError);
         }
     }
 
@@ -2395,6 +2408,26 @@ fn handle_diff(args: DiffArgs, writer: &mut impl io::Write) -> io::Result<ExitCo
     Ok(ExitCode::Success)
 }
 
+fn export_family_available(dialect: &str, family: ExportFactFamily) -> bool {
+    let known =
+        is_lua51_profile(dialect) || matches!(dialect, "lua5.2" | "lua5.3" | "lua5.4" | "lua5.5");
+    if !known {
+        return false;
+    }
+    match family {
+        ExportFactFamily::Prototype | ExportFactFamily::Constant | ExportFactFamily::Upvalue => {
+            true
+        }
+        ExportFactFamily::Instruction | ExportFactFamily::Xref => {
+            has_structured_disassembly(dialect)
+        }
+        ExportFactFamily::Callee
+        | ExportFactFamily::Origin
+        | ExportFactFamily::CallRelation
+        | ExportFactFamily::PrototypeIdentity => is_lua51_profile(dialect),
+    }
+}
+
 #[derive(Debug, Clone)]
 struct ExportFactSelection {
     families: std::collections::BTreeSet<ExportFactFamily>,
@@ -2431,6 +2464,18 @@ impl ExportFactSelection {
             families,
             explicit: true,
         })
+    }
+
+    fn unavailable_for(&self, dialect: &str) -> Vec<ExportFactFamily> {
+        if !self.explicit && has_structured_disassembly(dialect) {
+            // The implicit pipeline omits Lua51-only analyses on Lua54.
+            return vec![];
+        }
+        self.families
+            .iter()
+            .copied()
+            .filter(|family| !export_family_available(dialect, *family))
+            .collect()
     }
 
     fn includes(&self, family: ExportFactFamily) -> bool {
@@ -3014,11 +3059,61 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
             .unwrap_or_default()
         )?;
 
-        let disasm = fact_selection
-            .includes(ExportFactFamily::Instruction)
-            .then(|| get_disasm_proto(&chunk.dialect, &chunk.main_proto));
-        const LUA51_PROFILES: &[&str] = &["lua5.1", "lua5.1-lnum32", "lua5.1-stock32"];
-        let is_lua51_profile = LUA51_PROFILES.contains(&chunk.dialect.as_str());
+        let unavailable = fact_selection.unavailable_for(&chunk.dialect);
+        if !unavailable.is_empty() {
+            failed_count += 1;
+            let families = unavailable
+                .iter()
+                .map(|family| family.as_str())
+                .collect::<Vec<_>>()
+                .join(",");
+            let diagnostic = Diagnostic::error(
+                "ANA-PRECOND-001", DiagnosticCategory::Analysis, StableId::Chunk,
+                format!("Export facts [{families}] are unavailable for profile '{}'; use inspect or export --facts prototype,constant,upvalue", chunk.dialect),
+            ).with_source(chunk.header.source.clone());
+            let message = diagnostic.message.clone();
+            let context = JsonlRecordContext::successful(identity.clone(), interp);
+            // Availability failure cannot conceal an earlier bounded parse cutoff.
+            for item in chunk.diagnostics.iter().chain(std::iter::once(&diagnostic)) {
+                if classify_diagnostic(item) == ExitCode::LimitExceeded {
+                    any_limit_exceeded = true;
+                }
+                writeln!(
+                    writer,
+                    "{}",
+                    serde_json::to_string(&JsonlDataRecord {
+                        record_type: "diagnostic".to_string(),
+                        context: context.clone(),
+                        data: item,
+                    })
+                    .unwrap_or_default()
+                )?;
+            }
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string(&FileEndRecord {
+                    record_type: "file_end".to_string(),
+                    path: identity.path.clone(),
+                    status: "failed".to_string(),
+                    error: Some(message.clone()),
+                    instruction_count: 0,
+                    diagnostic_count: chunk.diagnostics.len() + 1,
+                    is_truncated: false,
+                    emitted_fact_count: 0,
+                    available_fact_count: 0,
+                })
+                .unwrap_or_default()
+            )?;
+            eprintln!("error: {}: {message}", identity.path);
+            continue;
+        }
+        let disasm = if fact_selection.includes(ExportFactFamily::Instruction) {
+            get_disasm_proto(&chunk.dialect, &chunk.main_proto)
+        } else {
+            None
+        };
+        let is_lua51_profile = is_lua51_profile(&chunk.dialect);
         let prototype_identity_analysis =
             if fact_selection.includes(ExportFactFamily::PrototypeIdentity) && is_lua51_profile {
                 match luad_analysis::analyze_chunk_prototype_identities(&chunk) {
@@ -3282,6 +3377,17 @@ fn handle_export(args: ExportArgs, writer: &mut impl io::Write) -> io::Result<Ex
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unknown_profiles_never_acquire_export_or_disassembly_availability() {
+        for profile in ["", "lua5.6", "lua5.1-vendor", "lua5.4-vendor", "Lua5.1"] {
+            assert!(!has_structured_disassembly(profile));
+            assert!(!has_unverified_text_disassembly(profile));
+            for family in EXPORT_FACT_FAMILIES {
+                assert!(!export_family_available(profile, family));
+            }
+        }
+    }
 
     /// A writer that accepts `budget` bytes and then reports a broken pipe, which is what a
     /// reader closing mid-script looks like to the process writing it.

@@ -72,6 +72,19 @@ incomplete stream.
 
 ---
 
+For a corpus containing Lua 5.2/5.3/5.5, select structural facts explicitly:
+
+```bash
+luad export --input-list mixed-version-files.txt --facts prototype,constant,upvalue
+```
+
+Those profiles retain raw words in `inspect` and unverified human text listings without
+`--effects`; structured disassembly and unavailable explicit fact families refuse. A default export includes instructions and emits complete per-file
+failure accounting for them. Lua 5.1/5.4 disassembly remains available. Always check each
+file result alongside the terminal summary.
+
+---
+
 ## 3. Finding Globals and Call Sites
 
 Find all `GETGLOBAL` / `SETGLOBAL` lookups and function invocation call sites (`CALL` / `TAILCALL`):

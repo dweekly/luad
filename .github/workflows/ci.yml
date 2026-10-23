@@ -569,6 +569,7 @@ jobs:
         source scripts/pins.env
         CARGO_BIN_EXE_luad="${PWD}/target/debug/luad" \
         LUAD_LUAC51="${LUAD_COMPILER_DIR_DEFAULT}/luac5.1" \
+        LUAD_LUAC52="${LUAD_COMPILER_DIR_DEFAULT}/luac5.2" \
           "${reader_venv}/bin/python" -m unittest discover -s examples/export_reader/tests -v
 
     - name: Run OpenWrt Lua 5.1 LNUM32 Authority Gate

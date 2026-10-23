@@ -178,15 +178,15 @@ required to build or test luad; the walkthrough verifies luad facts and refusal 
 
 ## Limitations
 
-Current scope in 0.3.1:
+Current development scope (unreleased):
 
 | Dialect | Opcodes | Tier | State |
 |---|---:|---|---|
 | `lua5.1` | 38 | Experimental | Best exercised. LNUM32 firmware profile and stock layouts both read. |
-| `lua5.2` | 40 | Experimental | Declared widths validated; implemented layouts decoded, other layouts refused. Derived analysis unavailable. |
-| `lua5.3` | 47 | Experimental | Declared widths and numeric canaries validated. Unsupported numeric layouts refused; no EdgeTX profile or derived analysis. |
+| `lua5.2` | 40 | Experimental | Structural inspection/export and unverified text listing. Structured disassembly, effects, explanation and derived facts unavailable. |
+| `lua5.3` | 47 | Experimental | Structural inspection/export and unverified text listing. No EdgeTX profile; structured disassembly, effects and explanation unavailable. |
 | `lua5.4` | 83 | Experimental | Reads well; exact-disassembly evidence exists for 5.4.8. |
-| `lua5.5` | 85 | Experimental | Header/count bounds and operands checked. Derived analysis unavailable. |
+| `lua5.5` | 85 | Experimental | Structural inspection/export and unverified text listing. Structured disassembly, effects, explanation and derived facts unavailable. |
 
 LuaJIT and Luau are separate bytecode systems and are out of scope. The capability
 manifest does not list them in any tier.
@@ -227,8 +227,12 @@ NaN payloads; decoded NaN classes carry no host payload/sign promise. Typed fini
 round trips use exact float parsing. Lua 5.3-5.5 format-check numbers must match exactly.
 See [machine float semantics](docs/MACHINE-INTERFACE.md#floating-values).
 
-Lua 5.2, 5.3, and 5.5 are limited to structural facts and validation. Derived analysis
-commands refuse these dialects rather than presenting unqualified semantic results.
+Lua 5.2, 5.3, and 5.5 retain raw words and child structure through `inspect` and
+`export --facts prototype,constant,upvalue`. Unverified text listings remain available without `--effects`; structured disassembly,
+instruction effects and explanation refuse these profiles. Default export includes instruction facts and reports per-file
+failure; explicit unavailable families also fail before emitting any facts. Use the
+selected structural path when inventorying a mixed-version corpus. Derived analysis
+commands retain their explicit refusal boundary.
 Layout, operand, analysis-eligibility, and malformed-input regressions cover the fixes
 in 0.3.1; they do not establish complete semantic correctness or support for every
 vendor layout. See [the changelog](CHANGELOG.md#031--2026-09-18) for release details.
@@ -290,7 +294,7 @@ delete the document in the same change and update this index.
 | [`docs/ROADMAP-1.0.md`](docs/ROADMAP-1.0.md) | Stable-release qualification obligations, exact targets, minimal machine contract, hostile-input evidence, and transfer. | 2026-10-22 | The stable target set, qualified surface, acceptance obligations, or qualification lifecycle changes. |
 | [`docs/BRINGUP.md`](docs/BRINGUP.md) | Setup for a developer machine, a self-hosted Actions runner, and a release builder, with the owning file for every tool pin. | 2026-10-22 | A tool pin, its owning file, the doctor's checks, runner prerequisites, labels or security boundary, or the release dry-run and rehearsal entry points change. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, evidence-based selection, proportional verification, qualification lanes, and orchestration. | 2026-10-22 | Selection criteria, planning ownership, CI lanes, roles, evidence policy, or sprint mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Neutral checkpoint before the reproduced nested export traversal correction. | 2026-10-22 | A bounded contract replaces the checkpoint or the first roadmap outcome changes. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Neutral checkpoint before the bounded caller view and public workflows. | 2026-10-23 | A bounded contract replaces the checkpoint or the first roadmap outcome changes. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-10-20 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/PRIOR-ART-AND-CORPORA.md`](docs/PRIOR-ART-AND-CORPORA.md) | Dated executed comparisons and source observations, corpus candidates, provenance, and research leads. | 2026-10-22 | A comparison is executed, a cited project/profile changes, or a candidate corpus is selected; source checks do not refresh older experiments. |
 | [`docs/MACHINE-INTERFACE.md`](docs/MACHINE-INTERFACE.md) | Machine formats, identities, schemas, limits, completion, current analysis caveats, and exit behavior. | 2026-10-22 | Public commands, schemas, known limitations, identities, diagnostics, or completion/exit contracts change. |
