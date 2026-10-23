@@ -662,10 +662,11 @@ fn render_text(answer: &CallersAnswer, writer: &mut impl io::Write) -> io::Resul
             .collect();
         writeln!(
             writer,
-            "  {} {} [{}]",
+            "  {} {} [{}] ({})",
             caller.caller.path,
             caller.call_id,
-            sources.join(", ")
+            sources.join(", "),
+            describe_arguments(&caller.argument_window)
         )?;
     }
     if !summary.dynamic_providers.is_empty() {
@@ -713,6 +714,41 @@ fn render_text(answer: &CallersAnswer, writer: &mut impl io::Write) -> io::Resul
             "attribution not degraded"
         }
     )
+}
+
+/// A compact human summary of an argument window; machine formats keep the full tree.
+fn describe_arguments(window: &luad_analysis::CallArgumentWindow) -> String {
+    use luad_analysis::CallArgumentWindow;
+    let (arguments, open) = match window {
+        CallArgumentWindow::Fixed { arguments } => (arguments, None),
+        CallArgumentWindow::Open { reason, arguments } => (arguments, Some(serde_plain(reason))),
+    };
+    let mut parts: Vec<String> = arguments
+        .iter()
+        .map(|argument| describe_origin(&argument.origin))
+        .collect();
+    if let Some(reason) = open {
+        parts.push(format!("open: {reason}"));
+    }
+    if parts.is_empty() {
+        "no arguments".to_string()
+    } else {
+        parts.join(", ")
+    }
+}
+
+fn describe_origin(origin: &luad_analysis::OriginExpression) -> String {
+    use luad_analysis::OriginExpressionKind as Kind;
+    match &origin.kind {
+        // Scalars go through the shared text renderer, which uses the scalar authority.
+        Kind::Literal { value, .. } => crate::render::text::format_origin_literal(value),
+        Kind::Parameter { index, .. } => format!("param#{index}"),
+        Kind::Unknown { reason } => format!("unknown: {}", serde_plain(reason)),
+        other => serde_json::to_value(other)
+            .ok()
+            .and_then(|v| v["kind"].as_str().map(str::to_string))
+            .unwrap_or_else(|| "expression".to_string()),
+    }
 }
 
 fn serde_plain<T: Serialize>(value: &T) -> String {

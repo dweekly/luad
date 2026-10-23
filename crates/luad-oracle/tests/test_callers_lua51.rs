@@ -956,6 +956,43 @@ fn test_callers_real_path_limit_exits_five_and_degrades() {
 }
 
 #[test]
+fn test_callers_text_view_summarizes_each_callers_arguments() {
+    let c = svc_corpus(false);
+    let output = run(&[
+        "callers",
+        c.path("mod_svc"),
+        "--proto",
+        "0/0",
+        c.path("caller_svc_a"),
+        c.path("caller_svc_b"),
+        "--link-convention",
+        CONVENTION,
+    ]);
+    assert_eq!(output.status.code(), Some(0));
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("(field)"), "{text}");
+    assert!(text.contains("(\"eth0\")"), "{text}");
+    assert!(text.contains("(concat)"), "{text}");
+    assert!(text.contains("(param#0)"), "{text}");
+    assert!(
+        text.contains("not proof") || text.contains("4 caller(s)"),
+        "{text}"
+    );
+}
+
+#[test]
+fn test_callers_text_view_prints_literal_values_through_the_scalar_authority() {
+    let source = "local function f(n) return n end\nf(42)\nf(1.5)\nf(true)\n";
+    let c = compile(&[("literals", source)], false);
+    let output = run(&["callers", c.path("literals"), "--proto", "0/0"]);
+    let text = String::from_utf8(output.stdout).unwrap();
+    // Stock Lua 5.1 numbers are binary64, rendered visibly as floats.
+    for expected in ["(42.0)", "(1.5)", "(true)"] {
+        assert!(text.contains(expected), "{expected} missing: {text}");
+    }
+}
+
+#[test]
 fn test_callers_debug_and_stripped_twins_agree() {
     let debug = svc_corpus(false);
     let stripped = svc_corpus(true);
