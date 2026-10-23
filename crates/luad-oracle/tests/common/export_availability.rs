@@ -422,7 +422,17 @@ pub fn assert_public_availability(luad: &str) {
                     }
                 }
             }
-            for selector in ["proto:0", "proto:0:k:0"] {
+            // Every non-instruction StableId kind, plus an absent prototype.
+            for selector in [
+                "chunk",
+                "proto:0",
+                "proto:0:block:0",
+                "proto:0:k:0",
+                "proto:0:upvalue:0",
+                "proto:0:local:0",
+                "diagnostic:L54-JUMP-003:proto:0:pc:0",
+                "proto:9:pc:0",
+            ] {
                 for format in ["text", "json", "jsonl", "dot"] {
                     let output = run(luad, &["explain", name, selector, "--format", format]);
                     if matches!(profile, "lua5.1" | "lua5.4") {
