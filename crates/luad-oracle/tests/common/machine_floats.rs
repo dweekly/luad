@@ -219,11 +219,17 @@ pub fn assert_json_float_facts(luad: &str) {
                     .args(["disasm", path.to_str().unwrap(), "--format", "json"])
                     .output()
                     .unwrap();
-                assert!(disasm.status.success());
-                let json: Value = serde_json::from_slice(&disasm.stdout).unwrap();
-                assert!(disasm_schema.is_valid(&json));
-                let _: MachineDocument<luad_core::DisassembledPrototype> =
-                    serde_json::from_slice(&disasm.stdout).unwrap();
+                if matches!(dialect, "lua5.1" | "lua5.4") {
+                    assert!(disasm.status.success());
+                    let json: Value = serde_json::from_slice(&disasm.stdout).unwrap();
+                    assert!(disasm_schema.is_valid(&json));
+                    let _: MachineDocument<luad_core::DisassembledPrototype> =
+                        serde_json::from_slice(&disasm.stdout).unwrap();
+                } else {
+                    assert_eq!(disasm.status.code(), Some(4));
+                    assert!(disasm.stdout.is_empty());
+                    assert!(String::from_utf8_lossy(&disasm.stderr).contains("ANA-PRECOND-001"));
+                }
                 let export = Command::new(luad)
                     .args(["export", "--facts", "constant", path.to_str().unwrap()])
                     .output()

@@ -178,15 +178,15 @@ required to build or test luad; the walkthrough verifies luad facts and refusal 
 
 ## Limitations
 
-Current scope in 0.3.1:
+Current development scope (unreleased):
 
 | Dialect | Opcodes | Tier | State |
 |---|---:|---|---|
 | `lua5.1` | 38 | Experimental | Best exercised. LNUM32 firmware profile and stock layouts both read. |
-| `lua5.2` | 40 | Experimental | Declared widths validated; implemented layouts decoded, other layouts refused. Derived analysis unavailable. |
-| `lua5.3` | 47 | Experimental | Declared widths and numeric canaries validated. Unsupported numeric layouts refused; no EdgeTX profile or derived analysis. |
+| `lua5.2` | 40 | Experimental | Structural inspection and selected structural export. Disassembly/explanation and derived facts unavailable. |
+| `lua5.3` | 47 | Experimental | Structural inspection and selected structural export. No EdgeTX profile; disassembly/explanation and derived facts unavailable. |
 | `lua5.4` | 83 | Experimental | Reads well; exact-disassembly evidence exists for 5.4.8. |
-| `lua5.5` | 85 | Experimental | Header/count bounds and operands checked. Derived analysis unavailable. |
+| `lua5.5` | 85 | Experimental | Structural inspection and selected structural export. Disassembly/explanation and derived facts unavailable. |
 
 LuaJIT and Luau are separate bytecode systems and are out of scope. The capability
 manifest does not list them in any tier.
@@ -227,8 +227,12 @@ NaN payloads; decoded NaN classes carry no host payload/sign promise. Typed fini
 round trips use exact float parsing. Lua 5.3-5.5 format-check numbers must match exactly.
 See [machine float semantics](docs/MACHINE-INTERFACE.md#floating-values).
 
-Lua 5.2, 5.3, and 5.5 are limited to structural facts and validation. Derived analysis
-commands refuse these dialects rather than presenting unqualified semantic results.
+Lua 5.2, 5.3, and 5.5 retain raw words and child structure through `inspect` and
+`export --facts prototype,constant,upvalue`. Disassembly and instruction explanation
+refuse these profiles. Default export includes instruction facts and reports per-file
+failure; explicit unavailable families also fail before emitting any facts. Use the
+selected structural path when inventorying a mixed-version corpus. Derived analysis
+commands retain their explicit refusal boundary.
 Layout, operand, analysis-eligibility, and malformed-input regressions cover the fixes
 in 0.3.1; they do not establish complete semantic correctness or support for every
 vendor layout. See [the changelog](CHANGELOG.md#031--2026-09-18) for release details.

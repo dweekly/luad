@@ -119,12 +119,10 @@ Output writes to stdout are checked across all CLI output formats (incremental t
 
 Callers consuming streaming JSONL output (e.g. `luad export --format jsonl`) must note that an early-closed or abandoned stream will lack its terminal completion records (`file_end` and/or `export_end`), even though the process terminated cleanly with exit code 0. Consumers that require complete batch verification must assert the presence of terminal records in the stream.
 
-Known export limitation: default or instruction-selected export can panic on nested
-prototypes in Lua 5.2/5.3/5.5, leaving an incomplete stream. Explicit
-`--facts prototype,constant,upvalue` avoids this disassembly-tree path. Completion checks
-must reject the failed attempt; those profiles do not acquire a derived-analysis promise
-from successful structural parsing. This reproduced family blocks its advertised workflow
-until the bounded export correction closes.
+Disassembly and instruction explanation are available only for the known Lua 5.1
+profiles and Lua 5.4. Other currently read PUC versions return exit 4, no stdout and an
+`ANA-PRECOND-001` diagnostic; use `inspect` for raw words and child structure. This is
+an availability boundary, not a supported-tier promotion.
 
 A [small export reference consumer](../examples/export_reader/README.md) demonstrates
 bounded capture and schema/context/completion checks with a recorded input inventory
@@ -608,6 +606,22 @@ Batch exports firmware artifacts in streaming JSONL format.
 emitted per input file while preserving stream framing, diagnostics, and per-file
 truncation metadata.
 
+Fact availability depends on the exact profile:
+
+| Families | Available profiles |
+|---|---|
+| `prototype`, `constant`, `upvalue` | Currently read PUC profiles |
+| `instruction`, `xref` | Known Lua 5.1 profiles and Lua 5.4 |
+| `callee`, `origin`, `call_relation`, `prototype_identity` | Known Lua 5.1 profiles |
+
+An explicit selection containing an unavailable family fails that input before any
+facts are emitted. The stream retains its identity/interpretation, an
+`ANA-PRECOND-001` diagnostic with header byte evidence and a failed file_end with zero
+fact counts. This also applies at a zero fact cap. Default export includes instructions,
+so Lua 5.2/5.3/5.5 fail explicitly; default Lua 5.4 retains its available families. For a
+mixed-version structural inventory choose `--facts prototype,constant,upvalue`.
+Opt-in link records preserve their existing explicit unsupported statuses.
+
 `--facts FAMILY,...` selects a non-empty subset of those nine counted families. Names
 are exact and may appear only once; an unknown, duplicate, or empty name is a usage
 error with empty stdout, and unknown names list the sorted valid families. Discover the
@@ -704,7 +718,7 @@ joins across records.
 
 Each requested input produces exactly one terminal `file_end` status: `succeeded` for a
 complete recognized chunk, `skipped` for readable source or unsupported/malformed
-formats, and `failed` when input or an internal required export analysis cannot
+formats, and `failed` when input, a selected fact family, or an internal required export analysis cannot
 complete. Duplicate paths are processed per occurrence. Every non-success is
 path-qualified in both its records and stderr.
 `export_end` is the completeness marker and reports `files_processed`,

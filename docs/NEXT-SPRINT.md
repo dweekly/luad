@@ -13,7 +13,7 @@ is the declared PUC opcode layout (official 5.2.4/5.3.6/5.5.1 lopcodes.h), the e
 
 Remove the synthesized fallback from public disassembly/explanation. This batch does
 not implement three new disassemblers. Keep raw words, constants and child structure
-available through inspect and selected structural export. Supported public disassembly
+available through inspect and selected structural export. Available public disassembly
 paths remain experimental Lua 5.1 profiles and Lua 5.4. Disasm/explain on 5.2/5.3/5.5
 must explicitly refuse with exit 4, no machine stdout and an actionable diagnostic.
 Capabilities and documentation must describe that actual boundary.
@@ -38,7 +38,8 @@ prototype,constant,upvalue export remains usable on all five read PUC versions.
 
 ## Scope
 
-Production: CLI main.rs shared disassembly, explain and export routing; core
+Production: CLI main.rs shared disassembly, explain and export routing; CI only to
+supply the required Lua5.2 compiler to the new reader interaction control; core
 capabilities.rs; analysis lib.rs only to correct obsolete availability guidance. Tests:
 an ordinary test_export_availability.rs and/or shared oracle helper, existing canonical
 machine entrypoints, common/machine_floats.rs, and reference-consumer tests. Update
