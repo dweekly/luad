@@ -208,8 +208,8 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>, limit_reached:
 
         // Register B and Constant bounds
         match op {
+            // SETUPVAL's B is an upvalue index (checked below); its source register is A.
             Opcode53::Move
-            | Opcode53::SetUpval
             | Opcode53::Unm
             | Opcode53::BNot
             | Opcode53::Not

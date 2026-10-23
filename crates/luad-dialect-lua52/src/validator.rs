@@ -208,12 +208,8 @@ fn validate_proto(proto: &Prototype, diags: &mut Vec<Diagnostic>, limit_reached:
 
         // Register B and Constant bounds
         match op {
-            Opcode52::Move
-            | Opcode52::SetUpval
-            | Opcode52::Unm
-            | Opcode52::Not
-            | Opcode52::Len
-            | Opcode52::TestSet => {
+            // SETUPVAL's B is an upvalue index (checked below); its source register is A.
+            Opcode52::Move | Opcode52::Unm | Opcode52::Not | Opcode52::Len | Opcode52::TestSet => {
                 if (raw.b as u8) >= proto.maxstacksize {
                     diags.push(
                         Diagnostic::error(

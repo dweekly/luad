@@ -5,6 +5,11 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Stop the Lua 5.2/5.3 validators from checking `SETUPVAL` operand B as a source register
+  (#108). B is an upvalue index and keeps its upvalue bound; A remains register-checked.
+  Official compiler output whose upvalue index exceeds the writing function's stack no
+  longer reports false `L52-REG-002`/`L53-REG-002` errors.
+
 - Refuse unavailable structured disassembly, effects and explanation on Lua 5.2/5.3/5.5 instead of a
   generic projection with zero opcode fields and omitted children. Preserve unverified
   human text listings and their existing all-version scalar-rendering proof. Default/instruction
