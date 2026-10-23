@@ -5,6 +5,12 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Add an unmodified LuCI 22.03 `util.lua` beside the 23.05 subset, and tests making the
+  release comparison executable. The prototypes without a content-digest match are
+  pinned and checked against the textual source diff in debug and stripped builds, a
+  one-token edit control is included, and luad's validated layout must predict exactly
+  when the official Lua 5.1.5 lister accepts an artifact (stock versus LNUM32).
+
 - Add `callers` to the export reference consumer: one-hop callers of a prototype answered
   offline from a verified bundle's records, with the same exactly-once call-site classes
   as `luad callers`. It joins only on full record context plus the call id. Capped,
