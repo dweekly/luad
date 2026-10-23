@@ -2,6 +2,7 @@
 
 mod call_frame;
 pub mod callees;
+pub mod callers;
 pub mod callgraph;
 pub mod capture_mutation;
 pub mod cfg;
@@ -16,6 +17,10 @@ pub use callees::{
     analyze_callees, analyze_chunk_callees, analyze_chunk_callees_with_mutation_budget,
     CalleeAnalysis, CalleeFact, CalleeLookupKind, CalleeResolution, CalleeUnresolvedReason,
     CaptureEnvironment, CaptureValue, ChunkCalleeAnalysis, SymbolicPathBasis,
+};
+pub use callers::{
+    attach_argument_windows, attribute_file_callers, AttributedCaller, CallSiteCounts, CallerBasis,
+    CallerFileFacts, CallerSite, FileCallerAttribution, SiteClass,
 };
 pub use callgraph::{
     analyze_chunk_call_relations, CallRelationAnalysis, CallRelationBasis, CallRelationFact,

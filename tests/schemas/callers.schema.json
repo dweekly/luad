@@ -1,0 +1,1484 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MachineDocument_for_CallersAnswer",
+  "description": "Generic machine document envelope wrapping all top-level machine outputs.",
+  "type": "object",
+  "required": [
+    "analysis_configuration",
+    "data",
+    "input_identity",
+    "interpretation",
+    "schema_version",
+    "tool_version"
+  ],
+  "properties": {
+    "analysis_configuration": {
+      "description": "Analysis configuration applied.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/AnalysisConfiguration"
+        }
+      ]
+    },
+    "data": {
+      "description": "Command-specific payload data.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/CallersAnswer"
+        }
+      ]
+    },
+    "diagnostics": {
+      "description": "Structured diagnostics emitted during processing.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Diagnostic"
+      }
+    },
+    "input_identity": {
+      "description": "Provenance identity of the analyzed input.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/InputIdentity"
+        }
+      ]
+    },
+    "interpretation": {
+      "description": "Resolved dialect, profile, layout, and selection evidence.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/ResolvedInterpretation"
+        }
+      ]
+    },
+    "schema_version": {
+      "description": "Schema major version (pinned to 1).",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "tool_version": {
+      "description": "Tool semver version (e.g. \"0.1.0\").",
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "AnalysisConfiguration": {
+      "description": "Analysis and execution configuration used to produce the document.",
+      "type": "object",
+      "required": [
+        "limits",
+        "mode"
+      ],
+      "properties": {
+        "dialect_override": {
+          "description": "Explicit dialect or profile override requested by caller, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limits": {
+          "description": "Resource limit thresholds applied during parsing and analysis.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ResourceLimits"
+            }
+          ]
+        },
+        "mode": {
+          "description": "Parser mode (e.g. \"strict\" or \"permissive\").",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ParseMode"
+            }
+          ]
+        }
+      }
+    },
+    "CallArgumentWindow": {
+      "description": "The argument window represented by a call fact.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "arguments",
+            "kind"
+          ],
+          "properties": {
+            "arguments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/FixedArgumentOrigin"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "fixed"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "arguments",
+            "kind",
+            "reason"
+          ],
+          "properties": {
+            "arguments": {
+              "description": "Arguments at fixed registers before the open tail begins, in position order.\n\nThe window stays open: this is a prefix, never the whole argument list, and is empty when the first argument is already top-dependent. A call such as `sink(cmd, \"flag\", helper())` has two determinable arguments that reporting only the reason discards, and for a call whose first argument is the interesting one that is the entire fact a reader wanted.",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/FixedArgumentOrigin"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "open"
+              ]
+            },
+            "reason": {
+              "$ref": "#/definitions/OriginUnknownReason"
+            }
+          }
+        }
+      ]
+    },
+    "CallRelationBasis": {
+      "description": "Closed evidence bases for a resolved caller-to-prototype relation.",
+      "oneOf": [
+        {
+          "description": "The callee value is an exact closure constructed in the caller's value flow.",
+          "type": "string",
+          "enum": [
+            "closure-value"
+          ]
+        },
+        {
+          "description": "A literal global path has one closure-valued store in the analyzed chunk.",
+          "type": "string",
+          "enum": [
+            "unique-global-store"
+          ]
+        }
+      ]
+    },
+    "CallSiteCounts": {
+      "description": "Exactly-once classification counts for every call site of one analyzed file.",
+      "type": "object",
+      "required": [
+        "attributed_elsewhere",
+        "call_sites",
+        "caller",
+        "conflicting",
+        "degraded",
+        "unattributed",
+        "unmapped_label"
+      ],
+      "properties": {
+        "attributed_elsewhere": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "call_sites": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "caller": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "conflicting": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "degraded": {
+          "description": "Sites weakened by a limit or by index uncertainty, by first reason.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0.0
+          }
+        },
+        "unattributed": {
+          "description": "Sites with no proven callee, by first reason.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0.0
+          }
+        },
+        "unmapped_label": {
+          "description": "A proven label or lookup the requested convention did not map to any definition.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    },
+    "CallerBasis": {
+      "description": "One accepted fact naming the target as a call site's callee.",
+      "oneOf": [
+        {
+          "description": "A same-artifact call relation.",
+          "type": "object",
+          "required": [
+            "basis",
+            "evidence",
+            "source"
+          ],
+          "properties": {
+            "basis": {
+              "$ref": "#/definitions/CallRelationBasis"
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/StableId"
+              }
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "call_relation"
+              ]
+            }
+          }
+        },
+        {
+          "description": "A resolved cross-chunk link under the requested convention.",
+          "type": "object",
+          "required": [
+            "convention",
+            "evidence",
+            "label_segments",
+            "source"
+          ],
+          "properties": {
+            "convention": {
+              "type": "string"
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/StableId"
+              }
+            },
+            "label_segments": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "source": {
+              "type": "string",
+              "enum": [
+                "cross_chunk_link"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "CallerSite": {
+      "description": "One call site whose callee accepted facts prove to be the target.",
+      "type": "object",
+      "required": [
+        "argument_window",
+        "bases",
+        "call_id",
+        "call_kind",
+        "caller",
+        "caller_proto",
+        "pc"
+      ],
+      "properties": {
+        "argument_window": {
+          "description": "The site's argument window from origin analysis, verbatim.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/CallArgumentWindow"
+            }
+          ]
+        },
+        "bases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CallerBasis"
+          }
+        },
+        "call_id": {
+          "$ref": "#/definitions/StableId"
+        },
+        "call_kind": {
+          "type": "string"
+        },
+        "caller": {
+          "$ref": "#/definitions/InputIdentity"
+        },
+        "caller_proto": {
+          "$ref": "#/definitions/ProtoPath"
+        },
+        "pc": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    },
+    "CallersAnswer": {
+      "description": "`luad callers` payload. An empty `callers` list means no observed caller in the analyzed corpus, never unreachable code.",
+      "type": "object",
+      "required": [
+        "callers",
+        "files",
+        "summary",
+        "target"
+      ],
+      "properties": {
+        "callers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CallerSite"
+          }
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/CallersFileCoverage"
+          }
+        },
+        "summary": {
+          "$ref": "#/definitions/CallersSummary"
+        },
+        "target": {
+          "$ref": "#/definitions/CallersTarget"
+        }
+      }
+    },
+    "CallersFileCoverage": {
+      "description": "Coverage for one corpus input.",
+      "type": "object",
+      "required": [
+        "is_target",
+        "path",
+        "status"
+      ],
+      "properties": {
+        "counts": {
+          "description": "Exactly-once call-site classes; present for analyzed inputs.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/CallSiteCounts"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Diagnostic"
+          }
+        },
+        "input_identity": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/InputIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "interpretation": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ResolvedInterpretation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "is_target": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/CallersFileStatus"
+        }
+      }
+    },
+    "CallersFileStatus": {
+      "description": "What happened to one corpus input.",
+      "type": "string",
+      "enum": [
+        "analyzed",
+        "failed",
+        "unsupported_profile",
+        "unreadable"
+      ]
+    },
+    "CallersSummary": {
+      "description": "Terminal accounting for one answer.",
+      "type": "object",
+      "required": [
+        "caller_count",
+        "callers_omitted",
+        "coverage_complete",
+        "cross_artifact_searched",
+        "degraded",
+        "files_analyzed",
+        "files_failed",
+        "files_unreadable",
+        "files_unsupported",
+        "is_truncated"
+      ],
+      "properties": {
+        "caller_count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "callers_omitted": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "coverage_complete": {
+          "description": "Every corpus input was analyzed.",
+          "type": "boolean"
+        },
+        "cross_artifact_searched": {
+          "description": "False when no convention was requested: other artifacts were not searched.",
+          "type": "boolean"
+        },
+        "degraded": {
+          "description": "A limit or index uncertainty weakened attribution somewhere in the corpus.",
+          "type": "boolean"
+        },
+        "dynamic_providers": {
+          "description": "Providers whose definitions the convention index could not admit.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "files_analyzed": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "files_failed": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "files_unreadable": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "files_unsupported": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "is_truncated": {
+          "type": "boolean"
+        },
+        "link_convention": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "CallersTarget": {
+      "description": "The prototype whose callers are listed.",
+      "type": "object",
+      "required": [
+        "proto",
+        "proto_id"
+      ],
+      "properties": {
+        "proto": {
+          "$ref": "#/definitions/ProtoPath"
+        },
+        "proto_id": {
+          "$ref": "#/definitions/StableId"
+        },
+        "prototype_identity": {
+          "description": "Existing structural identity of the target prototype's subtree.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PrototypeIdentityFact"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Diagnostic": {
+      "description": "Structured diagnostic item.",
+      "type": "object",
+      "required": [
+        "category",
+        "code",
+        "message",
+        "severity",
+        "target"
+      ],
+      "properties": {
+        "category": {
+          "description": "Category of the diagnostic.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/DiagnosticCategory"
+            }
+          ]
+        },
+        "code": {
+          "description": "Stable diagnostic error code (e.g. \"L54-HEADER-001\", \"L54-JUMP-003\").",
+          "type": "string"
+        },
+        "evidence": {
+          "description": "Supporting evidence or context.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "help_topic": {
+          "description": "Topic resolvable via `luad help <topic>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "description": "Human-readable explanation.",
+          "type": "string"
+        },
+        "severity": {
+          "description": "Severity level.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Severity"
+            }
+          ]
+        },
+        "source": {
+          "description": "Raw byte location if applicable.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SourceLocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "suggested_action": {
+          "description": "Suggested next action for researcher or agent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "description": "Target artifact stable ID.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            }
+          ]
+        }
+      }
+    },
+    "DiagnosticCategory": {
+      "description": "Category of diagnostic check.",
+      "oneOf": [
+        {
+          "description": "Raw binary parsing, truncation, or format-envelope error.",
+          "type": "string",
+          "enum": [
+            "parse"
+          ]
+        },
+        {
+          "description": "Structural integrity or header consistency error.",
+          "type": "string",
+          "enum": [
+            "structure"
+          ]
+        },
+        {
+          "description": "Opcode, operand, or companion-instruction invariant violation.",
+          "type": "string",
+          "enum": [
+            "instruction"
+          ]
+        },
+        {
+          "description": "Control-flow anomaly, out-of-bounds jump, or unreachable entry.",
+          "type": "string",
+          "enum": [
+            "control-flow"
+          ]
+        },
+        {
+          "description": "Corrupt, inconsistent, or missing debug metadata.",
+          "type": "string",
+          "enum": [
+            "debug-metadata"
+          ]
+        },
+        {
+          "description": "Higher-level analysis precondition failure.",
+          "type": "string",
+          "enum": [
+            "analysis"
+          ]
+        }
+      ]
+    },
+    "FixedArgumentOrigin": {
+      "description": "One fixed argument position and its pre-call origin.",
+      "type": "object",
+      "required": [
+        "argument_index",
+        "origin",
+        "register"
+      ],
+      "properties": {
+        "argument_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "origin": {
+          "$ref": "#/definitions/OriginExpression"
+        },
+        "register": {
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        }
+      }
+    },
+    "InputIdentity": {
+      "description": "Identity and provenance metadata for an analyzed input artifact.",
+      "type": "object",
+      "required": [
+        "byte_length",
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "byte_length": {
+          "description": "Total byte length of the input.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "path": {
+          "description": "File path or source identifier (e.g. \"hello.luac\" or \"`<stdin>`\").",
+          "type": "string"
+        },
+        "sha256": {
+          "description": "SHA-256 hash of the complete input byte stream.",
+          "type": "string"
+        }
+      }
+    },
+    "LuaString": {
+      "description": "A lossless Lua string retaining exact byte contents along with escaped display representation.",
+      "type": "object",
+      "required": [
+        "display",
+        "is_utf8",
+        "raw_bytes"
+      ],
+      "properties": {
+        "display": {
+          "description": "Escaped ASCII/UTF-8 representation suitable for human inspection.",
+          "type": "string"
+        },
+        "is_utf8": {
+          "description": "Whether the string is valid UTF-8.",
+          "type": "boolean"
+        },
+        "raw_bytes": {
+          "description": "Raw byte sequence of the string.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        }
+      }
+    },
+    "OriginExpression": {
+      "description": "One eager, cycle-free value-expression node.",
+      "type": "object",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "constant_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/StableId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "literal"
+              ]
+            },
+            "value": {
+              "$ref": "#/definitions/OriginLiteral"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "index",
+            "kind",
+            "owner"
+          ],
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "parameter"
+              ]
+            },
+            "owner": {
+              "$ref": "#/definitions/ProtoPath"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "index",
+            "kind",
+            "owner"
+          ],
+          "properties": {
+            "index": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "upvalue"
+              ]
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "owner": {
+              "$ref": "#/definitions/ProtoPath"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "prototype"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "prototype"
+              ]
+            },
+            "prototype": {
+              "$ref": "#/definitions/ProtoPath"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "name"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "global"
+              ]
+            },
+            "name": {
+              "$ref": "#/definitions/LuaString"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "base",
+            "key",
+            "kind"
+          ],
+          "properties": {
+            "base": {
+              "$ref": "#/definitions/OriginExpression"
+            },
+            "key": {
+              "$ref": "#/definitions/OriginLiteral"
+            },
+            "key_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/StableId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "field"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "call_id",
+            "kind",
+            "result_index"
+          ],
+          "properties": {
+            "call_id": {
+              "$ref": "#/definitions/StableId"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "call-result"
+              ]
+            },
+            "result_index": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0.0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "parts"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "concat"
+              ]
+            },
+            "parts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/OriginExpression"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "entries",
+            "kind"
+          ],
+          "properties": {
+            "entries": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/OriginExpression"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "table"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "fields",
+            "incomplete",
+            "kind"
+          ],
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/TableLiteralField"
+              }
+            },
+            "incomplete": {
+              "type": "boolean"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "table-literal"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "operand",
+            "operator"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "unary"
+              ]
+            },
+            "operand": {
+              "$ref": "#/definitions/OriginExpression"
+            },
+            "operator": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "left",
+            "operator",
+            "right"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "binary"
+              ]
+            },
+            "left": {
+              "$ref": "#/definitions/OriginExpression"
+            },
+            "operator": {
+              "type": "string"
+            },
+            "right": {
+              "$ref": "#/definitions/OriginExpression"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "options"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "alternatives"
+              ]
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/OriginExpression"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "unknown"
+              ]
+            },
+            "reason": {
+              "$ref": "#/definitions/OriginUnknownReason"
+            }
+          }
+        }
+      ],
+      "required": [
+        "evidence"
+      ],
+      "properties": {
+        "evidence": {
+          "description": "Stable bytecode facts that establish this node.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StableId"
+          }
+        }
+      }
+    },
+    "OriginLiteral": {
+      "description": "A lossless literal suitable for structural equality in an origin graph.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "nil"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "boolean"
+              ]
+            },
+            "value": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "raw_hex",
+            "type",
+            "value"
+          ],
+          "properties": {
+            "raw_hex": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "integer"
+              ]
+            },
+            "value": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "is_inf",
+            "is_nan",
+            "raw_hex",
+            "type"
+          ],
+          "properties": {
+            "is_inf": {
+              "type": "boolean"
+            },
+            "is_nan": {
+              "type": "boolean"
+            },
+            "raw_hex": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "float"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "string"
+              ]
+            },
+            "value": {
+              "$ref": "#/definitions/LuaString"
+            }
+          }
+        }
+      ]
+    },
+    "OriginUnknownReason": {
+      "description": "Closed reasons why the analysis cannot describe a value expression.",
+      "type": "string",
+      "enum": [
+        "missing-definition",
+        "control-flow-conflict",
+        "dynamic-key",
+        "overwritten",
+        "open-argument-window",
+        "open-result-window",
+        "vararg-value",
+        "unsupported-value",
+        "unsupported-instruction",
+        "mutable-capture",
+        "ambiguous-capture",
+        "expression-depth-limit",
+        "expression-node-limit",
+        "register-window-limit",
+        "analysis-limit",
+        "unreachable"
+      ]
+    },
+    "ParseMode": {
+      "description": "Parsing mode behavior.",
+      "oneOf": [
+        {
+          "description": "Stop and fail immediately at the first invalid condition.",
+          "type": "string",
+          "enum": [
+            "strict"
+          ]
+        },
+        {
+          "description": "Safely record diagnostics and attempt recovery where bounds allow.",
+          "type": "string",
+          "enum": [
+            "permissive"
+          ]
+        }
+      ]
+    },
+    "ProtoPath": {
+      "type": "string"
+    },
+    "PrototypeIdentityFact": {
+      "type": "object",
+      "required": [
+        "digest",
+        "proto_id",
+        "scheme"
+      ],
+      "properties": {
+        "digest": {
+          "type": "string"
+        },
+        "proto_id": {
+          "$ref": "#/definitions/StableId"
+        },
+        "scheme": {
+          "type": "string"
+        }
+      }
+    },
+    "ResolvedInterpretation": {
+      "description": "Resolved interpretation record capturing base dialect, vendor profile, layout, and selection evidence.",
+      "type": "object",
+      "required": [
+        "base_dialect",
+        "detection_evidence",
+        "parse_mode",
+        "profile",
+        "selection_mode"
+      ],
+      "properties": {
+        "base_dialect": {
+          "description": "Base Lua language dialect (e.g. \"lua5.1\", \"lua5.4\").",
+          "type": "string"
+        },
+        "detection_evidence": {
+          "description": "Human-readable evidence explaining why this dialect/profile was resolved.",
+          "type": "string"
+        },
+        "parse_mode": {
+          "description": "Parse mode (\"strict\" or \"permissive\").",
+          "type": "string"
+        },
+        "patch_or_oracle_version": {
+          "description": "Patch or vendor variant if applicable (e.g. \"lnum32\").",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "description": "Exact resolved profile identifier (e.g. \"lua5.1\", \"lua5.1-lnum32\").",
+          "type": "string"
+        },
+        "profile_version_or_hash": {
+          "description": "Specific profile version or cryptographic specification hash if known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selection_mode": {
+          "description": "How the profile was selected.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/SelectionMode"
+            }
+          ]
+        },
+        "validated_layout": {
+          "description": "Summary of validated architectural layout widths and byte order.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ResourceLimits": {
+      "description": "Resource and safety limits for parsing unknown chunks safely.",
+      "type": "object",
+      "required": [
+        "max_constants_per_proto",
+        "max_diagnostics",
+        "max_input_bytes",
+        "max_instructions_per_proto",
+        "max_nesting_depth",
+        "max_string_bytes",
+        "max_total_prototypes",
+        "max_upvalues_per_proto"
+      ],
+      "properties": {
+        "max_constants_per_proto": {
+          "description": "Maximum constant count per prototype (default 262,144).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_diagnostics": {
+          "description": "Maximum number of diagnostics to collect before terminating early (default 50,000).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_input_bytes": {
+          "description": "Maximum allowed input file size in bytes (default 64 MiB).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_instructions_per_proto": {
+          "description": "Maximum instruction count per prototype (default 1,000,000).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_nesting_depth": {
+          "description": "Maximum recursive prototype nesting depth (default 128).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_string_bytes": {
+          "description": "Maximum single string byte length (default 16 MiB).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_total_prototypes": {
+          "description": "Maximum total number of prototypes across the entire chunk (default 10,000).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_upvalues_per_proto": {
+          "description": "Maximum upvalue count per prototype (default 1,024).",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    },
+    "SelectionMode": {
+      "description": "Selection mode for dialect and profile resolution.",
+      "oneOf": [
+        {
+          "description": "Dialect / profile was automatically detected from bytecode header.",
+          "type": "string",
+          "enum": [
+            "detected"
+          ]
+        },
+        {
+          "description": "Dialect / profile was explicitly selected via CLI option or API.",
+          "type": "string",
+          "enum": [
+            "explicit"
+          ]
+        }
+      ]
+    },
+    "Severity": {
+      "description": "Diagnostic severity level.",
+      "oneOf": [
+        {
+          "description": "Informational note or hint.",
+          "type": "string",
+          "enum": [
+            "info"
+          ]
+        },
+        {
+          "description": "Warning about suspicious, unconventional, or non-fatal condition.",
+          "type": "string",
+          "enum": [
+            "warning"
+          ]
+        },
+        {
+          "description": "Error indicating structural invalidity or parsing failure.",
+          "type": "string",
+          "enum": [
+            "error"
+          ]
+        }
+      ]
+    },
+    "SourceLocation": {
+      "description": "Source byte location and raw byte representation of a field or instruction.",
+      "type": "object",
+      "required": [
+        "byte_length",
+        "byte_offset",
+        "raw_hex"
+      ],
+      "properties": {
+        "byte_length": {
+          "description": "Encoded length in bytes.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "byte_offset": {
+          "description": "Absolute byte offset in the input chunk.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "raw_hex": {
+          "description": "Lowercase hex encoding of the raw bytes.",
+          "type": "string"
+        }
+      }
+    },
+    "StableId": {
+      "type": "string"
+    },
+    "TableLiteralField": {
+      "description": "One constant-key field in a reconstructed table literal expression.",
+      "type": "object",
+      "required": [
+        "evidence",
+        "key",
+        "value"
+      ],
+      "properties": {
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StableId"
+          }
+        },
+        "key": {
+          "$ref": "#/definitions/OriginLiteral"
+        },
+        "key_id": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StableId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "$ref": "#/definitions/OriginExpression"
+        }
+      }
+    }
+  }
+}

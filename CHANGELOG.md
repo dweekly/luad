@@ -5,6 +5,15 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Add experimental `luad callers`: the observed one-hop callers of one Lua 5.1 prototype
+  across an explicit corpus. It combines accepted same-artifact call relations,
+  convention-gated cross-chunk links and verbatim argument origins, with no new
+  resolution rule. Every other call site is counted in exactly one class (conflicting,
+  degraded, attributed elsewhere, unmapped label, unattributed), so the counts per file
+  sum to its call sites. Limit or index uncertainty is marked `degraded`, so it cannot
+  pass for a clean negative. Partial coverage exits 1 and limits exit 5. New
+  `callers` schema; no existing schema changes.
+
 - Stop the Lua 5.2/5.3 validators from checking `SETUPVAL` operand B as a source register
   (#108). B is an upvalue index and keeps its upvalue bound; A remains register-checked.
   Official compiler output whose upvalue index exceeds the writing function's stack no

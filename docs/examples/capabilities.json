@@ -23,6 +23,7 @@
         "symbolic callees (experimental)",
         "call-argument origins (experimental)",
         "provable call relations (experimental)",
+        "one-hop caller attribution (experimental)",
         "prototype subtree identity (experimental)",
         "typed structured retrieval (experimental)"
       ],

@@ -99,6 +99,7 @@ pub fn get_canonical_capabilities(tool_version: &str) -> CapabilityManifest {
                 "symbolic callees (experimental)".to_string(),
                 "call-argument origins (experimental)".to_string(),
                 "provable call relations (experimental)".to_string(),
+                "one-hop caller attribution (experimental)".to_string(),
                 "prototype subtree identity (experimental)".to_string(),
                 "typed structured retrieval (experimental)".to_string(),
             ],

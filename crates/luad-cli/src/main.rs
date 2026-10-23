@@ -10,6 +10,7 @@ use schemars::schema_for;
 use sha2::{Digest, Sha256};
 
 mod args;
+mod callers;
 mod exit_codes;
 mod render;
 
@@ -556,6 +557,7 @@ fn main() {
         Commands::Cfg(args) => handle_cfg(args, &mut writer),
         Commands::Callees(args) => handle_callees(args, &mut writer),
         Commands::Callgraph(args) => handle_callgraph(args, &mut writer),
+        Commands::Callers(args) => callers::handle_callers(args, &mut writer),
         Commands::Origins(args) => handle_origins(args, &mut writer),
         Commands::Xrefs(args) => handle_xrefs(args, &mut writer),
         Commands::Explain(args) => handle_explain(args, &mut writer),
@@ -1017,6 +1019,14 @@ fn handle_schema(args: SchemaArgs, writer: &mut impl io::Write) -> io::Result<Ex
                 serde_json::to_string_pretty(&schema).unwrap_or_default()
             )?;
         }
+        "callers" => {
+            let schema = schema_for!(MachineDocument<callers::CallersAnswer>);
+            writeln!(
+                writer,
+                "{}",
+                serde_json::to_string_pretty(&schema).unwrap_or_default()
+            )?;
+        }
         "origins" => {
             let schema = schema_for!(MachineDocument<luad_analysis::ChunkOriginAnalysis>);
             writeln!(
@@ -1091,7 +1101,7 @@ fn handle_schema(args: SchemaArgs, writer: &mut impl io::Write) -> io::Result<Ex
         }
         other => {
             eprintln!(
-                "{}: Unknown schema '{other}'. Supported: chunk, disasm, validate, diagnostic, diagnostics, instruction, cfg, callees, callgraph, origins, xrefs, query, analysis, diff, capabilities, manifest, export, link",
+                "{}: Unknown schema '{other}'. Supported: chunk, disasm, validate, diagnostic, diagnostics, instruction, cfg, callees, callgraph, callers, origins, xrefs, query, analysis, diff, capabilities, manifest, export, link",
                 "error".red()
             );
             return Ok(ExitCode::UsageError);
