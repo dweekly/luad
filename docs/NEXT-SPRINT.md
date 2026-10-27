@@ -2,6 +2,10 @@
 
 Fresh as of: 2026-10-27. The owner approved an opt-in convention on 2026-10-27.
 
+**Status: held.** The second code-review round found two new blockers, recorded at the
+end of this file. By the review rule, a new blocker on round two means the approach
+needs an owner decision before a third round. Do not merge until then.
+
 ## Why
 
 The strict `luci-module-setglobal` index trusts a module's top level only when it does
@@ -196,8 +200,10 @@ Selecting `--link-convention luci-module-trusted-init` changes only these behavi
     Separate controls pin that aliases and re-exports leave their source clean, and that
     the stated gap (a callback or an unknown callee) is labeled rather than followed.
   - **Mutation.** An oracle mutation must fail. The `test_trusted_init_source_oracle_*`
-    test rejects shifted and renamed callers. Fourteen implementation mutants are
-    killed by these gates (recorded in the PR).
+    test rejects shifted, renamed and re-namespaced callers. Of 24 implementation
+    mutants, 23 are killed by these gates. The survivor sets generic-`for` result
+    registers to `Opaque` and is redundant: the call-frame clobber also sets them to
+    `Unknown`. The list is recorded in the PR.
   - **Pinned counts.** The vendored-subset answer is pinned at 70 source-checked
     cross-file callers and 39 of 39 literal call sites found, so an admission change is
     a reviewed change.
@@ -265,3 +271,53 @@ Residual risks the review raised, and what happened to each:
     list no writes.
 - **Still open.** No compiled control exercises the clobbering, because the official
   compiler never reads those registers. Only crafted bytecode would.
+
+**Round 2** rejected again, with two new blockers. Both are open.
+
+1. **Calls through `Unknown` values are not refused.** `Unknown` may be `setfenv`,
+   `module` or `require`. Repro:
+
+   ```lua
+   rawget(_G, 'setfenv')(1, luci.sys); function exec() return 'evil' end
+   ```
+
+   Variants: `rawget(_G, 'module')(...)`, `rawget(_G, 'require')('luci.sys').exec = nil`,
+   and a generic `for` over `_G` that calls what it finds.
+
+   The suggested fix is to refuse `Unknown` callees, or model `rawget(Path, k)` like
+   `GETTABLE`. Neither is measured. Refusing `Unknown` callees would refuse common
+   `obj:method()` calls on call results, such as `uci.cursor():get(...)`, so it needs a
+   corpus measurement first.
+2. **Arithmetic, concat, unary minus and length results are typed `Opaque`.** A
+   metamethod can return any table. Repro: `local o = u.wrap() .. ''; o.sys.exec = nil`.
+   The fix is to type those results `CallResult` or `Unknown` whenever an operand may be
+   a table.
+
+Residual risks from round 2:
+
+- `assigned_upvalues` recurses into nested `CLOSURE`s without memoization. In hostile
+  bytecode where many `CLOSURE`s name the same child at every level, work could grow
+  exponentially. It needs a memo or budget.
+- Each block visit clones the whole frame, so the work is block visits x block length x
+  256, for up to 8 rounds.
+- Metatables of strings or functions pointed at namespaces by required code.
+- Writes into `getmetatable(<CallResult>)` when that metatable is shared with a
+  namespace's metatable.
+- There is still no crafted-bytecode control for the call-frame clobbering.
+
+`ModuleExportIndex` does not derive `Serialize`, so the new fields cannot change strict
+output; the reviewer's concern there does not apply.
+
+**Pattern for the owner.** Each round finds another way for unconstrained code to hand
+the root a namespace, or a namespace-changing function, through a value the token model
+calls safe. The alternatives:
+
+- (a) Keep tightening: `Unknown` callees, operator results and memoized recursion.
+  Measure each change against the 55-module corpus.
+- (b) Accept a broader assumption: the root itself never writes through, or calls,
+  values it obtained from code outside the module. This is simpler, but more of the
+  answer is assumed rather than checked.
+- (c) Narrow the convention: admit only roots whose non-declarative code is `require`
+  of literal names, table constructors and stores into fresh tables. That is the shape
+  of most refused modules (33 of 41 first refusals were `require` calls). Refuse
+  everything else, giving up util, http and dispatcher.
