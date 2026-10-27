@@ -7,19 +7,21 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 - Add the opt-in `--link-convention luci-module-trusted-init` for `callers` and `export`.
   It admits LuCI modules whose top level runs other code (`require`, table
-  constructors, field reads) under one stated assumption, `trusted-init`: code run during
-  initialization, other than the module's own top level, does not redefine module
-  functions or change environments or metatables.
+  constructors, field reads), under a stated assumption rather than a proof. The
+  assumption, `trusted-init`, is that code run during module initialization (including
+  same-file functions and anything reached through values luad does not identify) does
+  not replace, remove or alias any module's exported functions, or change a module's
+  environment.
 
-  The root's own instructions are still checked. Repeated, conditional or pre-declaration
-  stores, and visible writes into or through namespace tables, make the affected labels
-  dynamic. Environment changes and writes into namespaces the analysis cannot name
-  refuse the module, as before.
+  Only directly visible problems are still checked:
+  - a missing or second `module` declaration, or a direct `setfenv`/`getfenv` call,
+    refuses the module;
+  - a name whose root stores are not one unconditional closure makes that label dynamic.
 
   Every definite link carries `assumptions: ["trusted-init"]`, as do caller bases and the
-  callers summary (`assumptions`, `assumed_providers`). The fields are additive and
-  absent under the strict convention, whose output is unchanged. Strict consumers
-  validating against an older schema snapshot should refresh it.
+  callers summary (`assumptions`, `assumed_providers`). The fields are additive and absent
+  under the strict convention, whose output is unchanged. Strict consumers validating
+  against an older schema snapshot should refresh it.
 
   On the 13 vendored LuCI files, 70 cross-file callers are source-checked, and all 39
   literal `luci.x.f(` calls are found.

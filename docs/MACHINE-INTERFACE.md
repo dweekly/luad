@@ -750,54 +750,64 @@ those facts are missing or changed.
 
 This convention starts from the strict one, which most real LuCI modules fail: their top
 level runs `require` calls, builds tables or reads fields before or after `module(...)`.
+It **states** the following assumption rather than proving it.
 
-- **Unchanged.** A module the strict convention admits, ignores or limits is treated
-  identically.
-- **Re-examined.** A module it refuses is checked again under one assumption,
-  `trusted-init`:
-  - No function run during initialization defines, replaces or removes a function in a
-    module namespace, or changes a module's environment or metatable. The exceptions
-    are the module's root itself and the builtins `setmetatable`, `getmetatable` and
-    `rawset` called by those names. The assumption covers required modules, other
-    library functions, and same-file functions however they are called.
-  - `require(name)` returns the table at the global dotted path `name`. No other call
-    returns a namespace table itself; what a call result holds is not assumed.
-  - Initialization completes.
+**The `trusted-init` assumption.** Code run during module initialization does not
+replace, remove or alias any module's exported functions, or change a module's
+environment. That includes the module's own top-level statements, same-file functions,
+and anything reached through values luad does not identify (call results, table fields,
+metamethods). Every answer that relies on it carries `assumptions: ["trusted-init"]`.
 
-  Everything the root's own instructions do is checked. That includes same-file
-  functions that assign a root local the root later uses.
-- **Exports.** These stay root `SETGLOBAL`s of closures. Each name must be stored once,
-  after the declaration, on every path to the root's exit, with a value computed in the
-  same basic block.
-- **What makes a label dynamic.** Any other store makes its label dynamic, and so does
-  any visible root write into a table reached by a global path, a `require` result or
-  `package.loaded[name]`, such as `function net.routes()`. So does passing such a table
-  to `setmetatable`, `getmetatable` or `rawset`, as in `setmetatable(_M, ...)`, or
-  storing it where the analysis cannot follow it. A namespace stored under another
-  global name is followed as an alias. Labels under a dynamic prefix resolve `dynamic`.
-- **Whole-corpus refusals.** These refuse the module for the whole corpus, as strict
-  refusals do:
-  - a second or non-literal `module(...)`, or `module` reached any other way
-    (`_G.module`);
-  - `setfenv` or a `debug` setter, including a call through a namespace the analysis
-    cannot name;
-  - a root write into a value that may be any namespace: a field of a call result, a
-    generic-`for` value, a table already handed to a callee, or a local that same-file
-    code rebinds;
-  - a write through `_G[k]`.
+What luad still checks, because it is directly visible in the root's bytecode and cheap:
 
-  Exceeding a cap is `ANA-LIMIT-001`.
+- **Unchanged modules.** A module the strict convention admits, ignores or limits is
+  treated identically.
+- **Whole-corpus refusals.** These make the module `dynamic` for the whole corpus,
+  as strict refusals do:
+  - no single literal `module("name"[, package.seeall])` declaration that runs on every
+    path through the root;
+  - a second `module` load;
+  - a `setfenv` or `getfenv` global, loaded by `GETGLOBAL` (possibly copied to another
+    register), used as a call target;
+  - failed validation.
+
+  Exceeding `MAX_MODULE_INIT_WORDS` or `MAX_MODULE_INIT_CONSTANT_BYTES` is
+  `ANA-LIMIT-001`. The admission reads root instructions only; nested functions are
+  never visited.
+- **Exports, per name.** A name's root `SETGLOBAL` is a clean export only when all of
+  these hold:
+  - it stores a closure;
+  - it is the name's only root store;
+  - it comes after the declaration, on every path to the root's exit;
+  - its value is computed in the same basic block.
+
+  Any other store makes `M.name`, and every label under it, `dynamic`. That covers a
+  non-function, an unknown value, a second store, a conditional or loop store, and a
+  store before the declaration (which also makes the global `name` dynamic). Options
+  other than `package.seeall` make all of `M` dynamic.
 - **Labels.** When any provider was admitted this way, every `resolved`, `absent` and
-  `duplicate` link carries `assumptions: ["trusted-init"]`, including links to strictly
-  admitted providers, because the index's completeness rests on the assumption. Cross-chunk
-  caller bases copy it. The callers summary lists `assumptions` and `assumed_providers`.
-  `degraded`, `coverage_complete` and exit codes keep their meaning, and the strict
-  convention never emits these fields.
+  `duplicate` link carries `assumptions: ["trusted-init"]`. That includes links to
+  strictly admitted providers, because duplicate and absence claims rest on what the
+  trust-admitted modules define. Cross-chunk caller bases copy it, and the callers
+  summary lists `assumptions` and `assumed_providers`. `degraded`, `coverage_complete`
+  and exit codes keep their meaning, and the strict convention never emits these
+  fields.
 
-The full rule set is in [the contract](NEXT-SPRINT.md). The executable controls, including
-the pinned gap (a same-file function run by a callback is assumed, not followed), are in
-[test_trusted_init_linking.rs](../crates/luad-oracle/tests/test_trusted_init_linking.rs).
-The source-text oracle on public LuCI is in
+Examples the assumption covers, each pinned by a test to come back `resolved` with the
+label. These are cases of the assumption, not defects:
+
+- `rawget(_G, "setfenv")(1, luci.sys)` is an environment change made through a value
+  luad does not identify. Code review round 2 found it.
+- `local o = u.wrap() .. ""; o.sys.exec = nil` writes through a table returned by a
+  metamethod. Code review round 2 found it.
+- `luci.sys.exec = nil`, `_M.exec = nil`, and `package.loaded["luci.sys"].exec = nil` in
+  a module's own top level.
+- A same-file function, run directly, through a table or as a callback, that redefines
+  an export.
+
+The controls are in
+[test_trusted_init_linking.rs](../crates/luad-oracle/tests/test_trusted_init_linking.rs),
+and the source-text oracle on public LuCI is in
 [test_callers_luci_trusted_init.rs](../crates/luad-oracle/tests/test_callers_luci_trusted_init.rs).
 
 The [cross-chunk gate tests](../crates/luad-oracle/tests/test_cross_chunk_linking.rs)

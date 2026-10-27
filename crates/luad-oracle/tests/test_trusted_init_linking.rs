@@ -1,8 +1,10 @@
 //! The opt-in `luci-module-trusted-init` convention: admissions, refusals and labels.
 //!
 //! Each provider is compiled by the required official Lua 5.1.5 compiler and never
-//! executed. A control passes only when the caller's link is exactly what the contract in
-//! docs/NEXT-SPRINT.md says: resolved with the `trusted-init` label, or not resolved.
+//! executed. The convention states its assumption rather than proving it, so a control
+//! passes only when the caller's link is exactly what docs/MACHINE-INTERFACE.md says:
+//! resolved or absent with the `trusted-init` label, dynamic for the label a visible root
+//! store makes uncertain, or dynamic for the corpus after a visible refusal.
 
 use luad_analysis::{analyze_corpus_links, CrossChunkLinkFact, LinkConvention, LinkStatus};
 use luad_core::envelope::InputIdentity;
@@ -105,159 +107,53 @@ fn test_trusted_init_leaves_strict_answers_unlabeled() {
 }
 
 #[test]
-fn test_trusted_init_never_resolves_what_the_root_visibly_changes() {
+fn test_trusted_init_makes_visibly_unsettled_stores_dynamic() {
     let require = "local u = require 'luci.util'; ";
-    for providers in [
-        // The root rebinds, conditionally defines, or defines before declaring.
-        vec![format!("{require}module('luci.sys'); function exec() end; exec = u.exec")],
-        vec![format!("{require}module('luci.sys'); if flag then function exec() end end")],
-        vec![format!("{require}module('luci.sys'); for i = 1, 2 do function exec() end end")],
-        vec![format!("{require}function exec() end; module('luci.sys')")],
-        vec![format!("{require}module('luci.sys'); local f = function() end; if flag then f = u.g end; exec = f")],
+    for source in [
+        // The root rebinds, conditionally defines, loops, or defines before declaring.
+        format!("{require}module('luci.sys'); function exec() end; exec = u.exec"),
+        format!("{require}module('luci.sys'); if flag then function exec() end end"),
+        format!("{require}module('luci.sys'); for i = 1, 2 do function exec() end end"),
+        format!("{require}function exec() end; module('luci.sys')"),
+        format!("{require}module('luci.sys'); local f = function() end; if flag then f = u.g end; exec = f"),
         // Path-insensitive transfer sees the branch's closure last; the store is not proved.
-        vec![format!("{require}module('luci.sys'); local f = u.g; if flag then f = function() end end; exec = f")],
-        // The module table itself escapes or is written.
-        vec![format!("{require}module('luci.sys'); function exec() end; setmetatable(_M, {{}})")],
-        vec![format!("{require}module('luci.sys'); function exec() end; _M.exec = nil")],
-        vec![format!("{require}module('luci.sys', function(m) end); function exec() end")],
-        // Another module writes the namespace through a name the analysis follows.
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); luci.sys.exec = function() end"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local s = require 'luci.sys'; s.exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); package.loaded['luci.sys'].exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local l = package.loaded; l['luci.sys'].exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local s = luci.sys; local rs = rawset; rs(s, 'exec', nil)"),
-        ],
-        // Namespaces kept in tables this root made are followed out of them.
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local t = {{}}; t.s = luci.sys; t.s.exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local t = {{s = require 'luci.sys'}}; local x = t.s; x.exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local t = {{luci.sys}}; t[1].exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local t = {{}}; local k = 'x'; t[k] = luci.sys; t.y.exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local t = {{inner = {{s = luci.sys}}}}; setmetatable(t, {{}})"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local t = {{s = luci.sys}}; holder = t"),
-        ],
-        // A namespace stored under another name is followed through that alias.
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); holder = luci.sys; holder.exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); sys = require 'luci.sys'; local x = sys; x.exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); a = luci; b = a; b.sys.exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); holder = luci.sys; setmetatable(holder, {{}})"),
-        ],
-        // Code review round 1: values the analysis does not track, written by the root.
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local t = {{}}; table.insert(t, luci.sys); t[1].exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local o = u.wrap(); o.sys.exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local t = {{}}; u.install(t, luci.sys); t.exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); for _, m in pairs(luci) do m.exec = nil end"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local s = assert(require 'luci.sys'); s.exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local s = rawget(luci, 'sys'); s.exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local t = u.f().g; holder = t; holder.exec = nil"),
-        ],
-        // A same-file function rebinds a root local that the root then writes through.
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other', package.seeall); local t = {{}}; local function f() t = luci.sys end; f(); t.exec = nil"),
-        ],
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci.other'); local t = {{}}; local function f() local function g() t = luci.sys end; g() end; u.run(f); t.exec = nil"),
-        ],
-        // The root replaces a namespace that labels below it rely on.
-        vec![
-            "module('luci.sys'); function exec() end".to_string(),
-            format!("{require}module('luci'); sys = nil"),
-        ],
+        format!("{require}module('luci.sys'); local f = u.g; if flag then f = function() end end; exec = f"),
+        // Options receive the module table and may change its metatable.
+        format!("{require}module('luci.sys', function(m) end); function exec() end"),
     ] {
-        let sources: Vec<&str> = providers.iter().map(String::as_str).collect();
-        let link = trusted(&sources);
-        assert_eq!(link.status, LinkStatus::Dynamic, "{sources:?}: {link:?}");
+        let link = trusted(&[&source]);
+        assert_eq!(link.status, LinkStatus::Dynamic, "{source}: {link:?}");
         assert!(link.target_artifact.is_none() && link.target_proto.is_none());
         assert!(link.assumptions.is_empty());
         assert!(!link.evidence.is_empty());
     }
+    // A non-function store replaces the namespace labels below it rely on.
+    let link = trusted(&[
+        "module('luci.sys'); function exec() end",
+        &format!("{require}module('luci'); sys = nil"),
+    ]);
+    assert_eq!(link.status, LinkStatus::Dynamic, "{link:?}");
+    // Only that label: a clean neighbour in the same module still resolves.
+    let link = trusted(&[&format!(
+        "{require}module('luci.sys'); function exec() end; helper = 1; helper = 2"
+    )]);
+    assert_eq!(link.status, LinkStatus::Resolved);
+    assert_eq!(link.assumptions, ["trusted-init"]);
 }
 
 #[test]
-fn test_trusted_init_refuses_unbounded_initialization_for_the_whole_corpus() {
+fn test_trusted_init_refuses_what_is_visibly_unbounded_for_the_whole_corpus() {
     let exec = "module('luci.sys'); function exec() end";
     let require = "local u = require 'luci.util'; ";
     for refused in [
         format!("{require}module('luci.other'); module('luci.more')"),
+        // Two loads of `module`, one declaration: the second could be called anywhere.
+        format!("{require}local later = module; module('luci.other'); u.defer(later)"),
         format!("{require}local name = 'luci.' .. 'other'; module(name)"),
+        format!("{require}if flag then module('luci.other') end"),
         format!("{require}module('luci.other'); setfenv(1, {{}})"),
         format!("local sf = setfenv; {require}module('luci.other'); sf(1, {{}})"),
-        "local debug = require 'debug'; module('luci.other'); debug.setmetatable(u, {})".to_string(),
-        format!("{require}module('luci.other'); local k = 'x'; _G[k] = 1"),
-        format!("{require}module('luci.other'); local n = 'luci.' .. 'sys'; local s = require(n); s.exec = nil"),
-        format!("{require}module('luci.other'); local ok, s = pcall(require, 'luci.sys'); s.exec = nil"),
         format!("{require}module('luci.other'); getfenv(1).exec = nil"),
-        format!("{require}module('luci.other'); local m = module; u.call(m)"),
-        format!("{require}if flag then module('luci.other') end"),
-        // Code review round 1: `module` and `setfenv` reached by other spellings.
-        format!("{require}module('luci.other', package.seeall); _G.module('luci.sys'); function exec() return 'evil' end"),
-        format!("{require}module('luci.other', package.seeall); pcall(_G.module, 'luci.sys')"),
-        format!("{require}module('luci.other', package.seeall); local g = getfenv(0); g.setfenv(1, luci.sys); exec = nil"),
-        format!("{require}module('luci.other'); local t = {{}}; u.init(t); t.x = 1"),
-        format!("{require}module('luci.other'); setmetatable(u.f().g, {{}})"),
     ] {
         // The provider of luci.sys is clean, but the refused module could define anything.
         let link = trusted(&[exec, &refused]);
@@ -267,51 +163,91 @@ fn test_trusted_init_refuses_unbounded_initialization_for_the_whole_corpus() {
     }
 }
 
+/// What the assumption covers, pinned: each provider's initialization does remove or
+/// redirect `luci.sys.exec` at runtime, through code luad does not follow. The answer is
+/// still `resolved`, and says it rests on `trusted-init`. These are the examples the
+/// assumption names, including both code-review round-2 findings; they are not defects.
 #[test]
-fn test_trusted_init_caps_are_limits_not_partial_admissions() {
-    let deep = (0..40)
-        .map(|i| format!("f{i}"))
-        .collect::<Vec<_>>()
-        .join(".");
-    let link = trusted(&[
-        "module('luci.sys'); function exec() end",
-        &format!("local u = require 'luci.util'; module('luci.other'); local x = luci.{deep}"),
-    ]);
-    assert_eq!(link.status, LinkStatus::LimitExceeded, "{link:?}");
-    assert!(link.target_proto.is_none() && link.assumptions.is_empty());
-}
-
-/// The contract's stated gap, pinned: same-file functions run by code other than the
-/// root's own instructions are inside the assumption, so this answer is labeled, not
-/// proved.
-#[test]
-fn test_trusted_init_labels_same_file_code_it_does_not_follow() {
-    let source = "module('luci.sys', package.seeall); function exec() return 1 end; \
-                  local t = {}; t.g = function() exec = function() return 2 end end; t.g()";
-    let link = trusted(&[source]);
-    assert_eq!(link.status, LinkStatus::Resolved);
-    assert_eq!(link.assumptions, ["trusted-init"]);
-    // So is a namespace handed to a function other than the mutating builtins.
-    let link = trusted(&[
-        "module('luci.sys'); function exec() end",
-        "local u = require 'luci.util'; module('luci.other'); u.patch(luci.sys)",
-    ]);
-    assert_eq!(link.status, LinkStatus::Resolved);
-    assert_eq!(link.assumptions, ["trusted-init"]);
-}
-
-#[test]
-fn test_trusted_init_aliases_do_not_dirty_their_source() {
-    // Re-exporting or keeping a namespace under another name changes neither.
-    for other in [
-        "local u = require 'luci.util'; module('luci.other'); exec2 = luci.sys.exec",
-        "local u = require 'luci.util'; module('luci.other'); sys = require 'luci.sys'",
-        "local u = require 'luci.util'; module('luci.other'); local c = sys:cursor()",
-        "local u = require 'luci.util'; module('luci.other'); holder = luci.sys; holder.other.x = 1",
+fn test_trusted_init_labels_what_the_assumption_covers() {
+    let exec = "module('luci.sys'); function exec() end";
+    let require = "local u = require 'luci.util'; ";
+    for covered in [
+        // Code review round 2: a call through a value luad does not identify, and a table
+        // returned by a metamethod.
+        format!("{require}module('luci.other', package.seeall); rawget(_G, 'setfenv')(1, luci.sys); function exec() return 'evil' end"),
+        format!("{require}module('luci.other'); local o = u.wrap() .. ''; o.sys.exec = nil"),
+        // Code review round 1, now covered rather than chased.
+        format!("{require}module('luci.other'); local t = {{}}; table.insert(t, luci.sys); t[1].exec = nil"),
+        format!("{require}module('luci.other', package.seeall); local t = {{}}; local function f() t = luci.sys end; f(); t.exec = nil"),
+        format!("{require}module('luci.other', package.seeall); _G.module('luci.sys'); function exec() return 'evil' end"),
+        // The root's own writes into another module's table are initialization code too.
+        format!("{require}module('luci.other'); luci.sys.exec = function() end"),
+        format!("{require}module('luci.other'); package.loaded['luci.sys'].exec = nil"),
+        // Same-file code run through a table or a callback.
+        format!("{require}module('luci.other'); local t = {{}}; t.g = function() luci.sys.exec = nil end; t.g()"),
+        format!("{require}module('luci.other'); u.patch(luci.sys)"),
     ] {
-        let link = trusted(&["module('luci.sys'); function exec() end", other]);
-        assert_eq!(link.status, LinkStatus::Resolved, "{other}: {link:?}");
-        assert_eq!(link.assumptions, ["trusted-init"]);
+        let link = trusted(&[exec, &covered]);
+        assert_eq!(link.status, LinkStatus::Resolved, "{covered}: {link:?}");
+        assert_eq!(link.assumptions, ["trusted-init"], "{covered}");
+    }
+    // Within the module itself, too: `_M.exec = nil` after the definition.
+    let link = trusted(&[&format!(
+        "{require}module('luci.sys'); function exec() end; _M.exec = nil"
+    )]);
+    assert_eq!(link.status, LinkStatus::Resolved);
+    assert_eq!(link.assumptions, ["trusted-init"]);
+}
+
+/// Hostile input: deeply nested closures under initialization code, through the CLI as a
+/// user runs it. The admission visits only root instructions, so nesting depth adds no
+/// work of its own. Just under the parser's nesting limit the answer is labeled and quick;
+/// over it, parsing refuses before any admission runs.
+#[test]
+fn test_trusted_init_deep_nesting_is_bounded() {
+    let dir = tempfile::tempdir().unwrap();
+    let write = |name: &str, source: &str| {
+        let bytes = luad_oracle::compile_source_lua51(source, true).expect("official luac");
+        let path = dir.path().join(name);
+        std::fs::write(&path, bytes).unwrap();
+        path.display().to_string()
+    };
+    let caller = write("caller.luac", CALLER);
+    for (depth, expected_exit) in [(126usize, 0), (140, 5)] {
+        let mut body = String::from("return 1");
+        for i in 0..depth {
+            body = format!("local function f{i}() {body} end; local t{i} = {{f{i}}}; return t{i}");
+        }
+        let provider = write(
+            &format!("deep{depth}.luac"),
+            &format!(
+                "local u = require 'luci.util'; module('luci.sys'); function exec() end; \
+                 local function deep() {body} end; local x = deep()"
+            ),
+        );
+        let started = std::time::Instant::now();
+        let output = std::process::Command::new(luad_oracle::luad_binary_path())
+            .args(["callers", &provider, "--proto", "0/0", &caller])
+            .args([
+                "--link-convention",
+                "luci-module-trusted-init",
+                "-f",
+                "json",
+            ])
+            .output()
+            .unwrap();
+        let elapsed = started.elapsed();
+        assert_eq!(output.status.code(), Some(expected_exit), "depth {depth}");
+        assert!(elapsed < std::time::Duration::from_secs(20), "{elapsed:?}");
+        if expected_exit == 0 {
+            let document: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+            let callers = document["data"]["callers"].as_array().unwrap();
+            assert_eq!(callers.len(), 1, "depth {depth}");
+            assert_eq!(
+                callers[0]["bases"][0]["assumptions"],
+                serde_json::json!(["trusted-init"])
+            );
+        }
     }
 }
 

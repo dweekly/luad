@@ -328,9 +328,9 @@ Run on the 13 vendored files, the trusted-init answer lists 9 cross-file callers
 providers are admitted only under the assumption.
 
 The same command with `luci-module-setglobal` reports no cross-file caller. Both
-answers say `degraded: true`: the vendored dispatcher and others write into module-own
-tables, such as `function Client.method()`, and the labels under those tables stay
-dynamic.
+answers say `degraded: true`. Under trusted-init the cause is a few labels whose
+defining root stores something other than a single closure, such as the re-export
+`exec = luci.util.exec` in `luci.sys`. Those labels stay `dynamic`.
 
 ---
 
