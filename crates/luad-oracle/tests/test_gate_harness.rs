@@ -581,22 +581,47 @@ for a in "$@"; do [ "$prev" = -o ] && o=$a; prev=$a; done
     )
     .unwrap();
     fs::set_permissions(&impostor, fs::Permissions::from_mode(0o755)).unwrap();
+    wait_until_runnable(&impostor);
 
     let spec = reproduction_spec("reproduction-impostor", "Lua 5.1.5", "lua51");
-    assert!(matches!(
-        execute_gate_spec(&spec, tmp.path(), &root, Some(&impostor)),
-        Err(GateRunnerError::CompilerReproductionMismatch { .. })
-    ));
+    let outcome = execute_gate_spec(&spec, tmp.path(), &root, Some(&impostor));
+    assert!(
+        matches!(
+            outcome,
+            Err(GateRunnerError::CompilerReproductionMismatch { .. })
+        ),
+        "{outcome:?}"
+    );
 
     // Control: the same wrapper without the byte change is accepted, so the refusal
     // above comes from the output, not from the wrapper being a different executable.
     let faithful = dir.path().join("luac-faithful");
     fs::write(&faithful, wrapper(":")).unwrap();
     fs::set_permissions(&faithful, fs::Permissions::from_mode(0o755)).unwrap();
-    assert!(matches!(
-        execute_gate_spec(&spec, tmp.path(), &root, Some(&faithful)),
-        Err(GateRunnerError::UntrustedRunner(_))
-    ));
+    wait_until_runnable(&faithful);
+    let outcome = execute_gate_spec(&spec, tmp.path(), &root, Some(&faithful));
+    assert!(
+        matches!(outcome, Err(GateRunnerError::UntrustedRunner(_))),
+        "{outcome:?}"
+    );
+}
+
+/// Wait out Linux's ETXTBSY race on a script this process just wrote.
+///
+/// Another test thread can fork while the script's write descriptor is open; until that
+/// child execs, the inherited descriptor makes exec of the script fail with "Text file
+/// busy". Running it here until it starts keeps that race out of the gate under test.
+fn wait_until_runnable(path: &std::path::Path) {
+    for _ in 0..200 {
+        match std::process::Command::new(path).arg("-v").output() {
+            Ok(_) => return,
+            Err(e) if e.raw_os_error() == Some(26) => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(e) => panic!("cannot run {path:?}: {e}"),
+        }
+    }
+    panic!("{path:?} stayed busy");
 }
 
 #[test]
