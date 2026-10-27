@@ -265,6 +265,13 @@
             "source"
           ],
           "properties": {
+            "assumptions": {
+              "description": "Assumptions the link rests on (`trusted-init`); omitted when none.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
             "convention": {
               "type": "string"
             },
@@ -449,6 +456,20 @@
         "is_truncated"
       ],
       "properties": {
+        "assumed_providers": {
+          "description": "Providers admitted only under the `trusted-init` assumption.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assumptions": {
+          "description": "Assumptions the answer rests on (`trusted-init`); omitted when none.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "caller_count": {
           "type": "integer",
           "format": "uint",

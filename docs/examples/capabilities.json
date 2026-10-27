@@ -131,7 +131,8 @@
       "xref"
     ],
     "link_conventions": [
-      "luci-module-setglobal"
+      "luci-module-setglobal",
+      "luci-module-trusted-init"
     ]
   },
   "evidence": []

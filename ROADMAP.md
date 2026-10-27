@@ -170,6 +170,19 @@ need. Known limits to revisit when a real investigation hits them:
   the label could have named the target.
 - No compiled shape where a call relation and a link disagree has been found; the
   `conflicting` class is pinned only on synthetic facts.
+- The opt-in `luci-module-trusted-init` convention links what callee analysis
+  resolves to a symbolic path: global paths (`luci.x.f(`), and local aliases of
+  `require` results and their fields (`local util = require "luci.util"`,
+  `local class = util.class`).
+- Nested exports such as `function net.routes()` are not indexed. Their labels are
+  dynamic because `net = {}` is a non-closure store.
+- Hardening: the export reference consumer's offline `callers` stays strict-only; it
+  does not accept `luci-module-trusted-init` or carry `assumptions`.
+- `luci-module-trusted-init` states its assumption rather than proving it (owner
+  decision, 2026-10-27). The assumption covers writes through values luad does not
+  identify, and same-file code run during initialization. If a real investigation
+  finds that assumption false often enough to matter, the dataflow version (PR #121
+  history, reviewed twice) is the starting point for checking it instead.
 
 Extend the shared reference consumer with caller context and reuse its factual adapter
 across the workflows; keep firmware dispatch, sink, and authentication policy outside it.
@@ -286,7 +299,9 @@ frequency. None is an automatic prerequisite for announcement or a 1.0 promise.
   contents merely to improve a resolution count.
 - **Additional profiles:** prioritize actual refused artifacts with public authority.
   Encoded big-endian Lua 5.1, vendor opcode maps, EdgeTX, and newer stock releases compete
-  on that basis. Do not add a second module convention for an unverified matching gap.
+  on that basis. Do not add another module convention for an unverified matching gap
+  (`luci-module-trusted-init` answered a measured one: 41 of 55 public LuCI modules
+  refused by the strict index).
   Revisit the future release boundary if justified demand changes its ordering.
 - **Multi-hop caller inspection:** require per-call-site context, bounded recursion,
   open/missing arguments, callbacks, aliases, and unknown caller coverage. Keep a

@@ -213,6 +213,10 @@ operations, and cannot claim a unique target from an incomplete index. A binding
 conditional on that convention, not runtime reachability. See the
 [exact admitted shapes, statuses and budgets](docs/MACHINE-INTERFACE.md#export)
 and [executable controls](crates/luad-oracle/tests/test_cross_chunk_linking.rs).
+The opt-in `--link-convention luci-module-trusted-init` also admits modules whose top
+level runs other code. It does so under a stated assumption, and every answer that relies
+on it carries `assumptions: ["trusted-init"]`; see the
+[machine interface](docs/MACHINE-INTERFACE.md#luci-module-trusted-init-opt-in-assumption-labeled).
 
 Development callee/origin analysis invalidates call-frame temporaries before retaining
 returned results. It also refuses stale captures across overlapping calls and generic
@@ -297,7 +301,7 @@ delete the document in the same change and update this index.
 | [`docs/ROADMAP-1.0.md`](docs/ROADMAP-1.0.md) | Stable-release qualification obligations, exact targets, minimal machine contract, hostile-input evidence, and transfer. | 2026-10-22 | The stable target set, qualified surface, acceptance obligations, or qualification lifecycle changes. |
 | [`docs/BRINGUP.md`](docs/BRINGUP.md) | Setup for a developer machine, a self-hosted Actions runner, and a release builder, with the owning file for every tool pin. | 2026-10-22 | A tool pin, its owning file, the doctor's checks, runner prerequisites, labels or security boundary, or the release dry-run and rehearsal entry points change. |
 | [`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) | Customer-outcome batches, evidence-based selection, proportional verification, qualification lanes, and orchestration. | 2026-10-22 | Selection criteria, planning ownership, CI lanes, roles, evidence policy, or sprint mechanics change. |
-| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Neutral checkpoint while the release, site and link-convention decisions are pending. | 2026-10-23 | A bounded contract replaces the checkpoint or the first roadmap outcome changes. |
+| [`docs/NEXT-SPRINT.md`](docs/NEXT-SPRINT.md) | Contract for the opt-in `luci-module-trusted-init` link convention: its assumption, transfer rules, gates and design-review history. | 2026-10-27 | The convention merges and a new bounded contract replaces it, or the assumption changes. |
 | [`docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md`](docs/EMBEDDED-FIRMWARE-REQUIREMENTS.md) | Present factual-tool requirements derived from the TP-Link/OpenWrt reverse-engineering use case. | 2026-10-20 | New corpus evidence changes target authority, fact boundaries, or workflows, or all unique requirements move into the PRD. |
 | [`docs/TRIALS.md`](docs/TRIALS.md) | Outside-trial kit: participant roles, inputs to hand over, pre-registered questions with hashed answer keys, and what to record. | 2026-10-23 | A trial is run, the trial inputs or questions change, or roadmap D closes. |
 | [`docs/PRIOR-ART-AND-CORPORA.md`](docs/PRIOR-ART-AND-CORPORA.md) | Dated executed comparisons and source observations, corpus candidates, provenance, and research leads. | 2026-10-23 | A comparison is executed, a cited project/profile changes, or a candidate corpus is selected; source checks do not refresh older experiments. |

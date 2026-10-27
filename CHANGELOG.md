@@ -17,6 +17,27 @@ is promoted to a supported tier and no interface carries a compatibility promise
   `tests/candidates/lua51-lnum32-rc1-prerequisites/` and checked against the hashes
   RC1 recorded, so the RC1 candidate file itself is unchanged.
 
+- Add the opt-in `--link-convention luci-module-trusted-init` for `callers` and `export`.
+  It admits LuCI modules whose top level runs other code (`require`, table
+  constructors, field reads), under a stated assumption rather than a proof. The
+  assumption, `trusted-init`, is that code run during module initialization (including
+  same-file functions and anything reached through values luad does not identify) does
+  not replace, remove or alias any module's exported functions, or change a module's
+  environment.
+
+  Only directly visible problems are still checked:
+  - a missing or second `module` declaration, or a direct `setfenv`/`getfenv` call,
+    refuses the module;
+  - a name whose root stores are not one unconditional closure makes that label dynamic.
+
+  Every definite link carries `assumptions: ["trusted-init"]`, as do caller bases and the
+  callers summary (`assumptions`, `assumed_providers`). The fields are additive and absent
+  under the strict convention, whose output is unchanged. Strict consumers validating
+  against an older schema snapshot should refresh it.
+
+  On the 13 vendored LuCI files, 70 cross-file callers are source-checked, and all 39
+  literal `luci.x.f(` calls are found.
+
 ## 0.4.0 — 2026-10-23
 
 - Bound the parsed model with a chunk-wide instruction budget (#117).

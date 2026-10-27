@@ -468,7 +468,7 @@ reachability, execution order, or immunity from unobserved external mutation.
 ### `callers`
 
 `luad callers TARGET --proto PATH [CORPUS...] [--input-list FILE]
-[--link-convention luci-module-setglobal]` lists the observed one-hop callers of one Lua
+[--link-convention CONVENTION]` lists the observed one-hop callers of one Lua
 5.1 prototype. It reorganizes accepted facts and adds no resolution rule. Same-artifact
 callers come from resolved `call_relation` facts. Cross-artifact callers come from
 `resolved` link records whose target identity (path, sha256, byte length) and prototype
@@ -487,7 +487,10 @@ sites are never listed or counted as callers.
 An empty `callers` list means no observed caller in the analyzed corpus. It is not a
 proof of unreachability. `coverage_complete` reports whether every input was analyzed.
 `degraded` reports any degraded site, index cutoff or provider the index could not admit,
-and `dynamic_providers` names those providers. No field claims the negative is complete.
+and `dynamic_providers` names those providers. Under `luci-module-trusted-init`,
+`assumptions` and `assumed_providers` name the assumption the answer rests on and the
+providers admitted only under it; both are omitted otherwise. No field claims the
+negative is complete.
 Each corpus file is read once. A file that cannot be read, parsed or validated is
 reported in `files` and, when linking, makes the index uncertain, as in `export`.
 
@@ -676,9 +679,9 @@ order; the field is absent from an unfiltered export.
 `--link-convention CONVENTION` explicitly enables corpus-wide module indexing and
 inter-artifact binding under a named convention. Discover conventions at runtime via
 `luad capabilities --format json` under `export.link_conventions` or
-`luad export --help` (currently `luci-module-setglobal`). JSONL `cross_chunk_link`
-records conform to `luad schema link` and carry caller evidence plus a target artifact
-and prototype only when `resolved`.
+`luad export --help` (currently `luci-module-setglobal` and `luci-module-trusted-init`).
+JSONL `cross_chunk_link` records conform to `luad schema link` and carry caller evidence
+plus a target artifact and prototype only when `resolved`.
 
 The Lua 5.1 convention admits a deliberately narrow initialization subset: one direct
 literal `module("name")` call, optionally with `package.seeall`, in a straight-line
@@ -742,6 +745,70 @@ once for indexing and again for export, and does not create a transactional file
 snapshot. Link target hashes identify index-pass bytes. Consumers must join the exact
 `(path, sha256)` target to complete exported provider facts, and refuse the join when
 those facts are missing or changed.
+
+#### `luci-module-trusted-init` (opt-in, assumption-labeled)
+
+This convention starts from the strict one, which most real LuCI modules fail: their top
+level runs `require` calls, builds tables or reads fields before or after `module(...)`.
+It **states** the following assumption rather than proving it.
+
+**The `trusted-init` assumption.** Code run during module initialization does not
+replace, remove or alias any module's exported functions, or change a module's
+environment. That includes the module's own top-level statements, same-file functions,
+and anything reached through values luad does not identify (call results, table fields,
+metamethods). Every answer that relies on it carries `assumptions: ["trusted-init"]`.
+
+What luad still checks, because it is directly visible in the root's bytecode and cheap:
+
+- **Unchanged modules.** A module the strict convention admits, ignores or limits is
+  treated identically.
+- **Whole-corpus refusals.** These make the module `dynamic` for the whole corpus,
+  as strict refusals do:
+  - no single literal `module("name"[, package.seeall])` declaration that runs on every
+    path through the root;
+  - a second `module` load;
+  - a `setfenv` or `getfenv` global, loaded by `GETGLOBAL` (possibly copied to another
+    register), used as a call target;
+  - failed validation.
+
+  Exceeding `MAX_MODULE_INIT_WORDS` or `MAX_MODULE_INIT_CONSTANT_BYTES` is
+  `ANA-LIMIT-001`. The admission reads root instructions only; nested functions are
+  never visited.
+- **Exports, per name.** A name's root `SETGLOBAL` is a clean export only when all of
+  these hold:
+  - it stores a closure;
+  - it is the name's only root store;
+  - it comes after the declaration, on every path to the root's exit;
+  - its value is computed in the same basic block.
+
+  Any other store makes `M.name`, and every label under it, `dynamic`. That covers a
+  non-function, an unknown value, a second store, a conditional or loop store, and a
+  store before the declaration (which also makes the global `name` dynamic). Options
+  other than `package.seeall` make all of `M` dynamic.
+- **Labels.** When any provider was admitted this way, every `resolved`, `absent` and
+  `duplicate` link carries `assumptions: ["trusted-init"]`. That includes links to
+  strictly admitted providers, because duplicate and absence claims rest on what the
+  trust-admitted modules define. Cross-chunk caller bases copy it, and the callers
+  summary lists `assumptions` and `assumed_providers`. `degraded`, `coverage_complete`
+  and exit codes keep their meaning, and the strict convention never emits these
+  fields.
+
+Examples the assumption covers, each pinned by a test to come back `resolved` with the
+label. These are cases of the assumption, not defects:
+
+- `rawget(_G, "setfenv")(1, luci.sys)` is an environment change made through a value
+  luad does not identify. Code review round 2 found it.
+- `local o = u.wrap() .. ""; o.sys.exec = nil` writes through a table returned by a
+  metamethod. Code review round 2 found it.
+- `luci.sys.exec = nil`, `_M.exec = nil`, and `package.loaded["luci.sys"].exec = nil` in
+  a module's own top level.
+- A same-file function, run directly, through a table or as a callback, that redefines
+  an export.
+
+The controls are in
+[test_trusted_init_linking.rs](../crates/luad-oracle/tests/test_trusted_init_linking.rs),
+and the source-text oracle on public LuCI is in
+[test_callers_luci_trusted_init.rs](../crates/luad-oracle/tests/test_callers_luci_trusted_init.rs).
 
 The [cross-chunk gate tests](../crates/luad-oracle/tests/test_cross_chunk_linking.rs)
 exercise overwrites, refused declarations/clobbers, child bodies, aliases, capacity

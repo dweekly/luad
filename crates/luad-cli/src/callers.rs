@@ -90,6 +90,12 @@ pub struct CallersSummary {
     /// Providers whose definitions the convention index could not admit.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dynamic_providers: Vec<String>,
+    /// Assumptions the answer rests on (`trusted-init`); omitted when none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assumptions: Vec<String>,
+    /// Providers admitted only under the `trusted-init` assumption.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assumed_providers: Vec<String>,
 }
 
 /// `luad callers` payload. An empty `callers` list means no observed caller in the
@@ -474,6 +480,12 @@ pub(crate) fn handle_callers(
             .all(|f| f.status == CallersFileStatus::Analyzed),
         degraded,
         dynamic_providers: index.dynamic_artifacts.iter().cloned().collect(),
+        assumptions: if index.assumed_artifacts.is_empty() {
+            Vec::new()
+        } else {
+            vec![luad_analysis::TRUSTED_INIT_ASSUMPTION.to_string()]
+        },
+        assumed_providers: index.assumed_artifacts.iter().cloned().collect(),
     };
     let exit = answer_exit(is_truncated, limit_class, summary.coverage_complete);
     if is_truncated {
@@ -655,6 +667,15 @@ fn render_text(answer: &CallersAnswer, writer: &mut impl io::Write) -> io::Resul
                 luad_analysis::CallerBasis::CallRelation { basis, .. } => {
                     format!("call_relation:{}", serde_plain(basis))
                 }
+                luad_analysis::CallerBasis::CrossChunkLink {
+                    label_segments,
+                    assumptions,
+                    ..
+                } if !assumptions.is_empty() => format!(
+                    "link:{} assuming {}",
+                    label_segments.join("."),
+                    assumptions.join(", ")
+                ),
                 luad_analysis::CallerBasis::CrossChunkLink { label_segments, .. } => {
                     format!("link:{}", label_segments.join("."))
                 }
@@ -674,6 +695,14 @@ fn render_text(answer: &CallersAnswer, writer: &mut impl io::Write) -> io::Resul
             writer,
             "  Index uncertain because of: {}",
             summary.dynamic_providers.join(", ")
+        )?;
+    }
+    if !summary.assumptions.is_empty() {
+        writeln!(
+            writer,
+            "  Assumes {} for: {}",
+            summary.assumptions.join(", "),
+            summary.assumed_providers.join(", ")
         )?;
     }
     writeln!(writer, "Coverage:")?;

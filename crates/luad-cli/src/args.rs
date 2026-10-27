@@ -239,7 +239,7 @@ pub struct CallersArgs {
     #[arg(long)]
     pub input_list: Option<String>,
 
-    /// Cross-artifact linking convention (e.g. 'luci-module-setglobal').
+    /// Cross-artifact linking convention ('luci-module-setglobal' or 'luci-module-trusted-init').
     #[arg(long)]
     pub link_convention: Option<String>,
 
@@ -397,7 +397,7 @@ pub struct ExportArgs {
     #[arg(long)]
     pub strict: bool,
 
-    /// Optional cross-chunk linking convention (e.g. 'luci-module-setglobal').
+    /// Optional cross-chunk linking convention ('luci-module-setglobal' or 'luci-module-trusted-init').
     #[arg(long)]
     pub link_convention: Option<String>,
 }
