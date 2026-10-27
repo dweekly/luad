@@ -5,8 +5,8 @@
 use luad_oracle::find_workspace_root;
 use luad_oracle::gate_runner::{
     assemble_release_manifest, execute_gate_spec, verify_gate_result, verify_release_manifest,
-    CompilerHashRequirement, CompilerHashSet, FixtureRequirement, GateResult, GateRunnerError,
-    GateSpec,
+    CompilerHashRequirement, CompilerHashSet, CompilerReproduction, FixtureRequirement, GateResult,
+    GateRunnerError, GateSpec,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -20,6 +20,7 @@ fn mock_valid_spec(gate_id: &str) -> GateSpec {
         expected_tests: vec!["test_sample".to_string()],
         required_compiler_version: None,
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -47,6 +48,7 @@ fn mock_valid_result(gate_id: &str) -> GateResult {
         compiler_version: None,
         compiler_sha256: None,
         profile: None,
+        compiler_reproductions: vec![],
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "aarch64".to_string(),
@@ -68,6 +70,7 @@ fn test_probe_1_zero_tests_executed_rejected() {
         expected_tests: vec![],
         required_compiler_version: None,
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -102,6 +105,7 @@ fn test_probe_2_nonexistent_test_filter_rejected() {
         expected_tests: vec!["expected_test_name".to_string()],
         required_compiler_version: None,
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -138,6 +142,7 @@ fn test_probe_4_stale_git_commit_rejected() {
         expected_tests: vec!["test_one".to_string()],
         required_compiler_version: None,
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -162,6 +167,7 @@ fn test_probe_4_stale_git_commit_rejected() {
         compiler_version: None,
         compiler_sha256: None,
         profile: None,
+        compiler_reproductions: vec![],
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "arm64".to_string(),
@@ -195,6 +201,7 @@ fn test_probe_5_dirty_result_rejected_for_promotion() {
         expected_tests: vec!["test_one".to_string()],
         required_compiler_version: None,
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -219,6 +226,7 @@ fn test_probe_5_dirty_result_rejected_for_promotion() {
         compiler_version: None,
         compiler_sha256: None,
         profile: None,
+        compiler_reproductions: vec![],
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "arm64".to_string(),
@@ -251,6 +259,7 @@ fn test_probe_6_wrong_compiler_binary_sha256_rejected() {
         required_compiler_sha256: Some(CompilerHashRequirement::Single(
             "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
         )),
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -277,6 +286,7 @@ fn test_probe_6_wrong_compiler_binary_sha256_rejected() {
             "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string(),
         ),
         profile: None,
+        compiler_reproductions: vec![],
         fixture_hashes: vec![],
 
         platform: "macos".to_string(),
@@ -423,6 +433,283 @@ fn test_version_one_gate_spec_hash_remains_stable() {
     );
 }
 
+/// The ten reference compilations a version-3 spec pins for one stock dialect, read
+/// from the committed fixture files rather than from the spec under test.
+fn committed_reproductions(dialect: &str) -> Vec<CompilerReproduction> {
+    let root = find_workspace_root();
+    let digest = |path: &str| sha256_hex(&fs::read(root.join(path)).expect("read fixture"));
+    let mut out = Vec::new();
+    for name in ["hello", "control_flow", "closures", "tables", "numerics"] {
+        for strip in [false, true] {
+            let source = format!("tests/fixtures/{name}.lua");
+            let suffix = if strip { "_stripped" } else { "" };
+            let output = format!("tests/fixtures/precompiled/{dialect}/{name}{suffix}.luac");
+            out.push(CompilerReproduction {
+                source_sha256: digest(&source),
+                source,
+                strip,
+                output_sha256: digest(&output),
+            });
+        }
+    }
+    out
+}
+
+/// The OpenWrt LNUM32 authority compiler's references: its own frozen source, compiled
+/// with and without debug information.
+fn lnum32_reproductions() -> Vec<CompilerReproduction> {
+    let root = find_workspace_root();
+    let dir = "tests/fixtures/authority/lua51-openwrt-lnum32";
+    let digest = |path: &str| sha256_hex(&fs::read(root.join(path)).expect("read fixture"));
+    let source = format!("{dir}/authority_lnum32.lua");
+    [false, true]
+        .into_iter()
+        .map(|strip| CompilerReproduction {
+            source: source.clone(),
+            source_sha256: digest(&source),
+            strip,
+            output_sha256: digest(&format!(
+                "{dir}/authority_lnum32{}.luac",
+                if strip { "_stripped" } else { "" }
+            )),
+        })
+        .collect()
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+fn reproduction_spec(gate_id: &str, version: &str, dialect: &str) -> GateSpec {
+    let mut spec = mock_valid_spec(gate_id);
+    spec.schema_version = 3;
+    // An untrusted runner is refused only after every compiler check has passed, so
+    // reaching that refusal proves the reproductions were accepted.
+    spec.command_argv = vec!["printf".to_string(), "ok".to_string()];
+    spec.required_compiler_version = Some(version.to_string());
+    spec.required_compiler_reproductions = committed_reproductions(dialect);
+    spec
+}
+
+#[test]
+fn test_compiler_reproduction_accepts_official_compilers_by_output() {
+    let root = find_workspace_root();
+    let tmp = NamedTempFile::new().unwrap();
+    for (version, dialect, compiler) in [
+        ("Lua 5.1.5", "lua51", luad_oracle::require_luac51()),
+        ("Lua 5.4.8", "lua54", luad_oracle::require_luac54()),
+    ] {
+        let spec = reproduction_spec("reproduction-accepted", version, dialect);
+        match execute_gate_spec(&spec, tmp.path(), &root, Some(&compiler)) {
+            Err(GateRunnerError::UntrustedRunner(_)) => {}
+            other => panic!("{version}: expected reproductions to pass, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn test_compiler_reproduction_rejects_wrong_output_and_source() {
+    let root = find_workspace_root();
+    let tmp = NamedTempFile::new().unwrap();
+    let compiler = luad_oracle::require_luac51();
+
+    let mut wrong_output = reproduction_spec("reproduction-output", "Lua 5.1.5", "lua51");
+    wrong_output.required_compiler_reproductions[3].output_sha256 = "0".repeat(64);
+    match execute_gate_spec(&wrong_output, tmp.path(), &root, Some(&compiler)) {
+        Err(GateRunnerError::CompilerReproductionMismatch {
+            source_path, strip, ..
+        }) => {
+            assert_eq!(source_path, "tests/fixtures/control_flow.lua");
+            assert!(strip);
+        }
+        other => panic!("expected CompilerReproductionMismatch, got {other:?}"),
+    }
+
+    // The 5.4 references cannot be reproduced by a 5.1 compiler that passes the banner
+    // check only because the spec under test names 5.1.
+    let mut cross_dialect = reproduction_spec("reproduction-dialect", "Lua 5.1.5", "lua54");
+    cross_dialect.required_compiler_reproductions.truncate(1);
+    assert!(matches!(
+        execute_gate_spec(&cross_dialect, tmp.path(), &root, Some(&compiler)),
+        Err(GateRunnerError::CompilerReproductionMismatch { .. })
+    ));
+
+    let mut wrong_source = reproduction_spec("reproduction-source", "Lua 5.1.5", "lua51");
+    wrong_source.required_compiler_reproductions[0].source_sha256 = "0".repeat(64);
+    assert!(matches!(
+        execute_gate_spec(&wrong_source, tmp.path(), &root, Some(&compiler)),
+        Err(GateRunnerError::FixtureCorrupted { .. })
+    ));
+}
+
+#[test]
+fn test_compiler_reproduction_rejects_impostor_with_correct_banner() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = find_workspace_root();
+    let tmp = NamedTempFile::new().unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let real = luad_oracle::require_luac51();
+    let banner = String::from_utf8(
+        std::process::Command::new(&real)
+            .arg("-v")
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+
+    // Reports the pinned banner and delegates to the real compiler, then changes one
+    // byte of the chunk it wrote: the shape a patched compiler would have.
+    let wrapper = |tamper: &str| {
+        format!(
+            r#"#!/bin/sh
+if [ "$1" = -v ]; then printf '%s\n' '{banner}'; exit 0; fi
+'{real}' "$@" || exit 1
+o=; prev=
+for a in "$@"; do [ "$prev" = -o ] && o=$a; prev=$a; done
+{tamper}
+"#,
+            banner = banner.trim(),
+            real = real.display(),
+        )
+    };
+    let impostor = dir.path().join("luac");
+    fs::write(
+        &impostor,
+        wrapper(r#"printf '\377' | dd of="$o" bs=1 seek=40 conv=notrunc 2>/dev/null"#),
+    )
+    .unwrap();
+    fs::set_permissions(&impostor, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let spec = reproduction_spec("reproduction-impostor", "Lua 5.1.5", "lua51");
+    assert!(matches!(
+        execute_gate_spec(&spec, tmp.path(), &root, Some(&impostor)),
+        Err(GateRunnerError::CompilerReproductionMismatch { .. })
+    ));
+
+    // Control: the same wrapper without the byte change is accepted, so the refusal
+    // above comes from the output, not from the wrapper being a different executable.
+    let faithful = dir.path().join("luac-faithful");
+    fs::write(&faithful, wrapper(":")).unwrap();
+    fs::set_permissions(&faithful, fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(matches!(
+        execute_gate_spec(&spec, tmp.path(), &root, Some(&faithful)),
+        Err(GateRunnerError::UntrustedRunner(_))
+    ));
+}
+
+#[test]
+fn test_compiler_reproduction_contract_rejects_schema_substitution() {
+    let reproductions = committed_reproductions("lua51");
+    let result = mock_valid_result("reproduction-schema");
+
+    let mut with_hash = reproduction_spec("reproduction-schema", "Lua 5.1.5", "lua51");
+    with_hash.required_compiler_sha256 = Some(CompilerHashRequirement::Single("a".repeat(64)));
+    let mut without_version = reproduction_spec("reproduction-schema", "Lua 5.1.5", "lua51");
+    without_version.required_compiler_version = None;
+    let mut empty = reproduction_spec("reproduction-schema", "Lua 5.1.5", "lua51");
+    empty.required_compiler_reproductions.clear();
+    let mut version_two = mock_valid_spec("reproduction-schema");
+    version_two.schema_version = 2;
+    version_two.required_compiler_sha256 =
+        Some(CompilerHashRequirement::ByPlatform(BTreeMap::from([(
+            "macos-aarch64".to_string(),
+            CompilerHashSet::One("a".repeat(64)),
+        )])));
+    version_two.required_compiler_reproductions = reproductions.clone();
+    let mut version_one = mock_valid_spec("reproduction-schema");
+    version_one.required_compiler_reproductions = reproductions;
+
+    for (label, spec) in [
+        ("v3 with executable hash", with_hash),
+        ("v3 without version", without_version),
+        ("v3 without reproductions", empty),
+        ("v2 with reproductions", version_two),
+        ("v1 with reproductions", version_one),
+    ] {
+        match verify_gate_result(&result, &spec, None, false) {
+            Err(GateRunnerError::TamperDetected(_, message)) => {
+                assert!(
+                    message.contains("compiler identity contract"),
+                    "{label}: {message}"
+                );
+            }
+            other => panic!("{label}: expected schema refusal, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn test_compiler_reproduction_is_verified_from_the_recorded_result() {
+    let spec = reproduction_spec("reproduction-record", "Lua 5.1.5", "lua51");
+    let mut result = mock_valid_result("reproduction-record");
+    result.spec_hash = spec.compute_hash();
+    result.command_argv = spec.command_argv.clone();
+    result.compiler_version = Some("Lua 5.1.5  Copyright (C) 1994-2012 Lua.org, PUC-Rio".into());
+    result.compiler_reproductions = spec.required_compiler_reproductions.clone();
+    verify_gate_result(&result, &spec, None, false).expect("recorded reproductions accepted");
+
+    let mut missing = result.clone();
+    missing.compiler_reproductions.pop();
+    match verify_gate_result(&missing, &spec, None, false) {
+        Err(GateRunnerError::TamperDetected(_, message)) => {
+            assert!(message.contains("compiler reproductions"), "{message}");
+        }
+        other => panic!("expected reproduction count refusal, got {other:?}"),
+    }
+
+    let mut changed = result.clone();
+    changed.compiler_reproductions[5].output_sha256 = "f".repeat(64);
+    assert!(matches!(
+        verify_gate_result(&changed, &spec, None, false),
+        Err(GateRunnerError::CompilerReproductionMismatch { .. })
+    ));
+
+    let mut reordered = result;
+    reordered.compiler_reproductions.swap(0, 1);
+    assert!(matches!(
+        verify_gate_result(&reordered, &spec, None, false),
+        Err(GateRunnerError::CompilerReproductionMismatch { .. })
+    ));
+}
+
+#[test]
+fn test_earlier_results_serialize_without_reproduction_field() {
+    // Results recorded before version 3 must keep their bytes, and so their hashes.
+    let json = serde_json::to_string(&mock_valid_result("earlier")).unwrap();
+    assert!(!json.contains("compiler_reproductions"), "{json}");
+    let json = serde_json::to_string(&mock_valid_spec("earlier")).unwrap();
+    assert!(!json.contains("required_compiler_reproductions"), "{json}");
+}
+
+#[test]
+fn test_version_three_specs_pin_committed_reference_output() {
+    let root = find_workspace_root();
+    let mut checked = 0;
+    for entry in fs::read_dir(root.join("tests/gates")).unwrap() {
+        let path = entry.unwrap().path();
+        let spec: GateSpec = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        if spec.schema_version != 3 {
+            assert!(spec.required_compiler_reproductions.is_empty(), "{path:?}");
+            continue;
+        }
+        let expected = match (
+            spec.required_compiler_version.as_deref(),
+            spec.required_profile.as_deref(),
+        ) {
+            (Some("Lua 5.1.5"), Some("lua5.1-lnum32")) => lnum32_reproductions(),
+            (Some("Lua 5.1.5"), _) => committed_reproductions("lua51"),
+            (Some("Lua 5.4.8"), _) => committed_reproductions("lua54"),
+            other => panic!("{path:?}: unexpected compiler requirement {other:?}"),
+        };
+        assert_eq!(spec.required_compiler_sha256, None, "{path:?}");
+        assert_eq!(spec.required_compiler_reproductions, expected, "{path:?}");
+        checked += 1;
+    }
+    assert_eq!(checked, 26, "version-3 gate count");
+}
+
 #[test]
 fn test_probe_7_wrong_compiler_version_rejected() {
     let spec = GateSpec {
@@ -432,6 +719,7 @@ fn test_probe_7_wrong_compiler_version_rejected() {
         expected_tests: vec!["test_one".to_string()],
         required_compiler_version: Some("Lua 5.4.8".to_string()),
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -456,6 +744,7 @@ fn test_probe_7_wrong_compiler_version_rejected() {
         compiler_version: Some("Lua 5.4.7".to_string()),
         compiler_sha256: None,
         profile: None,
+        compiler_reproductions: vec![],
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "arm64".to_string(),
@@ -486,6 +775,7 @@ fn test_probe_8_missing_compiler_rejected_before_tests() {
         expected_tests: vec![],
         required_compiler_version: Some("Lua 5.4.8".to_string()),
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -513,6 +803,7 @@ fn test_probe_9_mutated_fixture_rejected_before_evaluation() {
         expected_tests: vec![],
         required_compiler_version: None,
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![FixtureRequirement {
             path: "README.md".to_string(),
             sha256: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
@@ -548,6 +839,7 @@ fn test_probe_10_mutated_result_after_manifest_assembly_rejected() {
         expected_tests: vec!["test_one".to_string()],
         required_compiler_version: None,
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -572,6 +864,7 @@ fn test_probe_10_mutated_result_after_manifest_assembly_rejected() {
         compiler_version: None,
         compiler_sha256: None,
         profile: None,
+        compiler_reproductions: vec![],
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "arm64".to_string(),
@@ -612,6 +905,7 @@ fn test_probe_11_success_boolean_flip_rejected() {
         expected_tests: vec!["test_one".to_string()],
         required_compiler_version: None,
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -637,6 +931,7 @@ fn test_probe_11_success_boolean_flip_rejected() {
         compiler_version: None,
         compiler_sha256: None,
         profile: None,
+        compiler_reproductions: vec![],
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "arm64".to_string(),
@@ -673,6 +968,7 @@ fn test_probe_12_printf_spoofed_libtest_output_rejected() {
         expected_tests: vec!["fake_required_test".to_string()],
         required_compiler_version: None,
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -839,7 +1135,7 @@ fn test_all_canonical_gate_scripts_and_specs_consistency() {
                 "gate_id inside {stem}.json must match filename stem"
             );
             assert!(
-                matches!(spec.schema_version, 1 | 2),
+                (1..=3).contains(&spec.schema_version),
                 "schema_version in {stem}.json must be supported"
             );
             assert!(

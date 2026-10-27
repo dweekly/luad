@@ -5,6 +5,18 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Gates identify a Lua compiler by its output, not by its executable's hash (#119).
+  The `luac` executable built from a verified source tarball changes with each C
+  toolchain update, even though the bytecode it emits doesn't. That broke 17 gates on
+  a current macOS toolchain. GateSpec version 3 drops the executable hash. In its
+  place, the runner compiles pinned reference sources and requires exact output bytes
+  (the committed fixtures: 10 per stock dialect, 2 for the LNUM32 authority compiler).
+  It records them in the GateResult, and verification checks them again. All 26
+  compiler-pinned gates move to version 3. Version-1 and version-2 specs and results
+  serialize unchanged. RC1's four prerequisite specs are archived byte-for-byte under
+  `tests/candidates/lua51-lnum32-rc1-prerequisites/` and checked against the hashes
+  RC1 recorded, so the RC1 candidate file itself is unchanged.
+
 ## 0.4.0 — 2026-10-23
 
 - Bound the parsed model with a chunk-wide instruction budget (#117).

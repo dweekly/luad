@@ -20,12 +20,9 @@ const EMBEDDED_BINARY: &str = "tests/fixtures/embedded/area1_validator.luac";
 const EMBEDDED_MANIFEST: &str = "tests/fixtures/embedded/MANIFEST.json";
 const SOURCE_SHA256: &str = "d123c19a4f2f6dc4e06a2dacfc27d3fd75c0c766dba0fa27eb7f47e5f531f8b8";
 const BINARY_SHA256: &str = "01857f082dfc5c8b21238c55db7a03e2a6bf3d6e48c36df96fd279f9ce611cab";
+// Provenance only: the executable that generated the committed fixture. The compiler
+// is identified by reproducing the fixture's bytes, not by its own (#119).
 const COMPILER_SHA256: &str = "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239";
-const ACCEPTED_COMPILER_SHA256S: &[&str] = &[
-    COMPILER_SHA256,
-    "b7f80fd88b683a3e8ebe5b98f50c57e17659b56f659a37149fd81f752bcc48e8",
-    "e2ba74327f3a4662689b9e58909b410af8635add51a35b951021d0b1d90c6000",
-];
 const DEEPEST: &str = "proto:0/0/0/0/0/0";
 
 const AREA1_PREREQUISITES: &[&str] = &[
@@ -171,11 +168,6 @@ fn test_public_embedded_case_provenance_and_stress_shape() {
     // Resolved through the oracle's own search order so the fixture is rebuilt with the
     // compiler every other Lua 5.1 gate uses, wherever it was installed.
     let compiler = luad_oracle::require_luac51();
-    let compiler_sha256 = sha256(&fs::read(&compiler).expect("read compiler"));
-    assert!(
-        ACCEPTED_COMPILER_SHA256S.contains(&compiler_sha256.as_str()),
-        "unrecognized Lua 5.1 compiler binary SHA-256: {compiler_sha256}"
-    );
     let status = Command::new(&compiler)
         .args(["-o"])
         .arg(rebuilt.path())
@@ -427,7 +419,11 @@ fn closure_contract(spec: &Value) -> bool {
                 && fixtures[0]["sha256"].as_str() == Some(BINARY_SHA256)
         })
         && spec["required_compiler_version"].as_str() == Some("Lua 5.1.5")
-        && spec["required_compiler_sha256"].as_str() == Some(COMPILER_SHA256)
+        && spec["schema_version"].as_u64() == Some(3)
+        && spec["required_compiler_sha256"].is_null()
+        && spec["required_compiler_reproductions"]
+            .as_array()
+            .is_some_and(|reproductions| reproductions.len() == 10)
         && spec["required_profile"].as_str() == Some("lua5.1-area1-validator-diagnostics")
         && spec["allowed_capability_mutations"]
             .as_array()
@@ -467,6 +463,13 @@ fn test_area1_gate_closure_is_exact_and_rejects_substitution() {
     assert!(
         !closure_contract(&tests),
         "missing acceptance test rejected"
+    );
+
+    let mut executable = spec.clone();
+    executable["required_compiler_sha256"] = Value::String(COMPILER_SHA256.into());
+    assert!(
+        !closure_contract(&executable),
+        "executable-hash identity rejected"
     );
 
     let mut capability = spec;

@@ -160,7 +160,12 @@ runner alone; CI invokes the same script rather than restating its flags.
 
 Parser fixtures can run from bundled bytecode, but differential proof requires the exact
 official compilers that [docs/BRINGUP.md](docs/BRINGUP.md) installs beneath
-`$HOME/.cache/luad/lua-tools/bin`. Canonical gates must verify the exact compiler version and binary/archive hashes they claim. A required compiler missing from CI must fail the gate; it must never cause a silent skip.
+`$HOME/.cache/luad/lua-tools/bin`. Canonical gates must verify the exact compiler version they claim, and a compiler
+is identified by what it emits: a version-3 GateSpec lists reference sources whose
+compiled bytes the compiler must reproduce exactly (`required_compiler_reproductions`).
+Gates do not pin the compiler executable's own hash, because that hash changes with
+every C toolchain update even when the source tarball and the emitted bytecode don't
+(#119). The installer still verifies each official source archive's SHA-256. A required compiler missing from CI must fail the gate; it must never cause a silent skip.
 
 ### Optional external decompilers
 

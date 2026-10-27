@@ -28,9 +28,15 @@
     "test_platform_compiler_hash_contract_rejects_schema_substitution_and_missing_compiler",
     "test_version_one_gate_spec_hash_remains_stable",
     "test_fixture_manifest_records_complete_provenance",
-    "test_all_canonical_gate_scripts_and_specs_consistency"
+    "test_all_canonical_gate_scripts_and_specs_consistency",
+    "test_compiler_reproduction_accepts_official_compilers_by_output",
+    "test_compiler_reproduction_rejects_wrong_output_and_source",
+    "test_compiler_reproduction_rejects_impostor_with_correct_banner",
+    "test_compiler_reproduction_contract_rejects_schema_substitution",
+    "test_compiler_reproduction_is_verified_from_the_recorded_result",
+    "test_earlier_results_serialize_without_reproduction_field",
+    "test_version_three_specs_pin_committed_reference_output"
   ],
-
   "required_compiler_version": null,
   "required_compiler_sha256": null,
   "required_fixtures": [],
