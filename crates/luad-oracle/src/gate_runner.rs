@@ -18,6 +18,10 @@ pub struct GateSpec {
     pub expected_tests: Vec<String>,
     pub required_compiler_version: Option<String>,
     pub required_compiler_sha256: Option<CompilerHashRequirement>,
+    /// Version 3: reference compilations the compiler must reproduce byte for byte.
+    /// Omitted when empty so version-1 and version-2 spec hashes are unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_compiler_reproductions: Vec<CompilerReproduction>,
     pub required_fixtures: Vec<FixtureRequirement>,
     pub required_profile: Option<String>,
     pub prerequisite_gates: Vec<String>,
@@ -32,6 +36,20 @@ pub enum CompilerHashRequirement {
     Single(String),
     /// Exact compiler artifacts for the maintained platform/architecture builders.
     ByPlatform(BTreeMap<String, CompilerHashSet>),
+}
+
+/// One reference compilation a version-3 gate requires its compiler to reproduce.
+///
+/// The compiler executable is not reproducible across C toolchains, but its output for
+/// a pinned source is: the official release, built from the verified tarball, emits
+/// the same chunk bytes on every maintained builder. The source is compiled from the
+/// workspace root under its relative path, so a debug chunk's source name is stable.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CompilerReproduction {
+    pub source: String,
+    pub source_sha256: String,
+    pub strip: bool,
+    pub output_sha256: String,
 }
 
 /// Exact compiler artifacts accepted for one platform/architecture builder.
@@ -90,6 +108,10 @@ pub struct GateResult {
     pub compiler_path: Option<String>,
     pub compiler_version: Option<String>,
     pub compiler_sha256: Option<String>,
+    /// Output hashes the compiler produced for a version-3 spec's reference sources.
+    /// Omitted when empty so results recorded under earlier specs hash unchanged.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub compiler_reproductions: Vec<CompilerReproduction>,
     pub profile: Option<String>,
     pub fixture_hashes: Vec<FixtureRequirement>,
     pub platform: String,
@@ -184,6 +206,13 @@ pub enum GateRunnerError {
     WrongCompilerVersion { expected: String, actual: String },
     #[error("Wrong compiler binary hash: expected {expected}, got {actual}")]
     WrongCompilerBinary { expected: String, actual: String },
+    #[error("Compiler did not reproduce '{source_path}' (strip={strip}): expected {expected}, got {actual}")]
+    CompilerReproductionMismatch {
+        source_path: String,
+        strip: bool,
+        expected: String,
+        actual: String,
+    },
     #[error("No compiler binary hash is pinned for platform '{platform}-{arch}'")]
     CompilerHashUnpinned { platform: String, arch: String },
     #[error("Profile mismatch in result '{gate_id}': expected {expected:?}, got {actual:?}")]
@@ -282,6 +311,7 @@ pub fn execute_gate_spec(
     let mut comp_ver = None;
     let mut comp_sha = None;
     let mut comp_path_str = None;
+    let mut recorded_reproductions = Vec::new();
 
     if let Some(cp) = compiler_path {
         comp_path_str = Some(cp.to_string_lossy().to_string());
@@ -331,7 +361,14 @@ pub fn execute_gate_spec(
                 });
             }
         }
-    } else if spec.required_compiler_version.is_some() || spec.required_compiler_sha256.is_some() {
+
+        for reproduction in &spec.required_compiler_reproductions {
+            recorded_reproductions.push(reproduce(cp, reproduction, workspace_root)?);
+        }
+    } else if spec.required_compiler_version.is_some()
+        || spec.required_compiler_sha256.is_some()
+        || !spec.required_compiler_reproductions.is_empty()
+    {
         return Err(GateRunnerError::CompilerMissing(
             "Compiler required but no compiler path provided".to_string(),
         ));
@@ -524,6 +561,7 @@ pub fn execute_gate_spec(
         compiler_path: comp_path_str,
         compiler_version: comp_ver,
         compiler_sha256: comp_sha,
+        compiler_reproductions: recorded_reproductions,
         profile: spec.required_profile.clone(),
         fixture_hashes: recorded_fixture_hashes,
         platform: std::env::consts::OS.to_string(),
@@ -745,7 +783,104 @@ pub fn verify_gate_result(
         }
     }
 
+    // A recorded result must carry exactly the reproductions its spec requires: a missing
+    // entry, an extra one, or a different output hash is not the same evidence.
+    if result.compiler_reproductions.len() != spec.required_compiler_reproductions.len() {
+        return Err(GateRunnerError::TamperDetected(
+            result.gate_id.clone(),
+            format!(
+                "Result records {} compiler reproductions; spec requires {}",
+                result.compiler_reproductions.len(),
+                spec.required_compiler_reproductions.len()
+            ),
+        ));
+    }
+    for (recorded, required) in result
+        .compiler_reproductions
+        .iter()
+        .zip(&spec.required_compiler_reproductions)
+    {
+        if recorded != required {
+            return Err(GateRunnerError::CompilerReproductionMismatch {
+                source_path: required.source.clone(),
+                strip: required.strip,
+                expected: required.output_sha256.clone(),
+                actual: recorded.output_sha256.clone(),
+            });
+        }
+    }
+
     Ok(())
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("{:x}", hasher.finalize())
+}
+
+/// Compile one pinned reference source and require the exact pinned chunk bytes.
+fn reproduce(
+    compiler: &Path,
+    required: &CompilerReproduction,
+    workspace_root: &Path,
+) -> Result<CompilerReproduction, GateRunnerError> {
+    let source_bytes = fs::read(workspace_root.join(&required.source)).map_err(|e| {
+        GateRunnerError::Io(format!(
+            "Failed to read reference source {}: {e}",
+            required.source
+        ))
+    })?;
+    let source_sha256 = sha256_hex(&source_bytes);
+    if source_sha256 != required.source_sha256 {
+        return Err(GateRunnerError::FixtureCorrupted {
+            path: required.source.clone(),
+            expected: required.source_sha256.clone(),
+            actual: source_sha256,
+        });
+    }
+    let out_dir = tempfile::tempdir()
+        .map_err(|e| GateRunnerError::Io(format!("Failed to create temporary directory: {e}")))?;
+    let out_path = out_dir.path().join("reproduction.luac");
+    let mut command = Command::new(compiler);
+    if required.strip {
+        command.arg("-s");
+    }
+    let status = command
+        .arg("-o")
+        .arg(&out_path)
+        .arg(&required.source)
+        .current_dir(workspace_root)
+        .status()
+        .map_err(|e| {
+            GateRunnerError::Io(format!("Failed to execute compiler {compiler:?}: {e}"))
+        })?;
+    let output = if status.success() {
+        fs::read(&out_path).map_err(|e| {
+            GateRunnerError::Io(format!("Failed to read compiler output {out_path:?}: {e}"))
+        })?
+    } else {
+        Vec::new()
+    };
+    let output_sha256 = if status.success() {
+        sha256_hex(&output)
+    } else {
+        format!("compiler exited with {status}")
+    };
+    if output_sha256 != required.output_sha256 {
+        return Err(GateRunnerError::CompilerReproductionMismatch {
+            source_path: required.source.clone(),
+            strip: required.strip,
+            expected: required.output_sha256.clone(),
+            actual: output_sha256,
+        });
+    }
+    Ok(CompilerReproduction {
+        source: required.source.clone(),
+        source_sha256,
+        strip: required.strip,
+        output_sha256,
+    })
 }
 
 fn is_canonical_lua51_pair(profile: &str, layout: &str) -> bool {
@@ -809,6 +944,22 @@ fn validate_gate_spec_schema(spec: &GateSpec) -> Result<(), GateRunnerError> {
             spec.required_compiler_sha256,
             Some(CompilerHashRequirement::ByPlatform(_))
         ),
+        // Version 3 identifies the compiler by what it emits: an exact version banner
+        // and at least one reference reproduction, never an executable hash.
+        // Reference sources are workspace-relative, so a spec cannot name a file
+        // outside the checkout it pins.
+        3 => {
+            spec.required_compiler_sha256.is_some()
+                || spec.required_compiler_version.is_none()
+                || spec.required_compiler_reproductions.is_empty()
+                || spec.required_compiler_reproductions.iter().any(|r| {
+                    let path = Path::new(&r.source);
+                    r.source.is_empty()
+                        || !path
+                            .components()
+                            .all(|c| matches!(c, std::path::Component::Normal(_)))
+                })
+        }
         2 => match &spec.required_compiler_sha256 {
             Some(CompilerHashRequirement::ByPlatform(hashes)) => {
                 hashes.is_empty()
@@ -821,6 +972,8 @@ fn validate_gate_spec_schema(spec: &GateSpec) -> Result<(), GateRunnerError> {
         },
         _ => true,
     };
+    let invalid =
+        invalid || (spec.schema_version != 3 && !spec.required_compiler_reproductions.is_empty());
     if invalid {
         return Err(GateRunnerError::TamperDetected(
             spec.gate_id.clone(),
@@ -838,6 +991,9 @@ fn required_compiler_sha256<'a>(
     platform: &str,
     arch: &str,
 ) -> Result<Option<&'a [String]>, GateRunnerError> {
+    if spec.schema_version == 3 {
+        return Ok(None);
+    }
     if spec.schema_version == 1 {
         return Ok(match spec.required_compiler_sha256.as_ref() {
             Some(CompilerHashRequirement::Single(hash)) => Some(std::slice::from_ref(hash)),
@@ -1054,6 +1210,7 @@ pub fn record_all_adversarial_probes(
         expected_tests: vec![],
         required_compiler_version: None,
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -1088,6 +1245,7 @@ pub fn record_all_adversarial_probes(
         expected_tests: vec!["test_probe_1_zero_tests_executed_rejected".to_string()],
         required_compiler_version: None,
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -1201,6 +1359,7 @@ pub fn record_all_adversarial_probes(
         expected_tests: vec![],
         required_compiler_version: Some("Lua 5.4.8".to_string()),
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -1231,6 +1390,7 @@ pub fn record_all_adversarial_probes(
         expected_tests: vec![],
         required_compiler_version: None,
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![FixtureRequirement {
             path: "tests/fixtures/hello.lua".to_string(),
             sha256: "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
@@ -1313,6 +1473,7 @@ pub fn record_all_adversarial_probes(
         expected_tests: vec!["fake_required_test".to_string()],
         required_compiler_version: None,
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -1352,6 +1513,7 @@ fn mock_valid_spec(gate_id: &str) -> GateSpec {
         expected_tests: vec!["test_sample".to_string()],
         required_compiler_version: None,
         required_compiler_sha256: None,
+        required_compiler_reproductions: vec![],
         required_fixtures: vec![],
         required_profile: None,
         prerequisite_gates: vec![],
@@ -1379,6 +1541,7 @@ fn mock_valid_result(gate_id: &str) -> GateResult {
         compiler_version: None,
         compiler_sha256: None,
         profile: None,
+        compiler_reproductions: vec![],
         fixture_hashes: vec![],
         platform: "macos".to_string(),
         arch: "aarch64".to_string(),
