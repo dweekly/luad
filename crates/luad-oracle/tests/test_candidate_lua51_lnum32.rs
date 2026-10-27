@@ -163,13 +163,19 @@ fn test_candidate_spec_and_provenance_schema() {
             gate_id, "gate-candidate-lua51-lnum32",
             "Candidate gate cannot be in prerequisites"
         );
-        let ppath = root.join(prereq["spec_path"].as_str().unwrap());
+        let spec_path = prereq["spec_path"].as_str().unwrap();
+        assert_eq!(spec_path, format!("tests/gates/{gate_id}.json"));
         assert!(
-            ppath.exists(),
-            "prerequisite spec path must exist: {:?}",
-            ppath
+            root.join(spec_path).exists(),
+            "prerequisite gate must still exist: {spec_path}"
         );
-        let pbytes = fs::read(&ppath).expect("read prereq spec");
+        // RC1 is immutable and is reproduced only from its own source commit. Its
+        // prerequisite specs are archived as they were at RC1, so the live gates can
+        // move on (#119) while these bytes stay pinned to the hashes RC1 recorded.
+        let ppath = root
+            .join("tests/candidates/lua51-lnum32-rc1-prerequisites")
+            .join(format!("{gate_id}.json"));
+        let pbytes = fs::read(&ppath).expect("read archived RC1 prerequisite spec");
         assert_eq!(
             sha256_digest(&pbytes),
             prereq["file_sha256"].as_str().unwrap()

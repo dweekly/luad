@@ -166,7 +166,8 @@ The 1.0 evidence bundle includes:
 - official Lua archive URLs and SHA-256 values;
 - immutable vendor/upstream revisions, ordered patch hashes, target configuration, and
   compiler build recipe where applicable;
-- detected compiler versions and compiler-binary hashes per platform;
+- detected compiler versions, the reference compilations each compiler reproduced, and
+  compiler-binary hashes per platform (recorded as provenance, not as identity);
 - resolved dialect/profile and validated chunk-layout matrix;
 - source and compiled fixture hashes;
 - gate specifications, results, skip counts, and mutation-probe rejections;

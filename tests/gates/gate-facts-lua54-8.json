@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 3,
   "gate_id": "gate-facts-lua54-8",
   "command_argv": [
     "cargo",
@@ -33,7 +33,6 @@
     "test_negative_control_malformed_zero_valued_field_rejected",
     "test_negative_control_metadata_mutation",
     "test_negative_control_missing_constant_tag_rejected",
-
     "test_negative_control_missing_operand",
     "test_negative_control_missing_upvalue_columns_rejected",
     "test_negative_control_mnemonic_mutation",
@@ -50,7 +49,69 @@
     "test_unpatched_pre_gate2_decoder_fails_oracle_on_all_fixtures"
   ],
   "required_compiler_version": "Lua 5.4.8",
-  "required_compiler_sha256": "5a1fb31d912159030a60894276606914f51a186a69aecc1cd92d6619bb2fa80f",
+  "required_compiler_sha256": null,
+  "required_compiler_reproductions": [
+    {
+      "source": "tests/fixtures/hello.lua",
+      "source_sha256": "5e4dfe4b44459c0e12d73506ecb911bd5e86cd6084515332625b5215525440a9",
+      "strip": false,
+      "output_sha256": "a171c4c88ec40b1c871a57a888f66d7a93144e1d742f4071af286c9dc7b93575"
+    },
+    {
+      "source": "tests/fixtures/hello.lua",
+      "source_sha256": "5e4dfe4b44459c0e12d73506ecb911bd5e86cd6084515332625b5215525440a9",
+      "strip": true,
+      "output_sha256": "9806c9692fd2e55f737c0af5b9cfb96fd543383a2f4decc715c8c30a861ede0f"
+    },
+    {
+      "source": "tests/fixtures/control_flow.lua",
+      "source_sha256": "fb4a31022ceaaa75d8bbddf88549977987f970450c85ca417814395bf38c045a",
+      "strip": false,
+      "output_sha256": "afca11be116a96cd956ecaa3326b2f896ab828a2e6a6c995ab4e8d22e72f8fbf"
+    },
+    {
+      "source": "tests/fixtures/control_flow.lua",
+      "source_sha256": "fb4a31022ceaaa75d8bbddf88549977987f970450c85ca417814395bf38c045a",
+      "strip": true,
+      "output_sha256": "1fa7703d3f009b57d1382518e78bb676c1cafbbe26448fcdd3d225ec261da24b"
+    },
+    {
+      "source": "tests/fixtures/closures.lua",
+      "source_sha256": "336360a0dd88c7249786fa2d7482c5fe907e47c75658d593fe4df0ceeada5a80",
+      "strip": false,
+      "output_sha256": "ceb00168e673be9fdbcdc24190d071ec8efa6afe6d1fe6f3a833b9ea3474f981"
+    },
+    {
+      "source": "tests/fixtures/closures.lua",
+      "source_sha256": "336360a0dd88c7249786fa2d7482c5fe907e47c75658d593fe4df0ceeada5a80",
+      "strip": true,
+      "output_sha256": "9c997b1f76f828b11326333c349294cee2ee536a21f7c2244a6b5ed7a82f9ac7"
+    },
+    {
+      "source": "tests/fixtures/tables.lua",
+      "source_sha256": "144867e5b63bfc18f28b02a7c68c6956a5de673f06cb22e5305255c2f59a535c",
+      "strip": false,
+      "output_sha256": "701b52fcfa9a9e798e68dda6933e021bd35e4768d817cbe5270a4242912d476b"
+    },
+    {
+      "source": "tests/fixtures/tables.lua",
+      "source_sha256": "144867e5b63bfc18f28b02a7c68c6956a5de673f06cb22e5305255c2f59a535c",
+      "strip": true,
+      "output_sha256": "2700a1f815fad482ae1b82c16bc40c8ce6562b8b8bd09b7e9d8f3d8e97693279"
+    },
+    {
+      "source": "tests/fixtures/numerics.lua",
+      "source_sha256": "961d7c742adb2462a5cc3f24a8a8a8aa789086600bbf94c17776d5d6140a92b8",
+      "strip": false,
+      "output_sha256": "f57931e46d30e42a1cf6f26a04e25c149c20f9386dfd1dbca619a7a25dcdcb23"
+    },
+    {
+      "source": "tests/fixtures/numerics.lua",
+      "source_sha256": "961d7c742adb2462a5cc3f24a8a8a8aa789086600bbf94c17776d5d6140a92b8",
+      "strip": true,
+      "output_sha256": "aa30816dc42e2b1a9fead667ca1cf44412d488ced8ad30d5934308721d3e5795"
+    }
+  ],
   "required_fixtures": [
     {
       "path": "tests/fixtures/precompiled/lua54/hello.luac",

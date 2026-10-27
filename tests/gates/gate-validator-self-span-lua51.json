@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 3,
   "gate_id": "gate-validator-self-span-lua51",
   "command_argv": [
     "cargo",
@@ -15,7 +15,69 @@
     "test_validator_self_span_lua51"
   ],
   "required_compiler_version": "Lua 5.1.5",
-  "required_compiler_sha256": "eb8251b1f15553447f0978e5b783d69667863b7acfd929c9521dad21d13c9239",
+  "required_compiler_sha256": null,
+  "required_compiler_reproductions": [
+    {
+      "source": "tests/fixtures/hello.lua",
+      "source_sha256": "5e4dfe4b44459c0e12d73506ecb911bd5e86cd6084515332625b5215525440a9",
+      "strip": false,
+      "output_sha256": "d64567d2d41ff584b86602f98fff5906f58f101f6faf98598f3662bac6e96a4f"
+    },
+    {
+      "source": "tests/fixtures/hello.lua",
+      "source_sha256": "5e4dfe4b44459c0e12d73506ecb911bd5e86cd6084515332625b5215525440a9",
+      "strip": true,
+      "output_sha256": "bae8346d80cefddb52839e414c7f7f77436db2e2b2375909e4f18b385d14484f"
+    },
+    {
+      "source": "tests/fixtures/control_flow.lua",
+      "source_sha256": "fb4a31022ceaaa75d8bbddf88549977987f970450c85ca417814395bf38c045a",
+      "strip": false,
+      "output_sha256": "d7e98a66c1ec34cde480a49c20aa5f070d2113294dd60b81100a1cf6d15ebe40"
+    },
+    {
+      "source": "tests/fixtures/control_flow.lua",
+      "source_sha256": "fb4a31022ceaaa75d8bbddf88549977987f970450c85ca417814395bf38c045a",
+      "strip": true,
+      "output_sha256": "58391aa20a5feb0c93cc11af71c8dbed9647dc6d467e0fe0326c20cb27c1e536"
+    },
+    {
+      "source": "tests/fixtures/closures.lua",
+      "source_sha256": "336360a0dd88c7249786fa2d7482c5fe907e47c75658d593fe4df0ceeada5a80",
+      "strip": false,
+      "output_sha256": "62c4438b660880fa546cbe377d1f40113d2efc25aefc40df227979276efa756e"
+    },
+    {
+      "source": "tests/fixtures/closures.lua",
+      "source_sha256": "336360a0dd88c7249786fa2d7482c5fe907e47c75658d593fe4df0ceeada5a80",
+      "strip": true,
+      "output_sha256": "3865e24ad6fecee94dbb36f1db010aa696df72fbde9930040115b7fe54710877"
+    },
+    {
+      "source": "tests/fixtures/tables.lua",
+      "source_sha256": "144867e5b63bfc18f28b02a7c68c6956a5de673f06cb22e5305255c2f59a535c",
+      "strip": false,
+      "output_sha256": "b9db891cc3f8ea04338194bfeace1847a06e5be3ad5e0222c4d19a10ad766a8f"
+    },
+    {
+      "source": "tests/fixtures/tables.lua",
+      "source_sha256": "144867e5b63bfc18f28b02a7c68c6956a5de673f06cb22e5305255c2f59a535c",
+      "strip": true,
+      "output_sha256": "177e2bfa35581a300b44767b185092281a4dcd937f2f5d2d5cf67b386e03d4b5"
+    },
+    {
+      "source": "tests/fixtures/numerics.lua",
+      "source_sha256": "961d7c742adb2462a5cc3f24a8a8a8aa789086600bbf94c17776d5d6140a92b8",
+      "strip": false,
+      "output_sha256": "51ab42b18f1057881da9b488315065275a08b1608679b7c6f271cf0d564b1c3d"
+    },
+    {
+      "source": "tests/fixtures/numerics.lua",
+      "source_sha256": "961d7c742adb2462a5cc3f24a8a8a8aa789086600bbf94c17776d5d6140a92b8",
+      "strip": true,
+      "output_sha256": "b6c40648382419ddb7aec54fd7d85a9326ec7376bb454bb00298d5c665a70610"
+    }
+  ],
   "required_fixtures": [
     {
       "path": "tests/fixtures/precompiled/lua51/control_flow.luac",
