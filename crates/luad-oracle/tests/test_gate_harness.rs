@@ -620,6 +620,10 @@ fn test_compiler_reproduction_contract_rejects_schema_substitution() {
     version_two.required_compiler_reproductions = reproductions.clone();
     let mut version_one = mock_valid_spec("reproduction-schema");
     version_one.required_compiler_reproductions = reproductions;
+    let mut escaping = reproduction_spec("reproduction-schema", "Lua 5.1.5", "lua51");
+    escaping.required_compiler_reproductions[0].source = "../outside.lua".to_string();
+    let mut absolute = reproduction_spec("reproduction-schema", "Lua 5.1.5", "lua51");
+    absolute.required_compiler_reproductions[0].source = "/etc/hosts".to_string();
 
     for (label, spec) in [
         ("v3 with executable hash", with_hash),
@@ -627,6 +631,8 @@ fn test_compiler_reproduction_contract_rejects_schema_substitution() {
         ("v3 without reproductions", empty),
         ("v2 with reproductions", version_two),
         ("v1 with reproductions", version_one),
+        ("source outside the workspace", escaping),
+        ("absolute source", absolute),
     ] {
         match verify_gate_result(&result, &spec, None, false) {
             Err(GateRunnerError::TamperDetected(_, message)) => {

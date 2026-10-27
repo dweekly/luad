@@ -946,10 +946,19 @@ fn validate_gate_spec_schema(spec: &GateSpec) -> Result<(), GateRunnerError> {
         ),
         // Version 3 identifies the compiler by what it emits: an exact version banner
         // and at least one reference reproduction, never an executable hash.
+        // Reference sources are workspace-relative, so a spec cannot name a file
+        // outside the checkout it pins.
         3 => {
             spec.required_compiler_sha256.is_some()
                 || spec.required_compiler_version.is_none()
                 || spec.required_compiler_reproductions.is_empty()
+                || spec.required_compiler_reproductions.iter().any(|r| {
+                    let path = Path::new(&r.source);
+                    r.source.is_empty()
+                        || !path
+                            .components()
+                            .all(|c| matches!(c, std::path::Component::Normal(_)))
+                })
         }
         2 => match &spec.required_compiler_sha256 {
             Some(CompilerHashRequirement::ByPlatform(hashes)) => {
