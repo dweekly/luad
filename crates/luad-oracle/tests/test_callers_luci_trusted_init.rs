@@ -175,16 +175,6 @@ fn literal_calls(line: &str) -> Vec<(String, String)> {
     out
 }
 
-/// Whether `line` applies `name` as a call.
-fn calls_by_name(line: &str, name: &str) -> bool {
-    line.match_indices(name).any(|(at, _)| {
-        let before = line[..at].chars().next_back();
-        let whole = before.is_none_or(|c| !is_ident(c));
-        let after = line[at + name.len()..].trim_start();
-        whole && after.starts_with(['(', '"', '\'', '{'])
-    })
-}
-
 fn walk<'a>(proto: &'a Prototype, out: &mut Vec<&'a Prototype>) {
     out.push(proto);
     for child in &proto.protos {
@@ -294,12 +284,65 @@ fn reported_callers(corpus: &Corpus, target: &Target) -> BTreeSet<(usize, usize)
     out
 }
 
-/// Precision check for one reported cross-file caller.
+/// Names a file binds to `namespace`: the namespace itself, and every identifier assigned
+/// from it or from `require` of it (`x = luci.sys`, `local x = require "luci.sys"`).
+fn namespace_spellings(text: &str, namespace: &str) -> Vec<String> {
+    let mut out = vec![namespace.to_string()];
+    for line in text.lines() {
+        // String contents matter here, so only a comment is cut.
+        let line = line.split(" --").next().unwrap_or("");
+        let Some((lhs, rhs)) = line.split_once('=') else {
+            continue;
+        };
+        let rhs = rhs.trim();
+        let quoted = [format!("\"{namespace}\""), format!("'{namespace}'")];
+        let names_it = rhs == namespace
+            || (rhs.starts_with("require") && quoted.iter().any(|q| rhs.contains(q.as_str())));
+        let name = lhs.trim().trim_start_matches("local").trim();
+        if names_it && !name.is_empty() && name.chars().all(is_ident) {
+            out.push(name.to_string());
+        }
+    }
+    out
+}
+
+/// Whether `line` calls `spelling.name(` or `spelling:name(` with `spelling` a whole name.
+fn calls_through(line: &str, spelling: &str, name: &str) -> bool {
+    [format!("{spelling}.{name}"), format!("{spelling}:{name}")]
+        .iter()
+        .any(|needle| {
+            line.match_indices(needle.as_str()).any(|(at, _)| {
+                let before = line[..at].chars().next_back();
+                let whole = before.is_none_or(|c| !(is_ident(c) || c == '.'));
+                let after = line[at + needle.len()..].trim_start();
+                whole && after.starts_with(['(', '"', '\'', '{'])
+            })
+        })
+}
+
+/// Precision check for one reported cross-file caller: the line calls the target by its
+/// name through the target's namespace or a name the file binds to it.
 fn caller_matches_source(corpus: &Corpus, target: &Target, caller: (usize, usize)) -> bool {
     let module = &corpus.modules[caller.0];
-    caller.1 > 0
-        && calls_by_name(&code(&module.lines[caller.1 - 1]), &target.name)
-        && module.text.contains(&target.namespace)
+    if caller.1 == 0 {
+        return false;
+    }
+    let raw = &module.lines[caller.1 - 1];
+    let line = code(raw);
+    let ns = &target.namespace;
+    // `require "luci.x".f()` calls through the literal, so match it before blanking.
+    let required = [
+        format!("require \"{ns}\""),
+        format!("require '{ns}'"),
+        format!("require(\"{ns}\")"),
+        format!("require('{ns}')"),
+    ];
+    namespace_spellings(&module.text, ns)
+        .iter()
+        .any(|spelling| calls_through(&line, spelling, &target.name))
+        || required
+            .iter()
+            .any(|spelling| calls_through(raw, spelling, &target.name))
 }
 
 #[test]
@@ -415,6 +458,19 @@ fn test_trusted_init_source_oracle_rejects_fabricated_callers() {
             if !caller_matches_source(&corpus, &renamed, caller) {
                 rejected_rename += 1;
             }
+            // The same name in a different namespace is rejected too.
+            let moved = Target {
+                module: target.module,
+                namespace: format!("{}.elsewhere", target.namespace),
+                name: target.name.clone(),
+                proto: target.proto.clone(),
+            };
+            assert!(
+                !caller_matches_source(&corpus, &moved, caller),
+                "{}.{} accepted for another namespace",
+                target.namespace,
+                target.name
+            );
         }
     }
     assert!(rejected_shift > 0 && rejected_rename > 0);

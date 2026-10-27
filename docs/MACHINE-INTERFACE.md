@@ -760,11 +760,12 @@ level runs `require` calls, builds tables or reads fields before or after `modul
     are the module's root itself and the builtins `setmetatable`, `getmetatable` and
     `rawset` called by those names. The assumption covers required modules, other
     library functions, and same-file functions however they are called.
-  - `require(name)` returns the table at the global dotted path `name`, and no other
-    call returns a namespace table.
+  - `require(name)` returns the table at the global dotted path `name`. No other call
+    returns a namespace table itself; what a call result holds is not assumed.
   - Initialization completes.
 
-  Everything the root's own instructions do is checked.
+  Everything the root's own instructions do is checked. That includes same-file
+  functions that assign a root local the root later uses.
 - **Exports.** These stay root `SETGLOBAL`s of closures. Each name must be stored once,
   after the declaration, on every path to the root's exit, with a value computed in the
   same basic block.
@@ -775,8 +776,16 @@ level runs `require` calls, builds tables or reads fields before or after `modul
   storing it where the analysis cannot follow it. A namespace stored under another
   global name is followed as an alias. Labels under a dynamic prefix resolve `dynamic`.
 - **Whole-corpus refusals.** These refuse the module for the whole corpus, as strict
-  refusals do: a second or non-literal `module(...)`, `setfenv` or a `debug` setter, a
-  write into a namespace the analysis cannot name, and a write through `_G[k]`.
+  refusals do:
+  - a second or non-literal `module(...)`, or `module` reached any other way
+    (`_G.module`);
+  - `setfenv` or a `debug` setter, including a call through a namespace the analysis
+    cannot name;
+  - a root write into a value that may be any namespace: a field of a call result, a
+    generic-`for` value, a table already handed to a callee, or a local that same-file
+    code rebinds;
+  - a write through `_G[k]`.
+
   Exceeding a cap is `ANA-LIMIT-001`.
 - **Labels.** When any provider was admitted this way, every `resolved`, `absent` and
   `duplicate` link carries `assumptions: ["trusted-init"]`, including links to strictly

@@ -54,14 +54,23 @@ pub(crate) enum TrustedOutcome {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Token {
-    /// A value that is not a module namespace table under the assumption.
+    /// A value that is not a table: a scalar, a closure, or nil.
     Opaque,
+    /// The result of a call other than a namespace source. Under the assumption it is not
+    /// a namespace table, but what it holds is not known.
+    CallResult,
+    /// Any value at all, possibly a namespace table: a field of an untracked value, a
+    /// generic-`for` value, or a local that same-file code may rebind.
+    Unknown,
     /// A table this root created at the `NEWTABLE` with this PC.
     Fresh(usize),
     /// The global `module`.
     Module,
     /// A string loaded by `LOADK` at this PC.
     Literal(usize),
+    /// In the state's last slot only: the fresh table made at this PC has been handed to
+    /// code the analysis does not follow.
+    Released(usize),
     /// Some module namespace table the analysis cannot name.
     AnyNamespace,
     /// A table reached by global lookup. `own` paths are relative to the module name.
@@ -89,6 +98,9 @@ struct Facts {
     fresh_fields: BTreeMap<(usize, Option<String>), Tokens>,
     /// Named destinations that hold an exact path: destination to sources.
     aliases: BTreeMap<PathKey, BTreeSet<PathKey>>,
+    /// Named destinations that may hold an `Unknown` value, with the storing PCs. A write
+    /// under one could reach any namespace.
+    unknown_aliases: BTreeMap<PathKey, BTreeSet<usize>>,
     limited: bool,
 }
 
@@ -197,6 +209,8 @@ fn path_parts(tokens: &Tokens) -> impl Iterator<Item = (&Vec<String>, bool)> {
 struct Root<'a> {
     chunk: &'a Chunk,
     frame: usize,
+    /// Registers that same-file code may assign whenever code runs.
+    rebindable: BTreeSet<usize>,
 }
 
 impl Root<'_> {
@@ -233,20 +247,46 @@ fn record_mark(facts: &mut Facts, own: bool, segments: Vec<String>, pc: usize) {
     facts.marks.entry((own, segments)).or_default().insert(pc);
 }
 
-/// A value escaped (stored, passed or listed): the paths it carries are marked, and
-/// values that could redirect later stores refuse. A fresh table escapes with
-/// everything it may hold.
-fn escape(facts: &mut Facts, tokens: &Tokens, pc: usize) {
+/// Whether a value is, or may be, the `module` function.
+fn is_module_function(token: &Token) -> bool {
+    match token {
+        Token::Module => true,
+        Token::Path { segments, .. } => segments.len() == 1 && segments[0] == "module",
+        _ => false,
+    }
+}
+
+/// A fresh table left the root's sight: anything may now be stored in it, and nested
+/// fresh tables it holds share that fate.
+fn release_fresh(
+    facts: &Facts,
+    released: &mut Tokens,
+    site: usize,
+    seen: &mut BTreeSet<usize>,
+) -> Vec<Token> {
+    if !seen.insert(site) {
+        return Vec::new();
+    }
+    released.insert(Token::Released(site));
+    facts.fresh_read(site, None).into_iter().collect()
+}
+
+/// A value escaped (stored where the analysis cannot follow it, listed, or handed to a
+/// mutating builtin): the paths it carries are marked, and values that could redirect
+/// later stores refuse. A fresh table escapes with everything it may hold.
+fn escape(facts: &mut Facts, released: &mut Tokens, tokens: &Tokens, pc: usize) {
     let mut pending: Vec<Token> = tokens.iter().cloned().collect();
     let mut seen_sites = BTreeSet::new();
     while let Some(token) = pending.pop() {
+        if is_module_function(&token) {
+            facts.refusals.insert(pc);
+        }
         match &token {
             Token::Fresh(site) => {
-                if seen_sites.insert(*site) {
-                    pending.extend(facts.fresh_read(*site, None));
-                }
+                let contents = release_fresh(facts, released, *site, &mut seen_sites);
+                pending.extend(contents);
             }
-            Token::Module | Token::AnyNamespace => {
+            Token::AnyNamespace => {
                 facts.refusals.insert(pc);
             }
             Token::Path {
@@ -264,14 +304,51 @@ fn escape(facts: &mut Facts, tokens: &Tokens, pc: usize) {
     }
 }
 
+/// An argument handed to a callee the assumption covers. The callee may store anything
+/// into a fresh table it receives; handing over `module` or an environment mutator lets
+/// the callee run it, so that refuses.
+fn hand_over(facts: &mut Facts, released: &mut Tokens, tokens: &Tokens, pc: usize) {
+    let mut pending: Vec<Token> = tokens.iter().cloned().collect();
+    let mut seen_sites = BTreeSet::new();
+    while let Some(token) = pending.pop() {
+        if is_module_function(&token) {
+            facts.refusals.insert(pc);
+        }
+        match &token {
+            Token::Fresh(site) => {
+                let contents = release_fresh(facts, released, *site, &mut seen_sites);
+                pending.extend(contents);
+            }
+            Token::Path {
+                segments, exact, ..
+            } if is_environment_mutator(segments, *exact) => {
+                facts.refusals.insert(pc);
+            }
+            _ => {}
+        }
+    }
+}
+
 /// A write into table register `table` with key `key` and value `value`. A value stored
 /// only into fresh tables is remembered there; stored anywhere else, it escapes.
-fn table_write(facts: &mut Facts, table: &Tokens, key: Option<&str>, value: &Tokens, pc: usize) {
+fn table_write(
+    facts: &mut Facts,
+    released: &mut Tokens,
+    table: &Tokens,
+    key: Option<&str>,
+    value: &Tokens,
+    pc: usize,
+) {
     let mut escapes = table.is_empty();
     let mut destinations = Vec::new();
     for token in table {
         match token {
             Token::Fresh(site) => {
+                // Once handed to a callee, the table may carry a metatable whose
+                // `__newindex` forwards writes anywhere.
+                if released.contains(&Token::Released(*site)) {
+                    facts.refusals.insert(pc);
+                }
                 facts
                     .fresh_fields
                     .entry((*site, key.map(str::to_owned)))
@@ -293,25 +370,34 @@ fn table_write(facts: &mut Facts, table: &Tokens, key: Option<&str>, value: &Tok
                 }
                 record_mark(facts, *own, target, pc);
             }
-            // A namespace the analysis cannot name was written.
-            Token::AnyNamespace | Token::Module => {
+            // A table that may be a namespace the analysis cannot name was written.
+            Token::AnyNamespace | Token::Module | Token::Unknown => {
                 facts.refusals.insert(pc);
                 escapes = true;
             }
-            _ => escapes = true,
+            // Not a namespace under the assumption (a call result) or not a table.
+            Token::Opaque | Token::CallResult | Token::Literal(_) | Token::Released(_) => {
+                escapes = true
+            }
         }
     }
     if escapes {
-        escape(facts, value, pc);
+        escape(facts, released, value, pc);
     } else {
-        store_named(facts, &destinations, value, pc);
+        store_named(facts, released, &destinations, value, pc);
     }
 }
 
 /// A value stored only under names the analysis follows (fresh-table fields, or exact
 /// paths). An exact path value becomes an alias of each destination, so later writes
 /// through the destination also mark the source. Anything else escapes.
-fn store_named(facts: &mut Facts, destinations: &[PathKey], value: &Tokens, pc: usize) {
+fn store_named(
+    facts: &mut Facts,
+    released: &mut Tokens,
+    destinations: &[PathKey],
+    value: &Tokens,
+    pc: usize,
+) {
     let mut rest = Tokens::new();
     for token in value {
         match token {
@@ -328,24 +414,40 @@ fn store_named(facts: &mut Facts, destinations: &[PathKey], value: &Tokens, pc: 
                         .insert((*own, segments.clone()));
                 }
             }
+            Token::Unknown => {
+                for destination in destinations {
+                    facts
+                        .unknown_aliases
+                        .entry(destination.clone())
+                        .or_default()
+                        .insert(pc);
+                }
+            }
             other => {
                 rest.insert(other.clone());
             }
         }
     }
-    escape(facts, &rest, pc);
+    escape(facts, released, &rest, pc);
 }
 
+/// The last state slot holds the released set, never a register.
 fn set_register(state: &mut [Tokens], facts: &mut Facts, register: usize, tokens: Tokens) {
     if tokens.len() > MAX_REGISTER_TOKENS {
         facts.limited = true;
     }
-    if let Some(slot) = state.get_mut(register) {
-        *slot = tokens;
+    if register + 1 < state.len() {
+        state[register] = tokens;
     }
 }
 
-fn get_table(root: &Root<'_>, facts: &mut Facts, table: &Tokens, key_rk: u16) -> Tokens {
+fn get_table(
+    root: &Root<'_>,
+    facts: &mut Facts,
+    released: &Tokens,
+    table: &Tokens,
+    key_rk: u16,
+) -> Tokens {
     let key = root.rk_name(key_rk);
     let mut out = Tokens::new();
     for token in table {
@@ -392,14 +494,22 @@ fn get_table(root: &Root<'_>, facts: &mut Facts, table: &Tokens, key_rk: u16) ->
                 // An unset field, or one the root stored here.
                 out.insert(Token::Opaque);
                 out.extend(facts.fresh_read(*site, key.as_deref()));
+                if released.contains(&Token::Released(*site)) {
+                    out.insert(Token::Unknown);
+                }
             }
-            _ => {
+            // A field of a value the analysis does not track may be anything.
+            Token::CallResult | Token::Unknown | Token::Module => {
+                out.insert(Token::Unknown);
+            }
+            // String methods, or an error on a non-table.
+            Token::Opaque | Token::Literal(_) | Token::Released(_) => {
                 out.insert(Token::Opaque);
             }
         }
     }
     if out.is_empty() {
-        out.insert(Token::Opaque);
+        out.insert(Token::Unknown);
     }
     out
 }
@@ -419,6 +529,7 @@ fn call(
     raw: &RawInstruction51,
     reg: &dyn Fn(usize) -> Tokens,
     facts: &mut Facts,
+    released: &mut Tokens,
     pc: usize,
 ) -> Tokens {
     let a = raw.a as usize;
@@ -428,12 +539,17 @@ fn call(
     } else {
         (a + 1..a + raw.b as usize).collect()
     };
-    if function.contains(&Token::Module) {
+    if function.iter().any(is_module_function) {
         let literal = match reg(a + 1).iter().collect::<Vec<_>>().as_slice() {
             [Token::Literal(load)] => Some(*load),
             _ => None,
         };
-        let shape = function.len() == 1 && raw.opcode == Some(Op::Call) && raw.c == 1 && raw.b >= 2;
+        // Only the global `module` itself, loaded once by `GETGLOBAL`, can declare.
+        let shape = function.len() == 1
+            && function.contains(&Token::Module)
+            && raw.opcode == Some(Op::Call)
+            && raw.c == 1
+            && raw.b >= 2;
         match (shape, literal) {
             (true, Some(load)) => {
                 facts.declarations.entry(pc).or_default().insert(load);
@@ -451,7 +567,7 @@ fn call(
                     // Options receive the module table and may change its metatable.
                     facts.declaration_options.insert(pc);
                     for argument in arguments.iter().skip(1) {
-                        escape(facts, &reg(*argument), pc);
+                        escape(facts, released, &reg(*argument), pc);
                     }
                 }
             }
@@ -461,23 +577,30 @@ fn call(
         }
         return Tokens::from([Token::Opaque]);
     }
-    if path_parts(&function).any(|(segments, exact)| is_environment_mutator(segments, exact)) {
+    // A function fetched from a namespace the analysis cannot name could be `setfenv`.
+    if function.contains(&Token::AnyNamespace)
+        || path_parts(&function).any(|(segments, exact)| is_environment_mutator(segments, exact))
+    {
         facts.refusals.insert(pc);
     }
     // Other callees are inside the assumption; the mutating builtins are not, so what
-    // they receive escapes. Handing over `module` or an environment mutator always counts.
+    // they receive escapes.
     let mutating = path_parts(&function).any(|(s, exact)| is_table_mutator(s, exact));
     let mut passes_source = false;
+    let mut argument_tokens = Tokens::new();
     for argument in &arguments {
         let tokens = reg(*argument);
         passes_source |= path_parts(&tokens).any(|(s, exact)| is_namespace_source(s, exact));
         if mutating {
-            escape(facts, &tokens, pc);
-        } else if tokens.contains(&Token::Module)
-            || path_parts(&tokens).any(|(s, exact)| is_environment_mutator(s, exact))
-        {
-            facts.refusals.insert(pc);
+            // `setmetatable(x, ...)` on a value that may be a namespace.
+            if tokens.contains(&Token::Unknown) || tokens.is_empty() {
+                facts.refusals.insert(pc);
+            }
+            escape(facts, released, &tokens, pc);
+        } else {
+            hand_over(facts, released, &tokens, pc);
         }
+        argument_tokens.extend(tokens);
     }
     let mut result = Tokens::new();
     let is_require = |s: &[String]| s.len() == 1 && s[0] == "require";
@@ -501,13 +624,115 @@ fn call(
     if passes_source {
         result.insert(Token::AnyNamespace);
     }
+    // Builtins that hand back what they were given, or parts of it.
+    if path_parts(&function).any(|(s, exact)| exact && s.len() == 1 && s[0] == "assert") {
+        result.extend(argument_tokens.iter().cloned());
+    }
+    if path_parts(&function).any(|(s, exact)| {
+        exact && s.len() == 1 && matches!(s[0].as_str(), "rawget" | "select" | "unpack" | "next")
+    }) {
+        result.insert(Token::Unknown);
+    }
     // Any other callee returns something that is not a namespace, under the assumption.
     if function.iter().any(|t| {
         !matches!(t, Token::Path { segments, exact, .. } if is_namespace_source(segments, *exact))
     }) {
-        result.insert(Token::Opaque);
+        result.insert(Token::CallResult);
     }
     result
+}
+
+/// Opcodes that cannot call a function or a metamethod in a Lua 5.1 root. Module
+/// environments reach `_G` through a table `__index`, so global access runs no code.
+fn runs_no_code(opcode: Option<Op>) -> bool {
+    matches!(
+        opcode,
+        Some(
+            Op::Move
+                | Op::LoadK
+                | Op::LoadBool
+                | Op::LoadNil
+                | Op::GetUpval
+                | Op::GetGlobal
+                | Op::SetGlobal
+                | Op::SetUpval
+                | Op::NewTable
+                | Op::Jmp
+                | Op::Test
+                | Op::TestSet
+                | Op::Return
+                | Op::Close
+                | Op::Closure
+                | Op::VarArg
+                | Op::SetList
+        )
+    )
+}
+
+/// Upvalue indices of `proto` that it or a nested function assigns.
+fn assigned_upvalues(proto: &luad_core::model::Prototype, depth: usize) -> BTreeSet<usize> {
+    let mut out = BTreeSet::new();
+    if depth > 256 {
+        // Validated chunks nest far less deeply; treat every upvalue as assigned.
+        return (0..proto.upvalues.len().max(256)).collect();
+    }
+    let roles = luad_dialect_lua51::roles::discover_roles_lua51(proto);
+    for (pc, word) in proto.instructions.iter().enumerate() {
+        if !roles.is_executable(pc) {
+            continue;
+        }
+        let raw = RawInstruction51::decode(word.raw_word);
+        match raw.opcode {
+            Some(Op::SetUpval) => {
+                out.insert(raw.b as usize);
+            }
+            Some(Op::Closure) => {
+                let Some(child) = proto.protos.get(raw.bx as usize) else {
+                    continue;
+                };
+                for upvalue in assigned_upvalues(child, depth + 1) {
+                    let binding = proto
+                        .instructions
+                        .get(pc + 1 + upvalue)
+                        .map(|w| RawInstruction51::decode(w.raw_word));
+                    if let Some(binding) = binding {
+                        if binding.opcode == Some(Op::GetUpval) {
+                            out.insert(binding.b as usize);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Root registers that a function created by the root captures and may assign.
+fn rebindable_registers(proto: &luad_core::model::Prototype) -> BTreeSet<usize> {
+    let mut out = BTreeSet::new();
+    let roles = luad_dialect_lua51::roles::discover_roles_lua51(proto);
+    for (pc, word) in proto.instructions.iter().enumerate() {
+        let raw = RawInstruction51::decode(word.raw_word);
+        if !roles.is_executable(pc) || raw.opcode != Some(Op::Closure) {
+            continue;
+        }
+        let Some(child) = proto.protos.get(raw.bx as usize) else {
+            continue;
+        };
+        for upvalue in assigned_upvalues(child, 1) {
+            let binding = proto
+                .instructions
+                .get(pc + 1 + upvalue)
+                .map(|w| RawInstruction51::decode(w.raw_word));
+            if let Some(binding) = binding {
+                if binding.opcode == Some(Op::Move) {
+                    out.insert(binding.b as usize);
+                }
+            }
+        }
+    }
+    out
 }
 
 fn transfer(
@@ -519,13 +744,14 @@ fn transfer(
     let pc = instruction.pc;
     let raw = RawInstruction51::decode(instruction.raw_word);
     let a = raw.a as usize;
-    let before: Vec<Tokens> = state.to_vec();
+    let before: Vec<Tokens> = state[..root.frame].to_vec();
     let reg = |r: usize| before.get(r).cloned().unwrap_or_default();
+    let mut released = state[root.frame].clone();
 
     let mut call_result = None;
     match raw.opcode {
         Some(Op::Call | Op::TailCall) => {
-            call_result = Some(call(root, &raw, &reg, facts, pc));
+            call_result = Some(call(root, &raw, &reg, facts, &mut released, pc));
         }
         Some(Op::SetTable) => {
             let value = if raw.c < 256 {
@@ -533,7 +759,14 @@ fn transfer(
             } else {
                 Tokens::new()
             };
-            table_write(facts, &reg(a), root.rk_name(raw.b).as_deref(), &value, pc);
+            table_write(
+                facts,
+                &mut released,
+                &reg(a),
+                root.rk_name(raw.b).as_deref(),
+                &value,
+                pc,
+            );
         }
         Some(Op::SetList) => {
             let values: Vec<usize> = if raw.b == 0 {
@@ -542,31 +775,65 @@ fn transfer(
                 (a + 1..=a + raw.b as usize).collect()
             };
             for value in values {
-                table_write(facts, &reg(a), None, &reg(value), pc);
+                table_write(facts, &mut released, &reg(a), None, &reg(value), pc);
             }
             // The table register still holds the same table.
+            state[root.frame] = released;
             return;
         }
         Some(Op::SetGlobal) => match root.constant(raw.bx as usize).and_then(admitted_name) {
             // Before the declaration the store lands in `_G`; after it, in the module.
             Some(name) => store_named(
                 facts,
+                &mut released,
                 &[(true, vec![name.clone()]), (false, vec![name])],
                 &reg(a),
                 pc,
             ),
-            None => escape(facts, &reg(a), pc),
+            None => escape(facts, &mut released, &reg(a), pc),
         },
         _ => {}
     }
 
+    // Same-file code that may run here can rebind the locals it captured and writes.
+    if !runs_no_code(raw.opcode) {
+        for &register in &root.rebindable {
+            set_register(state, facts, register, Tokens::from([Token::Unknown]));
+        }
+    }
+
     // Every result of a call carries the call's result tokens, since `pcall(require, n)`
-    // returns the namespace second.
-    let written = call_result.unwrap_or_else(|| Tokens::from([Token::Opaque]));
+    // returns the namespace second. Generic-`for` values are elements of any table.
+    let written = match raw.opcode {
+        Some(Op::TForLoop | Op::GetUpval) => Tokens::from([Token::Unknown]),
+        _ => call_result.unwrap_or_else(|| Tokens::from([Token::Opaque])),
+    };
     for target in &instruction.writes {
         for register in written_registers(target, root.frame) {
             set_register(state, facts, register, written.clone());
         }
+    }
+    // A callee's frame overlaps every register from the call slot up (from `A+3` for the
+    // generic-`for` iterator). Results land at `A..A+C-2`, or up to the top when `C` is
+    // 0; whatever else is left there is the callee's.
+    match raw.opcode {
+        Some(Op::Call | Op::TailCall) => {
+            for register in a..root.frame {
+                let result = raw.c == 0 || register + 1 < a + raw.c as usize;
+                let tokens = if result {
+                    written.clone()
+                } else {
+                    Tokens::from([Token::Unknown])
+                };
+                set_register(state, facts, register, tokens);
+            }
+        }
+        Some(Op::TForLoop) => {
+            for register in a + 3..root.frame {
+                set_register(state, facts, register, Tokens::from([Token::Unknown]));
+            }
+        }
+        _ => {}
     }
 
     let produced = match raw.opcode {
@@ -598,11 +865,17 @@ fn transfer(
                 },
             )
         }
-        Some(Op::GetTable) => Some(get_table(root, facts, &reg(raw.b as usize), raw.c)),
+        Some(Op::GetTable) => Some(get_table(
+            root,
+            facts,
+            &released,
+            &reg(raw.b as usize),
+            raw.c,
+        )),
         Some(Op::SelfOp) => {
             let table = reg(raw.b as usize);
             set_register(state, facts, a + 1, table.clone());
-            Some(get_table(root, facts, &table, raw.c))
+            Some(get_table(root, facts, &released, &table, raw.c))
         }
         Some(Op::NewTable) => Some(Tokens::from([Token::Fresh(pc)])),
         _ => None,
@@ -610,6 +883,7 @@ fn transfer(
     if let Some(tokens) = produced {
         set_register(state, facts, a, tokens);
     }
+    state[root.frame] = released;
 }
 
 fn dominates(cfg: &ControlFlowGraph, dominator: usize, block: usize) -> bool {
@@ -649,7 +923,9 @@ fn run_dataflow(
     budget: usize,
 ) -> Option<TrustedOutcome> {
     let mut entry: Vec<Option<Vec<Tokens>>> = vec![None; cfg.blocks.len()];
-    entry[0] = Some(vec![Tokens::from([Token::Opaque]); root.frame]);
+    let mut initial = vec![Tokens::from([Token::Opaque]); root.frame];
+    initial.push(Tokens::new());
+    entry[0] = Some(initial);
     let mut work = vec![0usize];
     let mut visits = 0usize;
     while let Some(b) = work.pop() {
@@ -670,11 +946,12 @@ fn run_dataflow(
                 }
                 Some(existing) => {
                     let mut grew = false;
-                    for (slot, tokens) in existing.iter_mut().zip(&state) {
+                    let released_slot = existing.len() - 1;
+                    for (index, (slot, tokens)) in existing.iter_mut().zip(&state).enumerate() {
                         for token in tokens {
                             grew |= slot.insert(token.clone());
                         }
-                        if slot.len() > MAX_REGISTER_TOKENS {
+                        if index != released_slot && slot.len() > MAX_REGISTER_TOKENS {
                             return Some(TrustedOutcome::Limited);
                         }
                     }
@@ -720,6 +997,7 @@ pub(crate) fn admit_trusted_module(chunk: &Chunk) -> TrustedOutcome {
     let root = Root {
         chunk,
         frame: (p.maxstacksize as usize).clamp(1, 256),
+        rebindable: rebindable_registers(p),
     };
 
     let mut block_of = BTreeMap::new();
@@ -844,6 +1122,12 @@ pub(crate) fn admit_trusted_module(chunk: &Chunk) -> TrustedOutcome {
         for pc in &pcs {
             add_mark(label.clone(), *pc);
         }
+        // A destination that may hold any value could be any namespace.
+        for ((dest_own, destination), stored) in &facts.unknown_aliases {
+            if *dest_own == own && segments.starts_with(destination) {
+                return refused(&mut pcs.iter().chain(stored).copied());
+            }
+        }
         for ((dest_own, destination), sources) in &facts.aliases {
             if *dest_own == own && segments.starts_with(destination) {
                 for (source_own, source) in sources {
@@ -905,7 +1189,8 @@ pub(crate) fn admit_trusted_module(chunk: &Chunk) -> TrustedOutcome {
             } if settled && in_block(evidence) => {
                 exports.push((name.to_string(), prototype.clone(), evidence.clone()));
             }
-            GlobalStoreValue::NonClosure { evidence } if settled && in_block(evidence) => {}
+            // Any other value, even a known non-function, may replace a namespace that
+            // labels below `M.name` rely on, so it is never treated as proved absence.
             _ => add_mark(resolve(true, &[name.to_string()]), pc),
         }
     }

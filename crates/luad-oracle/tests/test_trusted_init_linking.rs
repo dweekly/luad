@@ -183,6 +183,49 @@ fn test_trusted_init_never_resolves_what_the_root_visibly_changes() {
             "module('luci.sys'); function exec() end".to_string(),
             format!("{require}module('luci.other'); holder = luci.sys; setmetatable(holder, {{}})"),
         ],
+        // Code review round 1: values the analysis does not track, written by the root.
+        vec![
+            "module('luci.sys'); function exec() end".to_string(),
+            format!("{require}module('luci.other'); local t = {{}}; table.insert(t, luci.sys); t[1].exec = nil"),
+        ],
+        vec![
+            "module('luci.sys'); function exec() end".to_string(),
+            format!("{require}module('luci.other'); local o = u.wrap(); o.sys.exec = nil"),
+        ],
+        vec![
+            "module('luci.sys'); function exec() end".to_string(),
+            format!("{require}module('luci.other'); local t = {{}}; u.install(t, luci.sys); t.exec = nil"),
+        ],
+        vec![
+            "module('luci.sys'); function exec() end".to_string(),
+            format!("{require}module('luci.other'); for _, m in pairs(luci) do m.exec = nil end"),
+        ],
+        vec![
+            "module('luci.sys'); function exec() end".to_string(),
+            format!("{require}module('luci.other'); local s = assert(require 'luci.sys'); s.exec = nil"),
+        ],
+        vec![
+            "module('luci.sys'); function exec() end".to_string(),
+            format!("{require}module('luci.other'); local s = rawget(luci, 'sys'); s.exec = nil"),
+        ],
+        vec![
+            "module('luci.sys'); function exec() end".to_string(),
+            format!("{require}module('luci.other'); local t = u.f().g; holder = t; holder.exec = nil"),
+        ],
+        // A same-file function rebinds a root local that the root then writes through.
+        vec![
+            "module('luci.sys'); function exec() end".to_string(),
+            format!("{require}module('luci.other', package.seeall); local t = {{}}; local function f() t = luci.sys end; f(); t.exec = nil"),
+        ],
+        vec![
+            "module('luci.sys'); function exec() end".to_string(),
+            format!("{require}module('luci.other'); local t = {{}}; local function f() local function g() t = luci.sys end; g() end; u.run(f); t.exec = nil"),
+        ],
+        // The root replaces a namespace that labels below it rely on.
+        vec![
+            "module('luci.sys'); function exec() end".to_string(),
+            format!("{require}module('luci'); sys = nil"),
+        ],
     ] {
         let sources: Vec<&str> = providers.iter().map(String::as_str).collect();
         let link = trusted(&sources);
@@ -209,6 +252,12 @@ fn test_trusted_init_refuses_unbounded_initialization_for_the_whole_corpus() {
         format!("{require}module('luci.other'); getfenv(1).exec = nil"),
         format!("{require}module('luci.other'); local m = module; u.call(m)"),
         format!("{require}if flag then module('luci.other') end"),
+        // Code review round 1: `module` and `setfenv` reached by other spellings.
+        format!("{require}module('luci.other', package.seeall); _G.module('luci.sys'); function exec() return 'evil' end"),
+        format!("{require}module('luci.other', package.seeall); pcall(_G.module, 'luci.sys')"),
+        format!("{require}module('luci.other', package.seeall); local g = getfenv(0); g.setfenv(1, luci.sys); exec = nil"),
+        format!("{require}module('luci.other'); local t = {{}}; u.init(t); t.x = 1"),
+        format!("{require}module('luci.other'); setmetatable(u.f().g, {{}})"),
     ] {
         // The provider of luci.sys is clean, but the refused module could define anything.
         let link = trusted(&[exec, &refused]);

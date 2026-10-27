@@ -32,26 +32,44 @@ Selecting `--link-convention luci-module-trusted-init` changes only these behavi
      covers required modules, other library functions, and same-file functions however
      they are called.
    - `require(name)` returns the table at the global dotted path `name`. No other call
-     returns a module namespace table, except the namespace sources listed in item 5.
+     returns a module namespace table itself; what such a result holds is not assumed.
+     The exceptions are the namespace sources in item 5 and the pass-through builtins
+     (`assert`, `rawget`, `select`, `unpack`, `next`).
    - Initialization completes without error.
 
-   Everything the root prototype's own instructions do is checked, never assumed.
+   Everything the root prototype's own instructions do is checked, never assumed. That
+   includes same-file functions that assign a root local the root later uses (item 5).
 4. **Tokens.** Every register holds a set of tokens, joined by union at CFG merges and
    iterated to a fixpoint:
    - `Path(own|global, segments, exact)` is a table reached by global lookup. A global
      `X` yields both `own:[X]` and `global:[X]`, because `package.seeall` falls back to
      `_G`. `_G` yields `global:[]`, `_M` yields `own:[]`, and `own` paths are prefixed
      with the module name `M`.
-   - `Fresh(site)` is a table this root made at one `NEWTABLE`. What each site may hold
-     is tracked by key: a constant admitted key, or "any" for other keys and list
-     items. It is flow-insensitive, and the whole pass repeats until the contents
-     settle (at most 8 rounds).
+   - `Fresh(site)` is a table this root made at one `NEWTABLE`.
+     - What each site may hold is tracked by key: a constant admitted key, or "any" for
+       other keys and list items. That is flow-insensitive, and the whole pass repeats
+       until the contents settle (at most 8 rounds).
+     - Whether the site has been released (handed to code the analysis does not
+       follow) is flow-sensitive state, joined by union.
    - `Module` is the global `module`.
    - `Literal` is a string `LOADK`.
    - `AnyNamespace` is a namespace table the analysis cannot name.
-   - `Opaque` is anything else: call results other than namespace sources, closures,
-     arithmetic, and the initial frame.
+   - `CallResult` is a call result: not a namespace table, under the assumption.
+   - `Unknown` is any value at all, possibly a namespace table. It comes from:
+     - a field read from a `CallResult` or `Unknown`;
+     - a generic-`for` value;
+     - a field of a released fresh table;
+     - a root local that same-file code may rebind;
+     - what a callee left in registers its frame overlapped.
+   - `Opaque` is a non-table: a scalar, a closure, `nil`, or the initial frame.
 5. **Transfer.** The instruction's lifted `writes` become `Opaque`, then:
+   - **Calls clobber.** After `CALL`/`TAILCALL`, registers `A..A+C-2` (to the top when
+     `C = 0`) hold the result tokens. Every other register from `A` up becomes
+     `Unknown`; for `TFORLOOP`, those from `A+3` up.
+   - **Rebound locals.** A root register that a root closure captures, and that the
+     closure or a function nested in it assigns (`SETUPVAL`), becomes `Unknown` after
+     every instruction that can run code: anything but moves, loads, global access,
+     `NEWTABLE`, `CLOSURE`, jumps, tests, `RETURN`, `VARARG` and `SETLIST`.
    - **Reads and moves.**
      - `MOVE` copies the set, and `TESTSET` joins it.
      - `GETGLOBAL` yields the paths above, or `Module` for `module`. A name no admitted
@@ -61,41 +79,54 @@ Selecting `--link-convention luci-module-trusted-init` changes only these behavi
      - `package.loaded[name]` yields the path `name`, or `AnyNamespace` when the key is
        not a constant name.
      - A read from `Fresh(site)` yields what the site may hold under that key, plus
-       `Opaque`. Reads from `Opaque` yield `Opaque`, and reads from `AnyNamespace` yield
-       `AnyNamespace`.
+       `Opaque`, plus `Unknown` once the site is released.
+     - Reads from `CallResult`/`Unknown` yield `Unknown`, and reads from `AnyNamespace`
+       yield `AnyNamespace`.
      - `NEWTABLE` yields `Fresh(pc)`. `SETLIST` leaves its table register's set
        unchanged.
    - **Writes.** `SETTABLE`/`SETLIST`:
      - into a `Path` marks `p.k` (exact path and constant admitted key) or `p`;
-     - into `Fresh(site)` records the value in the site's contents;
-     - into `AnyNamespace` or `Module` refuses the whole corpus;
-     - into `Opaque` is permitted under the assumption.
+     - into an unreleased `Fresh(site)` records the value in the site's contents;
+     - into a released fresh table, `Unknown`, `AnyNamespace` or `Module` refuses the
+       whole corpus. A callee may have given a released table a forwarding
+       `__newindex`;
+     - into `CallResult` or `Opaque` is permitted under the assumption.
    - **Named stores.** A value stored only under names the analysis follows does not
      escape: it goes to fresh-table fields, to an exact path with a constant key, or
      to a `SETGLOBAL` name.
      - An exact `Path` value stored under a name becomes an alias of it. A mark under
        the alias later also marks the source, followed transitively, with at most 4096
        resolved marks.
+     - An `Unknown` value stored under a name makes any mark under that name refuse
+       the whole corpus.
      - Any other stored value escapes.
    - **Escapes.**
      - An escaping `Path` marks it.
-     - An escaping `Fresh(site)` escapes everything the site may hold, recursively.
-     - `Module`, `AnyNamespace` or an environment mutator refuses the whole corpus.
-     - Arguments to the mutating builtins (`setmetatable`, `getmetatable`, `rawset`)
-       escape.
-     - Arguments to other callees are covered by the assumption, except that passing
-       `Module` or an environment mutator refuses.
+     - An escaping `Fresh(site)` is released, and everything it may hold escapes,
+       recursively.
+     - `Module` (or any path spelled `module`), `AnyNamespace` or an environment
+       mutator refuses the whole corpus.
    - **Calls.**
      - The declaration is `F = {Module}` with `C = 1` and a single literal name.
-     - Any other call with `Module` in `F` refuses the whole corpus.
-     - Calling an environment mutator refuses the whole corpus: `setfenv`,
-       `debug.setfenv`, `debug.setmetatable`, `debug.setupvalue`, `debug.setlocal`, or
+     - Any other call whose `F` may be `module` (including `_G.module`) refuses the
+       whole corpus.
+     - Calling an environment mutator refuses the whole corpus, and so does calling an
+       `AnyNamespace` value (it could be one). The environment mutators are `setfenv`,
+       `debug.setfenv`, `debug.setmetatable`, `debug.setupvalue`, `debug.setlocal`, and
        an inexact `_G[k]` or `debug[k]`.
+     - Arguments to the mutating builtins (`setmetatable`, `getmetatable`, `rawset`)
+       escape, and an `Unknown` argument to one refuses.
+     - Arguments to any other callee are covered by the assumption, with two
+       exceptions: fresh tables passed to it are released, and passing `module` or an
+       environment mutator refuses.
      - Namespace sources return `AnyNamespace`: `getfenv`, `debug.getfenv`,
        `debug.getregistry`, `debug.getlocal` and `debug.getupvalue`. So does any call
        that receives one of them as an argument.
      - `require` of a constant admitted dotted name returns that `Path`; any other
        `require` returns `AnyNamespace`.
+     - `assert` returns its arguments' tokens; `rawget`, `select`, `unpack` and `next`
+       return `Unknown`.
+     - Every other call returns `CallResult`.
 6. **Declaration.**
    - `module` must be loaded exactly once, and exactly one call must declare it.
    - The literal name is admitted exactly as in the strict rule.
@@ -113,9 +144,10 @@ Selecting `--link-convention luci-module-trusted-init` changes only these behavi
    - every instruction in the value's evidence lies in the store's block, at or before
      the store, so path-insensitive value transfer cannot have merged values.
 
-   A dominated store that fails any condition marks `M.name`. A non-closure value is the
-   exception: when it is single, unconditional and in-block, it marks nothing, as in
-   the strict rule. An undominated store marks both `M.name` and `name`.
+   Every other root store marks `M.name`, including a single non-closure store.
+   Unlike the strict rule, such a store is not proof of absence: `module('luci');
+   sys = nil` replaces the namespace that `luci.sys.*` labels rely on. A store the
+   declaration does not dominate marks both `M.name` and `name`.
 8. **Marks and resolution.**
    - A label is dynamic when some mark is a prefix of it, and it resolves `dynamic` with
      the mark's evidence.
@@ -202,3 +234,34 @@ rounds rejected the contract.
 
   The wider assumption is a judgment call the owner should confirm; it is flagged in
   the PR.
+
+## Code review
+
+**Round 1** (`scripts/agents/claude-opus.sh review-fresh`) rejected the change with three
+blockers, all fixed with each repro added as a negative control.
+
+1. The root could write into values whose contents were never tracked:
+   - `table.insert(t, luci.sys); t[1].exec = nil`;
+   - fields of call results;
+   - a callee-installed `__newindex`.
+
+   The fix splits `CallResult` and `Unknown` out of `Opaque`, and releases fresh tables
+   handed to callees, flow-sensitively.
+2. A same-file closure could rebind a root local that the root then writes through.
+   Such locals now become `Unknown` whenever code runs.
+3. `_G.module(...)`, `pcall(_G.module, ...)` and `getfenv(0).setfenv` reached `module`
+   or an environment mutator by another spelling. Any path spelled `module` is now
+   treated as `module`, and calls of `AnyNamespace` values refuse.
+
+Residual risks the review raised, and what happened to each:
+
+- **Folded in.**
+  - Pass-through builtins: `assert`, `rawget`, `select`, `unpack`, `next`.
+  - Generic-`for` values.
+  - Inherited `sys = nil` absence: single non-closure stores now mark.
+  - A stricter precision oracle: the line must call through the namespace or a name
+    the file binds to it.
+  - Call-frame clobbering for `CALL` with `C = 0` or `C = 1`, whose lifted effects
+    list no writes.
+- **Still open.** No compiled control exercises the clobbering, because the official
+  compiler never reads those registers. Only crafted bytecode would.
