@@ -11,6 +11,7 @@ pub mod linking;
 pub mod origins;
 pub mod prototype_identity;
 pub mod query;
+mod trusted_init;
 pub mod xrefs;
 
 pub use callees::{
@@ -33,7 +34,7 @@ pub use linking::{
     build_module_export_index_bounded, index_chunk_module_exports,
     index_chunk_module_exports_bounded, resolve_chunk_links, resolve_chunk_links_bounded,
     ChunkLinkResult, CrossChunkLinkFact, ExportDefinition, LinkConvention, LinkStatus,
-    ModuleExportIndex, MAX_INDEXED_EXPORTS, MAX_LINK_FACTS,
+    ModuleExportIndex, MAX_INDEXED_EXPORTS, MAX_LINK_FACTS, TRUSTED_INIT_ASSUMPTION,
 };
 pub use origins::{
     analyze_chunk_origins, has_unknown, CallArgumentWindow, CallOriginFact, ChunkOriginAnalysis,

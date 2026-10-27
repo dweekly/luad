@@ -5,6 +5,25 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Add the opt-in `--link-convention luci-module-trusted-init` for `callers` and `export`.
+  It admits LuCI modules whose top level runs other code (`require`, table
+  constructors, field reads) under one stated assumption, `trusted-init`: code run during
+  initialization, other than the module's own top level, does not redefine module
+  functions or change environments or metatables.
+
+  The root's own instructions are still checked. Repeated, conditional or pre-declaration
+  stores, and visible writes into or through namespace tables, make the affected labels
+  dynamic. Environment changes and writes into namespaces the analysis cannot name
+  refuse the module, as before.
+
+  Every definite link carries `assumptions: ["trusted-init"]`, as do caller bases and the
+  callers summary (`assumptions`, `assumed_providers`). The fields are additive and
+  absent under the strict convention, whose output is unchanged. Strict consumers
+  validating against an older schema snapshot should refresh it.
+
+  On the 13 vendored LuCI files, 70 cross-file callers are source-checked, and all 39
+  literal `luci.x.f(` calls are found.
+
 ## 0.4.0 — 2026-10-23
 
 - Bound the parsed model with a chunk-wide instruction budget (#117).

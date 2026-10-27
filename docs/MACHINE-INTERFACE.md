@@ -468,7 +468,7 @@ reachability, execution order, or immunity from unobserved external mutation.
 ### `callers`
 
 `luad callers TARGET --proto PATH [CORPUS...] [--input-list FILE]
-[--link-convention luci-module-setglobal]` lists the observed one-hop callers of one Lua
+[--link-convention CONVENTION]` lists the observed one-hop callers of one Lua
 5.1 prototype. It reorganizes accepted facts and adds no resolution rule. Same-artifact
 callers come from resolved `call_relation` facts. Cross-artifact callers come from
 `resolved` link records whose target identity (path, sha256, byte length) and prototype
@@ -487,7 +487,10 @@ sites are never listed or counted as callers.
 An empty `callers` list means no observed caller in the analyzed corpus. It is not a
 proof of unreachability. `coverage_complete` reports whether every input was analyzed.
 `degraded` reports any degraded site, index cutoff or provider the index could not admit,
-and `dynamic_providers` names those providers. No field claims the negative is complete.
+and `dynamic_providers` names those providers. Under `luci-module-trusted-init`,
+`assumptions` and `assumed_providers` name the assumption the answer rests on and the
+providers admitted only under it; both are omitted otherwise. No field claims the
+negative is complete.
 Each corpus file is read once. A file that cannot be read, parsed or validated is
 reported in `files` and, when linking, makes the index uncertain, as in `export`.
 
@@ -676,9 +679,9 @@ order; the field is absent from an unfiltered export.
 `--link-convention CONVENTION` explicitly enables corpus-wide module indexing and
 inter-artifact binding under a named convention. Discover conventions at runtime via
 `luad capabilities --format json` under `export.link_conventions` or
-`luad export --help` (currently `luci-module-setglobal`). JSONL `cross_chunk_link`
-records conform to `luad schema link` and carry caller evidence plus a target artifact
-and prototype only when `resolved`.
+`luad export --help` (currently `luci-module-setglobal` and `luci-module-trusted-init`).
+JSONL `cross_chunk_link` records conform to `luad schema link` and carry caller evidence
+plus a target artifact and prototype only when `resolved`.
 
 The Lua 5.1 convention admits a deliberately narrow initialization subset: one direct
 literal `module("name")` call, optionally with `package.seeall`, in a straight-line
@@ -742,6 +745,51 @@ once for indexing and again for export, and does not create a transactional file
 snapshot. Link target hashes identify index-pass bytes. Consumers must join the exact
 `(path, sha256)` target to complete exported provider facts, and refuse the join when
 those facts are missing or changed.
+
+#### `luci-module-trusted-init` (opt-in, assumption-labeled)
+
+This convention starts from the strict one, which most real LuCI modules fail: their top
+level runs `require` calls, builds tables or reads fields before or after `module(...)`.
+
+- **Unchanged.** A module the strict convention admits, ignores or limits is treated
+  identically.
+- **Re-examined.** A module it refuses is checked again under one assumption,
+  `trusted-init`:
+  - No function run during initialization defines, replaces or removes a function in a
+    module namespace, or changes a module's environment or metatable. The exceptions
+    are the module's root itself and the builtins `setmetatable`, `getmetatable` and
+    `rawset` called by those names. The assumption covers required modules, other
+    library functions, and same-file functions however they are called.
+  - `require(name)` returns the table at the global dotted path `name`, and no other
+    call returns a namespace table.
+  - Initialization completes.
+
+  Everything the root's own instructions do is checked.
+- **Exports.** These stay root `SETGLOBAL`s of closures. Each name must be stored once,
+  after the declaration, on every path to the root's exit, with a value computed in the
+  same basic block.
+- **What makes a label dynamic.** Any other store makes its label dynamic, and so does
+  any visible root write into a table reached by a global path, a `require` result or
+  `package.loaded[name]`, such as `function net.routes()`. So does passing such a table
+  to `setmetatable`, `getmetatable` or `rawset`, as in `setmetatable(_M, ...)`, or
+  storing it where the analysis cannot follow it. A namespace stored under another
+  global name is followed as an alias. Labels under a dynamic prefix resolve `dynamic`.
+- **Whole-corpus refusals.** These refuse the module for the whole corpus, as strict
+  refusals do: a second or non-literal `module(...)`, `setfenv` or a `debug` setter, a
+  write into a namespace the analysis cannot name, and a write through `_G[k]`.
+  Exceeding a cap is `ANA-LIMIT-001`.
+- **Labels.** When any provider was admitted this way, every `resolved`, `absent` and
+  `duplicate` link carries `assumptions: ["trusted-init"]`, including links to strictly
+  admitted providers, because the index's completeness rests on the assumption. Cross-chunk
+  caller bases copy it. The callers summary lists `assumptions` and `assumed_providers`.
+  `degraded`, `coverage_complete` and exit codes keep their meaning, and the strict
+  convention never emits these fields.
+
+The full rule set is in [the contract](NEXT-SPRINT.md). The executable controls, including
+the pinned gap (a same-file function run by a callback is assumed, not followed), are in
+[test_trusted_init_linking.rs](../crates/luad-oracle/tests/test_trusted_init_linking.rs).
+The source-text oracle on public LuCI is in
+[test_callers_luci_trusted_init.rs](../crates/luad-oracle/tests/test_callers_luci_trusted_init.rs).
 
 The [cross-chunk gate tests](../crates/luad-oracle/tests/test_cross_chunk_linking.rs)
 exercise overwrites, refused declarations/clobbers, child bodies, aliases, capacity

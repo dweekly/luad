@@ -170,6 +170,16 @@ need. Known limits to revisit when a real investigation hits them:
   the label could have named the target.
 - No compiled shape where a call relation and a link disagree has been found; the
   `conflicting` class is pinned only on synthetic facts.
+- The opt-in `luci-module-trusted-init` convention links only symbolic global paths
+  (`luci.x.f(`). Calls through a local `require` alias (`local util = require
+  "luci.util"; util.f()`) stay unlinked. They are the commonest LuCI idiom, and the
+  largest remaining recall gap.
+- Nested exports such as `function net.routes()` are marked dynamic, not indexed.
+- Hardening: the export reference consumer's offline `callers` stays strict-only; it
+  does not accept `luci-module-trusted-init` or carry `assumptions`.
+- Hardening: whether `trusted-init` should cover same-file functions that the root
+  reaches only through a callback or a table read is an owner call recorded in the PR.
+  Tightening it refused 13 of 55 public modules and left every answer degraded.
 
 Extend the shared reference consumer with caller context and reuse its factual adapter
 across the workflows; keep firmware dispatch, sink, and authentication policy outside it.
@@ -286,7 +296,9 @@ frequency. None is an automatic prerequisite for announcement or a 1.0 promise.
   contents merely to improve a resolution count.
 - **Additional profiles:** prioritize actual refused artifacts with public authority.
   Encoded big-endian Lua 5.1, vendor opcode maps, EdgeTX, and newer stock releases compete
-  on that basis. Do not add a second module convention for an unverified matching gap.
+  on that basis. Do not add another module convention for an unverified matching gap
+  (`luci-module-trusted-init` answered a measured one: 41 of 55 public LuCI modules
+  refused by the strict index).
   Revisit the future release boundary if justified demand changes its ordering.
 - **Multi-hop caller inspection:** require per-call-site context, bounded recursion,
   open/missing arguments, callbacks, aliases, and unknown caller coverage. Keep a

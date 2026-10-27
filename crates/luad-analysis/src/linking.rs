@@ -17,6 +17,7 @@ use luad_core::model::{Chunk, ConstantValue};
 use crate::callees::{
     analyze_chunk_callees, analyze_root_global_stores, CalleeResolution, GlobalStoreValue,
 };
+use crate::trusted_init::{TrustedModule, TrustedOutcome};
 
 /// Supported explicit linking conventions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
@@ -24,6 +25,9 @@ use crate::callees::{
 pub enum LinkConvention {
     /// LuCI module pattern: literal `module("...")` followed by exported `CLOSURE`/`SETGLOBAL`.
     LuciModuleSetglobal,
+    /// The strict LuCI pattern, plus modules whose top level runs other code, admitted
+    /// under the labeled `trusted-init` assumption.
+    LuciModuleTrustedInit,
 }
 
 impl LinkConvention {
@@ -32,6 +36,7 @@ impl LinkConvention {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::LuciModuleSetglobal => "luci-module-setglobal",
+            Self::LuciModuleTrustedInit => "luci-module-trusted-init",
         }
     }
 
@@ -40,6 +45,7 @@ impl LinkConvention {
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "luci-module-setglobal" => Some(Self::LuciModuleSetglobal),
+            "luci-module-trusted-init" => Some(Self::LuciModuleTrustedInit),
             _ => None,
         }
     }
@@ -47,9 +53,12 @@ impl LinkConvention {
     /// List all supported link convention identifiers.
     #[must_use]
     pub const fn all_names() -> &'static [&'static str] {
-        &["luci-module-setglobal"]
+        &["luci-module-setglobal", "luci-module-trusted-init"]
     }
 }
+
+/// The assumption label carried by answers that rest on a `trusted-init` admission.
+pub const TRUSTED_INIT_ASSUMPTION: &str = "trusted-init";
 
 impl std::fmt::Display for LinkConvention {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -111,6 +120,9 @@ pub struct CrossChunkLinkFact {
     pub target_proto: Option<ProtoPath>,
     /// Evidence IDs from both defining export and calling site.
     pub evidence: Vec<StableId>,
+    /// Assumptions this answer rests on (`trusted-init`); omitted when none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assumptions: Vec<String>,
 }
 
 /// A candidate export definition recorded during corpus indexing.
@@ -135,6 +147,24 @@ pub struct ModuleExportIndex {
     pub export_limit_exceeded: bool,
     /// Diagnostics accumulated during indexing.
     pub diagnostics: Vec<Diagnostic>,
+    /// Label prefixes whose definitions a `trusted-init` root visibly made uncertain.
+    pub dynamic_labels: BTreeMap<Vec<String>, Vec<StableId>>,
+    /// Artifacts admitted only under the `trusted-init` assumption.
+    pub assumed_artifacts: BTreeSet<String>,
+}
+
+impl ModuleExportIndex {
+    /// Evidence for the dynamic prefixes covering `segments`, if any covers it.
+    #[must_use]
+    pub fn dynamic_label_evidence(&self, segments: &[String]) -> Option<Vec<StableId>> {
+        let mut evidence = Vec::new();
+        for end in 1..=segments.len() {
+            if let Some(found) = self.dynamic_labels.get(&segments[..end]) {
+                evidence.extend(found.iter().cloned());
+            }
+        }
+        (!evidence.is_empty()).then_some(evidence)
+    }
 }
 
 pub const MAX_INDEXED_EXPORTS: usize = 10_000;
@@ -171,7 +201,7 @@ fn string_bytes(value: &ConstantValue) -> Option<&[u8]> {
     }
 }
 
-fn admitted_selector(bytes: &[u8]) -> bool {
+pub(crate) fn admitted_selector(bytes: &[u8]) -> bool {
     !bytes.is_empty()
         && bytes
             .iter()
@@ -444,7 +474,10 @@ pub fn index_chunk_module_exports_bounded(
     index: &mut ModuleExportIndex,
     max_exports: usize,
 ) {
-    if convention != LinkConvention::LuciModuleSetglobal {
+    if !matches!(
+        convention,
+        LinkConvention::LuciModuleSetglobal | LinkConvention::LuciModuleTrustedInit
+    ) {
         return;
     }
 
@@ -479,63 +512,30 @@ pub fn index_chunk_module_exports_bounded(
                     }
                 }
             }
-            let mut count: usize = index.exports.values().map(Vec::len).sum();
-            let mut retained_label_bytes: usize = index
-                .exports
-                .values()
-                .flatten()
-                .map(|d| {
-                    d.label_segments
-                        .iter()
-                        .map(String::len)
-                        .sum::<usize>()
-                        .saturating_mul(2)
-                })
-                .sum();
-            let namespace_bytes: usize = module_segments.iter().map(String::len).sum();
+            let mut budget = ExportBudget::new(index, &module_segments);
             for (_, (_, store)) in last_stores {
                 if let GlobalStoreValue::Closure {
                     prototype,
                     evidence,
                 } = store.value
                 {
-                    if count >= max_exports {
-                        mark_index_limit(index, format!("Corpus module export indexing safety limit ({max_exports} definitions) exceeded; cross-chunk linking is incomplete"));
-                        continue;
-                    }
-                    let label_cost = namespace_bytes
-                        .saturating_add(store.name_raw.len())
-                        .saturating_mul(2);
-                    if retained_label_bytes.saturating_add(label_cost)
-                        > MAX_MODULE_INDEX_LABEL_BYTES
-                    {
-                        mark_index_limit(index, "Module index label payload budget exceeded; export index is incomplete".into());
-                        continue;
-                    }
-                    retained_label_bytes += label_cost;
                     // Admission validated UTF-8; preserve raw bytes until this
                     // explicit boundary, never merge distinct lossy spellings.
                     let Ok(export_name) = String::from_utf8(store.name_raw) else {
                         unreachable!("admitted export name")
                     };
-                    let mut full_segments = module_segments.clone();
-                    full_segments.push(export_name);
                     let mut combined_evidence = mod_evidence.clone();
                     combined_evidence.extend(evidence);
                     combined_evidence.push(store.store_id);
-                    combined_evidence.sort();
-                    combined_evidence.dedup();
-                    index
-                        .exports
-                        .entry(full_segments.clone())
-                        .or_default()
-                        .push(ExportDefinition {
-                            defining_artifact: identity.clone(),
-                            defining_proto: prototype,
-                            label_segments: full_segments,
-                            evidence: combined_evidence,
-                        });
-                    count += 1;
+                    budget.insert(
+                        index,
+                        identity,
+                        &module_segments,
+                        export_name,
+                        prototype,
+                        combined_evidence,
+                        max_exports,
+                    );
                 } else if matches!(store.value, GlobalStoreValue::Unknown { .. }) {
                     index.dynamic_artifacts.insert(identity.path.clone());
                     index.dynamic_evidence.push(store.store_id);
@@ -546,6 +546,27 @@ pub fn index_chunk_module_exports_bounded(
             index,
             "Module initialization admission budget exceeded; export index is incomplete".into(),
         ),
+        Some(ModuleDeclaration::Dynamic { evidence })
+            if convention == LinkConvention::LuciModuleTrustedInit =>
+        {
+            match crate::trusted_init::admit_trusted_module(chunk) {
+                TrustedOutcome::Admitted(module) => {
+                    index_trusted_module(identity, module, index, max_exports);
+                }
+                TrustedOutcome::Refused(refusal) => {
+                    index.dynamic_artifacts.insert(identity.path.clone());
+                    index.dynamic_evidence.extend(evidence);
+                    index.dynamic_evidence.extend(refusal);
+                    index.dynamic_evidence.sort();
+                    index.dynamic_evidence.dedup();
+                }
+                TrustedOutcome::Limited => mark_index_limit(
+                    index,
+                    "Module initialization admission budget exceeded; export index is incomplete"
+                        .into(),
+                ),
+            }
+        }
         Some(ModuleDeclaration::Dynamic { evidence }) => {
             index.dynamic_artifacts.insert(identity.path.clone());
             index.dynamic_evidence.extend(evidence);
@@ -553,6 +574,131 @@ pub fn index_chunk_module_exports_bounded(
             index.dynamic_evidence.dedup();
         }
         None => {}
+    }
+}
+
+/// Charges export definitions to the corpus-wide count and label-payload budgets.
+struct ExportBudget {
+    count: usize,
+    retained_label_bytes: usize,
+    namespace_bytes: usize,
+}
+
+impl ExportBudget {
+    fn new(index: &ModuleExportIndex, module_segments: &[String]) -> Self {
+        let count =
+            index.exports.values().map(Vec::len).sum::<usize>() + index.dynamic_labels.len();
+        let label_bytes = |segments: &[String]| {
+            segments
+                .iter()
+                .map(String::len)
+                .sum::<usize>()
+                .saturating_mul(2)
+        };
+        let retained_label_bytes = index
+            .exports
+            .values()
+            .flatten()
+            .map(|d| label_bytes(&d.label_segments))
+            .chain(index.dynamic_labels.keys().map(|k| label_bytes(k)))
+            .sum();
+        Self {
+            count,
+            retained_label_bytes,
+            namespace_bytes: module_segments.iter().map(String::len).sum(),
+        }
+    }
+
+    /// Charge one label of `extra` bytes beyond the namespace, or record the limit.
+    fn charge(&mut self, index: &mut ModuleExportIndex, extra: usize, max_exports: usize) -> bool {
+        if self.count >= max_exports {
+            mark_index_limit(index, format!("Corpus module export indexing safety limit ({max_exports} definitions) exceeded; cross-chunk linking is incomplete"));
+            return false;
+        }
+        let label_cost = self.namespace_bytes.saturating_add(extra).saturating_mul(2);
+        if self.retained_label_bytes.saturating_add(label_cost) > MAX_MODULE_INDEX_LABEL_BYTES {
+            mark_index_limit(
+                index,
+                "Module index label payload budget exceeded; export index is incomplete".into(),
+            );
+            return false;
+        }
+        self.retained_label_bytes += label_cost;
+        self.count += 1;
+        true
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn insert(
+        &mut self,
+        index: &mut ModuleExportIndex,
+        identity: &InputIdentity,
+        module_segments: &[String],
+        export_name: String,
+        prototype: ProtoPath,
+        mut evidence: Vec<StableId>,
+        max_exports: usize,
+    ) {
+        if !self.charge(index, export_name.len(), max_exports) {
+            return;
+        }
+        let mut full_segments = module_segments.to_vec();
+        full_segments.push(export_name);
+        evidence.sort();
+        evidence.dedup();
+        index
+            .exports
+            .entry(full_segments.clone())
+            .or_default()
+            .push(ExportDefinition {
+                defining_artifact: identity.clone(),
+                defining_proto: prototype,
+                label_segments: full_segments,
+                evidence,
+            });
+    }
+}
+
+fn index_trusted_module(
+    identity: &InputIdentity,
+    module: TrustedModule,
+    index: &mut ModuleExportIndex,
+    max_exports: usize,
+) {
+    index.assumed_artifacts.insert(identity.path.clone());
+    let mut budget = ExportBudget::new(index, &module.segments);
+    for (label, evidence) in module.marks {
+        if index.dynamic_labels.contains_key(&label) {
+            let entry = index.dynamic_labels.get_mut(&label).expect("present");
+            entry.extend(evidence);
+            entry.sort();
+            entry.dedup();
+            continue;
+        }
+        let extra = label.iter().map(String::len).sum::<usize>();
+        // Marks are charged with no namespace prefix of their own.
+        let namespace = std::mem::take(&mut budget.namespace_bytes);
+        let charged = budget.charge(index, extra, max_exports);
+        budget.namespace_bytes = namespace;
+        if !charged {
+            continue;
+        }
+        index
+            .dynamic_labels
+            .insert(label, evidence.into_iter().collect());
+    }
+    for (name, prototype, evidence) in module.exports {
+        let mut combined = module.declaration_evidence.clone();
+        combined.extend(evidence);
+        budget.insert(
+            index,
+            identity,
+            &module.segments,
+            name,
+            prototype,
+            combined,
+            max_exports,
+        );
     }
 }
 
@@ -628,7 +774,10 @@ pub fn resolve_chunk_links_bounded(
     convention: LinkConvention,
     max_links: usize,
 ) -> ChunkLinkResult {
-    if convention != LinkConvention::LuciModuleSetglobal {
+    if !matches!(
+        convention,
+        LinkConvention::LuciModuleSetglobal | LinkConvention::LuciModuleTrustedInit
+    ) {
         return ChunkLinkResult::default();
     }
 
@@ -644,6 +793,7 @@ pub fn resolve_chunk_links_bounded(
                 target_artifact: None,
                 target_proto: None,
                 evidence: Vec::new(),
+                assumptions: Vec::new(),
             }],
             diagnostics: Vec::new(),
         };
@@ -670,11 +820,13 @@ pub fn resolve_chunk_links_bounded(
                 } => {
                     let escaped_selector =
                         segments.iter().any(|s| !admitted_selector(s.as_bytes()));
+                    let marked = index.dynamic_label_evidence(segments);
                     // Check if this path targets the module namespace. Escaped
                     // paths cannot be compared to admitted raw selectors.
                     if segments.first().is_some_and(|s| s == "luci")
                         || index.exports.contains_key(segments)
                         || escaped_selector
+                        || marked.is_some()
                         || ((!index.dynamic_artifacts.is_empty() || index.export_limit_exceeded)
                             && segments.len() > 1)
                     {
@@ -700,6 +852,7 @@ pub fn resolve_chunk_links_bounded(
                                 target_artifact: None,
                                 target_proto: None,
                                 evidence: sorted_evidence,
+                                assumptions: Vec::new(),
                             });
                             break 'outer;
                         }
@@ -715,7 +868,26 @@ pub fn resolve_chunk_links_bounded(
                                 target_artifact: None,
                                 target_proto: None,
                                 evidence: evidence.clone(),
+                                assumptions: Vec::new(),
                             },
+                            _ if marked.is_some() => {
+                                let mut combined_evidence = evidence.clone();
+                                combined_evidence.extend(marked.clone().unwrap_or_default());
+                                combined_evidence.sort();
+                                combined_evidence.dedup();
+                                CrossChunkLinkFact {
+                                    call_id: call.call_id.clone(),
+                                    caller_path: identity.path.clone(),
+                                    caller_proto: call.proto_path.clone(),
+                                    call_pc: call.pc,
+                                    label_segments: segments.clone(),
+                                    status: LinkStatus::Dynamic,
+                                    target_artifact: None,
+                                    target_proto: None,
+                                    evidence: combined_evidence,
+                                    assumptions: Vec::new(),
+                                }
+                            }
                             Some(candidates) if candidates.len() == 1 => {
                                 let candidate = &candidates[0];
                                 let mut combined_evidence = evidence.clone();
@@ -733,6 +905,7 @@ pub fn resolve_chunk_links_bounded(
                                     target_artifact: Some(candidate.defining_artifact.clone()),
                                     target_proto: Some(candidate.defining_proto.clone()),
                                     evidence: combined_evidence,
+                                    assumptions: Vec::new(),
                                 }
                             }
                             Some(candidates) if candidates.len() > 1 => {
@@ -753,6 +926,7 @@ pub fn resolve_chunk_links_bounded(
                                     target_artifact: None,
                                     target_proto: None,
                                     evidence: sorted_evidence,
+                                    assumptions: Vec::new(),
                                 }
                             }
                             _ => {
@@ -772,6 +946,7 @@ pub fn resolve_chunk_links_bounded(
                                         target_artifact: None,
                                         target_proto: None,
                                         evidence: combined_evidence,
+                                        assumptions: Vec::new(),
                                     }
                                 } else if index.export_limit_exceeded {
                                     // When the export index cap was exceeded, unindexed exports cannot prove absence.
@@ -789,6 +964,7 @@ pub fn resolve_chunk_links_bounded(
                                         target_artifact: None,
                                         target_proto: None,
                                         evidence: sorted_evidence,
+                                        assumptions: Vec::new(),
                                     }
                                 } else {
                                     let mut sorted_evidence = evidence.clone();
@@ -805,6 +981,7 @@ pub fn resolve_chunk_links_bounded(
                                         target_artifact: None,
                                         target_proto: None,
                                         evidence: sorted_evidence,
+                                        assumptions: Vec::new(),
                                     }
                                 }
                             }
@@ -820,7 +997,7 @@ pub fn resolve_chunk_links_bounded(
                     // Constant lookup key that might match a top-level module export
                     if let Some(name) = as_str_constant(key) {
                         let segments = vec![name];
-                        if index.exports.contains_key(&segments) {
+                        if let Some(marked) = index.dynamic_label_evidence(&segments) {
                             if links.len() >= max_links {
                                 diagnostics.push(Diagnostic::error(
                                     "ANA-LIMIT-002",
@@ -843,6 +1020,50 @@ pub fn resolve_chunk_links_bounded(
                                     target_artifact: None,
                                     target_proto: None,
                                     evidence: sorted_evidence,
+                                    assumptions: Vec::new(),
+                                });
+                                break 'outer;
+                            }
+                            let mut combined_evidence = evidence.clone();
+                            combined_evidence.extend(marked);
+                            combined_evidence.sort();
+                            combined_evidence.dedup();
+                            links.push(CrossChunkLinkFact {
+                                call_id: call.call_id.clone(),
+                                caller_path: identity.path.clone(),
+                                caller_proto: call.proto_path.clone(),
+                                call_pc: call.pc,
+                                label_segments: segments,
+                                status: LinkStatus::Dynamic,
+                                target_artifact: None,
+                                target_proto: None,
+                                evidence: combined_evidence,
+                                assumptions: Vec::new(),
+                            });
+                        } else if index.exports.contains_key(&segments) {
+                            if links.len() >= max_links {
+                                diagnostics.push(Diagnostic::error(
+                                    "ANA-LIMIT-002",
+                                    DiagnosticCategory::Analysis,
+                                    call.call_id.clone(),
+                                    format!(
+                                        "Cross-chunk link facts safety limit ({max_links}) exceeded; linking fact generation terminated early"
+                                    ),
+                                ));
+                                let mut sorted_evidence = evidence.clone();
+                                sorted_evidence.sort();
+                                sorted_evidence.dedup();
+                                links.push(CrossChunkLinkFact {
+                                    call_id: call.call_id.clone(),
+                                    caller_path: identity.path.clone(),
+                                    caller_proto: call.proto_path.clone(),
+                                    call_pc: call.pc,
+                                    label_segments: segments,
+                                    status: LinkStatus::LimitExceeded,
+                                    target_artifact: None,
+                                    target_proto: None,
+                                    evidence: sorted_evidence,
+                                    assumptions: Vec::new(),
                                 });
                                 break 'outer;
                             }
@@ -865,6 +1086,7 @@ pub fn resolve_chunk_links_bounded(
                                     target_artifact: Some(candidate.defining_artifact.clone()),
                                     target_proto: Some(candidate.defining_proto.clone()),
                                     evidence: combined_evidence,
+                                    assumptions: Vec::new(),
                                 });
                             } else {
                                 let mut sorted_evidence = evidence.clone();
@@ -884,6 +1106,7 @@ pub fn resolve_chunk_links_bounded(
                                     target_artifact: None,
                                     target_proto: None,
                                     evidence: sorted_evidence,
+                                    assumptions: Vec::new(),
                                 });
                             }
                         }
@@ -911,6 +1134,17 @@ pub fn resolve_chunk_links_bounded(
                 link.evidence.extend(index.dynamic_evidence.iter().cloned());
                 link.evidence.sort();
                 link.evidence.dedup();
+            }
+        }
+    }
+    if !index.assumed_artifacts.is_empty() {
+        // Index completeness, and so every definite answer, rests on the assumption.
+        for link in &mut links {
+            if matches!(
+                link.status,
+                LinkStatus::Resolved | LinkStatus::Absent | LinkStatus::Duplicate
+            ) {
+                link.assumptions = vec![TRUSTED_INIT_ASSUMPTION.to_string()];
             }
         }
     }

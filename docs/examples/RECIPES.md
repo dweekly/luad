@@ -305,6 +305,33 @@ initialization is a bare `module(...)` with plain stores, so most real LuCI libr
 make cross-file answers `degraded`; the command says so rather than returning an empty
 list.
 
+To accept the stated `trusted-init` assumption instead, use `--link-convention
+luci-module-trusted-init`. Its meaning is in the
+[machine interface](../MACHINE-INTERFACE.md#luci-module-trusted-init-opt-in-assumption-labeled).
+In short, code run during a module's initialization, other than its own top level, is
+assumed not to redefine module functions. Answers that rely on it say so:
+
+```bash
+mkdir -p luci-build
+for f in $(find tests/corpus/luci-23.05 -name '*.lua'); do
+  luac5.1 -o "luci-build/$(echo "${f#tests/corpus/luci-23.05/}" | tr / _)c" "$f"
+done
+# Who calls luci.http.prepare_content (prototype 0/8 of http.lua)?
+luad callers luci-build/libs_luci-lib-base_luasrc_http.luac --proto 0/8 luci-build/*.luac \
+  --link-convention luci-module-trusted-init --format json | jq '{
+    summary: .data.summary | {assumptions, degraded, assumed: (.assumed_providers | length)},
+    cross_file: [.data.callers[] | select(any(.bases[]; .source == "cross_chunk_link"))] | length}'
+```
+
+Run on the 13 vendored files, the trusted-init answer lists 9 cross-file callers.
+`"assumptions": ["trusted-init"]` appears on each linked basis and in the summary. Seven
+providers are admitted only under the assumption.
+
+The same command with `luci-module-setglobal` reports no cross-file caller. Both
+answers say `degraded: true`: the vendored dispatcher and others write into module-own
+tables, such as `function Client.method()`, and the labels under those tables stay
+dynamic.
+
 ---
 
 ## 7. Convention-Gated Cross-Chunk Linking (`export --link-convention`)

@@ -657,6 +657,7 @@ fn test_callers_classifier_degrades_starved_analysis_and_separates_conflicts() {
         target_artifact: Some(target.clone()),
         target_proto: Some(proto),
         evidence: vec![StableId::Chunk],
+        assumptions: Vec::new(),
     };
     let result = ChunkLinkResult {
         facts: vec![link(proto.clone()), link(ProtoPath::root().child(1))],
@@ -716,6 +717,7 @@ fn test_callers_classifier_degrades_starved_analysis_and_separates_conflicts() {
                 target_artifact: Some(svc.clone()),
                 target_proto: Some(link_names.clone()),
                 evidence: vec![StableId::Chunk],
+                assumptions: Vec::new(),
             }],
             diagnostics: vec![],
         };

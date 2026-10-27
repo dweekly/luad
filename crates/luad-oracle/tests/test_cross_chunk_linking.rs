@@ -655,6 +655,7 @@ fn test_cross_chunk_link_limit_exceeded_schema_validation() {
         target_artifact: None,
         target_proto: None,
         evidence: Vec::new(),
+        assumptions: Vec::new(),
     };
 
     let rec = JsonlDataRecord {

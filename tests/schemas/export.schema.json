@@ -1115,6 +1115,13 @@
         "status"
       ],
       "properties": {
+        "assumptions": {
+          "description": "Assumptions this answer rests on (`trusted-init`); omitted when none.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "call_id": {
           "description": "Stable identifier of the calling instruction.",
           "allOf": [

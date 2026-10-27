@@ -31,6 +31,9 @@ pub enum CallerBasis {
         convention: String,
         label_segments: Vec<String>,
         evidence: Vec<StableId>,
+        /// Assumptions the link rests on (`trusted-init`); omitted when none.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        assumptions: Vec<String>,
     },
 }
 
@@ -270,6 +273,7 @@ fn classify_site(
                 convention: convention.map_or("", LinkConvention::as_str).to_string(),
                 label_segments: link.label_segments.clone(),
                 evidence: link.evidence.clone(),
+                assumptions: link.assumptions.clone(),
             });
         } else {
             names_other = true;
