@@ -320,4 +320,5 @@ calls safe. The alternatives:
 - (c) Narrow the convention: admit only roots whose non-declarative code is `require`
   of literal names, table constructors and stores into fresh tables. That is the shape
   of most refused modules (33 of 41 first refusals were `require` calls). Refuse
-  everything else, giving up util, http and dispatcher.
+  everything else. Unmeasured: it would refuse util at least, whose root writes into
+  `getmetatable("")`.
