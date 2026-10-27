@@ -1240,8 +1240,10 @@ pub(crate) fn analyze_root_global_stores(
     let frame_size = proto.maxstacksize as usize;
     let mut state = vec![FlowValue::Bottom; frame_size];
     let mut stores = Vec::new();
-    // The linker has proved this root is linear. Reuse ordinary value transfer,
-    // without visiting lexical children or constructing a separate interpreter.
+    // Value transfer runs in PC order, without visiting lexical children or building a
+    // separate interpreter. The strict linker has proved its roots linear. The
+    // trusted-init admission accepts branchy roots, and keeps a closure value only
+    // when all of its evidence lies in the storing block.
     for (step, instruction) in instructions.iter().enumerate() {
         if step >= MAX_TRANSFER_STEPS {
             return Err(CalleeUnresolvedReason::AnalysisLimit);

@@ -88,16 +88,41 @@ fn dominates(cfg: &ControlFlowGraph, dominator: usize, block: usize) -> bool {
     false
 }
 
-fn dominates_exits(cfg: &ControlFlowGraph, block: usize) -> bool {
-    let exits: Vec<usize> = cfg
-        .blocks
-        .iter()
-        .filter(|b| b.is_reachable && b.is_exit)
-        .map(|b| b.index)
-        .collect();
-    cfg.blocks[block].is_reachable
-        && !exits.is_empty()
-        && exits.iter().all(|&exit| dominates(cfg, block, exit))
+/// Which blocks dominate every reachable exit, computed once per block on demand.
+struct ExitDominance<'a> {
+    cfg: &'a ControlFlowGraph,
+    exits: Vec<usize>,
+    known: BTreeMap<usize, bool>,
+}
+
+impl<'a> ExitDominance<'a> {
+    fn new(cfg: &'a ControlFlowGraph) -> Self {
+        let exits = cfg
+            .blocks
+            .iter()
+            .filter(|b| b.is_reachable && b.is_exit)
+            .map(|b| b.index)
+            .collect();
+        Self {
+            cfg,
+            exits,
+            known: BTreeMap::new(),
+        }
+    }
+
+    fn dominates_exits(&mut self, block: usize) -> bool {
+        if let Some(&known) = self.known.get(&block) {
+            return known;
+        }
+        let answer = self.cfg.blocks[block].is_reachable
+            && !self.exits.is_empty()
+            && self
+                .exits
+                .iter()
+                .all(|&exit| dominates(self.cfg, block, exit));
+        self.known.insert(block, answer);
+        answer
+    }
 }
 
 fn root_pc(id: &StableId) -> Option<usize> {
@@ -108,9 +133,10 @@ fn root_pc(id: &StableId) -> Option<usize> {
 }
 
 /// Re-examine a root the strict rule refused. The caller has already checked the chunk
-/// is Lua 5.1 and loads `module`. Work is one pass over at most `MAX_MODULE_INIT_WORDS`
-/// root instructions, plus the shared root store analysis; nested prototypes are never
-/// visited.
+/// is Lua 5.1 and loads `module`. Work is bounded by `MAX_MODULE_INIT_WORDS` root
+/// instructions: one linear pass, the shared root store analysis, and one exit-dominance
+/// answer per block (each a walk up the dominator tree from every exit). Nested
+/// prototypes are never visited.
 pub(crate) fn admit_trusted_module(chunk: &Chunk) -> TrustedOutcome {
     let p = &chunk.main_proto;
     let refused = |pcs: &mut dyn Iterator<Item = usize>| {
@@ -256,7 +282,8 @@ pub(crate) fn admit_trusted_module(chunk: &Chunk) -> TrustedOutcome {
     };
     let (call_pc, load_pc) = (*call_pc, *load_pc);
     let declaration_block = block_of[&call_pc];
-    if !dominates_exits(&cfg, declaration_block) {
+    let mut exit_dominance = ExitDominance::new(&cfg);
+    if !exit_dominance.dominates_exits(declaration_block) {
         return refused(&mut std::iter::once(call_pc));
     }
     let raw_load = RawInstruction51::decode(p.instructions[load_pc].raw_word);
@@ -336,7 +363,8 @@ pub(crate) fn admit_trusted_module(chunk: &Chunk) -> TrustedOutcome {
                 .iter()
                 .all(|id| root_pc(id).is_some_and(|e| e <= pc && block_of.get(&e) == Some(&block)))
         };
-        let settled = store_counts[store.name_raw.as_slice()] == 1 && dominates_exits(&cfg, block);
+        let settled =
+            store_counts[store.name_raw.as_slice()] == 1 && exit_dominance.dominates_exits(block);
         match &store.value {
             GlobalStoreValue::Closure {
                 prototype,
