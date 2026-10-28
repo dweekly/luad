@@ -7,44 +7,47 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## 0.4.1 — 2026-10-28
 
-- The export reference consumer's offline `callers` refuses a bundle captured under
-  `luci-module-trusted-init`, and any link record carrying `assumptions`. It previously
-  answered such a bundle (when built through its library entry point; its `capture`
-  command never offered the convention) with the assumption label dropped. It stays
-  strict-only.
+- New opt-in `--link-convention luci-module-trusted-init` for `callers` and `export`.
+  The strict `luci-module-setglobal` convention only indexes a LuCI module whose top
+  level does nothing but define functions, which leaves out most real modules: they
+  call `require`, build tables or read fields first. The new convention indexes those
+  too, by assuming something instead of proving it. The assumption, `trusted-init`, is
+  that code run while a module loads doesn't replace, remove or alias any module's
+  exported functions, or change a module's environment. That covers the module's own
+  top-level code, functions in the same file, and anything reached through values luad
+  can't identify.
 
-- Gates identify a Lua compiler by its output, not by its executable's hash (#119).
-  The `luac` executable built from a verified source tarball changes with each C
-  toolchain update, even though the bytecode it emits doesn't. That broke 17 gates on
-  a current macOS toolchain. GateSpec version 3 drops the executable hash. In its
-  place, the runner compiles pinned reference sources and requires exact output bytes
-  (the committed fixtures: 10 per stock dialect, 2 for the LNUM32 authority compiler).
-  It records them in the GateResult, and verification checks them again. All 26
-  compiler-pinned gates move to version 3. Version-1 and version-2 specs and results
-  serialize unchanged. RC1's four prerequisite specs are archived byte-for-byte under
-  `tests/candidates/lua51-lnum32-rc1-prerequisites/` and checked against the hashes
-  RC1 recorded, so the RC1 candidate file itself is unchanged.
+  luad still checks what it can see directly in the module's top-level bytecode:
+  - it refuses a module with no `module` declaration, a second one, or a direct
+    `setfenv`/`getfenv` call;
+  - a name that isn't assigned exactly one function, unconditionally, comes back
+    `dynamic`.
 
-- Add the opt-in `--link-convention luci-module-trusted-init` for `callers` and `export`.
-  It admits LuCI modules whose top level runs other code (`require`, table
-  constructors, field reads), under a stated assumption rather than a proof. The
-  assumption, `trusted-init`, is that code run during module initialization (including
-  same-file functions and anything reached through values luad does not identify) does
-  not replace, remove or alias any module's exported functions, or change a module's
-  environment.
+  Every definite link (`resolved`, `absent` or `duplicate`) carries
+  `assumptions: ["trusted-init"]`. So do the caller bases
+  and the `callers` summary, which also lists `assumed_providers`. These fields are new
+  and only appear under trusted-init; strict-mode output is byte-for-byte unchanged. If
+  you validate against a saved copy of the schema, refresh it.
 
-  Only directly visible problems are still checked:
-  - a missing or second `module` declaration, or a direct `setfenv`/`getfenv` call,
-    refuses the module;
-  - a name whose root stores are not one unconditional closure makes that label dynamic.
+  On the 13 LuCI files in the repository, tests check all 70 cross-file callers against
+  the source, and find all 39 literal `luci.x.f(` calls.
 
-  Every definite link carries `assumptions: ["trusted-init"]`, as do caller bases and the
-  callers summary (`assumptions`, `assumed_providers`). The fields are additive and absent
-  under the strict convention, whose output is unchanged. Strict consumers validating
-  against an older schema snapshot should refresh it.
+- The export reference consumer's offline `callers` now refuses a bundle captured under
+  `luci-module-trusted-init`, and any link record that carries `assumptions`. Before
+  this, its library entry point would answer such a bundle and drop the assumption
+  label. (Its `capture` command never offered the convention.) It remains strict-only.
 
-  On the 13 vendored LuCI files, 70 cross-file callers are source-checked, and all 39
-  literal `luci.x.f(` calls are found.
+- Gates now identify a Lua compiler by the bytecode it produces, not by a hash of the
+  `luac` executable (#119). A `luac` built from the same verified source changes with
+  every C toolchain update, even though its output doesn't, and that broke 17 gates on
+  a current macOS toolchain. GateSpec version 3 drops the executable hash. Instead, the
+  runner compiles pinned reference sources (the committed fixtures: 10 per stock
+  dialect, 2 for the LNUM32 compiler), requires the exact output bytes, records them in
+  the GateResult, and checks them again during verification. All 26 compiler-pinned
+  gates use version 3. Version 1 and 2 specs and results serialize as before. RC1's four
+  prerequisite specs are archived byte for byte under
+  `tests/candidates/lua51-lnum32-rc1-prerequisites/` and checked against the hashes RC1
+  recorded, so the RC1 candidate file itself is unchanged.
 
 ## 0.4.0 — 2026-10-23
 

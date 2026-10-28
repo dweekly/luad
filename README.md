@@ -13,33 +13,33 @@
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue" alt="License: MIT OR Apache-2.0"></a>
 </p>
 
-`luad` reads compiled Lua bytecode and tells you what is in it: the exact format it was
-built for, the instructions, the constants, the closure bindings, and where every one of
-those facts lives in the original bytes. It is a memory-safe Rust CLI and library for
-inspecting, disassembling, validating, and analyzing Lua chunks — including the
-non-standard ones that turn up inside extracted router and embedded firmware.
+`luad` reads compiled Lua bytecode and tells you what's in it: the exact format it was
+built for, its instructions, constants and closure bindings, and where each of those
+sits in the original bytes. It's a Rust command-line tool and library, written without
+`unsafe` code, and it handles the nonstandard Lua chunks that turn up in router and other
+embedded firmware.
 
-It does not decompile. When you want source back, `luad` tells you exactly which profile
-the chunk uses so you can hand it to a decompiler that reads that profile.
+It doesn't decompile. If you want source code back, `luad` tells you exactly which
+profile the chunk uses, so you can give it to a decompiler that reads that profile.
 
 ## Status: 0.4.1, experimental
 
-This is an early release of a tool built for fun. It works, and it gives real answers on
-real firmware, but no dialect is promoted to a supported tier and nothing here is
-qualified as a basis for security conclusions. Lua 5.2, 5.3, and 5.5 provide structural
-facts and validation; derived analysis is refused for these dialects. Please file issues.
+This is an early release of a tool built for fun. It works and gives real answers on
+real firmware, but no Lua version is officially supported yet, and you shouldn't base
+security conclusions on it alone. For Lua 5.2, 5.3 and 5.5 it reads file structure and
+validates it, but refuses the deeper analysis. Please file issues.
 
-Development follows the [customer-outcome workflow](docs/DEVELOPMENT-WORKFLOW.md):
-small reviewed product batches, focused verification, and separate qualification for
-support or compatibility promises. Experimental status does not relax the repository
-invariants in [`AGENTS.md`](AGENTS.md). Passing CI establishes only what its assertions
-cover; public counterexamples take priority over feature expansion.
+Work happens in small reviewed batches (see the
+[development workflow](docs/DEVELOPMENT-WORKFLOW.md)), and support or compatibility
+promises need their own qualification. Being experimental doesn't loosen the rules in
+[`AGENTS.md`](AGENTS.md). Passing CI proves only what the tests assert, and a public
+counterexample gets fixed before new features get added.
 
-See [limitations](#limitations) for what specifically does not work yet.
+[Limitations](#limitations) lists what doesn't work yet.
 
 ## What it does
 
-Every command below runs against a fixture in this repository, so you can reproduce it
+Every command below runs on a test file in this repository, so you can reproduce it
 after cloning.
 
 ```console
@@ -54,10 +54,11 @@ Layout:            int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4
 Verdict:           ValidForParser
 ```
 
-That `Layout` line is the point. This chunk is an OpenWrt-style build with a 32-bit
-`size_t` and an integer-flavored number representation — stock desktop Lua never emits
-it, and tools built on the stock loader refuse it or read it wrong. The command prints
-the full header and prototype summary below this; the overview is the first block.
+Look at the `Layout` line. This chunk is an OpenWrt-style build with a 32-bit `size_t`
+and an integer-based number format. Stock desktop Lua never produces that, and tools
+built on the stock loader either refuse it or misread it. The command goes on to print
+the full header and a summary of each function; the overview above is just the first
+block.
 
 ```console
 $ luad disasm tests/fixtures/precompiled/lua51_lnum32/hello.luac
@@ -82,18 +83,17 @@ $ luad disasm tests/fixtures/precompiled/lua51_lnum32/hello.luac
    8  RETURN       R(0) 1
 ```
 
-Constants are resolved inline at their use sites. Add `--raw` for the encoded words and
-`--effects` for each instruction's semantic effect.
+Constants are shown where they're used. Add `--raw` to see the encoded instruction
+words and `--effects` to see what each instruction does.
 
-Most of this is also available as JSON and JSONL with published schemas, so you can
-build on it without scraping text. Supported formats vary by command — see
+Most of this is also available as JSON and JSONL with published schemas, so your
+scripts don't have to parse text. Which formats each command supports is listed under
 [machine interface](#machine-interface).
 
 ## Install
 
-Prebuilt archives for `linux-x86_64` and `macos-aarch64` are attached to each
-[GitHub release](https://github.com/dweekly/luad/releases). Download, verify the
-checksum, and extract.
+Each [GitHub release](https://github.com/dweekly/luad/releases) has prebuilt archives
+for `linux-x86_64` and `macos-aarch64`. Download one, check its checksum, and extract it.
 
 From source, with a Rust 1.85 or newer toolchain:
 
@@ -103,11 +103,11 @@ cd luad
 cargo install --path crates/luad-cli --locked
 ```
 
-This is a source install. Workspace packages are marked `publish = false`, so
-`cargo install luad` from crates.io is not a supported channel.
+That builds from source. luad isn't published on crates.io, so `cargo install luad`
+won't work.
 
-Contributors setting up the full toolchain, the official Lua compilers, and the fuzz
-suite should use [docs/BRINGUP.md](docs/BRINGUP.md) instead.
+If you're contributing and need the full toolchain, the official Lua compilers and the
+fuzz suite, follow [docs/BRINGUP.md](docs/BRINGUP.md) instead.
 
 ## Commands
 
@@ -120,14 +120,15 @@ luad export firmware/*.lua --format jsonl   # deterministic batch export
 luad diagnostics L51-REG-SPAN-001           # look up a diagnostic code
 ```
 
-Also present, and explicitly experimental: `cfg`, `callees`, `callgraph`, `callers`,
-`origins`, `xrefs`, `query`, and `diff`. These produce useful output but their schemas
-and semantics may change without notice. `callees`, `callgraph`, `callers`, and `origins`
-currently require a Lua 5.1 profile and say so when given anything else. `callers` lists
-the observed one-hop callers of one prototype across a corpus, with argument origins and
-per-file coverage; an empty list is not proof that nothing calls it.
+Also available, and more experimental still: `cfg`, `callees`, `callgraph`, `callers`,
+`origins`, `xrefs`, `query` and `diff`. Their output is useful, but its format and
+meaning may change without notice. `callees`, `callgraph`, `callers` and `origins` only
+work on Lua 5.1 for now, and say so if you give them anything else. `callers` lists the
+direct callers it finds for one function across a set of files, with where each
+argument came from and how much of each file it covered. An empty list doesn't prove
+nothing calls the function.
 
-Output formats are not uniform across commands:
+Not every command supports every output format:
 
 | Command | `text` | `json` | `jsonl` |
 |---|:--:|:--:|:--:|
@@ -137,21 +138,22 @@ Output formats are not uniform across commands:
 | `diagnostics` | yes | yes | no |
 | `export` | no | no | **jsonl only** |
 
-`export` is the streaming batch interface and deliberately emits JSONL only.
+`export` is the batch interface and only writes JSONL, one record per line.
 
-The repository ships precompiled fixtures, so you can try it without a Lua compiler:
+The repository includes precompiled test files, so you can try it without a Lua
+compiler:
 
 ```console
 cargo run -q -p luad-cli -- inspect tests/fixtures/precompiled/lua54/hello.luac
 ```
 
-`luad` analyzes bytecode as data. It never invokes an external compiler and never
-executes the chunk.
+`luad` treats bytecode as data. It never runs an external compiler and never runs the
+chunk.
 
 ## Firmware investigation walkthrough
 
-A reproducible four-phase investigation using the public firmware-shaped fixture
-tree at `tests/fixtures/firmware_tree/`:
+A four-step investigation you can reproduce, using the small fake firmware tree in
+`tests/fixtures/firmware_tree/`:
 
 ```console
 # 1. Inventory and triage mixed artifacts via streaming JSONL export:
@@ -174,86 +176,97 @@ luad disasm tests/fixtures/firmware_tree/dispatcher.lua --raw --effects
 # Choose a decompiler that accepts the exact profile; compatibility is tool-specific.
 ```
 
-See [docs/examples/RECIPES.md](docs/examples/RECIPES.md#13-reproducible-firmware-investigation-walkthrough)
-for the complete recipe and optional decompiler experiment. No external decompiler is
-required to build or test luad; the walkthrough verifies luad facts and refusal behavior.
+[docs/examples/RECIPES.md](docs/examples/RECIPES.md#13-reproducible-firmware-investigation-walkthrough)
+has the full recipe, plus an optional decompiler experiment. You don't need a
+decompiler to build or test luad; the walkthrough checks luad's own answers and the
+cases where it refuses.
 
 ## Limitations
 
-Current development scope (unreleased):
+What the current code reads:
 
 | Dialect | Opcodes | Tier | State |
 |---|---:|---|---|
-| `lua5.1` | 38 | Experimental | Best exercised. LNUM32 firmware profile and stock layouts both read. |
-| `lua5.2` | 40 | Experimental | Structural inspection/export and unverified text listing. Structured disassembly, effects, explanation and derived facts unavailable. |
-| `lua5.3` | 47 | Experimental | Structural inspection/export and unverified text listing. No EdgeTX profile; structured disassembly, effects and explanation unavailable. |
-| `lua5.4` | 83 | Experimental | Reads well; exact-disassembly evidence exists for 5.4.8. |
-| `lua5.5` | 85 | Experimental | Structural inspection/export and unverified text listing. Structured disassembly, effects, explanation and derived facts unavailable. |
+| `lua5.1` | 38 | Experimental | Best tested. Reads both the LNUM32 firmware profile and stock layouts. |
+| `lua5.2` | 40 | Experimental | File structure through inspect and export, plus an unchecked text listing. No structured disassembly, effects, explain or analysis. |
+| `lua5.3` | 47 | Experimental | File structure through inspect and export, plus an unchecked text listing. No EdgeTX profile, structured disassembly, effects or explain. |
+| `lua5.4` | 83 | Experimental | Reads well. Disassembly is checked against official Lua 5.4.8. |
+| `lua5.5` | 85 | Experimental | File structure through inspect and export, plus an unchecked text listing. No structured disassembly, effects, explain or analysis. |
 
-LuaJIT and Luau are separate bytecode systems and are out of scope. The capability
-manifest does not list them in any tier.
+LuaJIT and Luau use different bytecode formats, and luad doesn't read them.
+`luad capabilities` doesn't list them at all.
 
-No dialect is in the `supported` tier and the supported set is empty, which is what
-`luad capabilities` reports. Experimental means the code is present and gives useful
-answers, not that its correctness has been qualified.
+Nothing is in the `supported` tier yet, and `luad capabilities` says so. Experimental
+means the code is there and gives useful answers, not that its correctness has been
+formally checked.
 
-`diff` compares exact decoded content by position, including constant bytes and numeric
-representations, prototype shape, capture descriptors, headers/layouts, and physical
-instruction words. `--semantic` adds decoded instruction fields and physical roles;
-it retains unused bits and companion words. `--ignore debug` excludes names, line data,
-and local scopes. Equality means no compared content changed, not behavioral equivalence
-or byte identity; use the artifact hash for byte identity. See the
+`diff` compares decoded content position by position: constant bytes and number
+formats, the shape of each function, capture descriptors, headers and layouts, and the
+raw instruction words. `--semantic` adds decoded instruction fields and what role each
+word plays, and still compares unused bits and companion words. `--ignore debug` skips
+names, line numbers and local scopes. "Equal" means nothing it compared changed. It
+doesn't mean the two chunks behave the same, or that their bytes match; compare the
+file hashes for that. See the
 [machine interface](docs/MACHINE-INTERFACE.md#cfg-xrefs-query-and-diff) and
 [public comparison regressions](crates/luad-oracle/tests/test_diff_cli.rs).
 
-Convention-based linking requires explicit `--link-convention luci-module-setglobal`
-and admits straight-line root initialization with one literal module declaration.
-It uses final root closure stores, refuses ambiguous initialization and clobbering
-operations, and cannot claim a unique target from an incomplete index. A binding is
-conditional on that convention, not runtime reachability. See the
-[exact admitted shapes, statuses and budgets](docs/MACHINE-INTERFACE.md#export)
-and [executable controls](crates/luad-oracle/tests/test_cross_chunk_linking.rs).
-The opt-in `--link-convention luci-module-trusted-init` also admits modules whose top
-level runs other code. It does so under a stated assumption, and every answer that relies
-on it carries `assumptions: ["trusted-init"]`; see the
-[machine interface](docs/MACHINE-INTERFACE.md#luci-module-trusted-init-opt-in-assumption-labeled).
+Linking calls across files only happens when you ask for it with
+`--link-convention luci-module-setglobal`. That convention accepts a module only if its
+top level runs straight through, with one `module("name")` declaration and plain
+function definitions. It uses each function's final assignment, refuses modules whose
+setup it can't follow or that overwrite functions, and won't name a single target when
+its index is incomplete. A link means "this is what the convention says," not that the
+call happens at run time. The
+[exact accepted shapes, statuses and limits](docs/MACHINE-INTERFACE.md#export) and the
+[tests behind them](crates/luad-oracle/tests/test_cross_chunk_linking.rs) have details.
 
-Development callee/origin analysis invalidates call-frame temporaries before retaining
-returned results. It also refuses stale captures across overlapping calls and generic
-iterator control updates. Ordinary live locals, fresh definitions and exact literal
-`require` results retain their facts. See the [call-frame evidence](crates/luad-oracle/tests/test_symbolic_callees_lua51.rs).
-These are conditional static facts under the ordinary VM ABI and symbolic lookup
-assumptions. Arbitrary C/reflection/debug mutation and all implicit metamethod effects
-are not qualified; capture analysis can also lose precision after a closed cell's
-register is reused. Derived records carry no runtime call-edge guarantee.
+`--link-convention luci-module-trusted-init` also accepts modules whose top level runs
+other code first, such as `require` calls. It does that by making an assumption
+instead of checking, and every answer that depends on the assumption carries
+`assumptions: ["trusted-init"]`. The
+[machine interface](docs/MACHINE-INTERFACE.md#luci-module-trusted-init-opt-in-assumption-labeled)
+spells out the assumption.
 
-Development machine floats use JSON numbers for finite values and the exact strings
-`nan`, `inf`, `-inf` for nonfinite classes. Raw source bits remain separate, including
-NaN payloads; decoded NaN classes carry no host payload/sign promise. Typed finite
-round trips use exact float parsing. Lua 5.3-5.5 format-check numbers must match exactly.
-See [machine float semantics](docs/MACHINE-INTERFACE.md#floating-values).
+The callee and argument-origin analysis throws away a call frame's temporary values
+before it keeps a call's results. It also refuses to use a captured value that might be
+stale across overlapping calls, or a generic `for` loop's control variables. Ordinary
+live locals, new definitions and the results of literal `require` calls keep their
+facts. The [call-frame tests](crates/luad-oracle/tests/test_symbolic_callees_lua51.rs)
+show the cases. All of these are static facts that hold only under the normal Lua VM
+calling rules and luad's assumptions about name lookup. Changes made from C, through
+reflection or the debug library, and anything a metamethod might do, aren't covered.
+Capture analysis can also get less precise after a closed-over variable's register is
+reused. None of these records promise that a call actually happens at run time.
 
-Lua 5.2, 5.3, and 5.5 retain raw words and child structure through `inspect` and
-`export --facts prototype,constant,upvalue`. Unverified text listings remain available without `--effects`; structured disassembly,
-instruction effects and explanation refuse these profiles. Default export includes instruction facts and reports per-file
-failure; explicit unavailable families also fail before emitting any facts. Use the
-selected structural path when inventorying a mixed-version corpus. Derived analysis
-commands retain their explicit refusal boundary.
-Layout, operand, analysis-eligibility, caller-attribution and malformed-input
-regressions cover the fixes through 0.4.1; they do not establish complete semantic
-correctness or support for every vendor layout. See [the changelog](CHANGELOG.md#041--2026-10-28)
-for release details.
+In JSON output, finite floats are JSON numbers, and the other values are the strings
+`nan`, `inf` and `-inf`. The raw bits from the file are kept separately, including any
+NaN payload; the decoded value doesn't promise a NaN's payload or sign. Finite values
+round-trip exactly. The check numbers in Lua 5.3 to 5.5 headers must match exactly.
+[Machine float semantics](docs/MACHINE-INTERFACE.md#floating-values) has the details.
 
-`luad` also does not do firmware extraction, decompilation, source reconstruction,
-exploitability judgment, or persistent research state. Those belong in other tools, and
-[the roadmap](ROADMAP.md) lists which ones to reach for.
+For Lua 5.2, 5.3 and 5.5, `inspect` and `export --facts prototype,constant,upvalue`
+give you the raw instruction words and how functions nest. You can get an unchecked
+text listing as long as you leave off `--effects`; structured disassembly, instruction
+effects and `explain` refuse these versions. A plain `export` includes instruction
+facts, so it reports these files as failed; asking for an unavailable fact type fails
+before any output. When sorting files from mixed Lua versions, use the `--facts` list
+above. The analysis commands refuse these versions outright.
 
-"Valid" from `luad validate` means consistent with the selected format and the named
-checks. It does not mean the chunk is safe to execute, or that its producer is known.
+Regression tests cover the fixes made through 0.4.1 to layout handling, operands, which
+files get analyzed, caller attribution and malformed input. They don't prove every instruction is
+interpreted correctly or that every vendor layout works. The
+[changelog](CHANGELOG.md#041--2026-10-28) has release details.
+
+`luad` also doesn't extract firmware, decompile, rebuild source, judge whether
+something is exploitable, or keep notes between runs. Other tools do those jobs, and
+[the roadmap](ROADMAP.md) suggests which.
+
+"Valid" from `luad validate` means the file fits the selected format and passes the
+listed checks. It doesn't mean the chunk is safe to run, or tell you who made it.
 
 ## Machine interface
 
-Discover the live surface rather than scraping human output:
+Ask luad what it supports instead of parsing its human-readable output:
 
 ```console
 luad capabilities --format json
@@ -262,24 +275,29 @@ luad schema capabilities
 luad schema chunk
 ```
 
-Consumers should read [docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md) for exit
-codes, stable-ID scope, truncation behavior, and the stdout/stderr contract. Schemas are
-versioned, but at 0.4.1 nothing carries a compatibility promise yet.
+If you're writing code against luad, read
+[docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md) for exit codes, which IDs stay
+stable and across what, what happens when output is cut short, and what goes to stdout versus stderr.
+Schemas have version numbers, but as of 0.4.1 none of them is promised to stay
+compatible.
 
-[docs/examples/RECIPES.md](docs/examples/RECIPES.md) has practical composition recipes.
+[docs/examples/RECIPES.md](docs/examples/RECIPES.md) has recipes for combining
+commands.
 
 ## How `luad` compares on non-stock chunks
 
-[docs/PRIOR-ART-AND-CORPORA.md](docs/PRIOR-ART-AND-CORPORA.md) distinguishes dated
-executed comparisons from source/documentation observations. Rizin's development
-branch includes OpenWrt/TP-Link handling; unluac-rs provides a Rust library, CLI, and
-browser workspace. Exact profile compatibility and comparative correctness require
-task-specific runs with pinned versions. `luad` does not provide an EdgeTX profile.
+[docs/PRIOR-ART-AND-CORPORA.md](docs/PRIOR-ART-AND-CORPORA.md) keeps comparisons we
+actually ran, with dates, separate from what we read in other projects' source and
+docs. Rizin's development branch handles OpenWrt and TP-Link chunks, and unluac-rs
+offers a Rust library, a CLI and a browser workspace. Whether a tool handles a given
+profile, and which gets the right answer, can only be settled by running a specific
+task with pinned versions. `luad` has no EdgeTX profile.
 
-The [roadmap](ROADMAP.md) requires useful public workflows and outside trials before
-an experimental announcement. The intended contribution combines format interpretation,
-byte evidence, explicit uncertainty, and a reliable machine interface. It does not
-depend on other tools remaining deficient.
+Before luad is announced, even as experimental, the [roadmap](ROADMAP.md) calls for
+public workflows that are actually useful, plus trials by outside users. What luad
+offers is the combination: reading the format exactly, pointing at the bytes, saying
+plainly when it isn't sure, and output a program can rely on. That stays true even as
+other tools improve.
 
 ## Documentation index
 
