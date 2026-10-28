@@ -2,7 +2,7 @@
 
 Status: release policy and operational checklist.
 
-Fresh as of: 2026-09-17.
+Fresh as of: 2026-10-28.
 
 Revalidate or delete when: the release target matrix, qualification lifecycle, package
 platforms, artifact channel, compatibility policy, signing/checksum policy, release
@@ -16,6 +16,12 @@ requires only that CI is green on the tagged revision, that `CHANGELOG.md` and t
 README describe the release honestly, and that the capability manifest promotes nothing
 it has not earned. The point of a 0.x line is to put a useful tool in someone's hands
 while the evidence program below is still incomplete.
+
+Text a visitor reads (`site/index.html`, the README's prose, and the `CHANGELOG.md`
+section that becomes the release notes) gets a plain-English editing pass before the
+version PR merges. Cut stock phrasing such as em-dash asides, bolded list headers and
+"not X but Y" sentences. Then check each rewritten sentence against the original,
+because plain rewrites of technical claims are where meaning drifts.
 
 **1.0 remains stopped.** No exact target is promoted, and the public-contract,
 extended-fuzz, security-review, target-qualification, and final-candidate evidence has
