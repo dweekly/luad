@@ -176,8 +176,9 @@ need. Known limits to revisit when a real investigation hits them:
   `local class = util.class`).
 - Nested exports such as `function net.routes()` are not indexed. Their labels are
   dynamic because `net = {}` is a non-closure store.
-- Hardening: the export reference consumer's offline `callers` stays strict-only; it
-  does not accept `luci-module-trusted-init` or carry `assumptions`.
+- Hardening: the export reference consumer's offline `callers` stays strict-only. It
+  refuses `luci-module-trusted-init` bundles and any link carrying `assumptions`, rather
+  than carrying the label.
 - `luci-module-trusted-init` states its assumption rather than proving it (owner
   decision, 2026-10-27). The assumption covers writes through values luad does not
   identify, and same-file code run during initialization. If a real investigation

@@ -862,6 +862,11 @@ def callers_from_records(report, records, argv, target_path, proto):
         if "--link-convention" in argv[:-1]
         else None
     )
+    # Answers under an assumption must carry its label; this consumer does not.
+    require(
+        convention in {None, "luci-module-setglobal"},
+        f"callers answers only the strict luci-module-setglobal convention, not {convention}",
+    )
     proto = proto.removeprefix("proto:")
     require(re.fullmatch(r"\d+(/\d+)*", proto) is not None, "invalid prototype path")
 
@@ -925,6 +930,10 @@ def callers_from_records(report, records, argv, target_path, proto):
         links = {}
         for r in own:
             if r["record_type"] == "cross_chunk_link":
+                require(
+                    not r["data"].get("assumptions"),
+                    "a link rests on an assumption this consumer cannot label",
+                )
                 links.setdefault(r["data"]["call_id"], []).append(r["data"])
         cutoff = any(
             r["record_type"] == "diagnostic" and r["data"]["code"] == "ANA-LIMIT-002"

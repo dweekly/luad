@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>luad — read compiled Lua bytecode out of firmware</title>
-<meta name="description" content="luad is a memory-safe Rust CLI that inspects, disassembles, and validates compiled Lua bytecode, including the non-stock layouts found in embedded router firmware. It reports the exact profile a chunk declares, with byte-level provenance.">
+<title>luad: read compiled Lua bytecode from firmware</title>
+<meta name="description" content="luad is a Rust command-line tool for reading compiled Lua bytecode, including the nonstandard layouts found in router firmware. It reports the exact layout each file declares and where in the file each fact came from.">
 <link rel="canonical" href="https://dweekly.github.io/luad/">
 <meta name="theme-color" content="#04122a">
 <meta name="color-scheme" content="dark">
@@ -16,16 +16,16 @@
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="luad">
-<meta property="og:title" content="luad — read compiled Lua bytecode out of firmware">
-<meta property="og:description" content="A memory-safe Rust CLI that inspects, disassembles, and validates compiled Lua bytecode, including the non-stock layouts found in embedded router firmware.">
+<meta property="og:title" content="luad: read compiled Lua bytecode from firmware">
+<meta property="og:description" content="A Rust command-line tool for reading compiled Lua bytecode, including the nonstandard layouts found in router firmware.">
 <meta property="og:url" content="https://dweekly.github.io/luad/">
 <meta property="og:image" content="https://dweekly.github.io/luad/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="luad — a smiling crescent moon inside a magnifying glass, with the layout string int=4 sizet=4 inst=4 num=8 endian=1 integral_flag=4">
+<meta property="og:image:alt" content="luad logo: a smiling crescent moon inside a magnifying glass, with the layout string int=4 sizet=4 inst=4 num=8 endian=1 integral_flag=4">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="luad — read compiled Lua bytecode out of firmware">
-<meta name="twitter:description" content="A memory-safe Rust CLI that inspects, disassembles, and validates compiled Lua bytecode, including non-stock embedded layouts.">
+<meta name="twitter:title" content="luad: read compiled Lua bytecode from firmware">
+<meta name="twitter:description" content="A Rust command-line tool for reading compiled Lua bytecode, including the nonstandard layouts found in router firmware.">
 <meta name="twitter:image" content="https://dweekly.github.io/luad/og.png">
 <meta name="twitter:creator" content="@dweekly">
 
@@ -42,13 +42,13 @@
   "applicationCategory": "DeveloperApplication",
   "applicationSubCategory": "Reverse engineering",
   "operatingSystem": "Linux, macOS",
-  "softwareVersion": "0.4.0",
+  "softwareVersion": "0.4.1",
   "url": "https://dweekly.github.io/luad/",
   "codeRepository": "https://github.com/dweekly/luad",
-  "downloadUrl": "https://github.com/dweekly/luad/releases/tag/v0.4.0",
+  "downloadUrl": "https://github.com/dweekly/luad/releases/tag/v0.4.1",
   "programmingLanguage": "Rust",
   "license": "https://spdx.org/licenses/MIT.html",
-  "description": "A memory-safe Rust CLI and library that inspects, disassembles, and validates compiled Lua bytecode, including the non-stock layouts found in embedded firmware. Reports the exact declared profile with byte-level provenance.",
+  "description": "A Rust command-line tool and library for reading compiled Lua bytecode, including the nonstandard layouts found in router firmware. It reports the exact layout each file declares and where in the file each fact came from.",
   "author": { "@type": "Person", "name": "David E. Weekly", "url": "https://david.weekly.org/" },
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
 }
@@ -62,7 +62,7 @@
   <div style="display:flex;align-items:center;gap:.6rem">
     <img src="logo.png" alt="" width="26" height="26" style="display:block">
     <strong style="font-family:var(--mono);color:var(--text);letter-spacing:.04em">luad</strong>
-    <span class="tag-ver">v0.4.0 · experimental</span>
+    <span class="tag-ver">v0.4.1 · experimental</span>
   </div>
   <nav aria-label="Primary">
     <a href="#problem">The problem</a>
@@ -77,18 +77,18 @@
 <main id="main">
 
 <section class="shell hero">
-  <p class="kicker rise">Lua bytecode, from the bytes up</p>
+  <p class="kicker rise">A Lua bytecode reader for firmware</p>
   <div class="lockup rise">
     <img src="logo.png" alt="luad logo: a smiling crescent moon inside a magnifying glass" width="512" height="512">
     <h1 class="wordmark">luad<span class="dot">.</span></h1>
   </div>
   <p class="lede rise">
     Pull apart a router's firmware and you'll find compiled Lua chunks the official
-    tools refuse to open. <span class="quiet">luad reads them, tells you exactly which
-    layout the file declares, and hands the facts to whichever decompiler can use them.</span>
+    tools refuse to open. <span class="quiet">luad reads them and tells you which layout
+    each one declares, so you can pick a decompiler that handles it.</span>
   </p>
   <div class="cta rise">
-    <a class="btn btn-primary" href="https://github.com/dweekly/luad/releases/tag/v0.4.0">Download v0.4.0</a>
+    <a class="btn btn-primary" href="https://github.com/dweekly/luad/releases/tag/v0.4.1">Download v0.4.1</a>
     <a class="btn" href="https://github.com/dweekly/luad">Source on GitHub</a>
   </div>
 </section>
@@ -141,50 +141,50 @@
       </div>
     </div>
     <p class="figure-note">
-      Same Lua version. Same opcodes. <strong>Two bytes different</strong>, and the
-      official loader refuses the second one — correctly, since it is about to read
-      structures out of it. Those two bytes are why your firmware chunk will not open.
+      Both are Lua 5.1 with the same opcodes, but <strong>two bytes differ</strong>. The
+      official loader rejects the router file, and it's right to: it would read the rest
+      of the file at the wrong sizes. Those two bytes are why your firmware chunk won't open.
     </p>
   </figure>
 </div>
 
 <section class="shell" id="problem">
-  <h2>The format is not one format</h2>
+  <h2>Lua 5.1 isn't one file format</h2>
   <p>
-    A Lua binary chunk records <em>the C type widths and byte order that the Lua which
-    wrote it was built with</em> — not a version number implying them, but the actual
-    widths, measured inside the compiler binary and written into the header.
+    The header of a compiled Lua chunk records the sizes of a few C types and the byte
+    order of <em>the Lua build that wrote it</em>. Those are the real sizes from that
+    build, not something the version number implies.
   </p>
   <p>
-    The detail that matters: the loader calls the <em>same</em> function to build its own
-    twelve bytes, then compares. So the header is a compatibility fingerprint of the build
-    that wrote the chunk, and the chunk loads only where that fingerprint matches exactly.
-    It is not a declaration of an intended target — Lua has no notion of a target.
+    When Lua loads a chunk, it builds the same twelve header bytes for itself and compares
+    them. So a chunk loads only in a Lua built the same way as the one that wrote it. The
+    header doesn't name a target platform; Lua has no such idea.
   </p>
   <p>
-    Calling it "the machine that compiled it" is tempting and wrong. OpenWrt carries
+    It's tempting to read the header as describing the machine that compiled the chunk,
+    but that's wrong. OpenWrt carries
     <a href="https://github.com/openwrt/openwrt/tree/main/package/utils/lua/patches">a patch</a>
-    that makes even the x86-64 build-host <code>luac</code> write the router's layout: the
-    LNUM32 fixture in this repo was compiled on a 64-bit machine and declares a 4-byte
-    <code>size_t</code>. The
-    <a href="https://github.com/openwrt/openwrt/blob/master/package/utils/lua/patches/010-lua-5.1.3-lnum-full-260308.patch">LNUM patch</a>
-    — Asko Kauppi's integer patch for Lua 5.1, carried by OpenWrt since the 5.1.3 days —
-    gives Lua a native integer representation and repurposes the header's last byte to
-    hold <code>sizeof(lua_Integer)</code>.
+    that makes even the x86-64 build host's <code>luac</code> write the router's layout.
+    The LNUM32 test file in this repo was compiled on a 64-bit machine and declares a
+    4-byte <code>size_t</code>. The
+    <a href="https://github.com/openwrt/openwrt/blob/master/package/utils/lua/patches/010-lua-5.1.3-lnum-full-260308.patch">LNUM patch</a>,
+    Asko Kauppi's integer patch for Lua 5.1, has been in OpenWrt since Lua 5.1.3. It adds
+    a native integer type and reuses the header's last byte for
+    <code>sizeof(lua_Integer)</code>.
   </p>
-  <p>The loader refuses, and Lua 5.1 will not even tell you which field is wrong:</p>
+  <p>Stock Lua refuses the file, and Lua 5.1 won't even say which field is wrong:</p>
 <pre><span class="c">$</span> luac5.1 -l -l config.luac
 <span class="e">luac5.1: config.luac: bad header in precompiled chunk</span></pre>
   <p>
-    That's the right call for a runtime. It's useless when the job is reading somebody
-    else's firmware. So the first question about an unknown chunk isn't what the code
-    does — it's <strong>what exactly is this file?</strong>
+    That's the right behavior for a runtime, and no help when you're reading someone
+    else's firmware. Before you can ask what the code does, you need to know
+    <strong>what kind of file this is</strong>.
   </p>
 </section>
 
 <section class="shell" id="use">
   <h2>What luad tells you</h2>
-  <p>It answers that question first, and shows its work.</p>
+  <p>luad answers that first:</p>
 <pre><span class="c">$</span> luad inspect config.luac
 <span class="c">=== Chunk Overview ===</span>
 SHA-256:           8376be37ec3042d3b0a87aa39db7d7396fb54ae390abe346d885e1527d23e353
@@ -195,8 +195,8 @@ Selection Mode:    Detected
 Layout:            <span class="p">int=4,sizet=4,inst=4,num=8,endian=1,integral_flag=4</span>
 Verdict:           ValidForParser</pre>
   <p>
-    That <code>Layout</code> line is the point. It isn't a guess or a default — it's what
-    the file says about itself, reported back. Then you can read the code:
+    The <code>Layout</code> line comes straight from the file's header. luad doesn't
+    guess it or fill in a default. Once you know it, you can read the code:
   </p>
 <pre><span class="c">$</span> luad disasm config.luac
 <span class="c">; proto:0 (source: @config.lua, lines 0-0, stack: 4)</span>
@@ -210,29 +210,29 @@ Verdict:           ValidForParser</pre>
 
   <h3>What it's for</h3>
   <ul>
-    <li><strong>Triage an extracted tree.</strong> Inventory by content, not extension —
-      compiled chunks named <code>.lua</code>, source named <code>.luac</code>, and the
-      malformed ones — with an outcome for every file.</li>
-    <li><strong>Identify before you decompile.</strong> Get the exact profile, then pick a
-      decompiler that handles it instead of guessing and misreading.</li>
-    <li><strong>Cross-check a disputed detail.</strong> When a decompiler prints something
-      surprising, go back to the instruction and the bytes behind it.</li>
-    <li><strong>Feed a pipeline.</strong> JSON and JSONL with published schemas, stable
-      IDs, and a diagnostic catalog, so nothing has to scrape columns.</li>
+    <li>Sort an extracted firmware tree by what each file contains, whatever its name.
+      That catches compiled chunks named <code>.lua</code>, source named
+      <code>.luac</code> and broken files, and every file gets a result.</li>
+    <li>Learn a chunk's exact layout before you decompile it, so you can pick a
+      decompiler that reads it correctly.</li>
+    <li>When a decompiler prints something surprising, check the instruction and the
+      bytes it came from.</li>
+    <li>Feed your own scripts. JSON and JSONL output come with published schemas, stable
+      IDs and a list of diagnostic codes, so you don't have to parse text.</li>
   </ul>
   <p class="dim">
-    luad does not decompile, extract firmware, or judge whether something is dangerous.
-    Those are other tools' jobs, and the roadmap names which ones to reach for.
+    luad doesn't decompile, extract firmware, or judge whether code is dangerous. The
+    roadmap suggests other tools for those jobs.
   </p>
 </section>
 
 <section class="shell" id="callers">
   <h2>Who calls this, and with what?</h2>
   <p>
-    The question a firmware investigation asks most is not what a function does, but who
-    calls it and with which arguments. <code>luad callers</code> answers it for Lua 5.1,
-    on stripped builds too. Here it is on LuCI's <code>luci.sys</code>, compiled without
-    debug information, asking about <code>init_action</code>, the helper that runs
+    In a firmware investigation you usually want to know who calls a function, and with
+    what arguments. <code>luad callers</code> answers that for Lua 5.1, including stripped
+    builds. Here it is on LuCI's <code>luci.sys</code>, compiled without debug
+    information, asking about <code>init_action</code>, the helper that runs
     <code>/etc/init.d</code> scripts:
   </p>
 <pre><span class="c">$</span> luad callers sys.luac --proto 0/28
@@ -249,40 +249,51 @@ Callers of proto:0/28
   26 elsewhere, 0 unmapped label, 135 unattributed
 <span class="c">Summary: 7 caller(s); coverage complete; attribution not degraded</span></pre>
   <p>
-    Every other call site is counted in exactly one class, so the residue that might
-    still reach the target stays visible. An empty list means no observed caller, never
-    "unreachable". Add <code>--link-convention luci-module-setglobal</code> and more files
-    to search other modules; JSON output carries each argument's full origin tree.
+    The coverage line puts every other call site in exactly one category, so you can see
+    which ones might still reach the target. An empty list means luad found no caller, not
+    that the function is unreachable. To search other modules, add their files and a
+    <code>--link-convention</code>. JSON output shows where each argument came from.
+  </p>
+  <p>
+    There are two conventions. <code>luci-module-setglobal</code> assumes nothing about
+    what a module does while it loads, so it only accepts modules whose top level just
+    defines functions. That rules out 41 of the 55 modules in public LuCI, mostly because
+    they <code>require</code> other modules first. <code>luci-module-trusted-init</code>
+    accepts all 55. It assumes that code run while a module loads doesn't replace or
+    remove any module's functions, and it labels every answer that depends on that
+    assumption with <code>assumptions: ["trusted-init"]</code>. For the LuCI files kept in
+    the repository, tests check each cross-file caller it reports against the source.
   </p>
   <p class="dim">
-    How it compares, measured rather than claimed: on stock Lua 5.1 a decompiler such
-    as unluac-rs, or the official <code>luac -l -l</code> with a script, answers this same
-    question just as correctly. luad's edge is answering stock and OpenWrt LNUM32 builds
-    from one binary, with structured evidence. See the
-    <a href="https://github.com/dweekly/luad/blob/v0.4.0/docs/PRIOR-ART-AND-CORPORA.md#5b-task-comparison-on-luci-lucisys-2026-10-23">dated comparison</a>.
+    Other tools can answer this too. On stock Lua 5.1, the unluac-rs decompiler, or the
+    official <code>luac -l -l</code> plus a script, gets the same answers. luad's advantage
+    is that one binary reads both stock and OpenWrt LNUM32 builds, and its output is
+    structured data. The
+    <a href="https://github.com/dweekly/luad/blob/v0.4.1/docs/PRIOR-ART-AND-CORPORA.md#5b-task-comparison-on-luci-lucisys-2026-10-23">comparison</a>
+    is dated and shows how it was run.
   </p>
 </section>
 <section class="shell" id="install">
   <h2>Install</h2>
   <p>
     Prebuilt archives for Linux x86-64 and macOS arm64 are attached to
-    <a href="https://github.com/dweekly/luad/releases/tag/v0.4.0">the release</a>.
+    <a href="https://github.com/dweekly/luad/releases/tag/v0.4.1">the release</a>.
     Download all five release assets into an empty directory with the GitHub CLI, then
     verify the checksums and extract the archive for your platform:
   </p>
-<pre><span class="c">$</span> mkdir luad-0.4.0-downloads &amp;&amp; cd luad-0.4.0-downloads
-<span class="c">$</span> gh release download v0.4.0 --repo dweekly/luad
+<pre><span class="c">$</span> mkdir luad-0.4.1-downloads &amp;&amp; cd luad-0.4.1-downloads
+<span class="c">$</span> gh release download v0.4.1 --repo dweekly/luad
 <span class="c">$</span> shasum -a 256 -c SHA256SUMS
-<span class="c">$</span> tar xzf luad-0.4.0-macos-aarch64.tar.gz
-<span class="c">$</span> ./luad-0.4.0-macos-aarch64/luad --help</pre>
+<span class="c">$</span> tar xzf luad-0.4.1-macos-aarch64.tar.gz
+<span class="c">$</span> ./luad-0.4.1-macos-aarch64/luad --help</pre>
   <p>
-    The example uses macOS arm64; on Linux x86-64, substitute
-    <code>linux-x86_64</code> for <code>macos-aarch64</code>. The release also includes
-    an evidence index and CycloneDX source SBOM. Verify the archive's build provenance
-    with the GitHub CLI, adding <code>--source-digest</code> with the source revision the
-    release notes name:
+    The example is for macOS arm64. On Linux x86-64, use <code>linux-x86_64</code> in
+    place of <code>macos-aarch64</code>. The release also includes an evidence index and
+    a CycloneDX source SBOM. To check that the archive was built by this repository's CI,
+    use the GitHub CLI, adding <code>--source-digest</code> with the source revision named
+    in the release notes:
   </p>
-<pre><span class="c">$</span> gh attestation verify luad-0.4.0-macos-aarch64.tar.gz \
+<pre><span class="c">$</span> gh attestation verify luad-0.4.1-macos-aarch64.tar.gz \
     --repo dweekly/luad \
     --signer-workflow dweekly/luad/.github/workflows/ci.yml</pre>
   <p>Or build from source with Rust 1.85 or newer:</p>
@@ -293,121 +304,126 @@ Callers of proto:0/28
 <section class="shell" id="limits">
   <h2>What doesn't work yet</h2>
   <p>
-    The latest published release is 0.4.0. luad is experimental. No dialect is promoted to a supported tier,
-    the supported set is empty, and no interface carries a compatibility promise.
+    The latest release is 0.4.1, and luad is experimental. No Lua version is officially
+    supported yet, and commands and output formats may change between releases.
   </p>
   <div class="table-scroll">
   <table>
-    <caption class="dim" style="text-align:left;padding-bottom:.6rem;font-size:.85rem">Dialect coverage as of v0.4.0. Every tier is <em>experimental</em>.</caption>
+    <caption class="dim" style="text-align:left;padding-bottom:.6rem;font-size:.85rem">What v0.4.1 reads. All of it is <em>experimental</em>.</caption>
     <thead><tr><th scope="col">Dialect</th><th scope="col">Opcodes</th><th scope="col">State</th></tr></thead>
     <tbody>
-      <tr><td>lua5.1</td><td>38</td><td class="ok">Best exercised. LNUM32 and stock layouts both read.</td></tr>
-      <tr><td>lua5.2</td><td>40</td><td>Structural inspection/export and unverified text listing. Structured disassembly, effects and explanation unavailable.</td></tr>
-      <tr><td>lua5.3</td><td>47</td><td>Structural inspection/export and unverified text listing. No EdgeTX profile; structured disassembly and explanation unavailable.</td></tr>
-      <tr><td>lua5.4</td><td>83</td><td>Reads well; exact-disassembly evidence exists for 5.4.8.</td></tr>
-      <tr><td>lua5.5</td><td>85</td><td>Structural inspection/export and unverified text listing. Structured disassembly, effects and explanation unavailable.</td></tr>
-      <tr><td>LuaJIT, Luau</td><td>—</td><td class="dim">Separate bytecode systems. Out of scope.</td></tr>
+      <tr><td>lua5.1</td><td>38</td><td class="ok">Best tested. Reads both stock and LNUM32 layouts.</td></tr>
+      <tr><td>lua5.2</td><td>40</td><td>File structure through inspect and export, plus an unchecked text listing. No structured disassembly, effects or explain.</td></tr>
+      <tr><td>lua5.3</td><td>47</td><td>File structure through inspect and export, plus an unchecked text listing. No EdgeTX layout, structured disassembly or explain.</td></tr>
+      <tr><td>lua5.4</td><td>83</td><td>Reads well. Disassembly is checked against official Lua 5.4.8.</td></tr>
+      <tr><td>lua5.5</td><td>85</td><td>File structure through inspect and export, plus an unchecked text listing. No structured disassembly, effects or explain.</td></tr>
+      <tr><td>LuaJIT, Luau</td><td>—</td><td class="dim">Different bytecode formats. luad doesn't read them.</td></tr>
     </tbody>
   </table>
   </div>
 
   <div class="callout">
     <p>
-      <strong>Structural facts and analysis have different boundaries.</strong>
-      Lua 5.2, 5.3, and 5.5 retain raw words and child structure through inspection and
-      <code>export --facts prototype,constant,upvalue</code>. Unverified human text listings remain available without
-      <code>--effects</code>; structured disassembly, effects, explanation and unavailable
-      fact selections explicitly refuse these profiles. Layout and malformed-input regression coverage does not
-      establish complete semantic correctness or support for every vendor layout.
+      For Lua 5.2, 5.3 and 5.5, luad reads raw instruction words and how functions nest,
+      through <code>inspect</code> and <code>export --facts prototype,constant,upvalue</code>.
+      You can get an unchecked text listing (without <code>--effects</code>), but structured
+      disassembly, effects, <code>explain</code> and the other export facts refuse these
+      versions with an error. Passing the layout and malformed-file tests doesn't mean
+      every instruction is interpreted correctly, or that every vendor layout works.
     </p>
     <p>
-      The <a href="https://github.com/dweekly/luad/blob/v0.4.0/docs/examples/RECIPES.md#13-reproducible-firmware-investigation-walkthrough">public firmware walkthrough</a>
-      covers mixed-input inventory, layout inspection, constants, raw disassembly, and
-      profile-aware handoff. No external decompiler is required to build or test luad.
-      See the <a href="https://github.com/dweekly/luad/releases/tag/v0.4.0">release notes and evidence</a>
-      for the exact release scope.
+      The <a href="https://github.com/dweekly/luad/blob/v0.4.1/docs/examples/RECIPES.md#13-reproducible-firmware-investigation-walkthrough">public firmware walkthrough</a>
+      goes from a mixed folder of files to layouts, constants and raw disassembly, and then
+      to choosing a decompiler. You don't need a decompiler to build or test luad. The
+      <a href="https://github.com/dweekly/luad/releases/tag/v0.4.1">release notes and evidence</a>
+      say exactly what this release covers.
     </p>
   </div>
   <p class="dim">
-    Cross-file caller answers rely on a deliberately strict reading of LuCI module
-    initialization. Most real LuCI libraries initialize with <code>require</code> calls,
-    so those answers come back marked <code>degraded</code> instead of guessed.
+    Cross-file callers depend on which LuCI link convention you pick. Under the strict
+    one, most real LuCI libraries come back marked <code>degraded</code> rather than
+    guessed at. <code>trusted-init</code> answers for them, but it doesn't check its
+    assumption. If a module rewrote another module's functions while loading, you'd get a
+    wrong answer, though it would still carry the <code>trusted-init</code> label.
   </p>
   <p class="dim">
-    "Valid" from <code>luad validate</code> means consistent with the selected format and
-    the named checks. It does not mean safe to execute, or of known origin.
+    "Valid" from <code>luad validate</code> means the file fits the selected format and
+    passes the listed checks. It doesn't mean the code is safe to run, or tell you where it
+    came from.
   </p>
 </section>
 
 <section class="shell">
-  <h2>Standing on other people's shoulders</h2>
-  <p>This is not a new idea, and the prior art deserves naming.</p>
+  <h2>Prior art</h2>
+  <p>Most of this has been done before, in pieces, and luad leans on that work.</p>
   <div class="credits">
     <div class="credit">
       <h4><a href="https://github.com/viruscamp/luadec/blob/master/ChunkSpy/ChunkSpy51.lua">ChunkSpy</a></h4>
-      <p>Kein-Hong Man's chunk inspector — offsets, raw bytes, named profiles — did this
-      for the Lua 5.0/5.1 era. The direct ancestor. His
+      <p>Kein-Hong Man's chunk inspector showed offsets, raw bytes and named layouts for
+      Lua 5.0 and 5.1. It's luad's most direct ancestor. His
       <a href="https://archive.org/details/a-no-frills-intro-to-lua-5.1-vm-instructions">No-Frills Introduction</a>
-      is still the clearest writeup of the instruction encoding anywhere.</p>
+      is still the clearest explanation of the 5.1 instruction encoding.</p>
     </div>
     <div class="credit">
       <h4><a href="https://sourceforge.net/projects/unluac/">unluac</a> &amp; <a href="https://github.com/x3zvawq/unluac-rs">unluac-rs</a></h4>
-      <p>The two decompiler lineages that honour declared header widths end to end, so they
-      read 32-bit embedded layouts correctly. On EdgeTX chunks they succeed where luad
-      currently does not.</p>
+      <p>These two decompilers use the header's declared sizes throughout, so they read
+      32-bit embedded layouts correctly. They also handle EdgeTX chunks, which luad
+      can't yet.</p>
     </div>
     <div class="credit">
       <h4><a href="https://github.com/rizinorg/rizin">rizin</a></h4>
-      <p>A real <code>luac</code> architecture with per-version ISA tables for Lua 5.0–5.5
-      and LuaJIT. The platform luad should feed, not fight.</p>
+      <p>Has a real <code>luac</code> architecture, with instruction tables for each Lua
+      version from 5.0 to 5.5 plus LuaJIT. luad should feed it data rather than compete
+      with it.</p>
     </div>
     <div class="credit">
       <h4><a href="https://github.com/viruscamp/luadec">LuaDec</a></h4>
       <p>Descends from Hisham Muhammad's original. Its
       <a href="https://github.com/HandsomeYingyan/luadec-openwrt">OpenWrt</a> and
-      <a href="https://github.com/superkhung/luadec-tplink">TP-Link</a> forks show how long
-      people have been hitting this exact wall.</p>
+      <a href="https://github.com/superkhung/luadec-tplink">TP-Link</a> forks show people
+      have been stuck on these same files for years.</p>
     </div>
     <div class="credit">
       <h4><a href="https://github.com/metaworm/luac-parser-rs">luac-parser-rs</a></h4>
-      <p>Compiles custom parsers to WASM and hot-loads them for unofficial dialects — a
-      clever answer to the vendor-dialect problem.</p>
+      <p>Compiles custom parsers to WASM and loads them at run time to handle vendor
+      dialects. A neat way around the problem.</p>
     </div>
     <div class="credit">
       <h4>Opcode shuffling</h4>
       <p><a href="https://jhalon.github.io/side-channel/tplink-opcode-shuffle/">Unshuffling TP-Link's Lua opcodes</a>
       and <a href="https://doi.org/10.1109/TIFS.2023.3289254">Luo et al. (IEEE TIFS, 2023)</a>
-      both confirm the same thing: in the field, the opcode table is not a constant.</p>
+      both found vendors reordering the opcode table, so you can't assume the standard one.</p>
     </div>
   </div>
   <p style="margin-top:2rem">
-    And before any of it, you need the filesystem out of the image:
+    Before any of this, you need to get the filesystem out of the firmware image with
     <a href="https://github.com/onekey-sec/unblob">Unblob</a> or
     <a href="https://github.com/ReFirmLabs/binwalk">Binwalk</a>.
   </p>
 </section>
 
 <section class="shell">
-  <h2>Why bother</h2>
+  <h2>Why a separate reader</h2>
   <p>
     The <a href="https://www.lua.org/manual/5.4/manual.html">Lua 5.4 manual</a> says of
     <code>load</code>: <em>"It is safe to load malformed binary chunks; <code>load</code>
     signals an appropriate error. However, Lua does not check the consistency of the code
     inside binary chunks; running maliciously crafted bytecode can crash the
-    interpreter."</em> Structural validation of the code is explicitly somebody else's job.
+    interpreter."</em> In other words, Lua leaves checking the code inside a chunk to
+    someone else.
   </p>
   <p>
     <a href="https://saelo.github.io/posts/pwning-lua-through-load.html">Samuel Groß's <code>load</code> exploit</a>
-    shows what that buys an attacker, and the
+    shows what an attacker can do with that. The
     <a href="https://memorycorruption.net/posts/rce-lua-factorio/">Factorio bytecode RCE</a>
-    is the best case study of a hand-rolled verifier failing — it missed that
-    <code>JMP</code> targets are offset by one, so constant-pool data became reachable code.
+    shows a homemade verifier failing: it missed that <code>JMP</code> targets are offset
+    by one, so data in the constant pool became reachable code.
   </p>
   <p>
-    A file out of unknown firmware is exactly the input class where a C loader is the wrong
-    tool. luad forbids <code>unsafe</code> across the workspace, bounds allocation and
-    recursion, and runs a fuzz suite in CI. In testing, one established tool simply never
-    terminated on a malformed chunk. Bounded behaviour is not a given here.
+    A file from unknown firmware is exactly what you shouldn't feed to a C loader. luad
+    has no <code>unsafe</code> code, caps how much memory it allocates and how deep it
+    recurses, and runs a fuzz suite in CI. In testing, one established tool ran forever on
+    a malformed chunk, so finishing at all isn't something to take for granted.
   </p>
 </section>
 
@@ -416,14 +432,14 @@ Callers of proto:0/28
 <footer class="shell">
   <p>
     <a href="https://github.com/dweekly/luad">github.com/dweekly/luad</a> ·
-    <a href="https://github.com/dweekly/luad/releases/tag/v0.4.0">v0.4.0</a> ·
+    <a href="https://github.com/dweekly/luad/releases/tag/v0.4.1">v0.4.1</a> ·
     <a href="https://github.com/dweekly/luad/issues">Issues</a> ·
     MIT or Apache-2.0
   </p>
   <p>
     Built by <a href="https://david.weekly.org/">David E. Weekly</a>.
     Not affiliated with Lua.org or PUC-Rio.
-    If it reads a chunk wrong, the sample is genuinely welcome.
+    If luad misreads a chunk, please send the sample.
   </p>
 </footer>
 
