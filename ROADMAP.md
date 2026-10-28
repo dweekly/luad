@@ -203,9 +203,16 @@ capture budget) took 12.8 s and peaked at 807 MB resident for one query, about 2
 its size. The parsed model, not caller attribution, carries most of it: `inspect` peaks
 at 557 MB and `callees` at 322 MB on that chunk (about 300 bytes per 4-byte instruction
 word), while `callgraph` takes 13 s and `origins` 41 s there. Callee analysis is also re-run
-per file by call relations and link resolution. Before optimizing time, bound the model's
-per-instruction footprint against the input-size ceiling, since a hostile input at the
-ceiling scales the same way.
+per file by call relations and link resolution. Since the chunk-wide instruction budget
+(2,000,000 by default) landed, the worst case is set by that budget, not the input-size
+ceiling. A generated 7.6 MB stripped Lua 5.1 chunk at about 1.9 million instructions peaks
+at 360 MB for `validate`, 1.3 GB for `inspect -f json`, 3.2 GB for one `callers` query,
+5.9 GB for `export` and 8.7 GB for `disasm -f json` (release build, monster4, 2026-10-28).
+So the parsed model (#117) is the smallest share; whole-document output and analysis
+carry the rest. Real chunks sit far below the budget: the 55 public LuCI modules have a
+median of 222 instructions and a maximum of 5,171. The cheapest real reduction is a lower
+default budget, checked first against the largest private firmware chunk; shrinking the
+model or streaming `disasm` output waits for a user who hits the limit.
 
 **Exit:** each workflow has reproducible commands, exact expected answers and failure
 cases, applicable profile/tool versions, bounded output, and byte evidence. A user
