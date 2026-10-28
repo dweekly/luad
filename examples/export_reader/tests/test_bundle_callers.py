@@ -264,6 +264,18 @@ class BundleCallerTests(unittest.TestCase):
         statuses = {f["path"]: f["status"] for f in answer["files"]}
         self.assertEqual(statuses[lua52], "unsupported_profile")
         self.assertFalse(answer["summary"]["coverage_complete"])
+        # Answers under trusted-init need its label, which this consumer does not carry.
+        trusted = [
+            self.compile("r_mod_trusted", 'local u = require "luci.util"\n' + MOD_SYS),
+            self.compile("r_caller_trusted", CALLER_SYS),
+        ]
+        bundle = self.capture(trusted, "--link-convention", "luci-module-trusted-init")
+        with self.assertRaisesRegex(reader.Refusal, "strict"):
+            reader.bundle_callers(bundle, trusted[0], "0/0")
+        report, records, argv = self.verified(bundle)
+        argv = [CONVENTION if a == "luci-module-trusted-init" else a for a in argv]
+        with self.assertRaisesRegex(reader.Refusal, "assumption"):
+            reader.callers_from_records(report, records, argv, trusted[0], "0/0")
         # A damaged stream is refused before any caller answer.
         damaged = self.directory / "damaged"
         shutil.copytree(good, damaged)

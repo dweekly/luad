@@ -5,6 +5,14 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+## 0.4.1 — 2026-10-28
+
+- The export reference consumer's offline `callers` refuses a bundle captured under
+  `luci-module-trusted-init`, and any link record carrying `assumptions`. It previously
+  answered such a bundle (when built through its library entry point; its `capture`
+  command never offered the convention) with the assumption label dropped. It stays
+  strict-only.
+
 - Gates identify a Lua compiler by its output, not by its executable's hash (#119).
   The `luac` executable built from a verified source tarball changes with each C
   toolchain update, even though the bytecode it emits doesn't. That broke 17 gates on
