@@ -587,6 +587,13 @@
             }
           ]
         },
+        "target_string": {
+          "description": "Exact UTF-8 string target filter, when selected.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "total_count": {
           "description": "Total count of matching entries.",
           "type": "integer",

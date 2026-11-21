@@ -5,6 +5,12 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- String queries compare the original bytes of constants and lookup keys. Backspace
+  and form feed escapes are accepted. Unknown quoted escapes produce a usage error.
+- `xrefs FILE --to-string TEXT` finds uses of an exact UTF-8 literal across
+  prototypes. Combining a source filter with a target filter checks both endpoints.
+  Refresh saved xrefs schemas for the optional JSON `target_string` selector.
+
 ## 0.4.1 — 2026-10-28
 
 - New opt-in `--link-convention luci-module-trusted-init` for `callers` and `export`.

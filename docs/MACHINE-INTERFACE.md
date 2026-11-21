@@ -389,6 +389,19 @@ The ordinary [library](../crates/luad-oracle/tests/test_analysis.rs) and
 [required-compiler CLI](../crates/luad-oracle/tests/test_diff_cli.rs) regressions
 exercise equal controls and isolated changes in both modes and every output format.
 
+Use `xrefs FILE --to-string TEXT` to find references to every constant whose
+original bytes equal the UTF-8 argument. The shell passes the text as one literal
+argument. `--from ID` intersects with either `--to ID` or `--to-string TEXT`.
+A successful empty list means the index has no matching edge. JSON includes
+`data.target_string` when that selector is present.
+
+Quoted `string`, `constant`, and `callee.lookup.key` predicates compare UTF-8
+operand bytes with the stored string bytes. Substrings can match within binary
+strings. Inside a quoted query operand use `\n`, `\r`, `\t`, `\b`, `\f`,
+`\\`, `\"`, and `\'` for the corresponding characters. An unrecognized escape
+is a usage error. Use the exported constant's `raw_bytes` for arbitrary binary
+operands.
+
 `query --where` accepts `and`, `or`, parentheses, `==`, `!=`, and the explicitly listed
 `contains` forms. Quoted operands are strings; unquoted `nil`, booleans, and numbers are
 typed literals. A quoted `"0"`, numeric `+0.0`, and numeric `-0.0` are distinct. The

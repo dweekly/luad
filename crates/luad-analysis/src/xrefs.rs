@@ -46,6 +46,9 @@ pub struct XrefResponse {
     /// Target filter queried, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<StableId>,
+    /// Exact UTF-8 string target filter, when selected.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_string: Option<String>,
     /// Source filter queried, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<StableId>,

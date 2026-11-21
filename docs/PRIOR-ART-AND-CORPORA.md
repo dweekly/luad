@@ -13,6 +13,37 @@ reproducing it. External observations below are dated 2026-09-02 and must be rec
 new tool recommendation or qualification uses them. The README freshness date also
 covers alignment with current product scope; it does not refresh those observations.
 
+### Agent project trials, 2026-11-21
+
+Two agents used the published macOS ARM64 0.4.1 CLI (archive SHA-256
+`cd46d29a4ad42792176edbdc3d18229026afbf94ebcbe464f3611a0cba07ada0`).
+Build each pinned source with stock 64-bit Lua 5.1.5 using
+`luac -s -o module.luac SOURCE`. These are public source builds inspected
+without execution. They measure tool behavior and agent friction. Outside-user
+adoption is still an open question.
+
+| Source and stripped chunk SHA-256 | Task | Result checked against source |
+|---|---|---|
+| [argparse 0.6.0](https://github.com/mpeterv/argparse/blob/412e6aca393e365f92c0315dfe50181b193f1ace/src/argparse.lua) · `6c015b5912997f87fe18c9e0efcbcaabbb64c47e173d2782fe1700b4c0831e24` | Trace both “Did you mean” messages to the options or commands table. | Constant slots 12 and 16 in `proto:0/49` are read at PCs 96 and 106. Its two observed callers at `0/63:pc:10` and `0/64:pc:14` pass different receiver fields. Text renders both as `field`. JSON gives `options` and `commands`. 332 of 422 sites were unattributed. |
+| [json.lua](https://github.com/rxi/json.lua/blob/dbf4b2dd2eb7c23be2773c89eb059dadd6436f94/json.lua) · `385c071643c89279994ab2abfb2b297b71305d1715249af4bdf9176f8070ca94` | Locate the line/column formatter and its callers. | `%s at line %d col %d` is read by `proto:0/9:pc:19`. All 12 source calls to the formatter have observed callers. Changing the last specifier to `%x` produces no constant match. |
+| [LuaSocket 3.1.0](https://github.com/lunarmodules/luasocket/blob/95b7efa9da506ef968c1347edf3fc56370f0deed/src/url.lua) · `e3e98a1229661c00410f7d04ae48b599a5c9b45e0f9c2951b92972929a6ac51b` | Distinguish the lowercase and uppercase percent-encoding callbacks. | `%%%02x` is read by `proto:0/0/0:pc:2`, and `%%%02X` by `proto:0/2/0:pc:8`. Both are passed to a `gsub` call. Neither has an observed Lua caller in this module. 47 of its 54 call sites were unattributed. |
+
+To repeat the 0.4.1 workflow, run
+`luad query module.luac --where 'string contains "Did you mean"'`,
+then `luad xrefs module.luac --to ID` for each constant and
+`luad callers module.luac --proto 0/49 -f json` for the owner. Reuse the same
+sequence with the formatter or encoding strings and their respective IDs.
+
+The agents encountered two silent errors in the literal workflow. On argparse,
+0.4.1 missed an exact leading newline and matched a printable `n` in its escaped
+display. On json.lua, searching for backspace selected the adjacent letter b.
+Checking a specific edge also exposed that `xrefs --to ID --from SOURCE` could
+return a different source. The [literal retrieval tests](../crates/luad-oracle/tests/test_literal_retrieval.rs)
+cover these cases. The [agent skill](../.agents/skills/luad-inspect/SKILL.md)
+gives a raw-byte workaround for released binaries and the direct lookup when
+available. Other friction included large inspect documents and terse caller field
+summaries. A projected inspect header and the caller argument JSON served both tasks.
+
 ### Source and documentation check, 2026-10-22
 
 These observations update positioning, not the dated execution matrix below:

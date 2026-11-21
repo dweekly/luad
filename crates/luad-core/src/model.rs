@@ -85,6 +85,17 @@ pub enum ConstantValue {
     LongString(LuaString),
 }
 
+impl ConstantValue {
+    /// Original bytes of a short or long string constant.
+    #[must_use]
+    pub fn string_bytes(&self) -> Option<&[u8]> {
+        match self {
+            Self::ShortString(s) | Self::LongString(s) => Some(&s.raw_bytes),
+            _ => None,
+        }
+    }
+}
+
 /// A parsed constant in a prototype's constant vector.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Constant {
