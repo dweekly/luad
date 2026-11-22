@@ -687,7 +687,7 @@ fn render_text(answer: &CallersAnswer, writer: &mut impl io::Write) -> io::Resul
             caller.caller.path,
             caller.call_id,
             sources.join(", "),
-            describe_arguments(&caller.argument_window)
+            describe_arguments(&caller.argument_window, &caller.caller_proto)
         )?;
     }
     if !summary.dynamic_providers.is_empty() {
@@ -746,7 +746,10 @@ fn render_text(answer: &CallersAnswer, writer: &mut impl io::Write) -> io::Resul
 }
 
 /// A compact human summary of an argument window; machine formats keep the full tree.
-fn describe_arguments(window: &luad_analysis::CallArgumentWindow) -> String {
+fn describe_arguments(
+    window: &luad_analysis::CallArgumentWindow,
+    caller_proto: &ProtoPath,
+) -> String {
     use luad_analysis::CallArgumentWindow;
     let (arguments, open) = match window {
         CallArgumentWindow::Fixed { arguments } => (arguments, None),
@@ -754,7 +757,7 @@ fn describe_arguments(window: &luad_analysis::CallArgumentWindow) -> String {
     };
     let mut parts: Vec<String> = arguments
         .iter()
-        .map(|argument| describe_origin(&argument.origin))
+        .map(|argument| describe_origin(&argument.origin, caller_proto))
         .collect();
     if let Some(reason) = open {
         parts.push(format!("open: {reason}"));
@@ -766,12 +769,24 @@ fn describe_arguments(window: &luad_analysis::CallArgumentWindow) -> String {
     }
 }
 
-fn describe_origin(origin: &luad_analysis::OriginExpression) -> String {
+fn describe_origin(origin: &luad_analysis::OriginExpression, caller_proto: &ProtoPath) -> String {
     use luad_analysis::OriginExpressionKind as Kind;
     match &origin.kind {
         // Scalars go through the shared text renderer, which uses the scalar authority.
         Kind::Literal { value, .. } => crate::render::text::format_origin_literal(value),
         Kind::Parameter { index, .. } => format!("param#{index}"),
+        Kind::Field { base, key, .. } => match (&base.kind, key) {
+            (Kind::Parameter { owner, index }, luad_analysis::OriginLiteral::String { value })
+                if owner == caller_proto
+                    && value.raw_bytes.len() <= luad_core::scalar::BYTE_STRING_PREVIEW_BYTES =>
+            {
+                format!(
+                    "param#{index}[{}]",
+                    luad_core::scalar::render_byte_string(&value.raw_bytes)
+                )
+            }
+            _ => "field".to_string(),
+        },
         Kind::Unknown { reason } => format!("unknown: {}", serde_plain(reason)),
         other => serde_json::to_value(other)
             .ok()

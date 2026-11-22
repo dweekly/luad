@@ -489,6 +489,11 @@ equal the target, and only when a convention is requested. Without one, the corp
 target alone and the summary reports `cross_artifact_searched: false`. Each listed caller
 carries its bases and its verbatim `argument_window` from origin analysis.
 
+The text summary prints a caller parameter's direct string-keyed field as
+`param#0["options"]`. It escapes the original key bytes. Nested fields, keys
+over 64 bytes, and other field shapes print as `field`. Use JSON or JSONL for
+their full expressions.
+
 Every call site of every analyzed file falls into exactly one class, decided in order:
 `caller`, `conflicting` (sources name the target and something else), `degraded` (a
 limit-class callee or relation reason, a `dynamic` or `limit_exceeded` link, or a link

@@ -972,7 +972,7 @@ fn test_callers_text_view_summarizes_each_callers_arguments() {
     ]);
     assert_eq!(output.status.code(), Some(0));
     let text = String::from_utf8(output.stdout).unwrap();
-    assert!(text.contains("(field)"), "{text}");
+    assert!(text.contains(r#"(param#0["ifname"])"#), "{text}");
     assert!(text.contains("(\"eth0\")"), "{text}");
     assert!(text.contains("(concat)"), "{text}");
     assert!(text.contains("(param#0)"), "{text}");
@@ -980,6 +980,28 @@ fn test_callers_text_view_summarizes_each_callers_arguments() {
         text.contains("not proof") || text.contains("4 caller(s)"),
         "{text}"
     );
+}
+
+#[test]
+fn caller_parameter_fields_keep_exact_keys_and_compact_fallbacks() {
+    let boundary = "x".repeat(64);
+    let source = format!(
+        r#"
+local function take(...) end
+local function forward(other, p)
+    take(p.options, p.commands, p['a."\n\255'], other.nested.key, p["{boundary}"], p["{boundary}x"])
+end
+return forward
+"#
+    );
+    let c = compile(&[("fields", &source)], true);
+    let output = run(&["callers", c.path("fields"), "--proto", "0/0"]);
+    assert_eq!(output.status.code(), Some(0));
+    let text = String::from_utf8(output.stdout).unwrap();
+    let args = format!(
+        r#"(param#1["options"], param#1["commands"], param#1["a.\"\n\xff"], field, param#1["{boundary}"], field)"#
+    );
+    assert!(text.contains(&args), "{text}");
 }
 
 #[test]

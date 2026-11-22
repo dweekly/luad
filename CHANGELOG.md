@@ -5,6 +5,9 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Caller text identifies short, direct string fields of a caller parameter, e.g.
+  `param#0["options"]` and `param#0["commands"]`.
+
 - String queries compare the original bytes of constants and lookup keys. Backspace
   and form feed escapes are accepted. Unknown quoted escapes produce a usage error.
 - `xrefs FILE --to-string TEXT` finds uses of an exact UTF-8 literal across
