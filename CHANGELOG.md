@@ -5,6 +5,9 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- The outside-trial input bundle includes LuCI attribution and a checksum
+  manifest that verifies after extraction.
+
 - Caller text identifies short, direct string fields of a caller parameter, e.g.
   `param#0["options"]` and `param#0["commands"]`.
 
