@@ -10,7 +10,7 @@
     "base_dialect": "lua5.4",
     "patch_or_oracle_version": "5.4.8",
     "profile": "lua5.4",
-    "validated_layout": "int=8,sizet=8,inst=4,num=8,endian=1",
+    "validated_layout": "inst=4,lua_int=8,num=8,endian=1",
     "parse_mode": "permissive",
     "selection_mode": "detected",
     "detection_evidence": "Lua 5.4 signature matched (0x1bLua, version 0x54)"

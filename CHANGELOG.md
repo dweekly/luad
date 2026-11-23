@@ -5,6 +5,13 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- Correct the Lua 5.4 validated layout to report the serialized instruction,
+  Lua integer and Lua number widths. Its numeric header `sizeof_sizet` is zero.
+- Single-file inspection distinguishes invalid constant tags (exit 1) from
+  configured pool-count limits (exit 5). New invalid-tag diagnostics are
+  `L51-CONST-006`, `L52-CONST-003` and `L55-CONST-003`. Lua 5.3 uses
+  `L53-CONST-001` for invalid tags and `L53-CONST-002` for excessive counts.
+
 - The outside-trial input bundle includes LuCI attribution and a checksum
   manifest that verifies after extraction.
 

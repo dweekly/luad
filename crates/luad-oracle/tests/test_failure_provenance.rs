@@ -501,3 +501,52 @@ fn test_batch_export_retains_provenance_and_preserves_aggregation() {
         "file_end error must preserve specific limit message"
     );
 }
+
+#[test]
+fn stock_constant_tag_and_count_have_distinct_exit_codes() {
+    let luad = get_luad_bin();
+    let input = NamedTempFile::new().unwrap();
+    let inspect = |bytes: &[u8]| {
+        fs::write(input.path(), bytes).unwrap();
+        Command::new(&luad)
+            .arg("inspect")
+            .arg(input.path())
+            .args(["-f", "json"])
+            .output()
+            .unwrap()
+    };
+    // Root pool count followed by the first tag (short string "print") in
+    // each pinned stripped hello. 262145 is one above the default pool cap.
+    let fixed = 262145u32.to_le_bytes();
+    for (dialect, count_offset, count_bytes, excessive) in [
+        ("lua5.1", 72, &[4, 0, 0, 0][..], &fixed[..]),
+        ("lua5.2", 69, &[4, 0, 0, 0], &fixed),
+        ("lua5.3", 86, &[4, 0, 0, 0], &fixed),
+        ("lua5.4", 79, &[0x83], &[0x10, 0, 0x81]),
+        ("lua5.5", 88, &[3], &[0x90, 0x80, 1]),
+    ] {
+        let bytes = luad_oracle::get_fixture_bytes(dialect, "hello", true).unwrap();
+        let tag_offset = count_offset + count_bytes.len();
+        assert_eq!(&bytes[count_offset..tag_offset], count_bytes);
+        assert_eq!(bytes[tag_offset], 4);
+        assert!(inspect(&bytes).status.success());
+
+        let mut invalid_tag = bytes.clone();
+        invalid_tag[tag_offset] = 5;
+        let mut over_limit = bytes;
+        over_limit.splice(count_offset..tag_offset, excessive.iter().copied());
+        for (input, code, offset, detail) in [
+            (invalid_tag, 1, tag_offset, "constant tag"),
+            (over_limit, 5, count_offset, "262145"),
+        ] {
+            let out = inspect(&input);
+            let stderr = String::from_utf8(out.stderr).unwrap();
+            assert_eq!(out.status.code(), Some(code), "{dialect}: {stderr}");
+            assert!(out.stdout.is_empty(), "{dialect}");
+            assert!(
+                stderr.contains(&format!("offset {offset}:")) && stderr.contains(detail),
+                "{dialect}: {stderr}"
+            );
+        }
+    }
+}

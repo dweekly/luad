@@ -263,10 +263,6 @@ impl Prototype {
     }
 }
 
-fn default_sizeof_sizet() -> u8 {
-    8
-}
-
 /// Serialized chunk header.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Header {
@@ -282,8 +278,8 @@ pub struct Header {
     pub instruction_size: u8,
     /// Size of lua_Integer in bytes (8 on 64-bit, 4 on 32-bit).
     pub lua_integer_size: u8,
-    /// Size of size_t in bytes (8 on 64-bit, 4 on 32-bit).
-    #[serde(default = "default_sizeof_sizet")]
+    /// Declared size_t width in bytes, or zero when unreported (including Lua 5.4 and 5.5).
+    #[serde(default)]
     pub sizeof_sizet: u8,
     /// Declared size of lua_Number in bytes (4 or 8 for currently read layouts).
     pub lua_number_size: u8,

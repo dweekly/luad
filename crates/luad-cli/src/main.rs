@@ -251,7 +251,7 @@ fn is_resource_limit_code(code: &str) -> bool {
             | "L52-UPVAL-001"
             | "L52-STR-001"
             | "L53-CODE-001"
-            | "L53-CONST-001"
+            | "L53-CONST-002"
             | "L53-PROTO-001"
             | "L53-UPVAL-001"
             | "L53-STR-001"

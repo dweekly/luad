@@ -611,6 +611,14 @@ operation such as `CONCAT A A C` cannot recurse into its own result. JSON uses t
 
 Evidence-backed machine output must expose the selected dialect/profile and validated layout, including byte order, declared widths, number-integrality, and how the profile was selected. Vendor constant tags such as LNUM tag 9 must not be reported as stock Lua 5.1 support.
 
+Lua 5.4 declares widths for instructions, Lua integers and Lua numbers. Its
+layout string includes those three widths and the validated endianness. The
+numeric header field `sizeof_sizet` is zero for formats that omit this width.
+
+An unrecognized stock constant tag is invalid input (exit 1 on single-file
+inspection). A pool count above the configured limit exits 5. Stock Lua 5.1
+continues to report the known LNUM tag 9 as requiring another profile (exit 4).
+
 Parse failures must report the deepest known byte offset as the primary location.
 Prototype paths and enclosing fields are context, not replacements for that offset.
 Lua 5.1 profile identity and header-field meaning are present in machine output but
