@@ -58,6 +58,10 @@ impl DiagnosticDescriptor {
     }
 }
 
+/// Structural alternatives for a parsed chunk whose profile lacks semantic analysis.
+pub const STRUCTURAL_INSPECTION_ACTION: &str =
+    "For recognized profiles, use `luad inspect FILE` for raw structure or `luad export FILE --facts constant` to list the constant pool.";
+
 /// Static authority table of all production-emittable diagnostic codes in bytewise ascending order.
 pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
     StaticDiagnosticDescriptor {
@@ -79,7 +83,7 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         severity: Severity::Error,
         category: DiagnosticCategory::Analysis,
         semantics: "Semantic analysis preconditions are not qualified for this bytecode dialect in the active release.",
-        suggested_action: "Perform raw inspection or disassembly instead, or select a qualified analysis dialect.",
+        suggested_action: STRUCTURAL_INSPECTION_ACTION,
     },
     StaticDiagnosticDescriptor {
         code: "CORE-LIMIT-001",

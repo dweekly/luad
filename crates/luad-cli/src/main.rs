@@ -1222,6 +1222,9 @@ fn handle_analysis_validation_failure(
             eprintln!("  - [{}] {}", d.code, d.message);
             if d.code == "ANA-PRECOND-001" {
                 is_unsupported_format = true;
+                if let Some(action) = &d.suggested_action {
+                    eprintln!("    {action}");
+                }
             }
             if classify_diagnostic(d) == ExitCode::LimitExceeded {
                 is_limit_exceeded = true;

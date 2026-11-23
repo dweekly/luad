@@ -5,6 +5,9 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- When a profile lacks semantic analysis, `query` and `xrefs` point to
+  `luad export FILE --facts constant` for looking up strings in the constant pool.
+
 - Correct the Lua 5.4 validated layout to report the serialized instruction,
   Lua integer and Lua number widths. Its numeric header `sizeof_sizet` is zero.
 - Single-file inspection distinguishes invalid constant tags (exit 1) from
