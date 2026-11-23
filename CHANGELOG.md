@@ -5,27 +5,25 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
-- When a profile lacks semantic analysis, `query` and `xrefs` point to
-  `luad export FILE --facts constant` for looking up strings in the constant pool.
+## 0.4.2 — 2026-11-22
 
-- Correct the Lua 5.4 validated layout to report the serialized instruction,
-  Lua integer and Lua number widths. Its numeric header `sizeof_sizet` is zero.
-- Single-file inspection distinguishes invalid constant tags (exit 1) from
-  configured pool-count limits (exit 5). New invalid-tag diagnostics are
-  `L51-CONST-006`, `L52-CONST-003` and `L55-CONST-003`. Lua 5.3 uses
-  `L53-CONST-001` for invalid tags and `L53-CONST-002` for excessive counts.
-
-- The outside-trial input bundle includes LuCI attribution and a checksum
-  manifest that verifies after extraction.
-
-- Caller text identifies short, direct string fields of a caller parameter, e.g.
-  `param#0["options"]` and `param#0["commands"]`.
-
-- String queries compare the original bytes of constants and lookup keys. Backspace
-  and form feed escapes are accepted. Unknown quoted escapes produce a usage error.
-- `xrefs FILE --to-string TEXT` finds uses of an exact UTF-8 literal across
-  prototypes. Combining a source filter with a target filter checks both endpoints.
-  Refresh saved xrefs schemas for the optional JSON `target_string` selector.
+- Find every indexed read of an exact UTF-8 string with `luad xrefs FILE --to-string TEXT`.
+  Combining source and target filters now checks both ends of each reference.
+  Refresh saved xrefs schemas for the optional JSON field `target_string`.
+- String queries compare the original bytes of constants and lookup keys. Quoted
+  queries accept backspace and form feed escapes and report a usage error for unknown escapes.
+- Lua 5.4 layout reports list the widths the header declares for instructions,
+  Lua integers, and Lua numbers. The numeric header field `sizeof_sizet` is zero
+  because Lua 5.4 omits that width.
+- Single-file inspection returns exit 1 for an invalid stock constant tag and
+  exit 5 for a constant count above the configured limit. The new invalid-tag
+  codes are `L51-CONST-006`, `L52-CONST-003`, and `L55-CONST-003`. Lua 5.3
+  uses `L53-CONST-001` for invalid tags and `L53-CONST-002` for excessive counts.
+- On Lua 5.2, 5.3, and 5.5, `query` and `xrefs` point to
+  `luad export FILE --facts constant` to look up strings in the constant pool.
+- Caller summaries show direct string fields such as `param#0["options"]`.
+- The outside-trial input bundle includes LuCI attribution and checksums that
+  can be verified after extraction.
 
 ## 0.4.1 — 2026-10-28
 

@@ -22,7 +22,7 @@ embedded firmware.
 It doesn't decompile. If you want source code back, `luad` tells you exactly which
 profile the chunk uses, so you can give it to a decompiler that reads that profile.
 
-## Status: 0.4.1, experimental
+## Status: 0.4.2, experimental
 
 This is an early release of a tool built for fun. It works and gives real answers on
 real firmware, but no Lua version is officially supported yet, and you shouldn't base
@@ -252,10 +252,10 @@ facts, so it reports these files as failed; asking for an unavailable fact type 
 before any output. When sorting files from mixed Lua versions, use the `--facts` list
 above. The analysis commands refuse these versions outright.
 
-Regression tests cover the fixes made through 0.4.1 to layout handling, operands, which
+Regression tests cover the fixes made through 0.4.2 to layout handling, operands, which
 files get analyzed, caller attribution and malformed input. They don't prove every instruction is
 interpreted correctly or that every vendor layout works. The
-[changelog](CHANGELOG.md#041--2026-10-28) has release details.
+[changelog](CHANGELOG.md#042--2026-11-22) has release details.
 
 `luad` also doesn't extract firmware, decompile, rebuild source, judge whether
 something is exploitable, or keep notes between runs. Other tools do those jobs, and
@@ -278,7 +278,7 @@ luad schema chunk
 If you're writing code against luad, read
 [docs/MACHINE-INTERFACE.md](docs/MACHINE-INTERFACE.md) for exit codes, which IDs stay
 stable and across what, what happens when output is cut short, and what goes to stdout versus stderr.
-Schemas have version numbers, but as of 0.4.1 none of them is promised to stay
+Schemas have version numbers, but as of 0.4.2 none of them is promised to stay
 compatible.
 
 [docs/examples/RECIPES.md](docs/examples/RECIPES.md) has recipes for combining

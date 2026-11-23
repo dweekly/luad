@@ -42,10 +42,10 @@
   "applicationCategory": "DeveloperApplication",
   "applicationSubCategory": "Reverse engineering",
   "operatingSystem": "Linux, macOS",
-  "softwareVersion": "0.4.1",
+  "softwareVersion": "0.4.2",
   "url": "https://dweekly.github.io/luad/",
   "codeRepository": "https://github.com/dweekly/luad",
-  "downloadUrl": "https://github.com/dweekly/luad/releases/tag/v0.4.1",
+  "downloadUrl": "https://github.com/dweekly/luad/releases/tag/v0.4.2",
   "programmingLanguage": "Rust",
   "license": "https://spdx.org/licenses/MIT.html",
   "description": "A Rust command-line tool and library for reading compiled Lua bytecode, including the nonstandard layouts found in router firmware. It reports the exact layout each file declares and where in the file each fact came from.",
@@ -62,7 +62,7 @@
   <div style="display:flex;align-items:center;gap:.6rem">
     <img src="logo.png" alt="" width="26" height="26" style="display:block">
     <strong style="font-family:var(--mono);color:var(--text);letter-spacing:.04em">luad</strong>
-    <span class="tag-ver">v0.4.1 · experimental</span>
+    <span class="tag-ver">v0.4.2 · experimental</span>
   </div>
   <nav aria-label="Primary">
     <a href="#problem">The problem</a>
@@ -88,7 +88,7 @@
     each one declares, so you can pick a decompiler that handles it.</span>
   </p>
   <div class="cta rise">
-    <a class="btn btn-primary" href="https://github.com/dweekly/luad/releases/tag/v0.4.1">Download v0.4.1</a>
+    <a class="btn btn-primary" href="https://github.com/dweekly/luad/releases/tag/v0.4.2">Download v0.4.2</a>
     <a class="btn" href="https://github.com/dweekly/luad">Source on GitHub</a>
   </div>
 </section>
@@ -269,7 +269,7 @@ Callers of proto:0/28
     official <code>luac -l -l</code> plus a script, gets the same answers. luad's advantage
     is that one binary reads both stock and OpenWrt LNUM32 builds, and its output is
     structured data. The
-    <a href="https://github.com/dweekly/luad/blob/v0.4.1/docs/PRIOR-ART-AND-CORPORA.md#5b-task-comparison-on-luci-lucisys-2026-10-23">comparison</a>
+    <a href="https://github.com/dweekly/luad/blob/v0.4.2/docs/PRIOR-ART-AND-CORPORA.md#5b-task-comparison-on-luci-lucisys-2026-10-23">comparison</a>
     is dated and shows how it was run.
   </p>
 </section>
@@ -277,15 +277,15 @@ Callers of proto:0/28
   <h2>Install</h2>
   <p>
     Prebuilt archives for Linux x86-64 and macOS arm64 are attached to
-    <a href="https://github.com/dweekly/luad/releases/tag/v0.4.1">the release</a>.
+    <a href="https://github.com/dweekly/luad/releases/tag/v0.4.2">the release</a>.
     Download all five release assets into an empty directory with the GitHub CLI, then
     verify the checksums and extract the archive for your platform:
   </p>
-<pre><span class="c">$</span> mkdir luad-0.4.1-downloads &amp;&amp; cd luad-0.4.1-downloads
-<span class="c">$</span> gh release download v0.4.1 --repo dweekly/luad
+<pre><span class="c">$</span> mkdir luad-0.4.2-downloads &amp;&amp; cd luad-0.4.2-downloads
+<span class="c">$</span> gh release download v0.4.2 --repo dweekly/luad
 <span class="c">$</span> shasum -a 256 -c SHA256SUMS
-<span class="c">$</span> tar xzf luad-0.4.1-macos-aarch64.tar.gz
-<span class="c">$</span> ./luad-0.4.1-macos-aarch64/luad --help</pre>
+<span class="c">$</span> tar xzf luad-0.4.2-macos-aarch64.tar.gz
+<span class="c">$</span> ./luad-0.4.2-macos-aarch64/luad --help</pre>
   <p>
     The example is for macOS arm64. On Linux x86-64, use <code>linux-x86_64</code> in
     place of <code>macos-aarch64</code>. The release also includes an evidence index and
@@ -293,7 +293,7 @@ Callers of proto:0/28
     use the GitHub CLI, adding <code>--source-digest</code> with the source revision named
     in the release notes:
   </p>
-<pre><span class="c">$</span> gh attestation verify luad-0.4.1-macos-aarch64.tar.gz \
+<pre><span class="c">$</span> gh attestation verify luad-0.4.2-macos-aarch64.tar.gz \
     --repo dweekly/luad \
     --signer-workflow dweekly/luad/.github/workflows/ci.yml</pre>
   <p>Or build from source with Rust 1.85 or newer:</p>
@@ -304,12 +304,12 @@ Callers of proto:0/28
 <section class="shell" id="limits">
   <h2>What doesn't work yet</h2>
   <p>
-    The latest release is 0.4.1, and luad is experimental. No Lua version is officially
+    The latest release is 0.4.2, and luad is experimental. No Lua version is officially
     supported yet, and commands and output formats may change between releases.
   </p>
   <div class="table-scroll">
   <table>
-    <caption class="dim" style="text-align:left;padding-bottom:.6rem;font-size:.85rem">What v0.4.1 reads. All of it is <em>experimental</em>.</caption>
+    <caption class="dim" style="text-align:left;padding-bottom:.6rem;font-size:.85rem">What v0.4.2 reads. All of it is <em>experimental</em>.</caption>
     <thead><tr><th scope="col">Dialect</th><th scope="col">Opcodes</th><th scope="col">State</th></tr></thead>
     <tbody>
       <tr><td>lua5.1</td><td>38</td><td class="ok">Best tested. Reads both stock and LNUM32 layouts.</td></tr>
@@ -332,10 +332,10 @@ Callers of proto:0/28
       every instruction is interpreted correctly, or that every vendor layout works.
     </p>
     <p>
-      The <a href="https://github.com/dweekly/luad/blob/v0.4.1/docs/examples/RECIPES.md#13-reproducible-firmware-investigation-walkthrough">public firmware walkthrough</a>
+      The <a href="https://github.com/dweekly/luad/blob/v0.4.2/docs/examples/RECIPES.md#13-reproducible-firmware-investigation-walkthrough">public firmware walkthrough</a>
       goes from a mixed folder of files to layouts, constants and raw disassembly, and then
       to choosing a decompiler. You don't need a decompiler to build or test luad. The
-      <a href="https://github.com/dweekly/luad/releases/tag/v0.4.1">release notes and evidence</a>
+      <a href="https://github.com/dweekly/luad/releases/tag/v0.4.2">release notes and evidence</a>
       say exactly what this release covers.
     </p>
   </div>
@@ -432,7 +432,7 @@ Callers of proto:0/28
 <footer class="shell">
   <p>
     <a href="https://github.com/dweekly/luad">github.com/dweekly/luad</a> ·
-    <a href="https://github.com/dweekly/luad/releases/tag/v0.4.1">v0.4.1</a> ·
+    <a href="https://github.com/dweekly/luad/releases/tag/v0.4.2">v0.4.2</a> ·
     <a href="https://github.com/dweekly/luad/issues">Issues</a> ·
     MIT or Apache-2.0
   </p>
