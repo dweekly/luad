@@ -13,6 +13,76 @@ reproducing it. External observations below are dated 2026-09-02 and must be rec
 new tool recommendation or qualification uses them. The README freshness date also
 covers alignment with current product scope; it does not refresh those observations.
 
+### Cache, toolchain and release-artifact trials, 2026-11-22
+
+The trials used the published macOS ARM64 0.4.1 binary. The local CLI at
+`a42d9db` reproduced the font-cache byte lookups, closure controls, OpenTX
+exit-code mismatch and Lmod layout-reporting issue. These are internal trials.
+No upstream maintainer participated. All inspections read the target chunks
+without executing them.
+
+**Luaotfload — inspect a font database produced by a real application.** With
+Luaotfload 3.29 (`48139bd3`), LuaTeX 1.24 and stock Lua 5.3 on macOS, create an
+empty cache directory and put the TeX Live font `lmroman10-regular.otf` alone
+in a separate directory. Set `TEXMFCACHE`, `TEXMFVAR` and `TEXMFSYSVAR` to
+the empty directory, and `OPENTYPEFONTS` and `OSFONTDIR` to the font directory.
+Run `luaotfload-tool --update --force --formats=otf --max-fonts=1 --no-compress --prefer-texmf`.
+In the generated `luatex-cache/generic/names/luaotfload-names.luc`,
+`luad export FILE --facts constant` reported all 59 available constants. The
+font basename was `proto:0:k:15` at byte 622. Its encoded bytes matched the
+chunk and its spelling matched the generated text database. With fresh directories
+and only `lmsans10-regular.otf`, the new basename appeared at byte 620 and the
+Roman basename disappeared. Paths and generation metadata affect the bytes;
+these offsets describe the observed runs. The candidate's `xrefs --to-string`
+refused semantic analysis with exit 4 on this 5.3 layout. Constant inventory is
+enough for this cache-membership question. It does not establish that a font
+will be selected for a document. [Upstream package](https://ctan.org/pkg/luaotfload)
+
+**Lmod — check the Lua version of a cluster module cache.** Lmod's updater
+compiles caches and puts the interpreter version in the filename. From pinned
+release 8.7.59 copy `rt/modulerc/spiderT-vub-old.lua` to `spiderT.lua`, then
+run `luac5.1 -o spiderT.luac_5.1 spiderT.lua` and
+`luac5.4 -o spiderT.luac_5.4 spiderT.lua` with stock 5.1.5 and 5.4.8.
+`luad inspect FILE --summary` identified the content even after renaming the
+5.4 file to the 5.1 filename. Each matching official lister accepted its file
+with `-p` and the other rejected it. Querying `string == "cluster/C"` found
+root slot 7 in both. The three reads reported by `xrefs --to proto:0:k:7`
+agreed with the official listings. These are local builds of upstream regression
+data. One claim in `inspect` was wrong for the 5.4 chunk: it labeled
+`sizet=8` as validated. Lua 5.4 records the instruction, integer and number
+widths at that point. It has no producer `size_t` width in the header.
+[Updater](https://github.com/TACC/Lmod/blob/e50982337e1a2fd094b9f93992adefe0ebd5aa56/src/update_lmod_system_cache_files.in#L313-L322) ·
+[Cache fixture](https://github.com/TACC/Lmod/blob/e50982337e1a2fd094b9f93992adefe0ebd5aa56/rt/modulerc/spiderT-vub-old.lua) ·
+[Lua header writer](https://www.lua.org/source/5.4/ldump.c.html#dumpHeader)
+
+**unluac-rs — check a decompiler's closure bindings.** Compile the pinned
+`identity_06_close_capture_post_slot_reuse.lua` fixture with stock
+`luac5.1 -s -o slot.luac SOURCE`. For each child of `proto:0/0`, query
+`luad xrefs slot.luac --to proto:0/0/0:upvalue:0 -f json`, changing the last
+child index to 1 for the writer. Both upvalues bind parent slot 3. Only the
+writer has a write edge. The official listing shows both binding descriptors
+reading slot 3 and a CLOSE before the loop backedge. Changing only the writer's
+assignment from `value = value + delta` to `index = index + delta` moves only
+its binding to slot 2. The original stripped SHA-256 is
+`59bf4b3a3f65c6d141e7adb12f289d699246599226882f1a23310be8777a9f78`.
+These facts can check a decompiler regression at the bytecode boundary. They
+do not qualify the reconstructed source. [Upstream fixture](https://github.com/x3zvawq/unluac-rs/blob/76d1452359b207c2a6fdec3c7c894152c7a61374/tests/case_closures/identity_06_close_capture_post_slot_reuse.lua)
+
+**iNav OpenTX Telemetry Widget — identify a localization in a shipped binary.**
+From the 2.2.3 compiled archive, `SCRIPTS/TELEMETRY/iNav/lang_fr.luac` has
+SHA-256 `847a21948b8d1f952c1e5fad34f67ccb913352de8b386dd333f780534c3ac1a7`.
+`luad inspect FILE -f json` refused at byte 93 with invalid constant tag 5
+and empty stdout. The German sibling produced the same error at byte 113.
+The companion source archive assigns `Batterie` to label 2. Compiling that
+source with stock Lua 5.2.4 and exporting constants finds `Batterie` at
+`proto:0:k:10`. Its slot in the distributed chunk remains unverified.
+Both refusals returned 5, which the public contract reserves for resource
+limits. A stock control isolates that error independently of OpenTX: compile
+`return "demo"` with 64-bit stock `luac5.2 -s`. Changing its constant tag
+at byte 49 from 4 to 5 and, separately, raising the four-byte little-endian
+count at byte 45 from 1 to 262145 both return exit 5. The original returns 0.
+Only the count control exceeds a resource limit. [Release archives](https://github.com/iNavFlight/OpenTX-Telemetry-Widget/releases/tag/v.2.2.3)
+
 ### Agent project trials, 2026-11-21
 
 Two agents used the published macOS ARM64 0.4.1 CLI (archive SHA-256
