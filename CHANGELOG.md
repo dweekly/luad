@@ -5,6 +5,28 @@ is promoted to a supported tier and no interface carries a compatibility promise
 
 ## Unreleased
 
+- When a profile lacks semantic analysis, `query` and `xrefs` point to
+  `luad export FILE --facts constant` for looking up strings in the constant pool.
+
+- Correct the Lua 5.4 validated layout to report the serialized instruction,
+  Lua integer and Lua number widths. Its numeric header `sizeof_sizet` is zero.
+- Single-file inspection distinguishes invalid constant tags (exit 1) from
+  configured pool-count limits (exit 5). New invalid-tag diagnostics are
+  `L51-CONST-006`, `L52-CONST-003` and `L55-CONST-003`. Lua 5.3 uses
+  `L53-CONST-001` for invalid tags and `L53-CONST-002` for excessive counts.
+
+- The outside-trial input bundle includes LuCI attribution and a checksum
+  manifest that verifies after extraction.
+
+- Caller text identifies short, direct string fields of a caller parameter, e.g.
+  `param#0["options"]` and `param#0["commands"]`.
+
+- String queries compare the original bytes of constants and lookup keys. Backspace
+  and form feed escapes are accepted. Unknown quoted escapes produce a usage error.
+- `xrefs FILE --to-string TEXT` finds uses of an exact UTF-8 literal across
+  prototypes. Combining a source filter with a target filter checks both endpoints.
+  Refresh saved xrefs schemas for the optional JSON `target_string` selector.
+
 ## 0.4.1 — 2026-10-28
 
 - New opt-in `--link-convention luci-module-trusted-init` for `callers` and `export`.

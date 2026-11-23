@@ -217,7 +217,7 @@ fn load_proto_52(
             }
             other => {
                 let diag = Diagnostic::error(
-                    "L52-CONST-001",
+                    "L52-CONST-003",
                     DiagnosticCategory::Parse,
                     StableId::constant(path.clone(), idx),
                     format!("Invalid constant tag {other}"),

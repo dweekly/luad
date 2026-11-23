@@ -87,11 +87,11 @@ pub fn validate_for_analysis(
                 luad_core::diagnostic::DiagnosticCategory::Analysis,
                 luad_core::id::StableId::Chunk,
                 format!(
-                    "Semantic analysis is not qualified for dialect '{}' in this release; raw structural inspection (inspect) is available",
+                    "Semantic analysis is not qualified for dialect '{}' in this release.",
                     chunk.dialect
                 ),
             )
-            .with_suggested_action("Perform raw structural inspection instead, or select a qualified analysis dialect."),
+            .with_suggested_action(luad_core::diagnostic_catalog::STRUCTURAL_INSPECTION_ACTION),
         );
         return Err(diagnostics);
     }

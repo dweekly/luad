@@ -251,7 +251,7 @@ fn is_resource_limit_code(code: &str) -> bool {
             | "L52-UPVAL-001"
             | "L52-STR-001"
             | "L53-CODE-001"
-            | "L53-CONST-001"
+            | "L53-CONST-002"
             | "L53-PROTO-001"
             | "L53-UPVAL-001"
             | "L53-STR-001"
@@ -1222,6 +1222,9 @@ fn handle_analysis_validation_failure(
             eprintln!("  - [{}] {}", d.code, d.message);
             if d.code == "ANA-PRECOND-001" {
                 is_unsupported_format = true;
+                if let Some(action) = &d.suggested_action {
+                    eprintln!("    {action}");
+                }
             }
             if classify_diagnostic(d) == ExitCode::LimitExceeded {
                 is_limit_exceeded = true;
@@ -1626,6 +1629,21 @@ fn handle_origins(args: OriginsArgs, writer: &mut impl io::Write) -> io::Result<
     Ok(ExitCode::Success)
 }
 
+fn collect_string_targets<'a>(
+    proto: &'a Prototype,
+    bytes: &[u8],
+    targets: &mut std::collections::HashSet<&'a StableId>,
+) {
+    for constant in &proto.constants {
+        if constant.value.string_bytes() == Some(bytes) {
+            targets.insert(&constant.id);
+        }
+    }
+    for child in &proto.protos {
+        collect_string_targets(child, bytes, targets);
+    }
+}
+
 fn handle_xrefs(args: XrefsArgs, writer: &mut impl io::Write) -> io::Result<ExitCode> {
     let bytes = match read_input_bytes(&args.file) {
         Ok(b) => b,
@@ -1686,21 +1704,23 @@ fn handle_xrefs(args: XrefsArgs, writer: &mut impl io::Write) -> io::Result<Exit
         None
     };
 
-    let matching_refs: Vec<luad_analysis::XrefEntry> = if let Some(t) = &target_id {
-        index.query_to(t).into_iter().cloned().collect()
-    } else if let Some(s) = &source_id {
-        index.query_from(s).into_iter().cloned().collect()
-    } else {
-        index.entries.clone()
-    };
-
+    let string_targets = args.to_string.as_ref().map(|literal| {
+        let mut targets = std::collections::HashSet::new();
+        collect_string_targets(&chunk.main_proto, literal.as_bytes(), &mut targets);
+        targets
+    });
+    let matching_refs: Vec<_> = index
+        .entries
+        .into_iter()
+        .filter(|entry| {
+            target_id.as_ref().is_none_or(|id| id == &entry.target)
+                && source_id.as_ref().is_none_or(|id| id == &entry.source)
+                && string_targets
+                    .as_ref()
+                    .is_none_or(|ids| ids.contains(&entry.target))
+        })
+        .collect();
     let total_count = matching_refs.len();
-    let xref_response = XrefResponse {
-        target: target_id,
-        source: source_id,
-        entries: matching_refs.clone(),
-        total_count,
-    };
 
     match args.format {
         OutputFormat::Text => {
@@ -1711,7 +1731,13 @@ fn handle_xrefs(args: XrefsArgs, writer: &mut impl io::Write) -> io::Result<Exit
                 identity,
                 interp,
                 config,
-                xref_response,
+                XrefResponse {
+                    target: target_id,
+                    target_string: args.to_string,
+                    source: source_id,
+                    entries: matching_refs,
+                    total_count,
+                },
                 chunk.diagnostics.clone(),
             );
             render::print_json(&doc, writer)?;

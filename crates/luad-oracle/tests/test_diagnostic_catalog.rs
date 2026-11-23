@@ -6,7 +6,7 @@ use std::process::{Command, Output};
 
 use serde_json::{json, Value};
 
-const PINNED_CODES: [&str; 161] = [
+const PINNED_CODES: [&str; 164] = [
     "ANA-LIMIT-001",
     "ANA-LIMIT-002",
     "ANA-PRECOND-001",
@@ -29,6 +29,7 @@ const PINNED_CODES: [&str; 161] = [
     "L51-CONST-003",
     "L51-CONST-004",
     "L51-CONST-005",
+    "L51-CONST-006",
     "L51-DISASM-001",
     "L51-DISASM-002",
     "L51-HEADER-001",
@@ -52,6 +53,7 @@ const PINNED_CODES: [&str; 161] = [
     "L52-COMPANION-001",
     "L52-CONST-001",
     "L52-CONST-002",
+    "L52-CONST-003",
     "L52-HEADER-001",
     "L52-HEADER-002",
     "L52-HEADER-003",
@@ -139,6 +141,7 @@ const PINNED_CODES: [&str; 161] = [
     "L55-COMPANION-001",
     "L55-CONST-001",
     "L55-CONST-002",
+    "L55-CONST-003",
     "L55-HEADER-001",
     "L55-HEADER-002",
     "L55-HEADER-003",

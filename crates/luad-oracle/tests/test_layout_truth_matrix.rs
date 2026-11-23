@@ -20,7 +20,7 @@ fn test_cli_layout_truth_across_all_dialects_json() {
             "int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0",
         ),
         ("lua5.3", "int=4,sizet=8,inst=4,lua_int=8,num=8,endian=1"),
-        ("lua5.4", "int=8,sizet=8,inst=4,num=8,endian=1"),
+        ("lua5.4", "inst=4,lua_int=8,num=8,endian=1"),
         ("lua5.5", "int=4,inst=4,lua_int=8,num=8,endian=1"),
     ];
 
@@ -55,6 +55,14 @@ fn test_cli_layout_truth_across_all_dialects_json() {
             doc_auto["interpretation"]["validated_layout"], expected_layout,
             "Validated layout mismatch for {dialect} in auto mode"
         );
+
+        // 5.1 through 5.3 encode sizeof(size_t); 5.4 and 5.5 do not.
+        let width = match dialect {
+            "lua5.1" | "lua5.2" => raw[8],
+            "lua5.3" => raw[13],
+            _ => 0,
+        };
+        assert_eq!(doc_auto["data"]["header"]["sizeof_sizet"], width);
 
         // 2. Explicit dialect (-d)
         let out_explicit = Command::new(&luad)
@@ -97,6 +105,7 @@ fn test_cli_layout_truth_text_format() {
             "int=4,sizet=8,inst=4,num=8,endian=1,integral_flag=0",
         ),
         ("lua5.3", "int=4,sizet=8,inst=4,lua_int=8,num=8,endian=1"),
+        ("lua5.4", "inst=4,lua_int=8,num=8,endian=1"),
         ("lua5.5", "int=4,inst=4,lua_int=8,num=8,endian=1"),
     ];
 

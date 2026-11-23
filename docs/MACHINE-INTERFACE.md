@@ -389,6 +389,19 @@ The ordinary [library](../crates/luad-oracle/tests/test_analysis.rs) and
 [required-compiler CLI](../crates/luad-oracle/tests/test_diff_cli.rs) regressions
 exercise equal controls and isolated changes in both modes and every output format.
 
+Use `xrefs FILE --to-string TEXT` to find references to every constant whose
+original bytes equal the UTF-8 argument. The shell passes the text as one literal
+argument. `--from ID` intersects with either `--to ID` or `--to-string TEXT`.
+A successful empty list means the index has no matching edge. JSON includes
+`data.target_string` when that selector is present.
+
+Quoted `string`, `constant`, and `callee.lookup.key` predicates compare UTF-8
+operand bytes with the stored string bytes. Substrings can match within binary
+strings. Inside a quoted query operand use `\n`, `\r`, `\t`, `\b`, `\f`,
+`\\`, `\"`, and `\'` for the corresponding characters. An unrecognized escape
+is a usage error. Use the exported constant's `raw_bytes` for arbitrary binary
+operands.
+
 `query --where` accepts `and`, `or`, parentheses, `==`, `!=`, and the explicitly listed
 `contains` forms. Quoted operands are strings; unquoted `nil`, booleans, and numbers are
 typed literals. A quoted `"0"`, numeric `+0.0`, and numeric `-0.0` are distinct. The
@@ -475,6 +488,11 @@ callers come from resolved `call_relation` facts. Cross-artifact callers come fr
 equal the target, and only when a convention is requested. Without one, the corpus is the
 target alone and the summary reports `cross_artifact_searched: false`. Each listed caller
 carries its bases and its verbatim `argument_window` from origin analysis.
+
+The text summary prints a caller parameter's direct string-keyed field as
+`param#0["options"]`. It escapes the original key bytes. Nested fields, keys
+over 64 bytes, and other field shapes print as `field`. Use JSON or JSONL for
+their full expressions.
 
 Every call site of every analyzed file falls into exactly one class, decided in order:
 `caller`, `conflicting` (sources name the target and something else), `degraded` (a
@@ -592,6 +610,14 @@ operation such as `CONCAT A A C` cannot recurse into its own result. JSON uses t
 ## Required layout and diagnostic records
 
 Evidence-backed machine output must expose the selected dialect/profile and validated layout, including byte order, declared widths, number-integrality, and how the profile was selected. Vendor constant tags such as LNUM tag 9 must not be reported as stock Lua 5.1 support.
+
+Lua 5.4 declares widths for instructions, Lua integers and Lua numbers. Its
+layout string includes those three widths and the validated endianness. The
+numeric header field `sizeof_sizet` is zero for formats that omit this width.
+
+An unrecognized stock constant tag is invalid input (exit 1 on single-file
+inspection). A pool count above the configured limit exits 5. Stock Lua 5.1
+continues to report the known LNUM tag 9 as requiring another profile (exit 4).
 
 Parse failures must report the deepest known byte offset as the primary location.
 Prototype paths and enclosing fields are context, not replacements for that offset.

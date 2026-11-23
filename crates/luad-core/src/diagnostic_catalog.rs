@@ -58,6 +58,10 @@ impl DiagnosticDescriptor {
     }
 }
 
+/// Structural alternatives for a parsed chunk whose profile lacks semantic analysis.
+pub const STRUCTURAL_INSPECTION_ACTION: &str =
+    "For recognized profiles, use `luad inspect FILE` for raw structure or `luad export FILE --facts constant` to list the constant pool.";
+
 /// Static authority table of all production-emittable diagnostic codes in bytewise ascending order.
 pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
     StaticDiagnosticDescriptor {
@@ -79,7 +83,7 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         severity: Severity::Error,
         category: DiagnosticCategory::Analysis,
         semantics: "Semantic analysis preconditions are not qualified for this bytecode dialect in the active release.",
-        suggested_action: "Perform raw inspection or disassembly instead, or select a qualified analysis dialect.",
+        suggested_action: STRUCTURAL_INSPECTION_ACTION,
     },
     StaticDiagnosticDescriptor {
         code: "CORE-LIMIT-001",
@@ -183,8 +187,8 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         code: "L51-CONST-001",
         severity: Severity::Error,
         category: DiagnosticCategory::Parse,
-        semantics: "Lua 5.1 prototype declared an excessive constant count or encountered an invalid constant tag byte.",
-        suggested_action: "Verify constant count against safety limits and check constant tag validity.",
+        semantics: "Constant count declared in Lua 5.1 prototype exceeds configured safety limits.",
+        suggested_action: "Check the declared count against the configured constant limit.",
     },
     StaticDiagnosticDescriptor {
         code: "L51-CONST-002",
@@ -213,6 +217,13 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         category: DiagnosticCategory::Instruction,
         semantics: "Lua 5.1 RK operand in field C references a constant index out of bounds.",
         suggested_action: "Ensure RK operand C constant index does not exceed prototype constant count.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L51-CONST-006",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Unrecognized constant tag in a Lua 5.1 prototype.",
+        suggested_action: "Inspect the tag byte and verify the producer format.",
     },
     StaticDiagnosticDescriptor {
         code: "L51-DISASM-001",
@@ -365,8 +376,8 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         code: "L52-CONST-001",
         severity: Severity::Error,
         category: DiagnosticCategory::Parse,
-        semantics: "Lua 5.2 prototype declared an excessive constant count or encountered an invalid constant tag.",
-        suggested_action: "Verify constant count against safety limits and ensure constant tags match Lua 5.2 spec.",
+        semantics: "Constant count declared in Lua 5.2 prototype exceeds configured safety limits.",
+        suggested_action: "Check the declared count against the configured constant limit.",
     },
     StaticDiagnosticDescriptor {
         code: "L52-CONST-002",
@@ -374,6 +385,13 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         category: DiagnosticCategory::Instruction,
         semantics: "Lua 5.2 instruction references a constant index exceeding prototype constant table bounds.",
         suggested_action: "Ensure constant operand index references an existing constant in the prototype table.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L52-CONST-003",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Unrecognized constant tag in a Lua 5.2 prototype.",
+        suggested_action: "Inspect the tag byte and verify the producer format.",
     },
     StaticDiagnosticDescriptor {
         code: "L52-HEADER-001",
@@ -974,8 +992,8 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         code: "L55-CONST-001",
         severity: Severity::Error,
         category: DiagnosticCategory::Parse,
-        semantics: "Lua 5.5 prototype declared an excessive constant count or encountered an invalid constant tag.",
-        suggested_action: "Verify constant count against safety limits and ensure constant tags match Lua 5.5 spec.",
+        semantics: "Constant count declared in Lua 5.5 prototype exceeds configured safety limits.",
+        suggested_action: "Check the declared count against the configured constant limit.",
     },
     StaticDiagnosticDescriptor {
         code: "L55-CONST-002",
@@ -983,6 +1001,13 @@ pub const DIAGNOSTIC_ENTRIES: &[StaticDiagnosticDescriptor] = &[
         category: DiagnosticCategory::Instruction,
         semantics: "Lua 5.5 instruction references a constant index exceeding prototype constant table bounds.",
         suggested_action: "Ensure constant operand index references an existing constant in the prototype table.",
+    },
+    StaticDiagnosticDescriptor {
+        code: "L55-CONST-003",
+        severity: Severity::Error,
+        category: DiagnosticCategory::Parse,
+        semantics: "Unrecognized constant tag in a Lua 5.5 prototype.",
+        suggested_action: "Inspect the tag byte and verify the producer format.",
     },
     StaticDiagnosticDescriptor {
         code: "L55-HEADER-001",

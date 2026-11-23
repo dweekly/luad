@@ -27,9 +27,10 @@ Which command answers which question:
   What values reach a call's arguments?          luad origins
   Which prototypes call which?                   luad callgraph
   Who calls this function, with what arguments?  luad callers
-  Where is this string or global used?           luad query --where ...
+  Which instructions use this exact string?      luad xrefs FILE --to-string TEXT
+  Which constants contain a fragment?            luad query FILE --where 'string contains \"Usage\"'
   What are the branches and blocks?              luad cfg
-  What does this field or diagnostic mean?       luad explain
+  What does this instruction do?                 luad explain
   Facts for a whole firmware tree, as JSONL?     luad export
 
 `luad` has no decompiler and reconstructs no source. For readable Lua, compose with unluac
@@ -78,7 +79,7 @@ pub enum Commands {
     /// Query cross-references to and from an artifact.
     Xrefs(XrefsArgs),
 
-    /// Explain a field, prototype, instruction, or diagnostic.
+    /// Explain an instruction by stable ID.
     Explain(ExplainArgs),
 
     /// Run a bounded structured query over the bytecode.
@@ -283,7 +284,11 @@ pub struct XrefsArgs {
     #[arg(long)]
     pub to: Option<String>,
 
-    /// Source stable ID to find references from.
+    /// Find references to every string constant whose bytes equal this UTF-8 argument.
+    #[arg(long, conflicts_with = "to")]
+    pub to_string: Option<String>,
+
+    /// Source stable ID to find references from. Intersects with either target filter.
     #[arg(long)]
     pub from: Option<String>,
 
@@ -322,7 +327,7 @@ pub struct QueryArgs {
     #[arg(long)]
     pub input_list: Option<String>,
 
-    /// Filter predicate expression (e.g. 'effect.write.upvalue == 2').
+    /// Filter expression, e.g. string contains 'Usage' or effect.write.upvalue == 2.
     #[arg(long, rename_all = "kebab-case")]
     pub r#where: Option<String>,
 

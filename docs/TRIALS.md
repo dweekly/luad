@@ -29,8 +29,11 @@ Neither has seen this repository's tests, fixtures, or evidence beforehand.
    `scripts/build_lua51_openwrt_lnum32.sh`. `OUT/firmware/usr/lib/lua/luci/` is a
    stripped OpenWrt-layout tree compiled from the vendored LuCI 23.05 subset, keeping
    the `.lua` names as devices do. `OUT/releases/` holds stripped stock builds of
-   `luci.util` from 22.03 and 23.05. `OUT/SHA256SUMS` pins every file. Nothing is
-   executed.
+   `luci.util` from 22.03 and 23.05. Give participants the whole directory,
+   including the upstream license and attribution. After moving or extracting
+   it, run `shasum -a 256 -c SHA256SUMS` from inside the directory. Each
+   listed payload must verify. To test a change to the builder, run
+   `bash scripts/trials/test_inputs.sh LUAC51 LNUM32_LUAC`.
 3. **The public site and the repository README.** Nothing else: no recipes pointed out,
    no hints, and no walkthrough.
 

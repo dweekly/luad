@@ -314,7 +314,13 @@ fn tokenize(input: &str) -> Result<Vec<Token>, QueryError> {
                         '\\' => s.push('\\'),
                         '\'' => s.push('\''),
                         '"' => s.push('"'),
-                        other => s.push(other),
+                        'b' => s.push('\x08'),
+                        'f' => s.push('\x0c'),
+                        other => {
+                            return Err(QueryError::Malformed(format!(
+                                "Unsupported escape: \\{other}"
+                            )))
+                        }
                     }
                     i += 1;
                 } else {
@@ -845,17 +851,12 @@ fn origin_kind_str(k: &OriginExpressionKind) -> &'static str {
 
 fn match_constant(c: &ConstantValue, op: QueryOp, operand: &QueryOperand) -> bool {
     match operand {
-        QueryOperand::String(s) => match c {
-            ConstantValue::ShortString(str_val) | ConstantValue::LongString(str_val) => match op {
-                QueryOp::Equals => str_val.display == *s,
-                QueryOp::NotEquals => str_val.display != *s,
-                QueryOp::Contains => str_val.display.contains(s),
-            },
-            _ => match op {
-                QueryOp::Equals => false,
-                QueryOp::NotEquals => true,
-                QueryOp::Contains => false,
-            },
+        QueryOperand::String(s) => match op {
+            QueryOp::Equals => c.string_bytes() == Some(s.as_bytes()),
+            QueryOp::NotEquals => c.string_bytes() != Some(s.as_bytes()),
+            QueryOp::Contains => c
+                .string_bytes()
+                .is_some_and(|bytes| memchr::memmem::find(bytes, s.as_bytes()).is_some()),
         },
         QueryOperand::Bare(b) => {
             if op == QueryOp::Contains {

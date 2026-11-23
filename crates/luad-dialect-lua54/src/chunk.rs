@@ -72,7 +72,10 @@ pub fn decode_chunk_lua54(reader: &mut SafeReader) -> Result<Chunk, Diagnostic> 
         patch_or_oracle_version: Some("5.4.8".to_string()),
         profile: "lua5.4".to_string(),
         profile_version_or_hash: None,
-        validated_layout: Some("int=8,sizet=8,inst=4,num=8,endian=1".to_string()),
+        validated_layout: Some(format!(
+            "inst={},lua_int={},num={},endian=1",
+            header.instruction_size, header.lua_integer_size, header.lua_number_size
+        )),
         parse_mode: match reader.mode() {
             luad_core::limits::ParseMode::Strict => "strict".to_string(),
             luad_core::limits::ParseMode::Permissive => "permissive".to_string(),

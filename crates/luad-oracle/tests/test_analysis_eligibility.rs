@@ -247,6 +247,49 @@ fn test_cli_analysis_refused_with_exit_code_4_on_unqualified_dialects() {
 }
 
 #[test]
+fn refused_string_lookups_point_to_a_working_constant_export() {
+    let bin = luad_binary_path();
+    let fixtures = luad_oracle::find_workspace_root().join("tests/fixtures/precompiled");
+    for dialect in ["lua52", "lua53", "lua55"] {
+        let path = fixtures.join(dialect).join("hello.luac");
+        let file = path.to_str().unwrap();
+        for args in [
+            ["query", file, "--where", "string == \"Hello, luad!\""],
+            ["xrefs", file, "--to-string", "Hello, luad!"],
+        ] {
+            let out = Command::new(&bin).args(args).output().unwrap();
+            assert_eq!(out.status.code(), Some(4), "{args:?}");
+            assert!(out.stdout.is_empty());
+            let stderr = String::from_utf8(out.stderr).unwrap();
+            assert!(stderr.contains("ANA-PRECOND-001"), "{stderr}");
+            assert!(
+                stderr.contains("luad export FILE --facts constant"),
+                "{stderr}"
+            );
+        }
+        let out = Command::new(&bin)
+            .args(["export", file, "--facts", "constant"])
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        let rows: Vec<serde_json::Value> = String::from_utf8(out.stdout)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert!(rows.iter().any(|row| row["record_type"] == "constant"
+            && row["data"]["value"]["value"]["raw_bytes"] == serde_json::json!(b"Hello, luad!")));
+        let end = rows
+            .iter()
+            .find(|row| row["record_type"] == "file_end")
+            .unwrap();
+        assert_eq!(end["status"], "succeeded");
+        assert_eq!(end["is_truncated"], false);
+        assert_eq!(rows.last().unwrap()["files_succeeded"], 1);
+    }
+}
+
+#[test]
 fn test_cli_analysis_invalid_input_exits_code_1_not_code_4() {
     let bin = luad_binary_path();
     let root = luad_oracle::find_workspace_root();

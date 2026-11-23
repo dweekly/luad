@@ -20,5 +20,10 @@ done < <(find "$root/tests/corpus/luci-23.05" -name '*.lua' | sort)
 # Two releases of luci.util, stripped, stock layout.
 "$stock" -s -o "$out/releases/util-22.03.luac" "$root/tests/corpus/luci-22.03/libs/luci-lib-base/luasrc/util.lua"
 "$stock" -s -o "$out/releases/util-23.05.luac" "$root/tests/corpus/luci-23.05/libs/luci-lib-base/luasrc/util.lua"
-(cd "$out" && find . -type f | sort | xargs shasum -a 256 > SHA256SUMS)
+cp "$root/tests/corpus/luci-23.05/LICENSE" "$root/tests/corpus/luci-23.05/UPSTREAM-NOTICE" "$out/"
+(
+  cd "$out"
+  find ./firmware ./releases ./LICENSE ./UPSTREAM-NOTICE -type f | LC_ALL=C sort |
+    while IFS= read -r payload; do shasum -a 256 "$payload"; done > SHA256SUMS
+)
 echo "trial inputs in $out"

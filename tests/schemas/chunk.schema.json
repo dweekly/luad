@@ -609,8 +609,8 @@
           "type": "string"
         },
         "sizeof_sizet": {
-          "description": "Size of size_t in bytes (8 on 64-bit, 4 on 32-bit).",
-          "default": 8,
+          "description": "Declared size_t width in bytes, or zero when unreported (including Lua 5.4 and 5.5).",
+          "default": 0,
           "type": "integer",
           "format": "uint8",
           "minimum": 0.0
