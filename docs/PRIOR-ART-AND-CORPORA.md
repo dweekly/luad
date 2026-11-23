@@ -13,6 +13,55 @@ reproducing it. External observations below are dated 2026-09-02 and must be rec
 new tool recommendation or qualification uses them. The README freshness date also
 covers alignment with current product scope; it does not refresh those observations.
 
+### Debian VLC playlist package trial, 2026-11-22
+
+Which shipped playlist parser mentions `/dev/radio0`, and what filename
+pattern does it contain? Extract `vlc-plugin-base_3.0.23-0+deb12u1_amd64.deb`
+(SHA-256 `38b953a2a6355c5ba75e3e5d2015100d793fbf5a00211aaa78b2d705a9547cb1`).
+From the extracted root run
+`luad export usr/lib/x86_64-linux-gnu/vlc/lua/playlist/*.luac --facts constant`.
+The published macOS ARM64 0.4.1 CLI and local build `adee0bd` exported 1,242
+of 1,242 constants across all 16 files, with zero skipped, failed or truncated.
+
+Only `rockbox_fm_presets.luac` contained the URI prefix
+`v4l2c:///dev/radio0:tuner-frequency=` and the Lua pattern `%.[fF][mM][rR]$`.
+Their encoded constant records begin at offsets 61 and 342 respectively.
+The package bytes and the stock Lua 5.2.4 listing agree with both values.
+The instruction listing shows a load of each constant, and the matching source
+uses the suffix pattern in `probe`. [Debian VLC source](https://sources.debian.org/src/vlc/3.0.23-0%2Bdeb12u1/share/lua/playlist/rockbox_fm_presets.lua/#L23)
+
+On this Lua 5.2 artifact `query` and `xrefs` exit 4. The refusal points to `inspect`;
+specifying `--facts constant` on `export` gives a searchable inventory.
+No playback or hardware access is required. [Debian package inventory](https://packages.debian.org/bookworm/amd64/vlc-plugin-base/filelist) · [Tested package](https://deb.debian.org/debian/pool/main/v/vlc/vlc-plugin-base_3.0.23-0+deb12u1_amd64.deb)
+
+### Pandoc custom reader trial, 2026-11-22
+
+Can a packager identify which horizontal-rule marker a stripped Creole reader
+recognizes? Pandoc 3.14 supplies the reader as source. The following commands
+build a local test artifact with Pandoc's embedded Lua 5.4.8 and run it in Pandoc.
+
+```sh
+pandoc --print-default-data-file creole.lua > creole.lua
+pandoc lua -e 'local f=assert(io.open("reader.lua","wb")); assert(f:write(string.dump(assert(loadfile("creole.lua","t")),true))); assert(f:close())'
+luad query reader.lua --where 'string == "----"' -f json
+luad xrefs reader.lua --to proto:0:k:37 -f json
+printf '%s\n' '----' | pandoc -f ./reader.lua -t json
+```
+
+On the published macOS ARM64 0.4.1 CLI the query returned one constant and
+one instruction read at `proto:0:pc:149`. The local CLI at `adee0bd` returned
+the same read directly with `xrefs reader.lua --to-string=----`. The official
+`luac5.4 -p -l -l reader.lua` listing shows instruction 150 loading slot 37.
+The stripped file's SHA-256 was
+`150a78c4dd21b0480d6473aaac2d8f94ac0cd8826a72be846d34f586f3b374c0`.
+
+Replacing the single pattern `P"----"` with `P"++++"` before compilation
+moved the match to the new spelling at the same PC. Each build had zero
+matches for the other marker. Pandoc parsed the matching marker as a
+`HorizontalRule` and the other as a `Para` in both source and compiled runs.
+The application check establishes the marker's meaning. This was an internal
+trial with a locally compiled reader. [Pandoc custom readers](https://pandoc.org/custom-readers.html)
+
 ### Cache, toolchain and release-artifact trials, 2026-11-22
 
 The trials used the published macOS ARM64 0.4.1 binary. The local CLI at

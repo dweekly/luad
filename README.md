@@ -309,7 +309,7 @@ delete the document in the same change and update this index.
 | Document | Purpose | Fresh as of | Revalidate or delete when |
 |---|---|---:|---|
 | [`README.md`](README.md) | What luad is, installation, current limitations, first workflows, and the documentation index. | 2026-11-22 | Public scope, known analysis defects, support status, setup, workflows, or the documentation set changes. |
-| [`luad-inspect skill`](.agents/skills/luad-inspect/SKILL.md) | Trace literal bytes to uses and observed callers with the packaged or development CLI. | 2026-11-22 | Literal selectors, caller coverage or package availability change. |
+| [`luad-inspect skill`](.agents/skills/luad-inspect/SKILL.md) | Find literal bytes through structural export and trace uses and observed callers on eligible profiles. | 2026-11-22 | Literal selectors, export completeness, caller coverage or package availability change. |
 | [`AGENTS.md`](AGENTS.md) | Binding instructions, bounded implementation scope, completeness discipline, and safety constraints. | 2026-10-22 | Development workflow, proof policy, current priority, or repository invariants change. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Crate responsibilities, representations, completeness and context boundaries, and evidence layers. | 2026-10-22 | Crates, ownership, effect completeness, identity/context boundaries, or evidence layers change. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Backward-facing record of released and unreleased user-visible changes. | 2026-11-22 | Every user-visible change or release; never use it as a forward plan. |

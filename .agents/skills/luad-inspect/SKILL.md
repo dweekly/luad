@@ -11,7 +11,9 @@ On packaged 0.4.1, quoted query comparisons can mistake escaped display text for
 ```sh
 jq -c 'select(.record_type == "constant" and .data.value.value.raw_bytes? == [10]) | .data.id'
 ```
-Check file completion, truncation and the terminal export record. Then use the matching pool IDs with `xrefs --to`. On 0.4.1, combining `--from` and `--to` silently ignores the source filter. Check the returned edge's source yourself.
+When `query` or `xrefs` exits 4 because semantic analysis is unavailable, the same constant export can still answer a pool-membership question. For absence, check that each intended file succeeded, `is_truncated` is false, emitted and available fact counts agree, and the final totals cover the inputs. Report the constant ID and encoded record offset. An instruction use needs separate evidence, such as a matching official `luac -p -l -l` listing. For profiles with xrefs, follow the pool ID with `xrefs --to`.
+
+On 0.4.1, combining `--from` and `--to` silently ignores the source filter. Check the returned edge's source yourself.
 
 **Follow a use.** `proto:0/2:k:1` names pool slot 1 of prototype path `0/2`. A read identifies a physical PC in that artifact. Use the instruction ID with `luad explain FILE proto:0/2:pc:9`. For one-hop incoming calls, use `luad callers FILE --proto 0/2 -f json`. Include other artifacts only when they belong to the question's corpus. Read `param#0["options"]` as the options field of the caller's first parameter. For a generic `field` summary, inspect the argument JSON for the full base and key. Packaged 0.4.1 uses the generic summary for every field.
 
